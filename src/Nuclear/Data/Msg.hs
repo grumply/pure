@@ -14,7 +14,7 @@ import Nuclear.Data.Text
 import Nuclear.Data.ByteString
 
 type Header = Text
-type Body = LazyByteString
+type Body = ByteString
 
 data Msg
   = Msg
