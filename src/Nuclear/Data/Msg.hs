@@ -29,6 +29,6 @@ instance ToByteString Msg where
 
 fromBS :: LazyByteString -> Either String Msg
 fromBS lbs =
-  case decodeOrFail lbs of
+  case decodeOrFail $ lbs of
     Left (_,_,msg) -> Left msg
     Right (_,_,a) -> Right a
