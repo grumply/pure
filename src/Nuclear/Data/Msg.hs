@@ -6,6 +6,7 @@ module Nuclear.Data.Msg
   , fromBS
   , module Data.Binary
   , LazyByteString
+  , Text
   ) where
 
 import Data.Binary
