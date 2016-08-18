@@ -5,7 +5,6 @@ module Nuclear.Data.Msg
   , Body
   , fromBS
   , module Data.Binary
-  , BS.ByteString
   , LazyByteString
   , Text
   ) where
