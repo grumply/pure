@@ -17,9 +17,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Nuclear.Data.ByteString
-                     , Nuclear.Data.Text
-                     , Nuclear.Data.Msg
+  exposed-modules:     Nuclear.Data.Msg
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.8 && <4.10
