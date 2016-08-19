@@ -7,6 +7,7 @@ module Nuclear
   , encodeMsg, decodeMsg
   , LazyByteString, Text
   , ToJSON(..), FromJSON(..)
+  , genericToEncoding, defaultOptions
   , module GHC.Generics
   ) where
 
@@ -30,11 +31,8 @@ data Msg
     } deriving (Show,Eq,Ord,Generic)
 
 instance FromJSON Msg
-instance ToJSON Msg
-#if MIN_VERSION_aeson(0,10,0)
-  where
-    toEncoding = genericToEncoding defaultOptions
-#endif
+instance ToJSON Msg where
+  toEncoding = genericToEncoding defaultOptions
 
 fromBS :: LazyByteString -> Either String Msg
 fromBS = eitherDecode
