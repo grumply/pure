@@ -2,7 +2,7 @@
 {-# language OverloadedStrings #-}
 {-# language CPP #-}
 module Nuclear
-  ( Msg(..), Method, Body
+  ( Msg(..), Name, Body
   , fromBS, toBS
   , encodeMsg, decodeMsg
   , LazyByteString, Text
@@ -20,12 +20,12 @@ import qualified Data.ByteString.Lazy as LBS
 
 type LazyByteString = LBS.ByteString
 
-type Method = Text
+type Name = Text
 type Body = Lazy.Text
 
 data Msg
   = Msg
-    { method :: Method
+    { name :: Name
     , body :: Body
     } deriving (Show,Eq,Ord,Generic)
 
