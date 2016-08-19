@@ -9,7 +9,7 @@ module Nuclear
   , toBS
   , LazyByteString
   , Text
-  , module Data.Aeson
+  , ToJSON(..), FromJSON(..)
   , module GHC.Generics
   ) where
 
