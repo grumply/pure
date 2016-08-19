@@ -2,13 +2,10 @@
 {-# language OverloadedStrings #-}
 {-# language CPP #-}
 module Nuclear
-  ( Msg(..)
-  , Method
-  , Body
-  , fromBS
-  , toBS
-  , LazyByteString
-  , Text
+  ( Msg(..), Method, Body
+  , fromBS, toBS
+  , encodeMsg, decodeMsg
+  , LazyByteString, Text
   , ToJSON(..), FromJSON(..)
   , module GHC.Generics
   ) where
