@@ -25,21 +25,27 @@ type Body = Lazy.Text
 
 data Msg
   = Msg
-    { name :: Name
-    , body :: Body
+    { name :: !Name
+    , body :: !Body
     } deriving (Show,Eq,Ord,Generic)
 
 instance FromJSON Msg
 instance ToJSON Msg
 
+-- keep an eye on this takeWhile; the other option is
+-- conversion to strict ByteString with spanEnd. This
+-- implementation could be problematic if sending a
+-- bytestring of some pre-encoded value with a null
+-- byte. If sticking to ToJSON/FromJSON this should
+-- work out, I think.
 fromBS :: LazyByteString -> Either String Msg
-fromBS = eitherDecode
+fromBS = eitherDecode . LBS.takeWhile (/= 0)
 
 toBS :: Msg -> LazyByteString
 toBS = encode
 
 encodeMsg :: ToJSON a => Text -> a -> Msg
-encodeMsg method a =
+encodeMsg name a =
   let body = Lazy.decodeUtf8 $ encode a
   in Msg {..}
 
