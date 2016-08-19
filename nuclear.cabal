@@ -17,18 +17,15 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Nuclear.Data.Msg
+  exposed-modules:     Nuclear
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.8 && <4.10
                      , lens
                      , bytestring
                      , text
-                     , attoparsec
-                     , case-insensitive
-                     , scientific
-                     , time
                      , binary
+                     , ghc-prim
   default-extensions:  DefaultSignatures
                      , RecordWildCards
   hs-source-dirs:      src
