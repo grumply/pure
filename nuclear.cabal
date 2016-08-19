@@ -24,7 +24,7 @@ library
                      , bytestring
                      , text
                      , binary
-                     , aeson >= 0.10
+                     , aeson >= 0.9 && < 0.10
   default-extensions:  DefaultSignatures
                      , RecordWildCards
   hs-source-dirs:      src
