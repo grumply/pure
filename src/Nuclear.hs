@@ -44,6 +44,7 @@ data Msg
 instance FromJSON Msg
 instance ToJSON Msg
 
+
 -- keep an eye on this takeWhile; the other option is
 -- conversion to strict ByteString with spanEnd. This
 -- implementation could be problematic if sending a
