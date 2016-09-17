@@ -1,65 +1,73 @@
 {-# language DeriveGeneric #-}
 {-# language OverloadedStrings #-}
-{-# language CPP #-}
 {-# language MultiParamTypeClasses #-}
 {-# language FunctionalDependencies #-}
 {-# language ScopedTypeVariables #-}
 {-# language FlexibleInstances #-}
 {-# language UndecidableInstances #-}
-{-# language TypeFamilies #-}
 module Nuclear
-  ( Msg(..), Name, Body
-  , fromS, toS
+  ( Msg(..)
+  , fromBS, toBS
   , encodeMsg, decodeMsg
+  , Text
   , Request(..), Response(..), Message(..)
+  , module Data.Aeson
   , module Data.Typeable
+  , module GHC.Generics
   , Proxy(..)
   ) where
 
-import Data.Monoid
-
-import Data.Typeable
+import Data.Aeson
 import Data.Proxy
+import Data.Text
+import Data.Typeable
 
-import Text.Read
+import GHC.Generics
 
-type Name = String
-type Body = String
+import qualified Data.ByteString.Lazy as BSL
 
 data Msg
   = Msg
-    { name :: !Name
-    , body :: !Body
-    } deriving (Read,Show,Eq,Ord)
+    { name :: {-# UNPACK #-} !Text
+    , body :: {-# UNPACK #-} !Value
+    } deriving Generic
+instance ToJSON Msg
+instance FromJSON Msg
 
-fromS :: String -> Either String Msg
-fromS = readEither
+fromBS :: BSL.ByteString -> Either String Msg
+fromBS = eitherDecode
 
-toS :: Msg -> String
-toS = show
+toBS :: Msg -> BSL.ByteString
+toBS = encode
 
-encodeMsg :: Show a => String -> a -> Msg
+encodeMsg :: ToJSON a => Text -> a -> Msg
 encodeMsg name a =
-  let body = show a
+  let body = toJSON a
   in Msg {..}
 
-decodeMsg :: Read a => Msg -> Maybe a
-decodeMsg Msg {..} = readMaybe body
+decodeMsg :: FromJSON a => Msg -> Maybe a
+decodeMsg Msg {..} =
+  case fromJSON body of
+    Error _ -> Nothing
+    Success a -> Just a
 
-class (Show a,Read a,Show b,Read b,Typeable a,Typeable b) => Response a b | a -> b, b -> a where
-  requestName :: Proxy b -> String
+class (ToJSON a,FromJSON a,ToJSON b,FromJSON b,Typeable a,Typeable b)
+  => Response a b | a -> b, b -> a
+  where
+  requestName :: Proxy b -> Text
   requestName p =
-     "Req::" ++ show (typeRepTyCon $ typeOf (undefined :: b))
+     append "Req::" $ pack (show $ typeRepTyCon $ typeOf (undefined :: b))
 
-  responseName :: Proxy a -> String
+  responseName :: Proxy a -> Text
   responseName p =
-    "Res::" ++ show (typeRepTyCon $ typeOf (undefined :: a))
+    append "Res::" $ pack (show $ typeRepTyCon $ typeOf (undefined :: a))
 
-class (Show a,Read a,Show b,Read b,Typeable a,Typeable b) => Request b a | a -> b, b -> a
+class (ToJSON a,FromJSON a,ToJSON b,FromJSON b,Typeable a,Typeable b)
+  => Request b a | a -> b, b -> a
 instance (Request b a) => Response a b
 
 -- class of unsollicited message types
-class (Show m,Read m,Typeable m) => Message m where
-  messageName :: Proxy m -> String
+class (ToJSON m,FromJSON m,Typeable m) => Message m where
+  messageName :: Proxy m -> Text
   messageName p =
-    "Msg::" ++ show (typeRepTyCon $ typeOf (undefined :: m))
+    append "Msg::" $ pack (show $ typeRepTyCon $ typeOf (undefined :: m))
