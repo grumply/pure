@@ -64,7 +64,7 @@ class (ToJSON a,FromJSON a,ToJSON b,FromJSON b,Typeable a,Typeable b)
 
 class (ToJSON a,FromJSON a,ToJSON b,FromJSON b,Typeable a,Typeable b)
   => Request b a | a -> b, b -> a
-instance (Request b a) => Response a b
+instance (ToJSON a,FromJSON a,ToJSON b,FromJSON b,Typeable a,Typeable b,Request b a) => Response a b
 
 -- class of unsollicited message types
 class (ToJSON m,FromJSON m,Typeable m) => Message m where
