@@ -35,7 +35,7 @@ instance ToJSON Msg
 instance FromJSON Msg
 
 fromBS :: BSL.ByteString -> Either String Msg
-fromBS = eitherDecode . BSL.takeWhile (/= 0)
+fromBS = eitherDecode' . BSL.takeWhile (/= 0)
 
 toBS :: Msg -> BSL.ByteString
 toBS = encode
