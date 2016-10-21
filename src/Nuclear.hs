@@ -18,7 +18,6 @@ module Nuclear
   , Nuclear (..)
   , Indexed (..)
   , ToText (..)
-  -- , FromText (..)
   , ToBS (..)
   , FromBS (..)
   , module Data.Aeson
@@ -30,14 +29,20 @@ module Nuclear
 import Data.Aeson
 import Data.Monoid
 import Data.Proxy
-import Data.Text.Lazy hiding (index)
-import Data.Text.Lazy.Encoding
+import Data.Text hiding (index)
+import Data.Text.Encoding
 import Data.Typeable
 import Data.List as L
 
 import GHC.Generics
 
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Encoding as TL
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BSL
+
+-- Note: This module, and, thus, its descendants, defaults to preferring
+-- lazy bytestrings and strict text.
 
 data Msg
   = Msg
@@ -49,7 +54,6 @@ instance FromJSON Msg
 instance ToBS Msg
 instance FromBS Msg
 instance ToText Msg
--- instance FromText Msg
 
 {-# INLINE encodeMsg #-}
 encodeMsg :: ToJSON a => Text -> a -> Msg
@@ -119,7 +123,6 @@ qualRep _ =
            r ++ L.intercalate " " (L.map (go True) trs)
 
 class Typeable msgTy => Message msgTy where
-  -- better name for this?
   type M msgTy :: *
   {-# INLINE messageHeader #-}
   messageHeader :: Proxy msgTy -> Text
@@ -214,25 +217,36 @@ class FromBS a where
   fromBS = eitherDecode' . BSL.takeWhile (/= 0)
 
 instance FromBS Text where
-  fromBS = Right . decodeUtf8
+  fromBS = Right . TL.toStrict . TL.decodeUtf8
 
--- ToText is representational; toText is often used to assist in the
--- construction of storage filepaths or message headers. The default
--- instance, however, is simply a text packing of a JSON encoding via
--- toBS.
+instance FromBS TL.Text where
+  fromBS = Right . TL.decodeUtf8
+
+-- ToText is representational and is thus uni-directional. For a fully
+-- bidirectional encoding, see ToBS/FromBS where the expectation is that
+-- fromBS . toBS = id and toBS . fromBS = id
+--
+-- ToText is used to construct, possibly unique, resource identifiers.
+--
+-- Note the default instance uses a ToBS instance to construct a text value
+-- from a full encoding of the term; this is slow since ToBS generates a
+-- lazy bytestring and we must use lazy decoding and subsequent strictness
+-- conversion. For small terms, which is the intended use-case for the
+-- default instance, this won't matter much.
 class ToText a where
   toText :: a -> Text
   {-# INLINE toText #-}
   default toText :: ToBS a => a -> Text
-  toText = decodeUtf8 . toBS
+  toText = TL.toStrict . TL.decodeUtf8 . toBS
+
+instance ToText B.ByteString where
+  {-# INLINE toText #-}
+  toText = decodeUtf8
 
 instance ToText Text where
   {-# INLINE toText #-}
   toText = id
 
--- -- Find if this is useful anywhere
--- class FromText a where
---   fromText :: Text -> Either String a
---   {-# INLINE fromText #-}
---   default fromText :: FromBS a => Text -> Either String a
---   fromText = fromBS . encodeUtf8
+instance ToText TL.Text where
+  {-# INLINE toText #-}
+  toText = TL.toStrict
