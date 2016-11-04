@@ -18,6 +18,7 @@ module Nuclear
   , Nuclear (..)
   , Indexed (..)
   , ToText (..)
+  , FromText (..)
   , ToBS (..)
   , FromBS (..)
   , module Data.Aeson
@@ -29,13 +30,17 @@ module Nuclear
 import Data.Aeson
 import Data.Monoid
 import Data.Proxy
-import Data.Text hiding (index)
-import Data.Text.Encoding
 import Data.Typeable
 import Data.List as L
 
 import GHC.Generics
 
+import Numeric
+
+import Data.Text as T hiding (index)
+import Data.Text.Encoding as T
+import Data.Text.Lazy.Builder as Builder
+import Data.Text.Lazy.Builder.Int as Builder
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
 import qualified Data.ByteString as B
@@ -140,9 +145,12 @@ fullMsgHdr = append "Message :: " . fullRep
 
 class Indexed a where
   type I a :: *
+  type I a = a
   index :: (I a ~ i) => a -> i
+  default index :: (I a ~ a) => a -> a
+  index = id
 
-class (Typeable requestType) => Nuclear requestType rspTy | requestType -> rspTy where
+class (Typeable requestType) => Nuclear requestType where
   type Req requestType :: *
   type Rsp requestType :: *
 
@@ -171,7 +179,7 @@ fullReqHdr :: Typeable requestType => Proxy requestType -> Text
 fullReqHdr = fullRep
 
 simpleRspHdr :: ( Typeable requestType
-             , Nuclear requestType responseType
+             , Nuclear requestType
              , Req requestType ~ request
              , Indexed request
              , I request ~ requestIndex
@@ -181,7 +189,7 @@ simpleRspHdr :: ( Typeable requestType
 simpleRspHdr rqty_proxy req = rep rqty_proxy <> " " <> toText (index req)
 
 qualRspHdr :: ( Typeable requestType
-              , Nuclear requestType responseType
+              , Nuclear requestType
               , Req requestType ~ request
               , Indexed request
               , I request ~ requestIndex
@@ -191,7 +199,7 @@ qualRspHdr :: ( Typeable requestType
 qualRspHdr rqty_proxy req = qualRep rqty_proxy <> " " <> toText (index req)
 
 fullRspHdr :: ( Typeable requestType
-              , Nuclear requestType responseType
+              , Nuclear requestType
               , Req requestType ~ request
               , Indexed request
               , I request ~ requestIndex
@@ -237,16 +245,57 @@ class ToText a where
   toText :: a -> Text
   {-# INLINE toText #-}
   default toText :: ToBS a => a -> Text
+  -- can this fail at runtime?
   toText = TL.toStrict . TL.decodeUtf8 . toBS
 
+instance ToText BSL.ByteString where
+  -- can this fail at runtime?
+  toText = toText . TL.decodeUtf8
+
 instance ToText B.ByteString where
-  {-# INLINE toText #-}
+  -- can this fail at runtime?
   toText = decodeUtf8
 
 instance ToText Text where
-  {-# INLINE toText #-}
   toText = id
 
 instance ToText TL.Text where
-  {-# INLINE toText #-}
   toText = TL.toStrict
+
+instance ToText Char where
+  toText = T.singleton
+
+instance ToText String where
+  toText = pack
+
+instance ToText Int where
+  toText = shortText . Builder.decimal
+
+instance ToText Integer where
+  toText = shortText . Builder.decimal
+
+instance ToText Double where
+  toText = toText . ($ "") . showFFloat Nothing
+
+instance ToText Bool where
+    toText True  = "true"
+    toText False = "false"
+
+shortText :: Builder -> Text
+shortText = TL.toStrict . Builder.toLazyTextWith 32
+
+-- FromText is a convenience class that should be considered closed.
+class FromText a where
+  fromText :: Text -> a
+
+instance FromText TL.Text where
+  fromText = TL.fromStrict
+
+instance FromText String where
+  fromText = unpack
+
+instance FromText B.ByteString where
+  fromText = encodeUtf8
+
+instance FromText BSL.ByteString where
+  fromText = BSL.fromStrict . T.encodeUtf8
