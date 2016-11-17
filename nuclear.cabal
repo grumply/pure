@@ -18,14 +18,42 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Nuclear
+                     , Data.JSTime
+                     , Data.MicroTime
+                     , Nuclear.Header
+                     , Nuclear.ToBS
+                     , Nuclear.FromBS
+                     , Nuclear.ToText
+                     , Nuclear.FromText
+                     , Nuclear.TypeRep
+                     , Nuclear.Nuclear
+                     , Nuclear.Msg
+                     , Nuclear.Message
+                     , Nuclear.Indexed
+                     , Nuclear.API
+                     , Nuclear.API.Interface
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.8
+                     , ef-core >= 1.6
+                     , ef-base >= 0.12
                      , bytestring
                      , text
                      , binary
                      , aeson >= 0.9
+                     , time
   default-extensions:  DefaultSignatures
                      , RecordWildCards
+                     , DeriveGeneric
+                     , DeriveAnyClass
+                     , RankNTypes
+                     , ScopedTypeVariables
+                     , KindSignatures
+                     , PolyKinds
+                     , TypeFamilies
+                     , FlexibleInstances
+                     , DataKinds
+                     , TypeOperators
+                     , GADTs
   hs-source-dirs:      src
   default-language:    Haskell2010
