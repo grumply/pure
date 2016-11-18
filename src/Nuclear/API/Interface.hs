@@ -1,6 +1,4 @@
 {-# language UndecidableInstances #-}
-{-# language MultiParamTypeClasses #-}
-{-# language InstanceSigs #-}
 module Nuclear.API.Interface where
 
 import Data.Proxy
@@ -8,7 +6,7 @@ import Data.Proxy
 import Unsafe.Coerce
 
 import Nuclear.Message
-import Nuclear.Nuclear
+import Nuclear.Request
 
 {- Example API
 
@@ -107,48 +105,47 @@ instance ( Remove message messages ~ messages'
   deleteMessageEndpoint p (MessageCons mh mapi) =
     MessageCons mh (deleteMessageEndpoint p mapi)
 
-class ToNuclearAPI requests where
-  makeNuclearAPI :: PList requests -> NuclearAPI requests
+class ToRequestAPI requests where
+  makeRequestAPI :: PList requests -> RequestAPI requests
 
-instance ToNuclearAPI '[] where
-  makeNuclearAPI _ = NuclearNull
+instance ToRequestAPI '[] where
+  makeRequestAPI _ = RequestNull
 
-instance (Nuclear x, ToNuclearAPI xs) => ToNuclearAPI (x ': xs) where
-  makeNuclearAPI (PCons p ps) = NuclearCons p (makeNuclearAPI ps)
+instance (Request x, ToRequestAPI xs) => ToRequestAPI (x ': xs) where
+  makeRequestAPI (PCons p ps) = RequestCons p (makeRequestAPI ps)
 
-data NuclearAPI requests
+data RequestAPI requests
   where
-    NuclearNull
-      :: NuclearAPI '[]
+    RequestNull
+      :: RequestAPI '[]
 
-    NuclearCons
-      :: Nuclear request
+    RequestCons
+      :: Request request
       => Proxy request
-      -> NuclearAPI requests
-      -> NuclearAPI (request ': requests)
+      -> RequestAPI requests
+      -> RequestAPI (request ': requests)
 
 -- deletes the /first/ occurence of request in requests; failure to witness the request in requests is a type error.
-class (Remove request requests ~ requests') => DeleteNuclearEndpoint request requests requests' where
-  deleteNuclearEndpoint :: Proxy request -> NuclearAPI requests -> NuclearAPI requests'
+class (Remove request requests ~ requests') => DeleteRequestEndpoint request requests requests' where
+  deleteRequestEndpoint :: Proxy request -> RequestAPI requests -> RequestAPI requests'
 
-instance (Remove request (request ': requests) ~ requests) => DeleteNuclearEndpoint request (request ': requests) requests where
-  deleteNuclearEndpoint _ (NuclearCons _ napi) = napi
+instance (Remove request (request ': requests) ~ requests) => DeleteRequestEndpoint request (request ': requests) requests where
+  deleteRequestEndpoint _ (RequestCons _ napi) = napi
 
 instance ( -- Remove request requests ~ requests' -- constraint not necessary, but descriptive
-           DeleteNuclearEndpoint request requests requests'
+           DeleteRequestEndpoint request requests requests'
          , Remove request (x ': requests) ~ requests''
          , requests'' ~ (x ': requests')
-         ) => DeleteNuclearEndpoint request (x ': requests) requests'' where
-  deleteNuclearEndpoint p (NuclearCons mh napi) =
-    NuclearCons mh (deleteNuclearEndpoint p napi)
+         ) => DeleteRequestEndpoint request (x ': requests) requests'' where
+  deleteRequestEndpoint p (RequestCons mh napi) =
+    RequestCons mh (deleteRequestEndpoint p napi)
 
 data API messages requests
-  = API (MessageAPI messages) (NuclearAPI requests)
+  = API (MessageAPI messages) (RequestAPI requests)
 
-api :: (ToMessageAPI messages, ToNuclearAPI requests)
+api :: (ToMessageAPI messages, ToRequestAPI requests)
     => PList messages -> PList requests -> API messages requests
-api ms rs = API (makeMessageAPI ms) (makeNuclearAPI rs)
-
+api ms rs = API (makeMessageAPI ms) (makeRequestAPI rs)
 
 data PList elems
   where

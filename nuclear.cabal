@@ -26,12 +26,15 @@ library
                      , Nuclear.ToText
                      , Nuclear.FromText
                      , Nuclear.TypeRep
-                     , Nuclear.Nuclear
+                     , Nuclear.Request
                      , Nuclear.Msg
                      , Nuclear.Message
                      , Nuclear.Indexed
+                     , Nuclear.Endpoint
                      , Nuclear.API
                      , Nuclear.API.Interface
+                     , Nuclear.API.Implementation
+                     , Nuclear.API.Unification
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.8
@@ -55,5 +58,8 @@ library
                      , DataKinds
                      , TypeOperators
                      , GADTs
+                     , MultiParamTypeClasses
+                     , InstanceSigs
+                     , FlexibleContexts
   hs-source-dirs:      src
   default-language:    Haskell2010

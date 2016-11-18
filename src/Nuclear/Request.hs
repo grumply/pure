@@ -1,5 +1,5 @@
 {-# language OverloadedStrings #-}
-module Nuclear.Nuclear where
+module Nuclear.Request where
 
 import Nuclear.TypeRep
 
@@ -10,7 +10,7 @@ import Data.Typeable
 import Nuclear.ToText
 import Nuclear.Indexed
 
-class (Typeable (requestType :: *)) => Nuclear requestType where
+class (Typeable (requestType :: *)) => Request requestType where
   type Req requestType :: *
   type Rsp requestType :: *
 
@@ -39,7 +39,7 @@ fullReqHdr :: forall (requestType :: *). Typeable requestType => Proxy requestTy
 fullReqHdr = fullRep
 
 simpleRspHdr :: ( Typeable requestType
-                , Nuclear requestType
+                , Request requestType
                 , Req requestType ~ request
                 , Indexed request
                 , I request ~ requestIndex
@@ -49,7 +49,7 @@ simpleRspHdr :: ( Typeable requestType
 simpleRspHdr rqty_proxy req = rep rqty_proxy <> " " <> toText (index req)
 
 qualRspHdr :: ( Typeable requestType
-              , Nuclear requestType
+              , Request requestType
               , Req requestType ~ request
               , Indexed request
               , I request ~ requestIndex
@@ -59,7 +59,7 @@ qualRspHdr :: ( Typeable requestType
 qualRspHdr rqty_proxy req = qualRep rqty_proxy <> " " <> toText (index req)
 
 fullRspHdr :: ( Typeable requestType
-              , Nuclear requestType
+              , Request requestType
               , Req requestType ~ request
               , Indexed request
               , I request ~ requestIndex

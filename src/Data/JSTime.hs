@@ -23,6 +23,8 @@ instance Num JSTime where
   (*) (JSTime t0) (JSTime t1) = JSTime (t0 * t1)
   (-) (JSTime t0) (JSTime t1) = JSTime (t0 - t1)
   (+) (JSTime t0) (JSTime t1) = JSTime (t0 + t1)
+  abs = JSTime . abs . millis
+  signum = JSTime . signum . millis
   fromInteger = JSTime
 
 jstime :: (Monad super, MonadIO super) => super JSTime

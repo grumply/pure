@@ -23,6 +23,8 @@ instance Num MicroTime where
   (*) (MicroTime t0) (MicroTime t1) = MicroTime (t0 * t1)
   (-) (MicroTime t0) (MicroTime t1) = MicroTime (t0 - t1)
   (+) (MicroTime t0) (MicroTime t1) = MicroTime (t0 + t1)
+  abs = MicroTime . abs . micros
+  signum = MicroTime . signum . micros
   fromInteger = MicroTime
 
 microtime :: (Monad super, MonadIO super) => super MicroTime
