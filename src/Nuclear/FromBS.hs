@@ -17,4 +17,3 @@ instance FromBS Text where
 
 instance FromBS TL.Text where
   fromBS = Right . TL.decodeUtf8
-

@@ -147,7 +147,7 @@ api :: (ToMessageAPI messages, ToRequestAPI requests)
     => PList messages -> PList requests -> API messages requests
 api ms rs = API (makeMessageAPI ms) (makeRequestAPI rs)
 
-data PList elems
+data PList (elems :: [k])
   where
 
     PNull
@@ -173,7 +173,7 @@ instance Ap f '[] where
   (|>) _ _ = PNull
 instance (Ap f ys) => Ap f (y ': ys) where
   (|>) pf (PCons ph hs') =
-      PCons (pf <<@>> ph) (pf |> hs')
+      PCons (pf @@ ph) (pf |> hs')
 
 infixr 4 <|
 class On (fs :: [k -> k']) (x :: k) where
@@ -182,16 +182,16 @@ instance On '[] x where
   (<|) _ _ = PNull
 instance On xs k => On (x ': xs) k where
   (<|) (PCons pf hs) pk =
-    PCons (pf <<@>> pk) (hs <| pk)
+    PCons (pf @@ pk) (hs <| pk)
 
-infixr 6 <<@>>
-(<<@>>) :: forall f a b. (b ~ f a) => Proxy (f :: k -> k') -> Proxy (a :: k) -> Proxy (b :: k')
-(<<@>>) _ _ = Proxy :: Proxy (f a :: k')
+infixr 6 @@
+(@@) :: forall f a b. (b ~ f a) => Proxy (f :: k -> k') -> Proxy (a :: k) -> Proxy (b :: k')
+(@@) _ _ = Proxy :: Proxy (f a :: k')
 
 empty :: PList '[]
 empty = PNull
 
-only :: Proxy elem -> PList '[elem]
+only :: Proxy (elem :: k) -> PList '[elem]
 only x = x <:> empty
 
 infixr 5 <&>

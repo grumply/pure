@@ -9,21 +9,6 @@ import Data.Proxy
 -- A few common header combinators.
 
 ----------------------------------------
--- Destination
-
-data Manager a
-withManager :: Proxy Manager
-withManager = Proxy
-
-data Server a
-withServer :: Proxy Server
-withServer = Proxy
-
-data Client a
-withClient :: Proxy Client
-withClient = Proxy
-
-----------------------------------------
 -- Lifecycle
 
 data Register a
@@ -84,3 +69,7 @@ unsubscribe = Proxy
 data Publish a
 publish :: Proxy Publish
 publish = Proxy
+
+data Ready
+ready :: Proxy Ready
+ready = Proxy

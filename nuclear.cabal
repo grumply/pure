@@ -25,6 +25,7 @@ library
                      , Nuclear.FromBS
                      , Nuclear.ToText
                      , Nuclear.FromText
+                     , Nuclear.Strict
                      , Nuclear.TypeRep
                      , Nuclear.Request
                      , Nuclear.Msg
@@ -42,8 +43,8 @@ library
                      , ef-base >= 0.12
                      , bytestring
                      , text
-                     , binary
                      , aeson >= 0.9
+                     , hashable
                      , time
   default-extensions:  DefaultSignatures
                      , RecordWildCards
