@@ -7,25 +7,25 @@ import Nuclear.API.Implementation
 
 import Unsafe.Coerce
 
-data UnifiedAPI localMessages localRequests remoteMessages remoteRequests
-  = UnifiedAPI
-      (API localMessages localRequests)
-      (API remoteMessages remoteRequests)
+-- data Unified msg req self super messages requests messages' requests'
+--   where
+--     Unify
+--       :: FullAPI messages requests
+--       -> Implementation msg req self super messages' requests'
+--       -> Unified msg req self super messages requests messages' requests'
 
-unify :: API localMessages localRequests -> API remoteMessages remoteRequests -> UnifiedAPI localMessages localRequests remoteMessages remoteRequests
-unify = UnifiedAPI
+-- unify :: FullAPI messages requests -> Implementation msg req self super messages' requests' -> Unified msg req self super messages requests messages' requests'
+-- unify = Unify
 
-enact :: forall msg req messages requests messages' requests' remoteMessages remoteRequests self super.
-         ( Monad super, MonadIO super
-         , EnactEndpoints MessageAPI msg self super messages messages'
-         , EnactEndpoints RequestAPI req self super requests requests'
-         )
-      => UnifiedAPI messages requests remoteMessages remoteRequests
-      -> Implementation msg req self super messages' requests'
-      -> Narrative self super (ActiveAPI self super messages requests)
-enact u@(UnifiedAPI local _) (Implementation mhs rhs) = do
-  let API mapi rapi = local
-  amapi <- enactEndpoints mapi mhs
-  arapi <- enactEndpoints rapi rhs
-  let active = ActiveAPI amapi arapi
-  return active
+-- enact :: ( Monad super, MonadIO super
+--          , EnactEndpoints MessageAPI msg self super messages messages'
+--          , EnactEndpoints RequestAPI req self super requests requests'
+--          )
+--       => Unified msg req self super messages requests messages' requests'
+--       -> Narrative self super (ActiveAPI self super messages requests)
+-- enact (Unify local (Impl mhs rhs)) = do
+--   let API mapi rapi = local
+--   amapi <- enactEndpoints mapi mhs
+--   arapi <- enactEndpoints rapi rhs
+--   let active = ActiveAPI amapi arapi
+--   return active

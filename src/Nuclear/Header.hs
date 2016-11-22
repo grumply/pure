@@ -8,24 +8,6 @@ import Data.Proxy
 
 -- A few common header combinators.
 
-----------------------------------------
--- Lifecycle
-
-data Register a
-register :: Proxy Register
-register = Proxy
-
-data Initialize a
-initialize :: Proxy Initialize
-initialize = Proxy
-
-data Shutdown a
-shutdown :: Proxy Shutdown
-shutdown = Proxy
-
-----------------------------------------
--- Verbs and Status/Updates
-
 data Perform a
 perform :: Proxy Perform
 perform = Proxy

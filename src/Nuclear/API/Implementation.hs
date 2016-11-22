@@ -23,62 +23,92 @@ data Endpoints (hndlr :: [* -> *] -> (* -> *) -> * -> *) (self :: [* -> *]) (sup
       -> Endpoints hndlr self super endpoints
       -> Endpoints hndlr self super (endpoint ': endpoints)
 
-emptyH = EndpointsNull
+-- emptyH = EndpointsNull
 
-infixr 5 <@>
-(<@>) :: hndlr self super endpoint -> Endpoints hndlr self super endpoints -> Endpoints hndlr self super (endpoint ': endpoints)
-(<@>) = EndpointsCons
+instance EmptyDefault (Endpoints hndlr self super) where
+  none = EndpointsNull
+
+instance EmptyDefault (API f) where
+  none = APINull
+
+-- instance Build (hndlr self super :: * -> *) (Endpoints hndlr self super :: [*] -> *) where
+--   (<:>) = EndpointsCons
+
+instance (Appended '[] xs ~ xs) => Append (Endpoints hndlr self super) '[] xs xs where
+  (<++>) l (EndpointsCons x xs) = EndpointsCons x (l <++> xs)
+
+instance ( Removed x ys ~ ys
+         , Build (hndlr self super) (Endpoints hndlr self super)
+         , Append (Endpoints hndlr self super) xs ys zs'
+         , zs ~ (x ': Appended xs ys)
+         , zs ~ (z ': zs')
+         )
+    => Append (Endpoints hndlr self super) (x ': xs) ys zs
+  where
+    (<++>) (EndpointsCons x xs) ys = x <:> (xs <++> ys)
+
+infixr 5 <&>
+(<&>) = EndpointsCons
+
+-- infixr 5 <@>
+-- (<@>) :: hndlr self super endpoint -> Endpoints hndlr self super endpoints -> Endpoints hndlr self super (endpoint ': endpoints)
+-- (<@>) = EndpointsCons
 -- class EndpointCons (f :: [* -> *] -> (* -> *) -> [*] -> *) (g :: [* -> *] -> (* -> *) -> * -> *) (self :: [* -> *]) (super :: * -> *) (x :: *) (xs :: [*]) where
   -- (<@>) :: g self super x -> f self super xs -> f self super (x ': xs)
 
--- class GetEndpoint' hndlr self super (endpoint :: k) (endpoints :: [k]) (n :: Nat) where
---   getEndpoint' :: Index n -> Endpoints hndlr self super endpoints -> hndlr self super endpoint
+-- class GetHandler' hndlr self super (endpoint :: k) (endpoints :: [k]) (n :: Nat) where
+--   getHandler' :: Index n -> Endpoints hndlr self super endpoints -> hndlr self super endpoint
 
 -- instance endpoints ~ (endpoint ': xs)
-class GetEndpoint' (hndlr :: [* -> *] -> (* -> *) -> * -> *) (endpoint :: *) (endpoints :: [*]) (n :: Nat) where
-  getEndpoint' :: Index n
+class GetHandler' (hndlr :: [* -> *] -> (* -> *) -> * -> *) (endpoint :: *) (endpoints :: [*]) (n :: Nat) where
+  getHandler' :: Index n
                -> Endpoints hndlr self super endpoints
                -> hndlr self super endpoint
 
 instance endpoints ~ (endpoint ': xs)
-    => GetEndpoint' hndlr endpoint endpoints 'Z
+    => GetHandler' hndlr endpoint endpoints 'Z
   where
-    getEndpoint' _ (EndpointsCons h _) = h
+    getHandler' _ (EndpointsCons h _) = h
 
 instance ( index ~ Offset endpoint endpoints
-         , GetEndpoint' hndlr endpoint endpoints index
+         , GetHandler' hndlr endpoint endpoints index
          )
-    => GetEndpoint' hndlr endpoint (endpoint ': endpoints) ('S n)
+    => GetHandler' hndlr endpoint (endpoint ': endpoints) ('S n)
   where
-    getEndpoint' _ (EndpointsCons _ es) =
+    getHandler' _ (EndpointsCons _ es) =
       let index = Index :: Index (Offset endpoint endpoints)
-      in getEndpoint' index es
+      in getHandler' index es
 
-class GetEndpoint hndlr endpoint endpoints where
-  getEndpoint :: Endpoints hndlr self super endpoints
+class GetHandler hndlr endpoint endpoints where
+  getHandler :: Endpoints hndlr self super endpoints
               -> hndlr self super endpoint
 
 instance ( index ~ Offset endpoint endpoints
-         , GetEndpoint' hndlr endpoint endpoints index
+         , GetHandler' hndlr endpoint endpoints index
          )
-    => GetEndpoint hndlr endpoint endpoints
+    => GetHandler hndlr endpoint endpoints
   where
-    getEndpoint es =
+    getHandler es =
       let index = Index :: Index index
-      in getEndpoint' index es
+      in getHandler' index es
 
-class (Remove endpoint endpoints ~ endpoints') => DeleteEndpoint hndlr endpoint endpoints endpoints' where
-  deleteEndpoint :: Proxy endpoint -> Endpoints hndlr self super endpoints -> Endpoints hndlr self super endpoints'
+class (Removed endpoint endpoints ~ endpoints')
+    => DeleteHandler hndlr endpoint endpoints endpoints'
+  where
+    deleteHandler :: Proxy endpoint
+                   -> Endpoints hndlr self super endpoints
+                   -> Endpoints hndlr self super endpoints'
 
-instance (Remove endpoint (endpoint ': endpoints) ~ endpoints) => DeleteEndpoint hndlr endpoint (endpoint ': endpoints) endpoints where
-  deleteEndpoint _ (EndpointsCons _ hs) = hs
+instance (Removed endpoint (endpoint ': endpoints) ~ endpoints)
+    => DeleteHandler hndlr endpoint (endpoint ': endpoints) endpoints
+  where
+  deleteHandler _ (EndpointsCons _ hs) = hs
 
-instance ( Remove endpoint endpoints ~ endpoints'
-         , DeleteEndpoint hndlr endpoint endpoints endpoints'
-         , Remove endpoint (x ': endpoints) ~ endpoints''
-         , endpoints'' ~ (x ': endpoints')
-         ) => DeleteEndpoint hndlr endpoint (x ': endpoints) endpoints'' where
-  deleteEndpoint p (EndpointsCons mh mhs) = EndpointsCons mh (deleteEndpoint p mhs)
+instance ( DeleteHandler hndlr endpoint endpoints endpoints''
+         , Removed endpoint (x ': endpoints) ~ endpoints'
+         , endpoints' ~ (x ': endpoints'')
+         ) => DeleteHandler hndlr endpoint (x ': endpoints) endpoints' where
+  deleteHandler p (EndpointsCons mh mhs) = EndpointsCons mh (deleteHandler p mhs)
 
 data ActiveEndpoints self super endpoints
   where
@@ -99,14 +129,6 @@ class EnactEndpoints api_ty hndlr self super endpoints endpoints' where
 
 instance (Monad super) => EnactEndpoints api_ty hndlr self super '[] '[] where
   enactEndpoints _ _ = return ActiveEndpointsNull
-
-data Implementation msg req self super messages requests =
-  Implementation (Endpoints msg self super messages) (Endpoints req self super requests)
-
-impl :: Endpoints msg self super messages -> Endpoints req self super requests -> Implementation msg req self super messages requests
-impl = Implementation
-
-emptyImpl = Implementation emptyH emptyH
 
 data ActiveAPI self super messages requests =
   ActiveAPI (ActiveEndpoints self super messages) (ActiveEndpoints self super requests)
