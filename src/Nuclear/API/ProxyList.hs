@@ -58,7 +58,7 @@ class EmptyDefault (f :: [k] -> *) where
 instance EmptyDefault PList where
   none = PNull
 
-singleton x = x <:> none
+single x = x <:> none
 
 infixr 5 <:>
 class Build (f :: k -> *) (g :: [k] -> *) where
