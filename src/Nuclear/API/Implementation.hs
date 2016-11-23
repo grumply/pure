@@ -73,7 +73,7 @@ instance endpoints ~ (endpoint ': xs)
 instance ( index ~ Offset endpoint endpoints
          , GetHandler' hndlr endpoint endpoints index
          )
-    => GetHandler' hndlr endpoint (endpoint ': endpoints) ('S n)
+    => GetHandler' hndlr endpoint (x ': endpoints) ('S n)
   where
     getHandler' _ (EndpointsCons _ es) =
       let index = Index :: Index (Offset endpoint endpoints)
