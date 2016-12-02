@@ -32,10 +32,23 @@ jstime = timeInMillis
 
 timeInMillis :: (Monad super, MonadIO super) => super JSTime
 timeInMillis =
-  (JSTime . millis) <$> (liftIO getPOSIXTime)
-  where
-    millis = (`div` 1000)
-           . numerator
-           . toRational
-           . (* 1000000)
+  (JSTime . posixToMillis) <$> (liftIO getPOSIXTime)
 
+class FromJSTime a where
+  fromJSTime :: JSTime -> a
+
+instance FromJSTime POSIXTime where
+  fromJSTime (JSTime jst) = posixFromMillis jst
+
+posixToMillis :: POSIXTime -> Integer
+posixToMillis =
+  (`div` 1000)
+  . numerator
+  . toRational
+  . (* 1000000)
+
+posixFromMillis :: Integer -> POSIXTime
+posixFromMillis =
+  fromRational
+  . (% 1000000)
+  . (* 1000)

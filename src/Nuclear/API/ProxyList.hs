@@ -64,6 +64,7 @@ infixr 5 <:>
 class Build (f :: k -> *) (g :: [k] -> *) where
   (<:>) :: forall (x :: k) (xs :: [k]). f x -> g xs -> g (x ': xs)
 
+
 instance Build Proxy PList where
   (<:>) = PCons
 

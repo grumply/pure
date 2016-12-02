@@ -23,41 +23,25 @@ data Endpoints (hndlr :: [* -> *] -> (* -> *) -> * -> *) (self :: [* -> *]) (sup
       -> Endpoints hndlr self super endpoints
       -> Endpoints hndlr self super (endpoint ': endpoints)
 
--- emptyH = EndpointsNull
-
 instance EmptyDefault (Endpoints hndlr self super) where
   none = EndpointsNull
 
 instance EmptyDefault (API f) where
   none = APINull
 
+-- Doesn't work; not sure why....
 -- instance Build (hndlr self super :: * -> *) (Endpoints hndlr self super :: [*] -> *) where
 --   (<:>) = EndpointsCons
-
-instance (Appended '[] xs ~ xs) => Append (Endpoints hndlr self super) '[] xs xs where
-  (<++>) l (EndpointsCons x xs) = EndpointsCons x (l <++> xs)
-
-instance ( Removed x ys ~ ys
-         , Build (hndlr self super) (Endpoints hndlr self super)
-         , Append (Endpoints hndlr self super) xs ys zs'
-         , zs ~ (x ': Appended xs ys)
-         , zs ~ (z ': zs')
-         )
-    => Append (Endpoints hndlr self super) (x ': xs) ys zs
-  where
-    (<++>) (EndpointsCons x xs) ys = x <:> (xs <++> ys)
-
 infixr 5 <&>
 (<&>) = EndpointsCons
 
--- infixr 5 <@>
--- (<@>) :: hndlr self super endpoint -> Endpoints hndlr self super endpoints -> Endpoints hndlr self super (endpoint ': endpoints)
--- (<@>) = EndpointsCons
--- class EndpointCons (f :: [* -> *] -> (* -> *) -> [*] -> *) (g :: [* -> *] -> (* -> *) -> * -> *) (self :: [* -> *]) (super :: * -> *) (x :: *) (xs :: [*]) where
-  -- (<@>) :: g self super x -> f self super xs -> f self super (x ': xs)
+instance (Appended '[] xs ~ xs) => Append (Endpoints hndlr self super) '[] xs xs where
+  (<++>) EndpointsNull ys = ys
 
--- class GetHandler' hndlr self super (endpoint :: k) (endpoints :: [k]) (n :: Nat) where
---   getHandler' :: Index n -> Endpoints hndlr self super endpoints -> hndlr self super endpoint
+instance ( Appended (x ': xs) ys ~ zs, Appended (x ': xs) ys ~ (xy ': xys), Append (Endpoints hndlr self super) xs ys xys)
+    => Append (Endpoints hndlr self super) (x ': xs) ys zs
+  where
+    (<++>) (EndpointsCons x xs) ys = EndpointsCons x (xs <++> ys)
 
 -- instance endpoints ~ (endpoint ': xs)
 class GetHandler' (hndlr :: [* -> *] -> (* -> *) -> * -> *) (endpoint :: *) (endpoints :: [*]) (n :: Nat) where

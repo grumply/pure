@@ -43,9 +43,11 @@ type LazyText = TL.Text
 -- Note: This module, and, thus, its descendants, defaults to preferring
 -- lazy bytestrings and strict text.
 
-jsTimeToMicroTime :: JSTime -> MicroTime
-jsTimeToMicroTime jt = MicroTime $ (millis jt) * 1000
+instance FromJSTime MicroTime where
+ --  fromJSTime :: JSTime -> MicroTime
+  fromJSTime jt = MicroTime $ (millis jt) * 1000
 
--- truncate rather than round
-microTimeToJSTime :: MicroTime -> JSTime
-microTimeToJSTime mt = JSTime $ (micros mt) `div` 1000
+instance FromMicroTime JSTime where
+  -- fromMicrotime :: MicroTime -> JSTime
+  -- truncate rather than round
+  fromMicroTime mt = JSTime $ (micros mt) `div` 1000

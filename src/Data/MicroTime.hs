@@ -32,8 +32,21 @@ microtime = timeInMicros
 
 timeInMicros :: (Monad super, MonadIO super) => super MicroTime
 timeInMicros =
-  (MicroTime . micros) <$> (liftIO getPOSIXTime)
-  where
-    micros = numerator
-           . toRational
-           . (* 1000000)
+  (MicroTime . posixToMicros) <$> (liftIO getPOSIXTime)
+
+class FromMicroTime a where
+  fromMicroTime :: MicroTime -> a
+
+instance FromMicroTime POSIXTime where
+  fromMicroTime (MicroTime mt) = posixFromMicros mt
+
+posixToMicros :: POSIXTime -> Integer
+posixToMicros =
+  numerator
+  . toRational
+  . (* 1000000)
+
+posixFromMicros :: Integer -> POSIXTime
+posixFromMicros =
+  fromRational
+  . (% 1000000)
