@@ -1,4 +1,4 @@
-{-# language UndecidableInstances #-}
+{-# language FunctionalDependencies #-}
 module Nuclear.API.ProxyList where
 
 import Data.Proxy
@@ -61,9 +61,8 @@ instance EmptyDefault PList where
 only x = x <:> none
 
 infixr 5 <:>
-class Build (f :: k -> *) (g :: [k] -> *) where
+class Build (f :: k -> *) (g :: [k] -> *) | g -> f where
   (<:>) :: forall (x :: k) (xs :: [k]). f x -> g xs -> g (x ': xs)
-
 
 instance Build Proxy PList where
   (<:>) = PCons
@@ -74,15 +73,20 @@ class (Appended elems elems' ~ elems'')
   where
     (<++>) :: f elems -> f elems' -> f elems''
 
-instance (Appended '[] xs ~ xs) => Append PList '[] xs xs where
-  (<++>) l (PCons x xs) = PCons x (l <++> xs)
+instance (Appended es '[] ~ es) => Append f es '[] es where
+  (<++>) l _ = l
+
+instance (Appended '[] es ~ es) => Append f '[] es es where
+  (<++>) _ r = r
+
+-- instance (Appended '[] xs ~ xs) => Append PList '[] xs xs where
+--   (<++>) l (PCons x xs) = PCons x (l <++> xs)
 
 instance ( Removed x ys ~ ys
          , Append PList xs ys zs'
-         , zs ~ (x ': Appended xs ys)
-         , zs ~ (z ': zs')
+         , (z ': zs') ~ (x ': Appended xs ys)
          )
-    => Append PList (x ': xs) ys zs
+    => Append PList (x ': xs) ys (z ': zs')
   where
     (<++>) (PCons (x :: Proxy x) xs) ys = x <:> (xs <++> ys)
 

@@ -29,17 +29,14 @@ instance EmptyDefault (Endpoints hndlr self super) where
 instance EmptyDefault (API f) where
   none = APINull
 
--- Doesn't work; not sure why....
--- instance Build (hndlr self super :: * -> *) (Endpoints hndlr self super :: [*] -> *) where
---   (<:>) = EndpointsCons
-infixr 5 <&>
-(<&>) = EndpointsCons
+instance Build (hndlr self super :: * -> *) (Endpoints hndlr self super :: [*] -> *) where
+  (<:>) = EndpointsCons
 
-instance (Appended '[] xs ~ xs) => Append (Endpoints hndlr self super) '[] xs xs where
-  (<++>) EndpointsNull ys = ys
-
-instance ( Appended (x ': xs) ys ~ zs, Appended (x ': xs) ys ~ (xy ': xys), Append (Endpoints hndlr self super) xs ys xys)
-    => Append (Endpoints hndlr self super) (x ': xs) ys zs
+instance ( Appended (x ': xs) (y ': ys) ~ zs
+         , Appended (x ': xs) (y ': ys) ~ (xy ': xys)
+         , Append (Endpoints hndlr self super) xs (y ': ys) xys
+         )
+    => Append (Endpoints hndlr self super) (x ': xs) (y ': ys) zs
   where
     (<++>) (EndpointsCons x xs) ys = EndpointsCons x (xs <++> ys)
 
