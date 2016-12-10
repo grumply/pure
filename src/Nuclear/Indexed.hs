@@ -9,3 +9,7 @@ class Indexed a where
 
 instance Indexed ()
 
+instance {-# OVERLAPPABLE #-} Indexed a => Indexed [a] where
+  type I [a] = [I a]
+  index = map index
+

@@ -13,8 +13,8 @@ import Nuclear.FromText
 data Msg
   = Msg
     -- I'd prefer header/body but they overlap with the HTML elements.
-    { endpoint :: Text
-    , payload :: Value
+    { ep :: Text
+    , pl :: Value
     } deriving Generic
 instance ToJSON Msg
 instance FromJSON Msg
@@ -32,16 +32,13 @@ instance FromBS Msg where
 
 {-# INLINE encodeMsg #-}
 encodeMsg :: ToJSON a => Text -> a -> Msg
-encodeMsg endpoint a =
-  let payload = toJSON a
+encodeMsg ep a =
+  let pl = toJSON a
   in Msg {..}
 
 {-# INLINE decodeMsg #-}
 decodeMsg :: FromJSON a => Msg -> Maybe a
 decodeMsg Msg {..} =
-  case fromJSON payload of
+  case fromJSON pl of
     Error _ -> Nothing
     Success a -> Just a
-
-
-  

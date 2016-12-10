@@ -46,6 +46,14 @@ instance ( Removed endpoint endpoints ~ endpoints'
   deleteEndpoint p (APICons mh mapi) =
     APICons mh (deleteEndpoint p mapi)
 
+instance ( Appended (x ': xs) (y ': ys) ~ zs
+         , Appended (x ': xs) (y ': ys) ~ (xy ': xys)
+         , Append (API f) xs (y ': ys) xys
+         )
+    => Append (API f) (x ': xs) (y ': ys) zs
+  where
+    (<++>) (APICons x xs) ys = APICons x (xs <++> ys)
+
 type MessageAPI = API Message
 type RequestAPI = API Request
 

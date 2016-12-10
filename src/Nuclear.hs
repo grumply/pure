@@ -2,7 +2,6 @@ module Nuclear
   ( module Data.Aeson
   , module Data.Typeable
   , module Data.Hashable
-  , module GHC.Generics
   , module Export
   , LazyByteString
   , LazyText
@@ -11,7 +10,7 @@ module Nuclear
 import Data.Aeson
 import Data.Hashable
 import Data.Typeable
-import GHC.Generics
+import GHC.Generics as Export (Generic)
 
 import Data.Text as Export (Text)
 import Data.ByteString as Export (ByteString)
