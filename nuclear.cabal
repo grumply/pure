@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                nuclear
-version:             0.1.0.0
+version:             2.0.0.0
 synopsis:            Nuclear iis shared functionality between fusion and fission.
 -- description:
 homepage:            ef-lang.org/nuclear
@@ -28,21 +28,19 @@ library
                      , Nuclear.Strict
                      , Nuclear.TypeRep
                      , Nuclear.Request
-                     , Nuclear.Msg
+                     , Nuclear.Nuclear
                      , Nuclear.Message
                      , Nuclear.Indexed
                      , Nuclear.Endpoint
                      , Nuclear.API
                      , Nuclear.API.Interface
                      , Nuclear.API.Implementation
-                     , Nuclear.API.Unification
                      , Nuclear.API.ProxyList
-                     , Nuclear.API.TypeList
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.8
-                     , ef-core >= 1.6
-                     , ef-base >= 0.12
+                     , ef-core >= 2.0
+                     , ef-base >= 2.0
                      , bytestring
                      , text
                      , aeson >= 0.9

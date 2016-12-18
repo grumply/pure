@@ -13,106 +13,106 @@ import Nuclear.API.Interface
 
 import Data.Proxy
 
-data Endpoints (hndlr :: [* -> *] -> (* -> *) -> * -> *) (self :: [* -> *]) (super :: * -> *) (endpoints :: [*])
+data Endpoints (hndlr :: [* -> *] -> (* -> *) -> * -> *) (ms :: [* -> *]) (c :: * -> *) (es :: [*])
   where
     EndpointsNull
-      :: Endpoints hndlr self super '[]
+      :: Endpoints hndlr ms c '[]
 
     EndpointsCons
-      :: hndlr self super endpoint
-      -> Endpoints hndlr self super endpoints
-      -> Endpoints hndlr self super (endpoint ': endpoints)
+      :: hndlr ms c e
+      -> Endpoints hndlr ms c es
+      -> Endpoints hndlr ms c (e ': es)
 
-instance EmptyDefault (Endpoints hndlr self super) where
+instance EmptyDefault (Endpoints hndlr ms c) where
   none = EndpointsNull
 
 instance EmptyDefault (API f) where
   none = APINull
 
-instance Build (hndlr self super :: * -> *) (Endpoints hndlr self super :: [*] -> *) where
+instance Build (hndlr ms c :: * -> *) (Endpoints hndlr ms c :: [*] -> *) where
   (<:>) = EndpointsCons
 
 instance ( Appended (x ': xs) (y ': ys) ~ zs
          , Appended (x ': xs) (y ': ys) ~ (xy ': xys)
-         , Append (Endpoints hndlr self super) xs (y ': ys) xys
+         , NuclearAppend (Endpoints hndlr ms c) xs (y ': ys) xys
          )
-    => Append (Endpoints hndlr self super) (x ': xs) (y ': ys) zs
+    => NuclearAppend (Endpoints hndlr ms c) (x ': xs) (y ': ys) zs
   where
     (<++>) (EndpointsCons x xs) ys = EndpointsCons x (xs <++> ys)
 
--- instance endpoints ~ (endpoint ': xs)
-class GetHandler' (hndlr :: [* -> *] -> (* -> *) -> * -> *) (endpoint :: *) (endpoints :: [*]) (n :: Nat) where
+-- instance es ~ (e ': xs)
+class GetHandler' (hndlr :: [* -> *] -> (* -> *) -> * -> *) (e :: *) (es :: [*]) (n :: Nat) where
   getHandler' :: Index n
-               -> Endpoints hndlr self super endpoints
-               -> hndlr self super endpoint
+               -> Endpoints hndlr ms c es
+               -> hndlr ms c e
 
-instance endpoints ~ (endpoint ': xs)
-    => GetHandler' hndlr endpoint endpoints 'Z
+instance es ~ (e ': xs)
+    => GetHandler' hndlr e es 'Z
   where
     getHandler' _ (EndpointsCons h _) = h
 
-instance ( index ~ Offset endpoint endpoints
-         , GetHandler' hndlr endpoint endpoints index
+instance ( index ~ Offset es e
+         , GetHandler' hndlr e es index
          )
-    => GetHandler' hndlr endpoint (x ': endpoints) ('S n)
+    => GetHandler' hndlr e (x ': es) ('S n)
   where
     getHandler' _ (EndpointsCons _ es) =
-      let index = Index :: Index (Offset endpoint endpoints)
+      let index = Index :: Index index
       in getHandler' index es
 
-class GetHandler hndlr endpoint endpoints where
-  getHandler :: Endpoints hndlr self super endpoints
-              -> hndlr self super endpoint
+class GetHandler hndlr e es where
+  getHandler :: Endpoints hndlr ms c es
+             -> hndlr ms c e
 
-instance ( index ~ Offset endpoint endpoints
-         , GetHandler' hndlr endpoint endpoints index
+instance ( index ~ Offset es e
+         , GetHandler' hndlr e es index
          )
-    => GetHandler hndlr endpoint endpoints
+    => GetHandler hndlr e es
   where
     getHandler es =
       let index = Index :: Index index
       in getHandler' index es
 
-class (Removed endpoint endpoints ~ endpoints')
-    => DeleteHandler hndlr endpoint endpoints endpoints'
+class (Removed es e ~ es')
+    => DeleteHandler hndlr e es es'
   where
-    deleteHandler :: Proxy endpoint
-                   -> Endpoints hndlr self super endpoints
-                   -> Endpoints hndlr self super endpoints'
+    deleteHandler :: Proxy e
+                  -> Endpoints hndlr ms c es
+                  -> Endpoints hndlr ms c es'
 
-instance (Removed endpoint (endpoint ': endpoints) ~ endpoints)
-    => DeleteHandler hndlr endpoint (endpoint ': endpoints) endpoints
+instance (Removed (e ': es) e ~ es)
+    => DeleteHandler hndlr e (e ': es) es
   where
   deleteHandler _ (EndpointsCons _ hs) = hs
 
-instance ( DeleteHandler hndlr endpoint endpoints endpoints''
-         , Removed endpoint (x ': endpoints) ~ endpoints'
-         , endpoints' ~ (x ': endpoints'')
-         ) => DeleteHandler hndlr endpoint (x ': endpoints) endpoints' where
+instance ( DeleteHandler hndlr e es es''
+         , Removed (x ': es) e ~ es'
+         , es' ~ (x ': es'')
+         ) => DeleteHandler hndlr e (x ': es) es' where
   deleteHandler p (EndpointsCons mh mhs) = EndpointsCons mh (deleteHandler p mhs)
 
-data ActiveEndpoints self super endpoints
+data ActiveEndpoints ms c es
   where
     ActiveEndpointsNull
-      :: ActiveEndpoints self super '[]
+      :: ActiveEndpoints ms c '[]
 
     ActiveEndpointsCons
-      :: Proxy endpoint
-      -> Endpoint self super
-      -> ActiveEndpoints self super endpoints
-      -> ActiveEndpoints self super (endpoint ': endpoints)
+      :: Proxy e
+      -> Endpoint ms c
+      -> ActiveEndpoints ms c es
+      -> ActiveEndpoints ms c (e ': es)
 
-class EnactEndpoints api_ty hndlr self super endpoints endpoints' where
-  -- we take api_ty's endpoints to be our fixed basis
-  enactEndpoints :: api_ty endpoints
-                 -> Endpoints hndlr self super endpoints'
-                 -> Narrative self super (ActiveEndpoints self super endpoints)
+class EnactEndpoints api_ty hndlr ms c es es' where
+  -- we take api_ty's es to be our fixed basis
+  enactEndpoints :: api_ty es
+                 -> Endpoints hndlr ms c es'
+                 -> Code ms c (ActiveEndpoints ms c es)
 
-instance (Monad super) => EnactEndpoints api_ty hndlr self super '[] '[] where
+instance (Monad c, Functor (Messages ms)) => EnactEndpoints api_ty hndlr ms c '[] '[] where
   enactEndpoints _ _ = return ActiveEndpointsNull
 
-data ActiveAPI self super messages requests =
-  ActiveAPI (ActiveEndpoints self super messages) (ActiveEndpoints self super requests)
+data ActiveAPI ms c messages requests =
+  ActiveAPI (ActiveEndpoints ms c messages) (ActiveEndpoints ms c requests)
 
 type family Equal a b :: Bool
   where

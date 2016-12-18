@@ -3,7 +3,7 @@ module Nuclear.API.ProxyList where
 
 import Data.Proxy
 
-import Nuclear.API.TypeList
+import Ef.Type.List
 
 -- Utilities to build lists of proxies that have shared shape.
 
@@ -38,7 +38,7 @@ instance (Ap f ys) => Ap f (y ': ys) where
   (|>) pf (PCons ph hs') =
       PCons (pf <@> ph) (pf |> hs')
 
-infixr 4 <|
+infixl 4 <|
 class On (fs :: [k -> k']) (x :: k) where
   (<|) :: ((fs |&| x) ~ fs') => PList fs -> Proxy x -> PList fs'
 instance On '[] x where
@@ -48,7 +48,7 @@ instance On xs k => On (x ': xs) k where
     PCons (pf <@> pk) (hs <| pk)
 
 -- higher-kinded proxy application
-infixr 6 <@>
+infixl 6 <@>
 (<@>) :: forall f a b. (b ~ f a) => Proxy (f :: k -> k') -> Proxy (a :: k) -> Proxy (b :: k')
 (<@>) _ _ = Proxy :: Proxy (f a :: k')
 
@@ -69,24 +69,24 @@ instance Build Proxy PList where
 
 infixr 3 <++>
 class (Appended elems elems' ~ elems'')
-    => Append (f :: [k] -> *) (elems :: [k]) (elems' :: [k]) (elems'' :: [k])
+    => NuclearAppend (f :: [k] -> *) (elems :: [k]) (elems' :: [k]) (elems'' :: [k])
   where
     (<++>) :: f elems -> f elems' -> f elems''
 
-instance (Appended es '[] ~ es) => Append f es '[] es where
+instance (Appended es '[] ~ es) => NuclearAppend f es '[] es where
   (<++>) l _ = l
 
-instance (Appended '[] es ~ es) => Append f '[] es es where
+instance (Appended '[] es ~ es) => NuclearAppend f '[] es es where
   (<++>) _ r = r
 
 -- instance (Appended '[] xs ~ xs) => Append PList '[] xs xs where
 --   (<++>) l (PCons x xs) = PCons x (l <++> xs)
 
-instance ( Removed x ys ~ ys
-         , Append PList xs ys zs'
-         , (z ': zs') ~ (x ': Appended xs ys)
+instance ( Removed ys x   ~ ys
+         , NuclearAppend PList xs ys zs'
+ , Appended (x ': xs) ys ~ (x ': zs')
          )
-    => Append PList (x ': xs) ys (z ': zs')
+    => NuclearAppend PList (x ': xs) ys (x ': zs')
   where
     (<++>) (PCons (x :: Proxy x) xs) ys = x <:> (xs <++> ys)
 
@@ -95,6 +95,6 @@ instance ( Removed x ys ~ ys
 -- This is useful when combining two disparate APIs that are  possibly written and defined in
 -- separate libraries.
 infixr 1 <||>
-(<||>) :: Append f xs ys zs => f xs -> f ys -> f zs
+(<||>) :: NuclearAppend f xs ys zs => f xs -> f ys -> f zs
 (<||>) = (<++>)
 

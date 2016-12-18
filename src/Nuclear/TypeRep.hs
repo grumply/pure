@@ -22,7 +22,7 @@ rep _ =
          else if surround then
            " (" ++ L.intercalate " " (r:L.map (go True) trs) ++ ")"
          else
-           r ++ L.intercalate " " (L.map (go True) trs)
+           L.intercalate " " (r:L.map (go True) trs)
 
 -- | fullRep is a type representation with package and package version,
 -- and full module qualification. Use this only when expecting to create
@@ -42,7 +42,7 @@ fullRep _ =
          else if surround then
            " (" ++ L.intercalate " " (r:L.map (go True) trs) ++ ")"
          else
-           r ++ L.intercalate " " (L.map (go True) trs)
+           L.intercalate " " (r:L.map (go True) trs)
 
 -- | qualRep is a type representation with full module qualification.
 {-# INLINE qualRep #-}
@@ -59,5 +59,5 @@ qualRep _ =
          else if surround then
            " (" ++ L.intercalate " " (r:L.map (go True) trs) ++ ")"
          else
-           r ++ L.intercalate " " (L.map (go True) trs)
+           L.intercalate " " (r:L.map (go True) trs)
 

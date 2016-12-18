@@ -2,9 +2,7 @@ module Nuclear.API (module Export) where
 
 import Nuclear.API.Implementation as Export
 import Nuclear.API.Interface as Export
-import Nuclear.API.Unification as Export
 import Nuclear.API.ProxyList as Export
-import Nuclear.API.TypeList as Export
 
 -- Nuclear.API incorporates the following:
 --

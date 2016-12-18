@@ -20,7 +20,7 @@ import Nuclear.FromBS as Export
 import Nuclear.ToText as Export
 import Nuclear.FromText as Export
 import Nuclear.Strict as Export
-import Nuclear.Msg as Export
+import Nuclear.Nuclear as Export
 import Nuclear.Request as Export
 import Nuclear.Message as Export
 import Nuclear.TypeRep as Export

@@ -2,10 +2,11 @@
 module Nuclear.API.Interface
   ( module Nuclear.API.Interface
   , module Nuclear.API.ProxyList
-  , module Nuclear.API.TypeList
+  , module Ef.Type.List
   ) where
 
 import Data.Proxy
+import Ef.Type.List
 
 import Unsafe.Coerce
 
@@ -13,52 +14,51 @@ import Nuclear.Message
 import Nuclear.Request
 
 import Nuclear.API.ProxyList
-import Nuclear.API.TypeList
 
 import GHC.Exts
 
-data API (f :: k -> Constraint) (endpoints :: [k])
+data API (f :: k -> Constraint) (es :: [k])
   where
     APINull
       :: API f '[]
 
     APICons
-      :: f endpoint
-      => Proxy endpoint
-      -> API f endpoints
-      -> API f (endpoint ': endpoints)
+      :: f e
+      => Proxy e
+      -> API f es
+      -> API f (e ': es)
 
-class (Removed endpoint endpoints ~ endpoints')
-    => DeleteEndpoint f endpoint endpoints endpoints'
+class (Removed es e ~ es')
+    => DeleteEndpoint f e es es'
   where
-    deleteEndpoint :: Proxy endpoint -> API f endpoints -> API f endpoints'
+    deleteEndpoint :: Proxy e -> API f es -> API f es'
 
-instance (Removed endpoint (endpoint ': endpoints) ~ endpoints)
-    => DeleteEndpoint f endpoint (endpoint ': endpoints) endpoints
+instance (Removed (e ': es) e ~ es)
+    => DeleteEndpoint f e (e ': es) es
   where
     deleteEndpoint _ (APICons _ mapi) = mapi
 
-instance ( Removed endpoint endpoints ~ endpoints'
-         , DeleteEndpoint f endpoint endpoints endpoints'
-         , Removed endpoint (x ': endpoints) ~ endpoints''
-         , endpoints'' ~ (x ': endpoints')
-         ) => DeleteEndpoint f endpoint (x ': endpoints) endpoints'' where
+instance ( Removed es e ~ es'
+         , DeleteEndpoint f e es es'
+         , Removed (x ': es) e ~ es''
+         , es'' ~ (x ': es')
+         ) => DeleteEndpoint f e (x ': es) es'' where
   deleteEndpoint p (APICons mh mapi) =
     APICons mh (deleteEndpoint p mapi)
 
 instance ( Appended (x ': xs) (y ': ys) ~ zs
          , Appended (x ': xs) (y ': ys) ~ (xy ': xys)
-         , Append (API f) xs (y ': ys) xys
+         , NuclearAppend (API f) xs (y ': ys) xys
          )
-    => Append (API f) (x ': xs) (y ': ys) zs
+    => NuclearAppend (API f) (x ': xs) (y ': ys) zs
   where
     (<++>) (APICons x xs) ys = APICons x (xs <++> ys)
 
 type MessageAPI = API Message
 type RequestAPI = API Request
 
-class ToAPI f endpoints where
-  toAPI :: PList endpoints -> API f endpoints
+class ToAPI f es where
+  toAPI :: PList es -> API f es
 
 -- instance ToAPI f '[] where
 --   toAPI _ = APINull
