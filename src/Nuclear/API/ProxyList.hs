@@ -82,11 +82,11 @@ instance (Appended '[] es ~ es) => NuclearAppend f '[] es es where
 -- instance (Appended '[] xs ~ xs) => Append PList '[] xs xs where
 --   (<++>) l (PCons x xs) = PCons x (l <++> xs)
 
-instance ( Removed ys x   ~ ys
-         , NuclearAppend PList xs ys zs'
- , Appended (x ': xs) ys ~ (x ': zs')
+instance ( Removed (y ': ys) x   ~ (y ': ys)
+         , NuclearAppend PList xs (y ': ys) zs
+         , Appended (x ': xs) (y ': ys) ~ (x ': zs)
          )
-    => NuclearAppend PList (x ': xs) ys (x ': zs')
+    => NuclearAppend PList (x ': xs) (y ': ys) (x ': zs)
   where
     (<++>) (PCons (x :: Proxy x) xs) ys = x <:> (xs <++> ys)
 

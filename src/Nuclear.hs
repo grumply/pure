@@ -27,6 +27,7 @@ import Nuclear.TypeRep as Export
 import Nuclear.Indexed as Export
 import Nuclear.API as Export
 import Nuclear.Endpoint as Export
+import Nuclear.Try as Export
 
 import Data.JSTime as Export
 import Data.MicroTime as Export

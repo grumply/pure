@@ -14,11 +14,11 @@ class Typeable (msgTy :: *) => Message msgTy where
   messageHeader = qualMsgHdr
 
 simpleMsgHdr :: forall (msgTy :: *). Typeable msgTy => Proxy msgTy -> Text
-simpleMsgHdr = append "Message :: " . rep
+simpleMsgHdr = append "M :: " . rep
 
 qualMsgHdr :: forall (msgTy :: *). Typeable msgTy => Proxy msgTy -> Text
-qualMsgHdr = append "Message :: " . qualRep
+qualMsgHdr = append "M :: " . qualRep
 
 fullMsgHdr :: forall (msgTy :: *). Typeable msgTy => Proxy msgTy -> Text
-fullMsgHdr = append "Message :: " . fullRep
+fullMsgHdr = append "M :: " . fullRep
 

@@ -26,6 +26,7 @@ library
                      , Nuclear.ToText
                      , Nuclear.FromText
                      , Nuclear.Strict
+                     , Nuclear.Try
                      , Nuclear.TypeRep
                      , Nuclear.Request
                      , Nuclear.Nuclear

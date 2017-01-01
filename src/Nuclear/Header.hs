@@ -40,18 +40,6 @@ data Return a
 return :: Proxy Return
 return = Proxy
 
-data Subscribe a
-subscribe :: Proxy Subscribe
-subscribe = Proxy
-
-data Unsubscribe a
-unsubscribe :: Proxy Unsubscribe
-unsubscribe = Proxy
-
-data Publish a
-publish :: Proxy Publish
-publish = Proxy
-
 data Ready
 ready :: Proxy Ready
 ready = Proxy

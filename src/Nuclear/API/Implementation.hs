@@ -32,13 +32,17 @@ instance EmptyDefault (API f) where
 instance Build (hndlr ms c :: * -> *) (Endpoints hndlr ms c :: [*] -> *) where
   (<:>) = EndpointsCons
 
-instance ( Appended (x ': xs) (y ': ys) ~ zs
-         , Appended (x ': xs) (y ': ys) ~ (xy ': xys)
-         , NuclearAppend (Endpoints hndlr ms c) xs (y ': ys) xys
+instance (Appended '[] ys ~ ys) => NuclearAppend (Endpoints hndlr ms c) '[] ys ys where
+  (<++>) _ ys = ys
+
+instance ( Removed (y ': ys) x ~ (y ': ys)
+         , Appended (x ': xs) (y ': ys) ~ (x ': zs)
+         , NuclearAppend (Endpoints hndlr ms c) xs (y ': ys) zs
          )
-    => NuclearAppend (Endpoints hndlr ms c) (x ': xs) (y ': ys) zs
+    => NuclearAppend (Endpoints hndlr ms c) (x ': xs) (y ': ys) (x ': zs)
   where
     (<++>) (EndpointsCons x xs) ys = EndpointsCons x (xs <++> ys)
+
 
 -- instance es ~ (e ': xs)
 class GetHandler' (hndlr :: [* -> *] -> (* -> *) -> * -> *) (e :: *) (es :: [*]) (n :: Nat) where

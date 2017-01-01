@@ -15,7 +15,7 @@ data Nuclear
     -- I'd prefer header/body but they overlap with the HTML elements.
     { ep :: Text
     , pl :: Value
-    } deriving Generic
+    } deriving (Generic,Show)
 instance ToJSON Nuclear
 instance FromJSON Nuclear
 instance ToBS Nuclear

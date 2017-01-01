@@ -75,10 +75,30 @@ instance (Message x, ToAPI Message xs) => ToAPI Message (x ': xs) where
 instance (Request x, ToAPI Request xs) => ToAPI Request (x ': xs) where
   toAPI (PCons p ps) = APICons p (toAPI ps)
 
+class FromAPI f es where
+  fromAPI :: API f es -> PList es
+
+instance FromAPI Request '[] where
+  fromAPI _ = PNull
+
+instance FromAPI Message '[] where
+  fromAPI _ = PNull
+
+instance (Message x, FromAPI Message xs) => FromAPI Message (x ': xs) where
+  fromAPI (APICons p ps) = PCons p (fromAPI ps)
+
+instance (Request x, FromAPI Request xs) => FromAPI Request (x ': xs) where
+  fromAPI (APICons p ps) = PCons p (fromAPI ps)
+
 data FullAPI messages requests
-  = API (MessageAPI messages) (RequestAPI requests)
+  = API { messageAPI :: MessageAPI messages
+        , requestAPI :: RequestAPI requests
+        }
 
 api msgs reqs = API (toAPI msgs) (toAPI reqs)
+
+(<:+:>) (API msl rsl) (API msr rsr) =
+  api (fromAPI msl <++> fromAPI msr) (fromAPI rsl <++> fromAPI rsr)
 
 {- Example API
 

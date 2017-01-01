@@ -27,7 +27,6 @@ import Data.Text.Lazy.Builder.Int as Builder
 -- default instance, this won't matter much.
 class ToText a where
   toText :: a -> Text
-  {-# INLINE toText #-}
   default toText :: ToBS a => a -> Text
   -- can this fail at runtime from a bad encoding?
   toText = TL.toStrict . TL.decodeUtf8 . toBS
