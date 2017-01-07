@@ -5,6 +5,7 @@ import Nuclear.ToBS
 
 import Numeric
 
+import qualified Data.Aeson as AE
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BSL
 import Data.Text as T
@@ -30,6 +31,9 @@ class ToText a where
   default toText :: ToBS a => a -> Text
   -- can this fail at runtime from a bad encoding?
   toText = TL.toStrict . TL.decodeUtf8 . toBS
+
+instance ToText AE.Value where
+  toText = toText . AE.encode
 
 instance ToText ()
 
