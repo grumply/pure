@@ -19,8 +19,8 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Nuclear
                      , Data.JSTime
+                     , Data.JSText
                      , Data.MicroTime
-                     , Nuclear.Header
                      , Nuclear.ToBS
                      , Nuclear.FromBS
                      , Nuclear.ToText
@@ -39,14 +39,25 @@ library
                      , Nuclear.API.ProxyList
   -- other-modules:
   -- other-extensions:
-  build-depends:       base >=4.8
-                     , ef-core >= 2.0
-                     , ef-base >= 2.0
-                     , bytestring
-                     , text
-                     , aeson >= 0.9
-                     , hashable
-                     , time
+  if (impl(ghcjs))
+    build-depends:       base >=4.8
+                      , ef-core >= 2.0
+                      , ef-base >= 2.0
+                      , bytestring
+                      , text
+                      , aeson >= 0.9
+                      , hashable
+                      , time
+                      , ghcjs-base
+  else
+    build-depends:       base >=4.8
+                      , ef-core >= 2.0
+                      , ef-base >= 2.0
+                      , bytestring
+                      , text
+                      , aeson >= 0.9
+                      , hashable
+                      , time
   default-extensions:  DefaultSignatures
                      , RecordWildCards
                      , DeriveGeneric

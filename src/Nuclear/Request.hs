@@ -3,8 +3,8 @@ module Nuclear.Request where
 
 import Nuclear.TypeRep
 
+import Data.JSText
 import Data.Monoid
-import Data.Text hiding (index)
 import Data.Typeable
 
 import Nuclear.ToText
@@ -14,28 +14,28 @@ class (Typeable (requestType :: *)) => Request requestType where
   type Req requestType :: *
   type Rsp requestType :: *
 
-  requestHeader :: Proxy requestType -> Text
+  requestHeader :: Proxy requestType -> JSText
   {-# INLINE requestHeader #-}
-  default requestHeader :: Proxy requestType -> Text
+  default requestHeader :: Proxy requestType -> JSText
   requestHeader = qualReqHdr
 
-  responseHeader :: (Req requestType ~ request) => Proxy requestType -> request -> Text
+  responseHeader :: (Req requestType ~ request) => Proxy requestType -> request -> JSText
   {-# INLINE responseHeader #-}
   default responseHeader :: ( Req requestType ~ request
                             , Indexed request
                             , I request ~ requestIndex
                             , ToText requestIndex
                             )
-                        => Proxy requestType -> request -> Text
+                        => Proxy requestType -> request -> JSText
   responseHeader = qualRspHdr
 
-simpleReqHdr :: forall (requestType :: *). Typeable requestType => Proxy requestType -> Text
+simpleReqHdr :: forall (requestType :: *). Typeable requestType => Proxy requestType -> JSText
 simpleReqHdr = rep
 
-qualReqHdr :: forall (requestType :: *). Typeable requestType => Proxy requestType -> Text
+qualReqHdr :: forall (requestType :: *). Typeable requestType => Proxy requestType -> JSText
 qualReqHdr = qualRep
 
-fullReqHdr :: forall (requestType :: *). Typeable requestType => Proxy requestType -> Text
+fullReqHdr :: forall (requestType :: *). Typeable requestType => Proxy requestType -> JSText
 fullReqHdr = fullRep
 
 simpleRspHdr :: ( Typeable requestType
@@ -45,7 +45,7 @@ simpleRspHdr :: ( Typeable requestType
                 , I request ~ requestIndex
                 , ToText requestIndex
                 )
-             => Proxy requestType -> request -> Text
+             => Proxy requestType -> request -> JSText
 simpleRspHdr rqty_proxy req = rep rqty_proxy <> " " <> toText (index req)
 
 qualRspHdr :: ( Typeable requestType
@@ -55,7 +55,7 @@ qualRspHdr :: ( Typeable requestType
               , I request ~ requestIndex
               , ToText requestIndex
               )
-           => Proxy requestType -> request -> Text
+           => Proxy requestType -> request -> JSText
 qualRspHdr rqty_proxy req = qualRep rqty_proxy <> " " <> toText (index req)
 
 fullRspHdr :: ( Typeable requestType
@@ -65,6 +65,6 @@ fullRspHdr :: ( Typeable requestType
               , I request ~ requestIndex
               , ToText requestIndex
               )
-           => Proxy requestType -> request -> Text
+           => Proxy requestType -> request -> JSText
 fullRspHdr rqty_proxy req = fullRep rqty_proxy <> " " <> toText (index req)
 

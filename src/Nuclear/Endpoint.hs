@@ -7,12 +7,11 @@ import Nuclear.Message
 import Nuclear.Request
 
 import Data.Proxy
-import Data.Aeson
-import Data.Text
+import Data.JSText
 
 data Endpoint ms c
   = Endpoint
-    { wsEndpointHeader :: Text
+    { wsEndpointHeader :: JSText
     , wsEndpointSubscription :: Subscription ms c Nuclear
     , wsEndpointPeriodical :: Periodical ms c Nuclear
     } deriving Eq

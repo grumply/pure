@@ -2,7 +2,7 @@ module Data.JSTime where
 
 import Ef.Base
 
-import Data.Aeson
+import Data.JSText
 import GHC.Generics
 
 import Data.Ratio

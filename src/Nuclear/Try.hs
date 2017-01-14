@@ -1,6 +1,6 @@
 module Nuclear.Try where
 
-import Data.Aeson
+import Data.JSText
 import GHC.Generics
 
 data Try a

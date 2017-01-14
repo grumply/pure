@@ -1,18 +1,16 @@
 module Nuclear
-  ( module Data.Aeson
-  , module Data.Typeable
+  ( module Data.Typeable
   , module Data.Hashable
   , module Export
   , LazyByteString
   , LazyText
   ) where
 
-import Data.Aeson
 import Data.Hashable
 import Data.Typeable
 import GHC.Generics as Export (Generic)
 
-import Data.Text as Export (Text)
+import Data.JSText as Export hiding (defaultOptions,Options,(!))
 import Data.ByteString as Export (ByteString)
 
 import Nuclear.ToBS as Export
@@ -32,7 +30,7 @@ import Nuclear.Try as Export
 import Data.JSTime as Export
 import Data.MicroTime as Export
 
-import qualified Data.Text.Lazy as TL (Text) 
+import qualified Data.Text.Lazy as TL (Text)
 import qualified Data.ByteString.Lazy as BSL (ByteString)
 
 type LazyByteString = BSL.ByteString
