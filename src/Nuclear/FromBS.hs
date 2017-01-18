@@ -15,10 +15,8 @@ foreign import javascript unsafe
 
 class FromBS a where
   fromBS :: BSL.ByteString -> Either String a
+#ifndef __GHCJS__
   default fromBS :: FromJSON a => BSL.ByteString -> Either String a
-#ifdef __GHCJS__
-  fromBS = parseEither parseJSON . js_JSON_parse . toText
-#else
   fromBS = eitherDecode'
 #endif
 

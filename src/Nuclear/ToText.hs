@@ -10,6 +10,8 @@ import Data.JSText
 
 #ifdef __GHCJS__
 import Data.JSString
+import Data.JSString.RealFloat
+import Data.JSString.Int
 import GHCJS.Types
 import GHCJS.Marshal.Pure
 import GHCJS.Marshal
@@ -95,24 +97,33 @@ instance ToText String where
 
 instance ToText Int where
 #ifdef __GHCJS__
-  toText = toText . show
+  toText = decimal
 #else
   toText = shortText . Builder.decimal
 #endif
 
 instance ToText Integer where
 #ifdef __GHCJS__
-  toText = toText . show
+  toText = decimal
 #else
   toText = shortText . Builder.decimal
 #endif
 
-instance ToText Double where
+instance ToText Float where
 #ifdef __GHCJS__
-  toText = toText . show
+  toText = realFloat
 #else
   toText = toText . ($ "") . showFFloat Nothing
 #endif
+
+instance ToText Double where
+#ifdef __GHCJS__
+  toText = realFloat
+#else
+  toText = toText . ($ "") . showFFloat Nothing
+#endif
+
+
 
 instance ToText Bool where
   toText True  = "true"
