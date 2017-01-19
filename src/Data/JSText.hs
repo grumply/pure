@@ -20,6 +20,7 @@ module Data.JSText (module Data.JSText, module Export) where
 import Data.Text
 import Data.Monoid as Export
 import Data.Aeson as Export
+import Data.Aeson.Types as Export
 
 type JSText = Text
 #endif

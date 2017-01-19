@@ -49,6 +49,7 @@ library
                       , hashable
                       , time
                       , ghcjs-base
+                      , unordered-containers
   else
     build-depends:       base >=4.8
                       , ef-core >= 2.0
@@ -58,6 +59,7 @@ library
                       , aeson >= 0.9
                       , hashable
                       , time
+                      , unordered-containers
   default-extensions:  DefaultSignatures
                      , RecordWildCards
                      , DeriveGeneric
