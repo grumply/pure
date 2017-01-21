@@ -50,6 +50,7 @@ library
                       , time
                       , ghcjs-base
                       , unordered-containers
+                      , template-haskell
   else
     build-depends:       base >=4.8
                       , ef-core >= 2.0
