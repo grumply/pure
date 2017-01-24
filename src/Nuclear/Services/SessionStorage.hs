@@ -13,9 +13,7 @@ import Nuclear.FromText
 import Nuclear.ToText
 import Nuclear.FromBS
 
-#ifdef __GHCJS__
-import Fusion.WebSocket
-#endif
+import Nuclear.WebSocket
 
 import qualified Data.JSText as JSText
 

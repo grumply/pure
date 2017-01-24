@@ -2,9 +2,9 @@
 {-# language FlexibleInstances #-}
 {-# language UndecidableInstances #-}
 {-# language MagicHash #-}
-module Nuclear.Service where
+module Nuclear.Service (module Nuclear.Service) where
 
-import Ef.Base as Export hiding (Client,Server)
+import Ef.Base hiding (Client,Server)
 
 import Nuclear.Key
 import Nuclear.Revent

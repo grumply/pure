@@ -7,8 +7,8 @@ import Ef.Base as Export hiding (Object,Client,watch,transform)
 import qualified Ef.Base
 import Ef.Event as Ev
 
-import Nuclear as Export
-import Fission.WebSocket as Export hiding (LazyByteString,accept)
+import Nuclear as Export hiding (Client)
+import Nuclear.WebSocket as Export hiding (LazyByteString,accept)
 
 import Data.Promise
 import Data.Queue

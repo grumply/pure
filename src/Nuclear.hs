@@ -4,6 +4,8 @@ module Nuclear
   , module Export
   ) where
 
+import Ef.Base as Export hiding (Object,watch,transform)
+
 import Data.Hashable as Export
 import Data.Typeable as Export
 import GHC.Generics as Export (Generic)
@@ -46,6 +48,11 @@ import Nuclear.Try        as Export
 import Nuclear.TypeRep    as Export
 import Nuclear.UnsafeEq   as Export
 import Nuclear.Vault      as Export
+#ifdef __GHCJS__
+import Nuclear.WebSocket  as Export hiding (LazyByteString)
+#else
+import Nuclear.WebSocket  as Export hiding (LazyByteString,accept)
+#endif
 import Nuclear.With       as Export
 
 import Data.ByteString as Export (ByteString)
@@ -71,7 +78,7 @@ instance FromMicroTime JSTime where
 
 #ifndef __GHCJS__
 instance (ToJSON v,ToText k) => ToJSON (HashMap k v) where
-  toJSON = Object . Map.fromList . Prelude.map (\(k,v) -> (toText k,toJSON v)) . Map.toList
+  toJSON = JSText.Object . Map.fromList . Prelude.map (\(k,v) -> (toText k,toJSON v)) . Map.toList
   {-# INLINE toJSON #-}
 #else
 -- should be a faster encoding to Value that can be more quickly encoded to JSText for transfer

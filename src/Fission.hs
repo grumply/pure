@@ -4,12 +4,13 @@
 {-# language CPP #-}
 module Fission (module Fission, module Export) where
 
-import Ef.Base as Export hiding (Server,watch,transform)
+import Ef.Base as Export hiding (Object,watch,transform)
+import qualified Ef.Base
 
-import Nuclear as Export hiding (accept,Object)
+import Nuclear as Export hiding (accept)
 
-import Fission.WebSocket as Export hiding (LazyByteString)
-import Fission.User
+import Nuclear.WebSocket as Export hiding (LazyByteString)
+import User hiding (accept)
 
 import Data.Promise
 import Data.Queue
@@ -23,7 +24,6 @@ import Data.Ratio
 import Text.Read hiding (get,lift)
 
 import Data.HashMap.Strict as Map hiding ((!))
-import Data.Time.Clock.POSIX
 import Network.Socket as Export (SockAddr(..))
 import qualified Network.WebSockets as WS
 import qualified Network.WebSockets.Stream as WS
@@ -35,20 +35,20 @@ import qualified System.IO.Streams as Streams
 import Unsafe.Coerce
 import System.IO.Unsafe
 
-data ServerNotStarted = ServerNotStarted deriving Show
-instance Exception ServerNotStarted
+data FissionNotStarted = FissionNotStarted deriving Show
+instance Exception FissionNotStarted
 
-instance ( IsServer ts ms c
+instance ( IsFission ts ms c
          , IsUser uTs uMs
          , MonadIO c
          , MonadIO c'
          )
-  => With (Server ts ms c uTs uMs)
+  => With (Fission ts ms c uTs uMs)
           (Code ms c)
           c'
   where
     using_ s = do
-      mi_ <- lookupServer (key s)
+      mi_ <- lookupFission (key s)
       case mi_ of
         Just as -> return (liftIO . runAs as)
         -- Nothing -> hmm?
@@ -63,34 +63,34 @@ instance ( IsServer ts ms c
         liftIO $ do
           killBuffer buf
           myThreadId >>= killThread
-      deleteServer (key s)
+      deleteFission (key s)
 
-type IsServer ts ms c =
-  ( Server_ <: ms
-  , Server_ <. ts
+type IsFission ts ms c =
+  ( Fission_ <: ms
+  , Fission_ <. ts
   , Delta (Modules ts) (Messages ms)
   , MonadIO c
   )
 
 newtype Connections = Connections (Network (SockAddr,Socket,Signaled))
 
-type Server_ =
+type Fission_ =
   '[Revent
    ,State () Connections
    ,State () Vault
    ,State () Shutdown
    ]
-data Server ts ms c uTs uMs
+data Fission ts ms c uTs uMs
   =
 #ifdef SECURE
-    SecureServer
+    SecureFission
     { key      :: !(Key (As (Code ms c) IO))
     , ip       :: !String
     , port     :: !Int
     , sslKey   :: !FilePath
     , sslCert  :: !FilePath
     , sslChain :: !(Maybe FilePath)
-    , build    :: !(    Modules Server_ (Action ts c)
+    , build    :: !(    Modules Fission_ (Action ts c)
                      -> c (Modules ts (Action ts c))
                    )
     , prime    :: !(Code ms c ())
@@ -98,11 +98,11 @@ data Server ts ms c uTs uMs
     }
   |
 #endif
-    Server
+    Fission
     { key    :: !(Key (As (Code ms c) IO))
     , ip     :: !String
     , port   :: !Int
-    , build  :: !(    Modules Server_ (Action ts c)
+    , build  :: !(    Modules Fission_ (Action ts c)
                     -> c (Modules ts (Action ts c))
                  )
     , prime  :: !(Code ms c ())
@@ -111,31 +111,31 @@ data Server ts ms c uTs uMs
 
 forkRun :: ( MonadIO c
            , IsUser uTs uMs
-           , IsServer ts ms IO
+           , IsFission ts ms IO
            , Functor (Messages uMs) 
            )
-        => Server ts ms IO uTs uMs
+        => Fission ts ms IO uTs uMs
         -> c ThreadId
 forkRun = liftIO . forkIO . run
 
 {-# INLINE run #-}
 run :: forall ts ms c uTs uMs.
        ( IsUser uTs uMs
-       , IsServer ts ms c
+       , IsFission ts ms c
        , Functor (Messages uMs) -- why? ghc-8.0.1 bug; if I remove State () Connection, it works fine;
                                 -- something about the number of traits/messages since IsUser contains
                                 -- `User_ m <: uMs` which terminates in Functor (Messages uMs)
        )
-    => Server ts ms c uTs uMs
+    => Fission ts ms c uTs uMs
     -> c ()
 #ifdef SECURE
-run SecureServer {..} = void $ do
+run SecureFission {..} = void $ do
 
   nw :: Network (SockAddr,Socket,Signaled) <- network
 
   q <- newSignalBuffer
 
-  ctx <- liftIO $ sslSetupServer sslKey sslCert sslChain
+  ctx <- liftIO $ sslSetupFission sslKey sslCert sslChain
   sock <- newListenSocket ip port
 
   gs <- createVault
@@ -148,27 +148,27 @@ run SecureServer {..} = void $ do
     :: Network (Network uE)
     <- network
 
-  serverSig
+  fissionSig
     :: Signal ms c (Code ms c ())
     <- runner
 
-  let asServer = constructAs q serverSig
-      cli = user asServer
+  let asFission = constructAs q fissionSig
+      cli = user asFission
 
-  addServer key asServer
+  addFission key asFission
 
   liftIO $ forkIO $ void $ handleSecureUsers (ctx,sock) nw q connSignal
 
   sdn <- network
 
-  serverObj <- build (revent q
+  fissionObj <- build (revent q
                       *:* state (Connections nw)
                       *:* state gs
                       *:* state (Shutdown sdn)
                       *:* Empty
                      )
 
-  eventloop prime cli connSignal q (Object serverObj)
+  eventloop prime cli connSignal q (Object fissionObj)
   where
     handleSecureUsers (ctx,sock) nw gb connSignal = go
       where
@@ -181,11 +181,11 @@ run SecureServer {..} = void $ do
           forkIO $ void $
             E.handle (\(e :: E.SomeException) -> sClose conn) $ do
               ssl <- sslAccept conn
-              ws <- serverWSS buf conn ssl unlimited
+              ws <- fissionWSS buf conn ssl unlimited
               buffer gb connSignal (ws,sockAddr,buf)
           go
 #endif
-run Server {..} = void $ do
+run Fission {..} = void $ do
 
   nw :: Network (SockAddr,Socket,Signaled) <- network
 
@@ -203,27 +203,27 @@ run Server {..} = void $ do
     :: Network (Network uE)
     <- network
 
-  serverSig
+  fissionSig
     :: Signal ms c (Code ms c ())
     <- runner
 
-  let asServer = constructAs q serverSig
-      cli = user asServer
+  let asFission = constructAs q fissionSig
+      cli = user asFission
 
-  addServer key asServer
+  addFission key asFission
 
   tid <- liftIO $ forkIO $ void $ handleUsers sock q connSignal
 
   sdn <- network
 
-  serverObj <- build (revent q
+  fissionObj <- build (revent q
                       *:* state (Connections nw)
                       *:* state gs
                       *:* state (Shutdown sdn)
                       *:* Empty
                      )
 
-  eventloop prime cli connSignal q (Object serverObj)
+  eventloop prime cli connSignal q (Ef.Base.Object fissionObj)
   where
     handleUsers sock gb connSignal = go
       where
@@ -237,7 +237,7 @@ run Server {..} = void $ do
           go
 
 eventloop :: forall ts ms c uTs uMs.
-             ( IsServer ts ms c
+             ( IsFission ts ms c
              , IsUser uTs uMs
              , Functor (Messages uMs)
              )
@@ -245,10 +245,10 @@ eventloop :: forall ts ms c uTs uMs.
           -> User uTs uMs
           -> Signal ms c (State () WebSocket (Action uTs IO),SockAddr,Signaled)
           -> Signaled
-          -> Object ts c
+          -> Ef.Base.Object ts c
           -> c ()
-eventloop primeS User {..} connSignal q serverObj = do
-  (obj,_) <- serverObj ! do
+eventloop primeS User {..} connSignal q fissionObj = do
+  (obj,_) <- fissionObj ! do
     primeS
     void $ behavior connSignal $ \(websock,sockAddr,buf) -> do
       sdn <- network
@@ -260,23 +260,23 @@ eventloop primeS User {..} connSignal q serverObj = do
                               *:* state lv
                               *:* state (Shutdown sdn)
                               *:* Empty
-               (userObj,_) <- (Object built) ! prime
+               (userObj,_) <- (Ef.Base.Object built) ! prime
                E.handle (\(_ :: E.SomeException) -> return ()) $ driver buf userObj
       return ()
   driver q obj
 
-{-# NOINLINE serverVault__ #-}
-serverVault__ = Vault (unsafePerformIO (newMVar Map.empty))
+{-# NOINLINE fissionVault__ #-}
+fissionVault__ = Vault (unsafePerformIO (newMVar Map.empty))
 
-lookupServer :: (MonadIO c)
+lookupFission :: (MonadIO c)
               => Key phantom -> c (Maybe phantom)
-lookupServer = vaultLookup serverVault__
+lookupFission = vaultLookup fissionVault__
 
-addServer :: (MonadIO c)
+addFission :: (MonadIO c)
            => Key phantom -> phantom -> c ()
-addServer = vaultAdd serverVault__
+addFission = vaultAdd fissionVault__
 
-deleteServer :: (MonadIO c)
+deleteFission :: (MonadIO c)
               => Key phantom -> c ()
-deleteServer = vaultDelete serverVault__
+deleteFission = vaultDelete fissionVault__
 

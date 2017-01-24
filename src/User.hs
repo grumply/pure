@@ -1,8 +1,9 @@
-module Fission.User where
+module User (module User, module Export) where
 
-import Ef.Base
+import Ef.Base as Export hiding (Object,watch,transform)
+import Nuclear as Export
 
-import Fission.WebSocket
+import Nuclear.WebSocket
 
 import Nuclear.Revent
 import Nuclear.Vault

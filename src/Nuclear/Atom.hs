@@ -4,11 +4,10 @@
 {-# language DeriveFunctor #-}
 {-# language MagicHash #-}
 {-# language CPP #-}
-module Nuclear.Atom where
+module Nuclear.Atom (module Nuclear.Atom) where
 
 import Ef.Base hiding (Client,After,Before,current,Lazy,Eager)
-import qualified Ef.Get as Get
-import qualified Ef.Set as Set
+import qualified Ef.Base
 
 import Data.JSText
 #ifdef __GHCJS__
@@ -144,10 +143,10 @@ reflect c =
     (l,_,_) <- liftIO $ readIORef asLive
     return (unsafeCoerce l)
 
-atom :: forall ms ts m c e atom.
-        IsAtom ts ms m
+atom :: forall ms ms' ts' m c e atom.
+        IsAtom ts' ms' m
      => ([Attribute ms] -> [HTML ms] -> HTML ms)
-     -> ([Attribute ms] -> Atom ts ms m -> HTML ms)
+     -> ([Attribute ms] -> Atom ts' ms' m -> HTML ms)
 atom f = \as c ->
   let Node _ t _ _ = f [] []
   in Managed Nothing t as (Atom' c)

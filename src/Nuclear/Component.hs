@@ -1,9 +1,9 @@
 {-# language ConstraintKinds #-}
 {-# language FlexibleInstances #-}
 {-# language UndecidableInstances #-}
-module Nuclear.Component where
+module Nuclear.Component (module Nuclear.Component) where
 
-import Ef.Base as Export hiding (Client,Server)
+import Ef.Base hiding (Client,Server)
 
 import Nuclear.Key
 import Nuclear.Observable

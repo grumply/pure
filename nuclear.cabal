@@ -34,7 +34,6 @@ library
                       , Data.MicroTime
                       , Fusion
                       , Fusion.JS
-                      , Fusion.WebSocket
                       , Nuclear.API
                       , Nuclear.API.Implementation
                       , Nuclear.API.Interface
@@ -86,6 +85,7 @@ library
                       , Nuclear.TypeRep
                       , Nuclear.UnsafeEq
                       , Nuclear.Vault
+                      , Nuclear.WebSocket
                       , Nuclear.With
                       , Service
     build-depends:      base >=4.8
@@ -105,14 +105,13 @@ library
   else
     exposed-modules:    Nuclear
                       , Atom
+                      , Client
                       , Component
                       , Data.JSText
                       , Data.JSTime
                       , Data.MicroTime
                       , Fission
                       , Fission.Client
-                      , Fission.User
-                      , Fission.WebSocket
                       , Nuclear.API
                       , Nuclear.API.Implementation
                       , Nuclear.API.Interface
@@ -164,8 +163,10 @@ library
                       , Nuclear.TypeRep
                       , Nuclear.UnsafeEq
                       , Nuclear.Vault
+                      , Nuclear.WebSocket
                       , Nuclear.With
                       , Service
+                      , User
     if flag(secure)
       cpp-options:    -DSECURE
       build-depends:    base >=4.8

@@ -4,7 +4,7 @@
 {-# language CPP #-}
 module Fusion (module Fusion,module Export) where
 
-import Ef.Base as Export hiding (Object,path,transform,watch)
+import Ef.Base as Export hiding (Object,transform,watch)
 import qualified Ef.Base (Object(..))
 import Ef.Reflect as Export
 
@@ -39,7 +39,7 @@ import Nuclear.Atom
 import Nuclear          as Export hiding (route,stop)
 import qualified Nuclear
 import Fusion.JS        as Export
-import Fusion.WebSocket as Export
+import Nuclear.WebSocket as Export
 
 import System.IO.Unsafe
 

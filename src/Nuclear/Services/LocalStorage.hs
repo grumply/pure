@@ -19,11 +19,7 @@ import Nuclear.With
 import Nuclear.Message
 import Nuclear.TypeRep
 
-#ifdef __GHCJS__
-import Fusion.WebSocket
-#else
-import Fission.WebSocket
-#endif
+import Nuclear.WebSocket
 
 import qualified Data.JSText as JSText
 
