@@ -1,3 +1,4 @@
+{-# language CPP #-}
 module Data.JSTime where
 
 import Ef.Base
@@ -7,11 +8,18 @@ import GHC.Generics
 
 import Data.Ratio
 
+#ifndef __GHCJS__
 import Data.Time.Clock.POSIX
+#endif
 
 import Nuclear.ToBS
 import Nuclear.FromBS
 import Nuclear.ToText
+
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "var d = Date(); d.getTime();" getTime_millis_js :: IO Int
+#endif
 
 -- milliseconds since beginning of 1970
 newtype JSTime = JSTime { millis :: Integer }
@@ -32,11 +40,16 @@ jstime = timeInMillis
 
 timeInMillis :: (Monad super, MonadIO super) => super JSTime
 timeInMillis =
+#ifdef __GHCJS__
+  (JSTime . fromIntegral) <$> liftIO getTime_millis_js
+#else
   (JSTime . posixToMillis) <$> (liftIO getPOSIXTime)
+#endif
 
 class FromJSTime a where
   fromJSTime :: JSTime -> a
 
+#ifndef __GHCJS__
 instance FromJSTime POSIXTime where
   fromJSTime (JSTime jst) = posixFromMillis jst
 
@@ -52,3 +65,4 @@ posixFromMillis =
   fromRational
   . (% 1000000)
   . (* 1000)
+#endif

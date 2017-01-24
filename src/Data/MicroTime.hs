@@ -1,19 +1,23 @@
+{-# language CPP #-}
 module Data.MicroTime where
 
 import Ef.Base
 
 import Data.JSText
+import Data.JSTime
 import GHC.Generics
 
 import Data.Ratio
 
+#ifndef __GHCJS__
 import Data.Time.Clock.POSIX
+#endif
 
 import Nuclear.ToBS
 import Nuclear.FromBS
 import Nuclear.ToText
 
--- microseconds since beginning of 1970
+-- microseconds since beginning of 1970 to an accuracy of 1 millisecond in GHCJS and 1 microsecond in GHC
 newtype MicroTime = MicroTime { micros :: Integer }
   deriving (Show,Eq,Ord,Generic,ToJSON,FromJSON)
 instance ToBS MicroTime
@@ -32,11 +36,16 @@ microtime = timeInMicros
 
 timeInMicros :: (Monad super, MonadIO super) => super MicroTime
 timeInMicros =
+#ifdef __GHCJS__
+  (MicroTime . (*1000) . fromIntegral) <$> liftIO getTime_millis_js
+#else
   (MicroTime . posixToMicros) <$> (liftIO getPOSIXTime)
+#endif
 
 class FromMicroTime a where
   fromMicroTime :: MicroTime -> a
 
+#ifndef __GHCJS__
 instance FromMicroTime POSIXTime where
   fromMicroTime (MicroTime mt) = posixFromMicros mt
 
@@ -50,3 +59,4 @@ posixFromMicros :: Integer -> POSIXTime
 posixFromMicros =
   fromRational
   . (% 1000000)
+#endif

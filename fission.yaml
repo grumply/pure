@@ -1,0 +1,13 @@
+resolver: lts-5.18
+
+extra-deps:
+  - unagi-chan-0.4.0.0
+
+packages:
+  - location:
+      git: https://github.com/grumply/ef.git
+      commit: 4ca7cc8c6a682d305c81b9d76a85542078837613
+    subdirs:
+      - ef-core
+      - ef-base
+  - '.'
