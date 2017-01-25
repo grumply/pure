@@ -1,0 +1,230 @@
+name:                atomic
+version:             4.0.0.0
+synopsis:            Atomic is a framework that unifies client and server programming.
+-- description:
+homepage:            github.com/grumply/atomic
+license:             BSD3
+license-file:        LICENSE
+author:              S. M. Hickman
+maintainer:          sean@grump.ly
+-- copyright:
+category:            Web
+build-type:          Simple
+-- extra-source-files:
+cabal-version:       >=1.10
+
+Flag secure
+      Description: enable secure websockets
+      Default: False
+
+Flag debugws
+     Description: debug websocket messages
+     Default: False
+
+library
+  if flag(debugws)
+    cpp-options:    -DDEBUGWS
+
+  if (impl(ghcjs))
+    exposed-modules:    Atomic
+                      , Component
+                      , Construct
+                      , Mediator
+                      , Organism
+                      , Data.Txt
+                      , Data.Millis
+                      , Data.Micros
+                      , Atomic.API
+                      , Atomic.API.Implementation
+                      , Atomic.API.Interface
+                      , Atomic.API.ProxyList
+                      , Atomic.Construct
+                      , Atomic.Attribute
+                      , Atomic.CSS
+                      , Atomic.CSS.Helpers
+                      , Atomic.CSS.Render
+                      , Atomic.CSS.Styles
+                      , Atomic.Component
+                      , Atomic.Cond
+                      , Atomic.Debounce
+                      , Atomic.Default
+                      , Atomic.Ease
+                      , Atomic.Endpoint
+                      , Atomic.FromBS
+                      , Atomic.FromTxt
+                      , Atomic.Indexed
+                      , Atomic.Key
+                      , Atomic.Lazy
+                      , Atomic.Limit
+                      , Atomic.Memo
+                      , Atomic.Message
+                      , Atomic.Normalize
+                      , Atomic.Dispatch
+                      , Atomic.Observable
+                      , Atomic.Render
+                      , Atomic.Request
+                      , Atomic.Revent
+                      , Atomic.Route
+                      , Atomic.Router
+                      , Atomic.Mediator
+                      , Atomic.Mediators
+                      , Atomic.Mediators.Cookie
+                      , Atomic.Mediators.Frame
+                      , Atomic.Mediators.LocalStorage
+                      , Atomic.Mediators.Mouse
+                      , Atomic.Mediators.SessionStorage
+                      , Atomic.Mediators.Tween
+                      , Atomic.Mediators.Window
+                      , Atomic.Signals
+                      , Atomic.Strict
+                      , Atomic.Throttle
+                      , Atomic.ToBS
+                      , Atomic.ToTxt
+                      , Atomic.Try
+                      , Atomic.TypeRep
+                      , Atomic.UnsafeEq
+                      , Atomic.Vault
+                      , Atomic.WebSocket
+                      , Atomic.With
+    build-depends:      base >=4.8
+                      , ef-core >= 2.0
+                      , ef-base >= 2.0
+                      , bytestring
+                      , text
+                      , aeson >= 0.9
+                      , hashable
+                      , ghcjs-base
+                      , ghcjs-dom == 0.2.3.1
+                      , unordered-containers
+                      , template-haskell
+                      , ghc-prim
+                      , void
+
+  else
+    exposed-modules:    Atomic
+                      , Component
+                      , Construct
+                      , Mediator
+                      , Organism
+                      , Population
+                      , Presence
+                      , Data.Txt
+                      , Data.Millis
+                      , Data.Micros
+                      , Atomic.API
+                      , Atomic.API.Implementation
+                      , Atomic.API.Interface
+                      , Atomic.API.ProxyList
+                      , Atomic.Construct
+                      , Atomic.Attribute
+                      , Atomic.CSS
+                      , Atomic.CSS.Helpers
+                      , Atomic.CSS.Render
+                      , Atomic.CSS.Styles
+                      , Atomic.Component
+                      , Atomic.Cond
+                      , Atomic.Debounce
+                      , Atomic.Default
+                      , Atomic.Ease
+                      , Atomic.Endpoint
+                      , Atomic.FromBS
+                      , Atomic.FromTxt
+                      , Atomic.Indexed
+                      , Atomic.Key
+                      , Atomic.Lazy
+                      , Atomic.Limit
+                      , Atomic.Memo
+                      , Atomic.Message
+                      , Atomic.Normalize
+                      , Atomic.Dispatch
+                      , Atomic.Observable
+                      , Atomic.Render
+                      , Atomic.Request
+                      , Atomic.Revent
+                      , Atomic.Route
+                      , Atomic.Router
+                      , Atomic.Mediator
+                      , Atomic.Mediators
+                      , Atomic.Mediators.Cookie
+                      , Atomic.Mediators.Frame
+                      , Atomic.Mediators.LocalStorage
+                      , Atomic.Mediators.Mouse
+                      , Atomic.Mediators.SessionStorage
+                      , Atomic.Mediators.Tween
+                      , Atomic.Mediators.Window
+                      , Atomic.Signals
+                      , Atomic.Strict
+                      , Atomic.Throttle
+                      , Atomic.ToBS
+                      , Atomic.ToTxt
+                      , Atomic.Try
+                      , Atomic.TypeRep
+                      , Atomic.UnsafeEq
+                      , Atomic.Vault
+                      , Atomic.WebSocket
+                      , Atomic.With
+    if flag(secure)
+      cpp-options:    -DSECURE
+      build-depends:    base >=4.8
+                      , ef-core >= 2.0
+                      , ef-base >= 2.0
+                      , websockets >= 0.9.6.1 && < 0.10
+                      , network >= 2.6.2.1 && < 2.7
+                      , bytestring >= 0.10.6 && < 0.11
+                      , text
+                      , HsOpenSSL >= 0.11.1.1 && < 0.12
+                      , io-streams >= 1.3.5 && < 1.4
+                      , openssl-streams >= 1.2 && < 1.3
+                      , bytestring >= 0.10 && < 0.11
+                      , containers
+                      , unordered-containers
+                      , time
+                      , random
+                      , ghc-prim
+                      , hashable
+                      , aeson >= 0.9
+                      , void
+                      , template-haskell
+    else 
+      build-depends:    base >=4.8
+                      , ef-core >= 2.0
+                      , ef-base >= 2.0
+                      , websockets >= 0.9.6.1 && < 0.10
+                      , network >= 2.6.2.1 && < 2.7
+                      , bytestring >= 0.10.6 && < 0.11
+                      , text
+                      , io-streams >= 1.3.5 && < 1.4
+                      , bytestring >= 0.10 && < 0.11
+                      , containers
+                      , unordered-containers
+                      , time
+                      , random
+                      , ghc-prim
+                      , hashable
+                      , aeson >= 0.9
+                      , void
+                      , template-haskell
+
+  default-extensions:  BangPatterns
+                     , ConstraintKinds
+                     , DataKinds
+                     , DefaultSignatures
+                     , DeriveAnyClass
+                     , DeriveFunctor
+                     , DeriveGeneric
+                     , FlexibleContexts
+                     , FlexibleInstances
+                     , GADTs
+                     , InstanceSigs
+                     , KindSignatures
+                     , MultiParamTypeClasses
+                     , PolyKinds
+                     , RankNTypes
+                     , RecordWildCards
+                     , ScopedTypeVariables
+                     , TypeFamilies
+                     , TypeOperators
+
+  hs-source-dirs:      src
+
+  default-language:    Haskell2010
