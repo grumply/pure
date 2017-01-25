@@ -160,55 +160,55 @@ type NNode =
   ()
 #endif
 
-data Node e where
-  -- NullNode must have a presence on the page for proper diffing
-  NullNode
+data Atom e where
+  -- NullAtom must have a presence on the page for proper diffing
+  NullAtom
     :: { _node :: !(Maybe ENode)
-       } -> Node e
+       } -> Atom e
 
   Text
     ::  { _tnode      :: Maybe TNode
         , _content    :: Txt
-        } -> Node e
+        } -> Atom e
 
   Raw
     :: { _node        :: Maybe ENode
        , _tag         :: Txt
        , _attributes  :: [Feature e]
        , _content     :: Txt
-       } -> Node e
+       } -> Atom e
 
-  KNode
+  KAtom
     ::  { _node       :: Maybe ENode
         , _tag        :: Txt
         , _attributes :: [Feature e]
-        , _keyed      :: [(Int,Node e)]
-        } -> Node e
+        , _keyed      :: [(Int,Atom e)]
+        } -> Atom e
 
-  Node
+  Atom
     ::  { _node       :: Maybe ENode
         , _tag        :: Txt
         , _attributes :: [Feature e]
-        , _children   :: [Node e]
-        } -> Node e
+        , _children   :: [Atom e]
+        } -> Atom e
 
   -- TODO: SVG keyed node
-  SVGNode
+  SVGAtom
     ::  { _node       :: Maybe ENode
         , _tag        :: Txt
         , _attributes :: [Feature e]
-        , _children   :: [Node e]
-        } -> Node e
+        , _children   :: [Atom e]
+        } -> Atom e
 
   Managed
     ::  { _node       :: Maybe ENode
         , _tag        :: Txt
         , _attributes :: [Feature e]
         , _atom'      :: Construct'
-        } -> Node e
+        } -> Atom e
   deriving Functor
 
-type HTML ms = Node (Code ms IO ())
+type HTML ms = Atom (Code ms IO ())
 
 instance ToTxt (Attribute ms) where
   toTxt NullFeature          = mempty
@@ -260,24 +260,24 @@ selfClosing tag =
     _         -> False
 
 instance ToTxt (HTML ms) where
-  toTxt NullNode {} = mempty
+  toTxt NullAtom {} = mempty
   toTxt Text {..} = _content
   toTxt Raw {..} =
     "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
       ">" <> _content <> "</" <> _tag <> ">"
-  toTxt KNode {..} =
+  toTxt KAtom {..} =
     "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
       if selfClosing _tag then
         "/>"
       else
         ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
-  toTxt Node {..} =
+  toTxt Atom {..} =
     "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
       if selfClosing _tag then
         "/>"
       else
         ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
-  toTxt SVGNode {..} =
+  toTxt SVGAtom {..} =
     "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
       if selfClosing _tag then
         "/>"
@@ -424,7 +424,7 @@ renderDynamicPageBootstrap (Partial (Construct' c)) mainScript = do
 renderDynamicHTML :: HTML ms -> IO Txt
 renderDynamicHTML h =
   case h of
-    NullNode {} -> return mempty
+    NullAtom {} -> return mempty
 
     Text {..} -> return _content
 
@@ -432,7 +432,7 @@ renderDynamicHTML h =
       return $ "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
                  ">" <> _content <> "</" <> _tag <> ">"
 
-    KNode {..} ->
+    KAtom {..} ->
       return $
         "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
           if selfClosing _tag then
@@ -440,7 +440,7 @@ renderDynamicHTML h =
           else
             ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
 
-    Node {..} ->
+    Atom {..} ->
       return $
         "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
           if selfClosing _tag then
@@ -448,7 +448,7 @@ renderDynamicHTML h =
           else
             ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
 
-    SVGNode {..} ->
+    SVGAtom {..} ->
       return $
         "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
           if selfClosing _tag then
@@ -482,21 +482,21 @@ atom :: forall ms ms' ts' m c e atom.
      => ([Attribute ms] -> [HTML ms] -> HTML ms)
      -> ([Attribute ms] -> Construct ts' ms' m -> HTML ms)
 atom f = \as c ->
-  let Node _ t _ _ = f [] []
+  let Atom _ t _ _ = f [] []
   in Managed Nothing t as (Construct' c)
 
 -- -- flow div [] [Nothing,Just $ div [] []]
 -- flow :: ([Attribute ms] -> [HTML ms] -> HTML ms)
 --      -> ([Attribute ms] -> [Maybe (HTML ms)] -> HTML ms)
 -- flow f = \as fs ->
---   let Node _ t _ _ = f [] []
+--   let Atom _ t _ _ = f [] []
 --   in fnode t as fs
 
 -- tagged div [] [(1,div [] [])]
 tagged :: ([Attribute ms] -> [HTML ms] -> HTML ms)
       -> ([Attribute ms] -> [(Int,HTML ms)] -> HTML ms)
 tagged f = \as ks ->
-  let Node _ t _ _ = f [] []
+  let Atom _ t _ _ = f [] []
   in keyed t as ks
 
 hashed :: Hashable a => a -> HTML ms -> (Int,HTML ms)
@@ -980,27 +980,27 @@ rebuild c me h =
 #else
     go me h
   where
-    go mparent NullNode {..} =
+    go mparent NullAtom {..} =
       forM_ mparent $ \parent ->
-        embed_ parent NullNode {..}
+        embed_ parent NullAtom {..}
 
     go mparent Raw {..} =
       forM_ mparent $ \parent ->
         embed_ parent Raw {..}
 
-    go mparent Node {..} = do
+    go mparent Atom {..} = do
       forM_ mparent $ \parent ->
-        embed_ parent Node {..}
+        embed_ parent Atom {..}
       forM_ _children (go _node)
 
-    go mparent SVGNode {..} = do
+    go mparent SVGAtom {..} = do
       forM_ mparent $ \parent ->
-        embed_ parent SVGNode {..}
+        embed_ parent SVGAtom {..}
       forM_ _children (go _node)
 
-    go mparent KNode {..} = do
+    go mparent KAtom {..} = do
       forM_ mparent $ \parent ->
-        embed_ parent KNode {..}
+        embed_ parent KAtom {..}
       forM_ _keyed $ go _node . snd
 
     go mparent Text {..} =
@@ -1031,10 +1031,10 @@ setAttributes as f el =
 buildAndEmbedMaybe :: (Code ms IO () -> IO ()) -> Doc -> Maybe ENode -> HTML ms -> IO (HTML ms)
 buildAndEmbedMaybe f doc = go
   where
-    go mparent nn@NullNode {..} = do
+    go mparent nn@NullAtom {..} = do
       _cond@(Just el) <- createElement doc "span" -- what's a better choice here? I need something that is unrenderable....
       forM_ mparent (flip appendChild el)
-      return $ NullNode _cond
+      return $ NullAtom _cond
 
     go mparent Raw {..} = do
       _node@(Just el) <- createElement doc _tag
@@ -1043,26 +1043,26 @@ buildAndEmbedMaybe f doc = go
       forM_ mparent (flip appendChild el)
       return $ Raw _node _tag _attributes _content
 
-    go mparent Node {..} = do
+    go mparent Atom {..} = do
       _node@(Just el) <- createElement doc _tag
       _attributes <- setAttributes _attributes f el
       forM_ mparent (flip appendChild el)
       _children <- mapM (go (Just el)) _children
-      return $ Node _node _tag _attributes _children
+      return $ Atom _node _tag _attributes _children
 
-    go mparent SVGNode {..} = do
+    go mparent SVGAtom {..} = do
       _node@(Just el) <- createElementNS doc ("http://www.w3.org/2000/svg") _tag
       _attributes <- setAttributes _attributes f el
       forM_ mparent (flip appendChild el)
       _children <- mapM (go (Just el)) _children
-      return $ SVGNode _node _tag _attributes _children
+      return $ SVGAtom _node _tag _attributes _children
 
-    go mparent KNode {..} = do
+    go mparent KAtom {..} = do
       _node@(Just el) <- createElement doc _tag
       _attributes <- setAttributes _attributes f el
       forM_ mparent (flip appendChild el)
       _keyed <- mapM (\(k,x) -> go (Just el) x >>= \y -> return (k,y)) _keyed
-      return $ KNode _node _tag _attributes _keyed
+      return $ KAtom _node _tag _attributes _keyed
 
     go mparent Text {..} = do
       _tnode@(Just el) <- createTextNode doc _content
@@ -1192,19 +1192,19 @@ cleanup :: [HTML ms] -> IO ()
 #ifndef __GHCJS__
 cleanup _ = return ()
 #else
-cleanup (NullNode{}:rest) = cleanup rest
+cleanup (NullAtom{}:rest) = cleanup rest
 cleanup (Raw {..}:rest) = do
   forM_ _attributes cleanupAttr
   cleanup rest
-cleanup (Node {..}:rest) = do
+cleanup (Atom {..}:rest) = do
   forM_ _attributes cleanupAttr
   cleanup _children
   cleanup rest
-cleanup (SVGNode {..}:rest) = do
+cleanup (SVGAtom {..}:rest) = do
   forM_ _attributes cleanupAttr
   cleanup _children
   cleanup rest
-cleanup (KNode {..}:rest) = do
+cleanup (KAtom {..}:rest) = do
   forM_ _attributes cleanupAttr
   cleanup (map snd _keyed)
   cleanup rest
@@ -1253,9 +1253,9 @@ diffHelper f doc = go
         go' old mid new
 
       where
-        go' old@NullNode{} _ new = do
+        go' old@NullAtom{} _ new = do
           case new of
-            NullNode _ -> return $ Right old
+            NullAtom _ -> return $ Right old
             _          -> do
               new' <- buildHTML doc f new
               replace old new'
@@ -1263,14 +1263,14 @@ diffHelper f doc = go
               delete old
               return $ Right new'
 
-        go' old _ new@NullNode{} = do
+        go' old _ new@NullAtom{} = do
           new' <- buildHTML doc f new
           replace old new'
           cleanup [old]
           delete old
           return $ Right new'
 
-        go' old@Node {} mid@Node {} new@Node {} =
+        go' old@Atom {} mid@Atom {} new@Atom {} =
           if prettyUnsafeEq (_tag old) (_tag new)
           then do let Just n = _node old
                       Just m = _node mid
@@ -1282,7 +1282,7 @@ diffHelper f doc = go
                           return (_children old)
                         else
                           diffChildren n (_children old) (_children mid) (_children new)
-                  return $ Right $ Node (_node old) (_tag old) a' c'
+                  return $ Right $ Atom (_node old) (_tag old) a' c'
           else do new' <- buildHTML doc f new
                   -- shouldn't ever hit a nothing, but I stil don't like it
                   replace old new'
@@ -1290,7 +1290,7 @@ diffHelper f doc = go
                   delete old
                   return $ Left new'
 
-        go' old@SVGNode {} mid@SVGNode {} new@SVGNode {} =
+        go' old@SVGAtom {} mid@SVGAtom {} new@SVGAtom {} =
           if prettyUnsafeEq (_tag old) (_tag new)
           then do let Just n = _node old
                       Just m = _node mid
@@ -1302,7 +1302,7 @@ diffHelper f doc = go
                           return (_children old)
                         else
                           diffChildren n (_children old) (_children mid) (_children new)
-                  return $ Right $ Node (_node old) (_tag old) a' c'
+                  return $ Right $ Atom (_node old) (_tag old) a' c'
           else do new' <- buildHTML doc f new
                   -- shouldn't ever hit a nothing, but I stil don't like it
                   replace old new'
@@ -1310,16 +1310,16 @@ diffHelper f doc = go
                   delete old
                   return $ Left new'
 
-        go' old@(KNode old_node old_tag old_attributes old_keyed)
-          mid@(KNode mid_node _ mid_attributes mid_keyed)
-          new@(KNode _ new_tag new_attributes new_keyed) =
+        go' old@(KAtom old_node old_tag old_attributes old_keyed)
+          mid@(KAtom mid_node _ mid_attributes mid_keyed)
+          new@(KAtom _ new_tag new_attributes new_keyed) =
           if prettyUnsafeEq old_tag new_tag
           then do let Just n = old_node
                   a' <- if reallyUnsafeEq mid_attributes new_attributes then return old_attributes else
                           runElementDiff f n old_attributes mid_attributes new_attributes
                   c' <- if reallyUnsafeEq mid_keyed new_keyed then return old_keyed else
                           diffKeyedChildren n old_keyed mid_keyed new_keyed
-                  return $ Right $ KNode old_node old_tag a' c'
+                  return $ Right $ KAtom old_node old_tag a' c'
           else do new' <- buildHTML doc f new
                   replace old new'
                   cleanup [old]
@@ -1417,17 +1417,17 @@ diffHelper f doc = go
               in
                 if reallyUnsafeEq mid new then continue old else
                   case (mid,new) of
-                    (NullNode {},NullNode {}) ->
+                    (NullAtom {},NullAtom {}) ->
                       continue old
 
-                    (_,NullNode {}) -> do
+                    (_,NullAtom {}) -> do
                       new' <- buildHTML doc f new
                       replace old new'
                       cleanup [old]
                       delete old
                       continue new'
 
-                    (NullNode{},_) -> do
+                    (NullAtom{},_) -> do
                       new' <- buildHTML doc f new
                       replace old new'
                       cleanup [old]
@@ -1438,7 +1438,7 @@ diffHelper f doc = go
                       enew <- go old mid new
                       continue (either id id enew)
 
-    -- note that keyed nodes are filtered for NullNodes during construction
+    -- note that keyed nodes are filtered for NullAtoms during construction
     diffKeyedChildren n = go_ 0
       where
 
@@ -2033,7 +2033,7 @@ redirect redir = do
 
 
 instance Cond (HTML ms) where
-  nil = NullNode Nothing
+  nil = NullAtom Nothing
 
 instance IsString (HTML ms) where
   fromString = jss . fromString
@@ -2059,21 +2059,21 @@ instance Lift StaticHTML where
   lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
 
 #ifdef LENS
-makePrisms ''Node
-makeLenses ''Node
+makePrisms ''Atom
+makeLenses ''Atom
 #endif
 
 html :: Txt -> [Attribute ms] -> [HTML ms] -> HTML ms
 html _tag _attributes _children =
   let _node = Nothing
-  in Node {..}
+  in Atom {..}
 
 raw :: Txt -> [Attribute ms] -> Txt -> HTML ms
 raw _tag _attributes _content =
   let _node = Nothing
   in Raw {..}
 
-notNil (NullNode _) = False
+notNil (NullAtom _) = False
 notNil _ = True
 
 cnode :: Bool -> HTML ms -> HTML ms
@@ -2083,12 +2083,12 @@ keyed :: Txt -> [Attribute ms] -> [(Int,HTML ms)] -> HTML ms
 keyed _tag _attributes _keyed0 =
   let _node = Nothing
       _keyed = filter (notNil . snd) _keyed0
-  in KNode {..}
+  in KAtom {..}
 
 svgHTML :: Txt -> [Attribute ms] -> [HTML ms] -> HTML ms
 svgHTML _tag _attributes _children =
   let _node = Nothing
-  in SVGNode {..}
+  in SVGAtom {..}
 
 jss :: Txt -> HTML ms
 jss _content =

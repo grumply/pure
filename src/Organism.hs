@@ -139,7 +139,7 @@ run Organism {..} = do
   doc        <- getDocument
   q          <- newSignalBuffer
   rt         <- getOrganismRoot root
-  rt'        <- liftIO $ newIORef (NullNode $ Just rt,NullNode $ Just rt,())
+  rt'        <- liftIO $ newIORef (NullAtom $ Just rt,NullAtom $ Just rt,())
   nw :: Network r <- network
   sdn :: Network () <- network
   built      <- build $ mkRouter nw routes
@@ -199,7 +199,7 @@ run Organism {..} = do
 #endif
                 iohhm <- mkConstruct (Just differ) Nothing hc
                 (new,_,_) <- readIORef iohhm
-                replace (NullNode $ Just h) new
+                replace (NullAtom $ Just h) new
               Just (_,x_) -> do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
@@ -209,7 +209,7 @@ run Organism {..} = do
 #endif
                 (new,_,_) <- readIORef x_
                 rebuild hc Nothing new
-                replace (NullNode $ Just h) new
+                replace (NullAtom $ Just h) new
             mb_ <- lookupConstruct (key b)
             case mb_ of
               Nothing -> do

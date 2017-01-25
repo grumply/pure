@@ -144,7 +144,7 @@ double = Proxy
 
 -- theAPI :: FullAPI MAPI NAPI
 
-theAPI = api mesages nuclear
+theAPI = api mesages requests
   where
 
     messages =
@@ -154,7 +154,7 @@ theAPI = api mesages nuclear
       <||> server |>
             post <&> put <| double
 
-    nuclear =
+    requests =
            manager |> get |>
              int <&> double
       <||> server |> get |>
