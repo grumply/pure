@@ -97,28 +97,6 @@ type F r = Fusion (Fusion_ r) (Fusion_ r) IO r
 simpleF :: Code '[Route] (Code (Fusion_ r) IO) r -> (r -> Code (Fusion_ r) IO Page) -> Fusion (Fusion_ r) (Fusion_ r) IO r
 simpleF = Fusion "main" Nothing return (return ())
 
-data Page
-  = Page
-    { getHead :: Atom'
-    , getContent :: Atom'
-    }
-  | Partial
-    { getContent :: Atom'
-    }
-
-page :: ( IsAtom ts ms m
-        , IsAtom ts' ms' m'
-        )
-     => Atom ts ms m
-     -> Atom ts' ms' m'
-     -> Page
-page h b = Page (Atom' h) (Atom' b)
-
-partial :: IsAtom ts ms m
-        => Atom ts ms m
-        -> Page
-partial = Partial . Atom'
-
 onRoute :: ( IsFusion ts ms IO r
            , Monad c',  MonadIO c'
            , With (Fusion ts ms IO r) (Code ms IO) IO

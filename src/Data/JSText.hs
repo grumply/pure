@@ -40,6 +40,9 @@ instance T.IsGObject Export.Object where
 
 instance T.IsEvent Export.Object
 
+instance FromJSON Object where
+  parseJSON = withObject "object" pure
+
 type JSText = JSString
 
 -- this instance must be the same as Text to guarantee compatability

@@ -4,7 +4,7 @@ module Nuclear.Normalize where
 
 import Nuclear.CSS
 
-normalize :: CSSText
+normalize :: StaticCSS
 normalize =
   $( let nrmlz = staticCSS $ do
           select "html" $ do

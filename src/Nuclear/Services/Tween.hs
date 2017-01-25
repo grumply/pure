@@ -6,9 +6,8 @@ import Ef.Base
 
 import Data.JSText
 
-import Nuclear.Atom (Win,getElement,getWindow)
+import Nuclear.Atom
 import Nuclear.Ease
-import Nuclear.Node
 import Nuclear.Revent
 import Nuclear.Service
 import Nuclear.With
@@ -27,7 +26,7 @@ scrollTo :: ( MonadIO c
             )
          => Ease
          -> Double
-         -> Node atom' e
+         -> HTML ms'
          -> Code ms c (Maybe (IO ()))
 scrollTo ease duration {- milliseconds -} to =
   let me = getElement to

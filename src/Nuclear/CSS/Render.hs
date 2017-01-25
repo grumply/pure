@@ -8,6 +8,7 @@ import Ef.Base
 import Data.JSText
 
 import Nuclear.Attribute
+import Nuclear.Render
 import Nuclear.ToText
 import Nuclear.FromText
 import Nuclear.CSS.Helpers
@@ -28,35 +29,6 @@ data Styles_ k where
   deriving Functor
 
 type Styles = Code '[Styles_] Identity ()
-
-instance ToText (Feature e) where
-  toText NullFeature          = mempty
-
-  toText (Attribute attr val) =
-    case val of
-      Left b  -> attr <> "=" <> if b then "true" else "false"
-      Right v -> attr <> "=\"" <> v <> "\""
-
-  toText (Style pairs) =
-    "style=\""
-      <> JSText.intercalate
-           (JSText.singleton ';')
-           (renderStyles False (mapM_ (uncurry (=:)) pairs))
-      <> "\""
-
-  toText (CurrentValue _) = mempty
-
-  toText (On _ _ _)       = mempty
-
-  toText (On' _ _ _ _)    = mempty
-
-  toText (Link href _)    = "href=\"" <> href <> "\""
-
-instance ToText [Feature e] where
-  toText fs =
-    JSText.intercalate
-     (JSText.singleton ' ')
-     (Prelude.filter (not . JSText.null) $ Prelude.map toText fs)
 
 infixr 5 =:
 (=:) :: JSText -> JSText -> Styles
@@ -150,31 +122,34 @@ atKeyframes nm kfs = Send (CSS3_ "@keyframes " nm (Just kfs) (Return ()))
 -- data CSSError = InvalidCSSSyntax JSText deriving (Show)
 -- instance Exception CSSError
 
-newtype CSSText = CSSText { cssText :: JSText } deriving (Eq,Ord)
-instance ToText CSSText where
-  toText (CSSText csst) = csst
-instance FromText CSSText where
-  fromText = CSSText
-instance Monoid CSSText where
+newtype StaticCSS = StaticCSS { cssText :: JSText } deriving (Eq,Ord)
+instance ToText StaticCSS where
+  toText (StaticCSS csst) = csst
+instance FromText StaticCSS where
+  fromText = StaticCSS
+instance Monoid StaticCSS where
   mempty = fromText mempty
   mappend csst1 csst2 = fromText $ toText csst1 <> "\n" <> toText csst2
-instance Lift CSSText where
-  lift (CSSText csst) = [| CSSText csst |]
+instance Lift StaticCSS where
+  lift (StaticCSS csst) = [| StaticCSS csst |]
 
-staticCSS :: CSS -> CSSText
-staticCSS = CSSText . go False
-  where
-    go b (Return _) = mempty
-    go b (Lift s) = go b (runIdentity s)
-    go b (Do msg) =
-      case prj msg of
-        Just (CSS3_ atRule sel mCSS k) ->
-          case mCSS of
-            Nothing ->
-              atRule <> sel <> ";\n" <> go False k
-            Just c' ->
-              atRule <> sel <> " {\n" <> go True c' <> "\n}\n\n" <> go False k
-        Just (CSS_ sel ss k) ->
-          let t = sel <> " {\n" <> JSText.intercalate (if b then ";\n\t" else ";\n") (renderStyles b ss) <> if b then "\n\t}\n\n" else "\n}\n\n"
-          in (if b then "\t" <> t else t) <> go b k
-        _ -> mempty
+instance ToText CSS where
+  toText = ((JSText.singleton '\n') <>) . go False
+    where
+      go b (Return _) = mempty
+      go b (Lift s) = go b (runIdentity s)
+      go b (Do msg) =
+        case prj msg of
+          Just (CSS3_ atRule sel mCSS k) ->
+            case mCSS of
+              Nothing ->
+                atRule <> sel <> ";\n" <> go False k
+              Just c' ->
+                atRule <> sel <> " {\n" <> go True c' <> "\n}\n\n" <> go False k
+          Just (CSS_ sel ss k) ->
+            let t = sel <> " {\n" <> JSText.intercalate (if b then ";\n\t" else ";\n") (renderStyles b ss) <> if b then "\n\t}\n\n" else "\n}\n\n"
+            in (if b then "\t" <> t else t) <> go b k
+          _ -> mempty
+
+staticCSS :: CSS -> StaticCSS
+staticCSS = render

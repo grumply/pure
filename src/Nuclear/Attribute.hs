@@ -69,7 +69,7 @@ instance Cond (Feature e) where
 instance IsString (Feature e) where
   fromString = Attribute "class" . Right . fromString
 
-instance IsString [Feature e] where
+instance {-# OVERLAPS #-} IsString [Feature e] where
   fromString s = [fromString s]
 
 instance FromText (Feature e) where
@@ -438,9 +438,6 @@ onMouseOver = on "mouseover"
 
 onMouseOut :: e -> Feature e
 onMouseOut = on "mouseout"
-
-instance FromJSON Data.JSText.Object where
-  parseJSON = withObject "object" pure
 
 onInput :: (JSText -> e) -> Feature e
 onInput f = on' "input" Nuclear.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do

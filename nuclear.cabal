@@ -58,7 +58,6 @@ library
                       , Nuclear.Limit
                       , Nuclear.Memo
                       , Nuclear.Message
-                      , Nuclear.Node
                       , Nuclear.Normalize
                       , Nuclear.Nuclear
                       , Nuclear.Observable
@@ -136,7 +135,6 @@ library
                       , Nuclear.Limit
                       , Nuclear.Memo
                       , Nuclear.Message
-                      , Nuclear.Node
                       , Nuclear.Normalize
                       , Nuclear.Nuclear
                       , Nuclear.Observable

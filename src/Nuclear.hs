@@ -29,7 +29,6 @@ import Nuclear.Lazy       as Export
 import Nuclear.Limit      as Export
 import Nuclear.Memo       as Export
 import Nuclear.Message    as Export
-import Nuclear.Node       as Export hiding (path)
 import Nuclear.Normalize  as Export
 import Nuclear.Nuclear    as Export
 import Nuclear.Observable as Export
@@ -77,17 +76,17 @@ instance FromMicroTime JSTime where
   fromMicroTime mt = JSTime $ (micros mt) `Prelude.div` 1000
 
 #ifndef __GHCJS__
-instance (ToJSON v,ToText k) => ToJSON (HashMap k v) where
+instance {-# OVERLAPS #-} (ToJSON v,ToText k) => ToJSON (HashMap k v) where
   toJSON = JSText.Object . Map.fromList . Prelude.map (\(k,v) -> (toText k,toJSON v)) . Map.toList
   {-# INLINE toJSON #-}
 #else
 -- should be a faster encoding to Value that can be more quickly encoded to JSText for transfer
-instance (ToJSON v,ToText k) => ToJSON (HashMap k v) where
+instance {-# OVERLAPS #-} (ToJSON v,ToText k) => ToJSON (HashMap k v) where
   toJSON = objectValue . JSText.object . Prelude.map (\(k,v) -> (toText k,toJSON v)) . Map.toList
   {-# INLINE toJSON #-}
 #endif
 
-instance (FromJSON v,Hashable k,Eq k,FromText k) => FromJSON (HashMap k v) where
+instance {-# OVERLAPS #-} (FromJSON v,Hashable k,Eq k,FromText k) => FromJSON (HashMap k v) where
   parseJSON x = do
     o <- parseJSON x
     kvs <- flip mapM (Map.toList o) $ \(k,v) -> do

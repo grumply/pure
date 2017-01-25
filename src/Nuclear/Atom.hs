@@ -17,9 +17,10 @@ import qualified Data.Text as JSText
 #endif
 
 import Nuclear.Attribute
+import Nuclear.Cond
 import Nuclear.CSS
 import Nuclear.Key
-import Nuclear.Node
+import Nuclear.Render
 import Nuclear.Revent
 import Nuclear.UnsafeEq
 import Nuclear.Vault
@@ -56,16 +57,25 @@ import Data.Foldable
 import Data.Functor.Identity
 import Data.Hashable
 import Data.IORef
-import Data.List as List hiding (delete)
+import Data.List as List hiding (delete,head)
 import Data.Maybe
 import Data.String
 import Data.Traversable
+import Data.Void
 import GHC.Prim
 
 import qualified Data.HashMap.Strict as Map
 
+import Prelude hiding (div,head,span)
+import Language.Haskell.TH hiding (Loc)
+import Language.Haskell.TH.Syntax hiding (Loc)
+
 import System.IO.Unsafe
 import Unsafe.Coerce
+
+#ifdef LENS
+import Control.Lens (makePrisms,makeLenses)
+#endif
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
@@ -129,7 +139,238 @@ foreign import javascript unsafe
   append_child_js :: E.Element -> N.Node -> IO ()
 #endif
 
-type HTML ms = Node Atom' (Code ms IO ())
+type ENode =
+#ifdef __GHCJS__
+  T.Element
+#else
+  ()
+#endif
+
+type TNode =
+#ifdef __GHCJS__
+  T.Text
+#else
+  ()
+#endif
+
+type NNode =
+#ifdef __GHCJS__
+  T.Node
+#else
+  ()
+#endif
+
+data Node e where
+  -- NullNode must have a presence on the page for proper diffing
+  NullNode
+    :: { _node :: !(Maybe ENode)
+       } -> Node e
+
+  Text
+    ::  { _tnode      :: Maybe TNode
+        , _content    :: JSText
+        } -> Node e
+
+  Raw
+    :: { _node        :: Maybe ENode
+       , _tag         :: JSText
+       , _attributes  :: [Feature e]
+       , _content     :: JSText
+       } -> Node e
+
+  KNode
+    ::  { _node       :: Maybe ENode
+        , _tag        :: JSText
+        , _attributes :: [Feature e]
+        , _keyed      :: [(Int,Node e)]
+        } -> Node e
+
+  Node
+    ::  { _node       :: Maybe ENode
+        , _tag        :: JSText
+        , _attributes :: [Feature e]
+        , _children   :: [Node e]
+        } -> Node e
+
+  -- TODO: SVG keyed node
+  SVGNode
+    ::  { _node       :: Maybe ENode
+        , _tag        :: JSText
+        , _attributes :: [Feature e]
+        , _children   :: [Node e]
+        } -> Node e
+
+  Managed
+    ::  { _node       :: Maybe ENode
+        , _tag        :: JSText
+        , _attributes :: [Feature e]
+        , _atom'      :: Atom'
+        } -> Node e
+  deriving Functor
+
+type HTML ms = Node (Code ms IO ())
+
+instance ToText (Attribute ms) where
+  toText NullFeature          = mempty
+
+  toText (Attribute attr val) =
+    case val of
+      Left b  -> attr <> "=" <> if b then "true" else "false"
+      Right v -> attr <> "=\"" <> v <> "\""
+
+  toText (Style pairs) =
+    "style=\""
+      <> JSText.intercalate
+           (JSText.singleton ';')
+           (renderStyles False (mapM_ (uncurry (=:)) pairs))
+      <> "\""
+
+  toText (CurrentValue _) = mempty
+
+  toText (On _ _ _)       = mempty
+
+  toText (On' _ _ _ _)    = mempty
+
+  toText (Link href _)    = "href=\"" <> href <> "\""
+
+instance ToText [Attribute ms] where
+  toText fs =
+    JSText.intercalate
+     (JSText.singleton ' ')
+     (Prelude.filter (not . JSText.null) $ Prelude.map toText fs)
+
+selfClosing tag =
+  case tag of
+    "area"    -> True
+    "base"    -> True
+    "br"      -> True
+    "col"     -> True
+    "command" -> True
+    "embed"   -> True
+    "hr"      -> True
+    "img"     -> True
+    "input"   -> True
+    "keygen"  -> True
+    "link"    -> True
+    "meta"    -> True
+    "param"   -> True
+    "source"  -> True
+    "track"   -> True
+    "wbr"     -> True
+    _         -> False
+
+instance ToText (HTML ms) where
+  toText NullNode {} = ""
+  toText Text {..} = _content
+  toText Raw {..} =
+    "<" <> _tag <> " " <> JSText.intercalate " " (map toText _attributes) <>
+      ">" <> _content <> "</" <> _tag <> ">"
+  toText KNode {..} =
+    "<" <> _tag <> " " <> JSText.intercalate " " (map toText _attributes) <>
+      if selfClosing _tag then
+        "/>"
+      else
+        ">" <> JSText.concat (map (toText . snd) _keyed) <> "</" <> _tag <> ">"
+  toText Node {..} =
+    "<" <> _tag <> " " <> JSText.intercalate " " (map toText _attributes) <>
+      if selfClosing _tag then
+        "/>"
+      else
+        ">" <> JSText.concat (map toText _children) <> "</" <> _tag <> ">"
+  toText SVGNode {..} =
+    "<" <> _tag <> " " <> JSText.intercalate " " (map toText _attributes) <>
+      if selfClosing _tag then
+        "/>"
+      else
+        ">" <> JSText.concat (map toText _children) <> "</" <> _tag <> ">"
+  toText Managed {..} =
+    case _atom' of
+      Atom' Atom {..} ->
+        "<" <> _tag <> " " <> JSText.intercalate " " (map toText _attributes) <>
+          ">"  <> toText (view model) <> "</" <> _tag <> ">"
+
+staticHTML :: HTML ms -> StaticHTML
+staticHTML = render
+
+shtml :: JSText -> [Attribute ms] -> StaticHTML -> HTML ms
+shtml _tag _attributes = raw _tag _attributes . toText
+
+data Page
+  = Page
+    { getHead :: Atom'
+    , getContent :: Atom'
+    }
+  | Partial
+    { getContent :: Atom'
+    }
+  deriving Eq
+
+page :: ( IsAtom ts ms m
+        , IsAtom ts' ms' m'
+        )
+     => Atom ts ms m
+     -> Atom ts' ms' m'
+     -> Page
+page h b = Page (Atom' h) (Atom' b)
+
+partial :: IsAtom ts ms m
+        => Atom ts ms m
+        -> Page
+partial = Partial . Atom'
+
+renderPage :: Page -> JSText
+renderPage (Page h c) =
+  "<!DOCTYPE html>" <>
+    case h of
+      Atom' Atom {..} ->
+        toText $
+          html_ []
+            [ view model
+            , body []
+                [ case c of
+                    Atom' a@Atom {} -> atom div [ id_ "fusion" ] a
+                ]
+            ]
+renderPage (Partial c) =
+  ("<!DOCTYPE html>" <>) $
+    toText $
+      html_ []
+        [ head []
+        , body []
+            [ case c of
+                Atom' a@Atom {} -> atom div [ id_ "fusion" ] a
+            ]
+        ]
+
+renderPageBootstrap :: Page -> JSText -> JSText
+renderPageBootstrap (Page h c) mainScript =
+  "<!DOCTYPE html>" <>
+    case h of
+      Atom' Atom {..} ->
+        toText $
+          html_ []
+            [ view model
+            , body []
+                [ case c of
+                    Atom' a@Atom {} -> atom div [ id_ "fusion" ] a
+                , script [ src mainScript, defer True ] []
+                ]
+            ]
+renderPageBootstrap (Partial c) mainScript =
+  "<!DOCTYPE html>" <>
+    case c of
+      Atom' a@Atom {} ->
+        toText $
+          html_ []
+            [ head []
+            , body []
+                [ atom div [ id_ "fusion" ] a
+                , script [ src mainScript, defer True ] []
+                ]
+            ]
+
+-- renderDynamicPage :: Page -> IO JSText
+-- renderDynamicPage (Page h c) = do
 
 reflect :: forall ts ms m c.
            ( IsAtom ts ms m
@@ -205,10 +446,10 @@ css' b = html "style" [ type_ "text/css", scoped b ] . ((jss "\n"):) . go False
           )
         _ -> []
 
-scss :: CSSText -> HTML ms
+scss :: StaticCSS -> HTML ms
 scss = scss' False
 
-scss' :: Bool -> CSSText -> HTML ms
+scss' :: Bool -> StaticCSS -> HTML ms
 scss' b = raw "style" [type_ "text/css", scoped b] . cssText
 
 styles :: CSS -> HTML ms
@@ -627,7 +868,7 @@ swapContent t e =
 #endif
 
 {-# NOINLINE embed_ #-}
-embed_ :: ENode -> Node atom' e -> IO ()
+embed_ :: ENode -> HTML ms -> IO ()
 embed_ parent Text {..} =
   forM_ _tnode $ \node -> do
     ae <- isAlreadyEmbeddedText node parent
@@ -684,7 +925,7 @@ rebuild c me h =
               embed_ parent h
 #endif
 
-setAttributes :: [Feature e] -> (e -> IO ()) -> ENode -> IO [Feature e]
+setAttributes :: [Attribute ms] -> (Code ms IO () -> IO ()) -> ENode -> IO [Attribute ms]
 setAttributes as f el =
 #ifdef __GHCJS__
   forM as (setAttribute_ f el)
@@ -694,7 +935,7 @@ setAttributes as f el =
 
 
 {-# NOINLINE buildAndEmbedMaybe #-}
-buildAndEmbedMaybe :: (e -> IO ()) -> Doc -> Maybe ENode -> Node Atom' e -> IO (Node Atom' e)
+buildAndEmbedMaybe :: (Code ms IO () -> IO ()) -> Doc -> Maybe ENode -> HTML ms -> IO (HTML ms)
 buildAndEmbedMaybe f doc = go
   where
     go mparent nn@NullNode {..} = do
@@ -766,7 +1007,7 @@ buildAndEmbedMaybe f doc = go
               return Managed {..}
 
 {-# NOINLINE buildHTML #-}
-buildHTML :: Doc -> (e -> IO ()) -> Node Atom' e -> IO (Node Atom' e)
+buildHTML :: Doc -> (Code ms IO () -> IO ()) -> HTML ms -> IO (HTML ms)
 buildHTML doc f = buildAndEmbedMaybe f doc Nothing
 
 -- Useful for standalone components without a Fusion root.
@@ -815,7 +1056,7 @@ diff_ APatch {..} = do
 #endif
 
 {-# NOINLINE replace #-}
-replace :: Node atom0 ms0 -> Node atom1 ms1 -> IO ()
+replace :: HTML ms0 -> HTML ms1 -> IO ()
 #ifndef __GHCJS__
 replace _ _ = return ()
 #else
@@ -836,7 +1077,7 @@ replace old new = do
 #endif
 
 {-# NOINLINE delete #-}
-delete :: Node atom' e -> IO ()
+delete :: HTML ms -> IO ()
 #ifndef __GHCJS__
 delete _ = return ()
 #else
@@ -845,7 +1086,7 @@ delete n = forM_ (_node n) (delete_js . toNode)
 #endif
 
 {-# NOINLINE remove #-}
-remove :: Node atom' e -> IO ()
+remove :: HTML ms -> IO ()
 #ifndef __GHCJS__
 remove _ = return ()
 #else
@@ -854,7 +1095,7 @@ remove n = forM_ (_node n) (remove_js . toNode)
 #endif
 
 {-# NOINLINE cleanup #-}
-cleanup :: [Node atom' e] -> IO ()
+cleanup :: [HTML ms] -> IO ()
 #ifndef __GHCJS__
 cleanup _ = return ()
 #else
@@ -881,7 +1122,7 @@ cleanup _ = return ()
 #endif
 
 {-# NOINLINE insertAt #-}
-insertAt :: ENode -> Int -> Node atom' e -> IO ()
+insertAt :: ENode -> Int -> HTML ms -> IO ()
 #ifndef __GHCJS__
 insertAt _ _ _ = return ()
 #else
@@ -890,7 +1131,7 @@ insertAt parent ind n = forM_ (_node n) $ insert_at_js parent ind . toNode
 #endif
 
 {-# NOINLINE prepend #-}
-prepend :: ENode -> Node atom' e -> IO ()
+prepend :: ENode -> HTML ms -> IO ()
 #ifndef __GHCJS__
 prepend _ _ = return ()
 #else
@@ -899,7 +1140,7 @@ prepend parent n = forM_ (_node n) $ prepend_child_js parent . toNode
 #endif
 
 {-# NOINLINE insertBefore_ #-}
-insertBefore_ :: ENode -> Node atom' e -> Node atom' e -> IO ()
+insertBefore_ :: ENode -> HTML ms -> HTML ms -> IO ()
 #ifndef __GHCJS__
 insertBefore_ _ _ _ = return ()
 #else
@@ -909,7 +1150,7 @@ insertBefore_ parent child@(Text {}) new = void $ N.insertBefore parent (_node n
 insertBefore_ parent child new = void $ N.insertBefore parent (_node new) (_node child)
 #endif
 
-diffHelper :: (e -> IO ()) -> Doc -> Node Atom' e -> Node Atom' e -> Node Atom' e -> IO (Either (Node Atom' e) (Node Atom' e))
+diffHelper :: (Code ms IO () -> IO ()) -> Doc -> HTML ms -> HTML ms -> HTML ms -> IO (Either (HTML ms) (HTML ms))
 diffHelper f doc = go
   where
     go old mid new =
@@ -1231,7 +1472,7 @@ applyStyleDiffs el olds0 news0 = do
 #endif
 
 {-# NOINLINE runElementDiff #-}
-runElementDiff :: (e -> IO ()) -> ENode -> [Feature e] -> [Feature e] -> [Feature e] -> IO [Feature e]
+runElementDiff :: (Code ms IO () -> IO ()) -> ENode -> [Attribute ms] -> [Attribute ms] -> [Attribute ms] -> IO [Attribute ms]
 runElementDiff f el os0 ms0 ns0 =
 #ifndef __GHCJS__
     return ns0
@@ -1314,12 +1555,12 @@ runElementDiff f el os0 ms0 ns0 =
 #endif
 
 {-# NOINLINE runElementDiffSVG #-}
-runElementDiffSVG :: (e -> IO ())
+runElementDiffSVG :: (Code ms IO () -> IO ())
                   -> ENode
-                  -> [Feature e]
-                  -> [Feature e]
-                  -> [Feature e]
-                  -> IO [Feature e]
+                  -> [Attribute ms]
+                  -> [Attribute ms]
+                  -> [Attribute ms]
+                  -> IO [Attribute ms]
 runElementDiffSVG f el os0 ms0 ns0 =
 #ifndef __GHCJS__
     return ns0
@@ -1402,7 +1643,7 @@ runElementDiffSVG f el os0 ms0 ns0 =
 #endif
 
 {-# NOINLINE removeAttribute_ #-}
-removeAttribute_ :: ENode -> Feature e -> IO ()
+removeAttribute_ :: ENode -> Attribute ms -> IO ()
 removeAttribute_ element attr =
 #ifndef __GHCJS__
   return ()
@@ -1434,7 +1675,7 @@ removeAttribute_ element attr =
 #endif
 
 {-# NOINLINE removeAttributeSVG_ #-}
-removeAttributeSVG_ :: ENode -> Feature e -> IO ()
+removeAttributeSVG_ :: ENode -> Attribute ms -> IO ()
 removeAttributeSVG_ element attr =
 #ifndef __GHCJS__
   return ()
@@ -1466,7 +1707,7 @@ removeAttributeSVG_ element attr =
 #endif
 
 {-# NOINLINE setAttribute_ #-}
-setAttribute_ :: (e -> IO ()) -> ENode -> Feature e -> IO (Feature e)
+setAttribute_ :: (Code ms IO () -> IO ()) -> ENode -> Attribute ms -> IO (Attribute ms)
 setAttribute_ c element attr =
 #ifndef __GHCJS__
   return attr
@@ -1536,7 +1777,7 @@ setAttribute_ c element attr =
 #endif
 
 {-# NOINLINE setAttributeSVG_ #-}
-setAttributeSVG_ :: (e -> IO ()) -> ENode -> Feature e -> IO (Feature e)
+setAttributeSVG_ :: (Code ms IO () -> IO ()) -> ENode -> Attribute ms -> IO (Attribute ms)
 setAttributeSVG_ c element attr =
 #ifndef __GHCJS__
   return attr
@@ -1607,7 +1848,7 @@ setAttributeSVG_ c element attr =
 #endif
 
 {-# NOINLINE cleanupAttr #-}
-cleanupAttr :: Feature e -> IO ()
+cleanupAttr :: Attribute ms -> IO ()
 cleanupAttr attr =
 #ifndef __GHCJS__
   return ()
@@ -1697,3 +1938,477 @@ redirect redir = do
   return loc
 #endif
 
+
+instance Cond (HTML ms) where
+  nil = NullNode Nothing
+
+instance IsString (HTML ms) where
+  fromString = jss . fromString
+
+instance FromText (HTML ms) where
+  fromText = jss
+
+instance {-# OVERLAPS #-} IsString [HTML ms] where
+  fromString s = [fromString s]
+
+instance FromText [HTML ms] where
+  fromText t = [fromText t]
+
+newtype StaticHTML = StaticHTML { htmlText :: JSText } deriving (Eq,Ord)
+instance ToText StaticHTML where
+  toText (StaticHTML htmlt) = htmlt
+instance FromText StaticHTML where
+  fromText = StaticHTML
+instance Monoid StaticHTML where
+  mempty = fromText mempty
+  mappend htmlt1 htmlt2 = fromText $ toText htmlt1 <> toText htmlt2
+instance Lift StaticHTML where
+  lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
+
+#ifdef LENS
+makePrisms ''Node
+makeLenses ''Node
+#endif
+
+html :: JSText -> [Attribute ms] -> [HTML ms] -> HTML ms
+html _tag _attributes _children =
+  let _node = Nothing
+  in Node {..}
+
+raw :: JSText -> [Attribute ms] -> JSText -> HTML ms
+raw _tag _attributes _content =
+  let _node = Nothing
+  in Raw {..}
+
+notNil (NullNode _) = False
+notNil _ = True
+
+cnode :: Bool -> HTML ms -> HTML ms
+cnode = cond
+
+keyed :: JSText -> [Attribute ms] -> [(Int,HTML ms)] -> HTML ms
+keyed _tag _attributes _keyed0 =
+  let _node = Nothing
+      _keyed = filter (notNil . snd) _keyed0
+  in KNode {..}
+
+svgHTML :: JSText -> [Attribute ms] -> [HTML ms] -> HTML ms
+svgHTML _tag _attributes _children =
+  let _node = Nothing
+  in SVGNode {..}
+
+jss :: JSText -> HTML ms
+jss _content =
+  let _tnode = Nothing
+  in Text {..}
+
+--------------------------------------------------------------------------------
+-- Nodes
+
+abbr :: [Attribute ms] -> [HTML ms] -> HTML ms
+abbr = html "abbr"
+
+address :: [Attribute ms] -> [HTML ms] -> HTML ms
+address = html "address"
+
+area :: [Attribute ms] -> [HTML ms] -> HTML ms
+area = html "area"
+
+a :: [Attribute ms] -> [HTML ms] -> HTML ms
+a = html "a"
+
+article :: [Attribute ms] -> [HTML ms] -> HTML ms
+article = html "article"
+
+aside :: [Attribute ms] -> [HTML ms] -> HTML ms
+aside = html "aside"
+
+audio :: [Attribute ms] -> [HTML ms] -> HTML ms
+audio = html "audio"
+
+base :: [Attribute ms] -> [HTML ms] -> HTML ms
+base = html "base"
+
+bdi :: [Attribute ms] -> [HTML ms] -> HTML ms
+bdi = html "bdi"
+
+bdo :: [Attribute ms] -> [HTML ms] -> HTML ms
+bdo = html "bdo"
+
+big :: [Attribute ms] -> [HTML ms] -> HTML ms
+big = html "big"
+
+blockquote :: [Attribute ms] -> [HTML ms] -> HTML ms
+blockquote = html "blockquote"
+
+body :: [Attribute ms] -> [HTML ms] -> HTML ms
+body = html "body"
+
+b :: [Attribute ms] -> [HTML ms] -> HTML ms
+b = html "b"
+
+br :: HTML ms
+br = html "br" [] []
+
+button :: [Attribute ms] -> [HTML ms] -> HTML ms
+button = html "button"
+
+canvas :: [Attribute ms] -> [HTML ms] -> HTML ms
+canvas = html "canvas"
+
+caption :: [Attribute ms] -> [HTML ms] -> HTML ms
+caption = html "caption"
+
+cite :: [Attribute ms] -> [HTML ms] -> HTML ms
+cite = html "cite"
+
+code :: [Attribute ms] -> [HTML ms] -> HTML ms
+code = html "code"
+
+col :: [Attribute ms] -> [HTML ms] -> HTML ms
+col = html "col"
+
+colgroup :: [Attribute ms] -> [HTML ms] -> HTML ms
+colgroup = html "colgroup"
+
+dataN :: [Attribute ms] -> [HTML ms] -> HTML ms
+dataN = html "data"
+
+datalist :: [Attribute ms] -> [HTML ms] -> HTML ms
+datalist = html "datalist"
+
+dd :: [Attribute ms] -> [HTML ms] -> HTML ms
+dd = html "dd"
+
+description :: JSText -> HTML ms
+description d = meta [ name "description", content d ] []
+
+dl :: [Attribute ms] -> [HTML ms] -> HTML ms
+dl = html "dl"
+
+dt :: [Attribute ms] -> [HTML ms] -> HTML ms
+dt = html "dt"
+
+del :: [Attribute ms] -> [HTML ms] -> HTML ms
+del = html "del"
+
+details :: [Attribute ms] -> [HTML ms] -> HTML ms
+details = html "details"
+
+dfn :: [Attribute ms] -> [HTML ms] -> HTML ms
+dfn = html "dfn"
+
+dialog :: [Attribute ms] -> [HTML ms] -> HTML ms
+dialog = html "dialog"
+
+div :: [Attribute ms] -> [HTML ms] -> HTML ms
+div = html "div"
+
+em :: [Attribute ms] -> [HTML ms] -> HTML ms
+em = html "em"
+
+embed :: [Attribute ms] -> [HTML ms] -> HTML ms
+embed = html "embed"
+
+fieldset :: [Attribute ms] -> [HTML ms] -> HTML ms
+fieldset = html "fieldset"
+
+figcaption :: [Attribute ms] -> [HTML ms] -> HTML ms
+figcaption = html "figcaption"
+
+figure :: [Attribute ms] -> [HTML ms] -> HTML ms
+figure = html "figure"
+
+footer :: [Attribute ms] -> [HTML ms] -> HTML ms
+footer = html "footer"
+
+form :: [Attribute ms] -> [HTML ms] -> HTML ms
+form = html "form"
+
+head :: [HTML ms] -> HTML ms
+head = html "head" []
+
+header :: [Attribute ms] -> [HTML ms] -> HTML ms
+header = html "header"
+
+h1 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h1 = html "h1"
+
+h2 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h2 = html "h2"
+
+h3 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h3 = html "h3"
+
+h4 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h4 = html "h4"
+
+h5 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h5 = html "h5"
+
+h6 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h6 = html "h6"
+
+hgroup :: [Attribute ms] -> [HTML ms] -> HTML ms
+hgroup = html "hgroup"
+
+hr :: [Attribute ms] -> [HTML ms] -> HTML ms
+hr = html "hr"
+
+html_ :: [Attribute ms] -> [HTML ms] -> HTML ms
+html_ = html "html"
+
+iframe :: [Attribute ms] -> [HTML ms] -> HTML ms
+iframe = html "iframe"
+
+img :: [Attribute ms] -> [HTML ms] -> HTML ms
+img = html "img"
+
+input :: [Attribute ms] -> [HTML ms] -> HTML ms
+input = html "input"
+
+textInput :: [Attribute ms] -> [HTML ms] -> HTML ms
+textInput fs = html "input" (type_ "text":fs)
+
+ins :: [Attribute ms] -> [HTML ms] -> HTML ms
+ins = html "ins"
+
+iN :: [Attribute ms] -> [HTML ms] -> HTML ms
+iN = html "i"
+
+kbd :: [Attribute ms] -> [HTML ms] -> HTML ms
+kbd = html "kbd"
+
+keygen :: [Attribute ms] -> [HTML ms] -> HTML ms
+keygen = html "keygen"
+
+label :: [Attribute ms] -> [HTML ms] -> HTML ms
+label = html "label"
+
+legend :: [Attribute ms] -> [HTML ms] -> HTML ms
+legend = html "legend"
+
+li :: [Attribute ms] -> [HTML ms] -> HTML ms
+li = html "li"
+
+linkN :: [Attribute ms] -> [HTML ms] -> HTML ms
+linkN = html "link"
+
+mainN :: [Attribute ms] -> [HTML ms] -> HTML ms
+mainN = html "main"
+
+mapN :: [Attribute ms] -> [HTML ms] -> HTML ms
+mapN = html "map"
+
+mark :: [Attribute ms] -> [HTML ms] -> HTML ms
+mark = html "mark"
+
+menu :: [Attribute ms] -> [HTML ms] -> HTML ms
+menu = html "menu"
+
+menuitem :: [Attribute ms] -> [HTML ms] -> HTML ms
+menuitem = html "menuitem"
+
+meta :: [Attribute ms] -> [HTML ms] -> HTML ms
+meta = html "meta"
+
+meter :: [Attribute ms] -> [HTML ms] -> HTML ms
+meter = html "meter"
+
+nav :: [Attribute ms] -> [HTML ms] -> HTML ms
+nav = html "nav"
+
+noscript :: [Attribute ms] -> [HTML ms] -> HTML ms
+noscript = html "noscript"
+
+object_ :: [Attribute ms] -> [HTML ms] -> HTML ms
+object_ = html "object"
+
+optgroup :: [Attribute ms] -> [HTML ms] -> HTML ms
+optgroup = html "optgroup"
+
+option :: [Attribute ms] -> [HTML ms] -> HTML ms
+option = html "option"
+
+ol :: [Attribute ms] -> [HTML ms] -> HTML ms
+ol = html "ol"
+
+output :: [Attribute ms] -> [HTML ms] -> HTML ms
+output = html "output"
+
+p :: [Attribute ms] -> [HTML ms] -> HTML ms
+p = html "p"
+
+param :: [Attribute ms] -> [HTML ms] -> HTML ms
+param = html "param"
+
+picture :: [Attribute ms] -> [HTML ms] -> HTML ms
+picture = html "picture"
+
+pre :: [Attribute ms] -> [HTML ms] -> HTML ms
+pre = html "pre"
+
+progress :: [Attribute ms] -> [HTML ms] -> HTML ms
+progress = html "progress"
+
+q :: [Attribute ms] -> [HTML ms] -> HTML ms
+q = html "q"
+
+rp :: [Attribute ms] -> [HTML ms] -> HTML ms
+rp = html "rp"
+
+rt :: [Attribute ms] -> [HTML ms] -> HTML ms
+rt = html "rt"
+
+ruby :: [Attribute ms] -> [HTML ms] -> HTML ms
+ruby = html "ruby"
+
+samp :: [Attribute ms] -> [HTML ms] -> HTML ms
+samp = html "samp"
+
+script :: [Attribute ms] -> [HTML ms] -> HTML ms
+script = html "script"
+
+s :: [Attribute ms] -> [HTML ms] -> HTML ms
+s = html "s"
+
+section :: [Attribute ms] -> [HTML ms] -> HTML ms
+section = html "section"
+
+selectN :: [Attribute ms] -> [HTML ms] -> HTML ms
+selectN = html "select"
+
+small :: [Attribute ms] -> [HTML ms] -> HTML ms
+small = html "small"
+
+source :: [Attribute ms] -> [HTML ms] -> HTML ms
+source = html "source"
+
+span :: [Attribute ms] -> [HTML ms] -> HTML ms
+span = html "span"
+
+strong :: [Attribute ms] -> [HTML ms] -> HTML ms
+strong = html "strong"
+
+style :: [Attribute ms] -> [HTML ms] -> HTML ms
+style = html "style"
+
+sub :: [Attribute ms] -> [HTML ms] -> HTML ms
+sub = html "sub"
+
+summary :: [Attribute ms] -> [HTML ms] -> HTML ms
+summary = html "summary"
+
+sup :: [Attribute ms] -> [HTML ms] -> HTML ms
+sup = html "sup"
+
+table :: [Attribute ms] -> [HTML ms] -> HTML ms
+table = html "table"
+
+tbody :: [Attribute ms] -> [HTML ms] -> HTML ms
+tbody = html "tbody"
+
+td :: [Attribute ms] -> [HTML ms] -> HTML ms
+td = html "td"
+
+textarea :: [Attribute ms] -> [HTML ms] -> HTML ms
+textarea = html "textarea"
+
+tfoot :: [Attribute ms] -> [HTML ms] -> HTML ms
+tfoot = html "tfoot"
+
+th :: [Attribute ms] -> [HTML ms] -> HTML ms
+th = html "th"
+
+thead :: [Attribute ms] -> [HTML ms] -> HTML ms
+thead = html "thead"
+
+time :: [Attribute ms] -> [HTML ms] -> HTML ms
+time = html "time"
+
+title :: JSText -> HTML ms
+title jst = html "title" [] [ jss jst ]
+
+tr :: [Attribute ms] -> [HTML ms] -> HTML ms
+tr = html "tr"
+
+track :: [Attribute ms] -> [HTML ms] -> HTML ms
+track = html "track"
+
+u :: [Attribute ms] -> [HTML ms] -> HTML ms
+u = html "u"
+
+ul :: [Attribute ms] -> [HTML ms] -> HTML ms
+ul = html "ul"
+
+varN :: [Attribute ms] -> [HTML ms] -> HTML ms
+varN = html "var"
+
+video :: [Attribute ms] -> [HTML ms] -> HTML ms
+video = html "video"
+
+viewport :: JSText -> HTML ms
+viewport jst = html "meta" [ name "viewport", content jst ] []
+
+wbr :: [Attribute ms] -> [HTML ms] -> HTML ms
+wbr = html "wbr"
+
+--------------------------------------------------------------------------------
+-- SVG
+
+circle :: [Attribute ms] -> [HTML ms] -> HTML ms
+circle = svgHTML "circle"
+
+clipPath :: [Attribute ms] -> [HTML ms] -> HTML ms
+clipPath = svgHTML "clipPath"
+
+defs :: [Attribute ms] -> [HTML ms] -> HTML ms
+defs = svgHTML "defs"
+
+ellipse :: [Attribute ms] -> [HTML ms] -> HTML ms
+ellipse = svgHTML "ellipse"
+
+g :: [Attribute ms] -> [HTML ms] -> HTML ms
+g = svgHTML "g"
+
+image :: [Attribute ms] -> [HTML ms] -> HTML ms
+image = svgHTML "image"
+
+line :: [Attribute ms] -> [HTML ms] -> HTML ms
+line = svgHTML "line"
+
+linearGradient :: [Attribute ms] -> [HTML ms] -> HTML ms
+linearGradient = svgHTML "linearGradient"
+
+mask :: [Attribute ms] -> [HTML ms] -> HTML ms
+mask = svgHTML "mask"
+
+path :: [Attribute ms] -> [HTML ms] -> HTML ms
+path = svgHTML "path"
+
+patternN :: [Attribute ms] -> [HTML ms] -> HTML ms
+patternN = svgHTML "pattern"
+
+polygon :: [Attribute ms] -> [HTML ms] -> HTML ms
+polygon = svgHTML "polygon"
+
+polyline :: [Attribute ms] -> [HTML ms] -> HTML ms
+polyline = svgHTML "polyline"
+
+radialGradient :: [Attribute ms] -> [HTML ms] -> HTML ms
+radialGradient = svgHTML "radialGraedient"
+
+rect :: [Attribute ms] -> [HTML ms] -> HTML ms
+rect = svgHTML "rect"
+
+stop_ :: [Attribute ms] -> [HTML ms] -> HTML ms
+stop_ = svgHTML "stop"
+
+svg :: [Attribute ms] -> [HTML ms] -> HTML ms
+svg = svgHTML "svg"
+
+text :: [Attribute ms] -> [HTML ms] -> HTML ms
+text = svgHTML "text"
+
+tspan :: [Attribute ms] -> [HTML ms] -> HTML ms
+tspan = svgHTML "tspan"
