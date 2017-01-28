@@ -290,7 +290,7 @@ renderSystemBootstrap (System h c) mainScript =
             , body []
                 [ case c of
                     Construct' a@Construct {} -> construct div [ idA "atomic" ] a
-                , script [ src mainScript, defer True ] []
+                , script [ src mainScript, defer "defer" ] []
                 ]
             ]
 renderSystemBootstrap (Subsystem c) mainScript =
@@ -302,7 +302,7 @@ renderSystemBootstrap (Subsystem c) mainScript =
             [ head []
             , body []
                 [ construct div [ idA "atomic" ] a
-                , script [ src mainScript, defer True ] []
+                , script [ src mainScript, defer "defer" ] []
                 ]
             ]
 
@@ -342,7 +342,7 @@ renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript =
       [ raw "head" [] head_html
       , body []
           [ raw "div" [ idA "atomic" ] body_html
-          , script [ src mainScript, defer True ] []
+          , script [ src mainScript, defer "defer" ] []
           ]
       ]
 renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
@@ -354,7 +354,7 @@ renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
       [ head []
       , body []
           [ raw "div" [ idA "atomic" ] body_html
-          , script [ src mainScript, defer True ] []
+          , script [ src mainScript, defer "defer" ] []
           ]
       ]
 

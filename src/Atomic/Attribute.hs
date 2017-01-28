@@ -317,8 +317,8 @@ headers = attr "headers" . JSS.intercalate " "
 scope :: Txt -> Feature e
 scope = attr "scope"
 
-async :: Bool -> Feature e
-async = boolattr "async"
+async :: Txt -> Feature e
+async = attr "async"
 
 charset :: Txt -> Feature e
 charset = attr "charset"
@@ -326,8 +326,8 @@ charset = attr "charset"
 content :: Txt -> Feature e
 content = attr "content"
 
-defer :: Bool -> Feature e
-defer = boolattr "defer"
+defer :: Txt -> Feature e
+defer = attr "defer"
 
 httpEquiv :: Txt -> Feature e
 httpEquiv = attr "http-equiv"
