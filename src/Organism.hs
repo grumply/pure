@@ -43,9 +43,10 @@ import Data.Ratio
 import qualified Data.HashMap.Strict as Map
 
 import Atomic.Construct
-import Atomic          as Export hiding (route,stop,accept)
+import Atomic          as Export hiding (stop,accept)
 import qualified Atomic
 import Atomic.WebSocket as Export hiding (LazyByteString)
+import qualified Atomic.Route as Route
 
 import System.IO.Unsafe
 import Unsafe.Coerce
@@ -116,8 +117,8 @@ instance Eq (Organism' ts ms c r) where
          1# -> True
          _  -> k1 == k2
 
-simpleF :: Code '[Route] (Code (OrganismBase r) IO) r -> (r -> Code (OrganismBase r) IO System) -> Organism '[] r
-simpleF = Organism "main" Nothing return (return ())
+simpleOrganism :: Code '[Route] (Code (OrganismBase r) IO) r -> (r -> Code (OrganismBase r) IO System) -> Organism '[] r
+simpleOrganism = Organism "main" Nothing return (return ())
 
 onRoute :: ( IsOrganism' ts ms IO r
            , Monad c',  MonadIO c'
@@ -243,7 +244,7 @@ getOrganismRoot mt = do
 #ifdef __GHCJS__
   me <-
     case mt of
-      Nothing -> D.getElementById doc ("organism" :: Txt)
+      Nothing -> D.getElementById doc ("atomic" :: Txt)
       Just n  -> D.getElementById doc n
   case me of
     Nothing -> liftIO $ getFirstElementByTagName ("body" :: Txt)
@@ -345,7 +346,7 @@ setupRouter _ = do
   qps <- getSearch
   let p = pn <> qps
   rtr  <- getRouter
-  mncr <- Atomic.route rtr p
+  mncr <- Route.route rtr p
   setRoute mncr
   forM_ mncr $ syndicate crn
   delay 500000 (connect psn (go crn loc p mncr))
@@ -359,26 +360,13 @@ setupRouter _ = do
           let p' = pn <> qps
           -- prevent recalculation with popstate on hash change
           unless (p' == p) $ do
-            mncr <- lift $ Atomic.route rtr p'
+            mncr <- lift $ Route.route rtr p'
             forM_ mncr $ \ncr ->
               when (mncr /= cr) $ do
                 lift $ do
                   setRoute mncr
                   syndicate crn ncr
             become (go' p' mncr)
-
-
--- Note that this /should not/ be called within the first 500 milliseconds
--- of the application loading or it may be ignored; this is to work around
--- a browser disparity in the triggering of popstate events on load.
-route :: MonadIO c => Txt -> c ()
-route rt = do
-  pushPath rt
-#ifdef __GHCJS__
-  liftIO triggerPopstate_js
-#else
-  triggerWindowPreventDefaultEvent popstate (mempty :: Obj)
-#endif
 
 goto :: ( MonadIO c
         , With (Organism' ts ms IO r) (Code ms IO) IO
@@ -392,16 +380,3 @@ goto f rts rt = do
     crn <- getRouteNetwork
     syndicate crn rt
 
-pushPath :: MonadIO c => Txt -> c ()
-pushPath pth = do
-  win <- getWindow
-#ifdef __GHCJS__
-  liftIO $ do
-    Just hist <- W.getHistory win
-    H.pushState hist (M.pToJSVal (0 :: Int)) (mempty :: Txt) pth
-#else
-  let (pathname,search) = Txt.span (/= '?') pth
-  liftIO $ do
-    writeIORef pathname_ pathname
-    writeIORef search_ search
-#endif

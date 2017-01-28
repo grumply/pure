@@ -19,6 +19,7 @@ instance Lift JSString where
   lift (unpack -> str) = [| pack str |]
 #else
 import Data.Text as Export
+import Data.Text.IO as Export
 
 type Txt = Text
 

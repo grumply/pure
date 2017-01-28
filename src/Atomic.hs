@@ -36,7 +36,7 @@ import Atomic.Observable as Export
 import Atomic.Render     as Export
 import Atomic.Request    as Export
 import Atomic.Revent     as Export
-import Atomic.Route      as Export
+import Atomic.Route      as Export hiding (route)
 import Atomic.Router     as Export
 import Atomic.Mediators  as Export
 import Atomic.Signals    as Export

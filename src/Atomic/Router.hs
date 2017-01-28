@@ -1,6 +1,18 @@
+{-# language CPP #-}
 module Atomic.Router where
 
-import Atomic.Route
+import Atomic.Route hiding (route)
+import Atomic.Signals
+import Atomic.Construct
+
+import Data.Txt (Txt)
+import Data.JSON
+
+#ifdef __GHCJS__
+import qualified GHCJS.DOM.Window as W
+import qualified GHCJS.DOM.History as H
+import qualified GHCJS.Marshal.Pure as M
+#endif
 
 import Ef.Base
 
@@ -40,3 +52,29 @@ mkRouter :: forall ms c ts r.
             )
          => Network r -> Code '[Route] (Code ms c) r -> State () (Router r) (Action ts c)
 mkRouter nw rtr = state (Router (unsafeCoerce rtr) Nothing nw)
+
+-- Note that this /should not/ be called within the first 500 milliseconds
+-- of the application loading or it may be ignored; this is to work around
+-- a browser disparity in the triggering of popstate events on load.
+route :: MonadIO c => Txt -> c ()
+route rt = do
+  pushPath rt
+#ifdef __GHCJS__
+  liftIO triggerPopstate_js
+#else
+  triggerWindowPreventDefaultEvent popstate (mempty :: Obj)
+#endif
+
+pushPath :: MonadIO c => Txt -> c ()
+pushPath pth = do
+  win <- getWindow
+#ifdef __GHCJS__
+  liftIO $ do
+    Just hist <- W.getHistory win
+    H.pushState hist (M.pToJSVal (0 :: Int)) (mempty :: Txt) pth
+#else
+  let (pathname,search) = Txt.span (/= '?') pth
+  liftIO $ do
+    writeIORef pathname_ pathname
+    writeIORef search_ search
+#endif

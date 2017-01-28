@@ -291,7 +291,7 @@ staticHTML = render
 shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
 shtml _tag _attributes = raw _tag _attributes . toTxt
 
--- Useful for standalone components without a Fusion root.
+-- Useful for standalone components without a Atomic root.
 renderConstruct' :: IsConstruct' ts ms m => Construct' ts ms m -> ENode -> Atom (Code ms IO ()) -> IO (Atom (Code ms IO ()))
 renderConstruct' a parent html = do
   let f e = void $ with a e
@@ -381,7 +381,7 @@ renderSystem (System h c) =
             [ view model
             , body []
                 [ case c of
-                    Construct' a@Construct {} -> construct div [ id_ "fusion" ] a
+                    Construct' a@Construct {} -> construct div [ id_ "atomic" ] a
                 ]
             ]
 renderSystem (Subsystem c) =
@@ -391,7 +391,7 @@ renderSystem (Subsystem c) =
         [ head []
         , body []
             [ case c of
-                Construct' a@Construct {} -> construct div [ id_ "fusion" ] a
+                Construct' a@Construct {} -> construct div [ id_ "atomic" ] a
             ]
         ]
 
@@ -405,7 +405,7 @@ renderSystemBootstrap (System h c) mainScript =
             [ view model
             , body []
                 [ case c of
-                    Construct' a@Construct {} -> construct div [ id_ "fusion" ] a
+                    Construct' a@Construct {} -> construct div [ id_ "atomic" ] a
                 , script [ src mainScript, defer True ] []
                 ]
             ]
@@ -417,7 +417,7 @@ renderSystemBootstrap (Subsystem c) mainScript =
           html_ []
             [ head []
             , body []
-                [ construct div [ id_ "fusion" ] a
+                [ construct div [ id_ "atomic" ] a
                 , script [ src mainScript, defer True ] []
                 ]
             ]
@@ -433,7 +433,7 @@ renderDynamicSystem (System (Construct' h) (Construct' c)) = do
     html_ []
       [ raw "head" [] head_html
       , body []
-          [ raw "div" [ id_ "fusion" ] body_html ]
+          [ raw "div" [ id_ "atomic" ] body_html ]
       ]
 renderDynamicSystem (Subsystem (Construct' c)) = do
   let dt = "<!DOCTYPE html>"
@@ -443,7 +443,7 @@ renderDynamicSystem (Subsystem (Construct' c)) = do
     html_ []
       [ head []
       , body []
-          [ raw "div" [ id_ "fusion" ] body_html ]
+          [ raw "div" [ id_ "atomic" ] body_html ]
       ]
 
 renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
@@ -457,7 +457,7 @@ renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript =
     html_ []
       [ raw "head" [] head_html
       , body []
-          [ raw "div" [ id_ "fusion" ] body_html
+          [ raw "div" [ id_ "atomic" ] body_html
           , script [ src mainScript, defer True ] []
           ]
       ]
@@ -469,7 +469,7 @@ renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
     html_ []
       [ head []
       , body []
-          [ raw "div" [ id_ "fusion" ] body_html
+          [ raw "div" [ id_ "atomic" ] body_html
           , script [ src mainScript, defer True ] []
           ]
       ]
