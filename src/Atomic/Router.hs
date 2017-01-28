@@ -1,21 +1,29 @@
 {-# language CPP #-}
+{-# language OverloadedStrings #-}
 module Atomic.Router where
 
 import Atomic.Route hiding (route)
 import Atomic.Signals
 import Atomic.Construct
 
+import Data.IORef
+
 import Data.Txt (Txt)
+import qualified Data.Txt as Txt
 import Data.JSON
 
 #ifdef __GHCJS__
 import qualified GHCJS.DOM.Window as W
 import qualified GHCJS.DOM.History as H
 import qualified GHCJS.Marshal.Pure as M
+import qualified GHCJS.DOM.Location as L
+import qualified GHCJS.DOM.EventM as Ev
+import qualified GHCJS.DOM.EventTargetClosures as Ev
 #endif
 
 import Ef.Base
 
+import System.IO.Unsafe
 import Unsafe.Coerce
 
 data Router r
@@ -78,3 +86,42 @@ pushPath pth = do
     writeIORef pathname_ pathname
     writeIORef search_ search
 #endif
+
+popstate :: EVName Win Obj
+popstate =
+#ifdef __GHCJS__
+  (Ev.unsafeEventName "popstate" :: EVName Win Obj)
+#else
+  "popstate"
+#endif
+
+#ifndef __GHCJS__
+{-# NOINLINE pathname_ #-}
+pathname_ :: IORef Txt
+pathname_ = unsafePerformIO (newIORef mempty)
+#endif
+
+#ifndef __GHCJS__
+{-# NOINLINE search_ #-}
+search_ :: IORef Txt
+search_ = unsafePerformIO (newIORef mempty)
+#endif
+
+getPathname :: MonadIO c => c Txt
+getPathname = do
+  loc <- getLocation
+#ifdef __GHCJS__
+  L.getPathname loc
+#else
+  liftIO $ readIORef pathname_
+#endif
+
+getSearch :: MonadIO c => c Txt
+getSearch = do
+  loc <- getLocation
+#ifdef __GHCJS__
+  L.getSearch loc
+#else
+  liftIO $ readIORef search_
+#endif
+

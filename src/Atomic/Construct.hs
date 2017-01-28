@@ -203,93 +203,126 @@ data Atom e where
         } -> Atom e
   deriving Functor
 
-type HTML ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
-type Attribute ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
+instance Cond (Atom e) where
+  nil = NullAtom Nothing
 
-instance ToTxt (Feature e) where
-  toTxt NullFeature          = mempty
+instance IsString (Atom e) where
+  fromString = jss . fromString
 
-  toTxt (Attribute attr val) =
-    case val of
-      Left b  -> attr <> "=" <> if b then "true" else "false"
-      Right v -> attr <> "=\"" <> v <> "\""
+instance FromTxt (Atom e) where
+  fromTxt = jss
 
-  toTxt (Style pairs) =
-    "style=\""
-      <> Txt.intercalate
-           (Txt.singleton ';')
-           (renderStyles False (mapM_ (uncurry (=:)) pairs))
-      <> "\""
+instance {-# OVERLAPS #-} IsString [Atom e] where
+  fromString s = [fromString s]
 
-  toTxt (CurrentValue _) = mempty
+instance FromTxt [Atom e] where
+  fromTxt t = [fromTxt t]
 
-  toTxt (On _ _ _)       = mempty
+html :: Txt -> [Feature e] -> [Atom e] -> Atom e
+html _tag _attributes _children =
+  let _node = Nothing
+  in Atom {..}
 
-  toTxt (On' _ _ _ _)    = mempty
+raw :: Txt -> [Feature e] -> Txt -> Atom e
+raw _tag _attributes _content =
+  let _node = Nothing
+  in Raw {..}
 
-  toTxt (Link href _)    = "href=\"" <> href <> "\""
+notNil (NullAtom _) = False
+notNil _ = True
 
-instance ToTxt [Feature e] where
-  toTxt fs =
-    Txt.intercalate
-     (Txt.singleton ' ')
-     (Prelude.filter (not . Txt.null) $ Prelude.map toTxt fs)
+cnode :: Bool -> Atom e -> Atom e
+cnode = cond
 
-selfClosing tag =
-  case tag of
-    "area"    -> True
-    "base"    -> True
-    "br"      -> True
-    "col"     -> True
-    "command" -> True
-    "embed"   -> True
-    "hr"      -> True
-    "img"     -> True
-    "input"   -> True
-    "keygen"  -> True
-    "link"    -> True
-    "meta"    -> True
-    "param"   -> True
-    "source"  -> True
-    "track"   -> True
-    "wbr"     -> True
-    _         -> False
+keyed :: Txt -> [Feature e] -> [(Int,Atom e)] -> Atom e
+keyed _tag _attributes _keyed0 =
+  let _node = Nothing
+      _keyed = filter (notNil . snd) _keyed0
+  in KAtom {..}
 
-instance ToTxt (Atom e) where
-  toTxt NullAtom {} = mempty
-  toTxt Text {..} = _content
-  toTxt Raw {..} =
-    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-      ">" <> _content <> "</" <> _tag <> ">"
-  toTxt KAtom {..} =
-    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-      if selfClosing _tag then
-        "/>"
-      else
-        ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
-  toTxt Atom {..} =
-    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-      if selfClosing _tag then
-        "/>"
-      else
-        ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
-  toTxt SVGAtom {..} =
-    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-      if selfClosing _tag then
-        "/>"
-      else
-        ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
-  toTxt Managed {..} =
-    case _constr of
-      Construct' Construct {..} ->
-        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-          ">"  <> toTxt (view model) <> "</" <> _tag <> ">"
+svgHTML :: Txt -> [Feature e] -> [Atom e] -> Atom e
+svgHTML _tag _attributes _children =
+  let _node = Nothing
+  in SVGAtom {..}
 
-staticHTML :: Atom e -> StaticHTML
-staticHTML = render
+jss :: Txt -> Atom e
+jss _content =
+  let _tnode = Nothing
+  in Text {..}
 
-shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
-shtml _tag _attributes = raw _tag _attributes . toTxt
+ujss :: Txt -> Atom e
+ujss = jss . unindent
+
+construct :: forall ms ms' ts' m c e atom.
+        IsConstruct' ts' ms' m
+     => ([Feature e] -> [Atom e] -> Atom e)
+     -> ([Feature e] -> Construct' ts' ms' m -> Atom e)
+construct f = \as c ->
+  case f [] [] of
+    Atom _ t _ _ -> Managed Nothing t as (Construct' c)
+    _ -> error "Incorrect usage of construct; Constructs may only be embedded in Atoms."
+
+-- tagged div [] [hashed 'a' (div [] []), hashed 4 (div [] [])]
+tagged :: ([Feature e] -> [Atom e] -> Atom e)
+      -> ([Feature e] -> [(Int,Atom e)] -> Atom e)
+tagged f = \as ks ->
+  let Atom _ t _ _ = f [] []
+  in keyed t as ks
+
+hashed :: Hashable a => a -> Atom e -> (Int,Atom e)
+hashed k h = (hash k,h)
+
+css :: CSS -> Atom e
+css = css' False
+
+css' :: Bool -> CSS -> Atom e
+css' b = html "style" [ typeA "text/css", scoped b ] . ((jss "\n"):) . go False
+  where
+    go :: Bool -> CSS -> [Atom e]
+    go b (Return _) = []
+    go b (Lift s) = go b (runIdentity s)
+    go b c@(Do msg) =
+      case prj msg of
+        Just (CSS3_ atRule sel mCSS k) ->
+          case mCSS of
+            Nothing ->
+              jss (atRule <> sel <> ";\n")
+              : go False k
+            Just c' ->
+              ( jss (atRule <> sel <> " {\n")
+              : go True c'
+              ) ++ ( jss "\n}\n\n"
+                   : go False k
+                   )
+        Just (CSS_ sel ss r) ->
+          ( jss ( (if b then "\t" else mempty)
+                     <> sel
+                     <> " {\n"
+                     <> (Txt.intercalate (if b then ";\n\t" else ";\n") $ renderStyles b ss)
+                     <> (if b then "\n\t}\n\n" else "\n}\n\n")
+                )
+          : go b r
+          )
+        _ -> []
+
+scss :: StaticCSS -> Atom e
+scss = scss' False
+
+scss' :: Bool -> StaticCSS -> Atom e
+scss' b = raw "style" [typeA "text/css", scoped b] . cssText
+
+styles :: CSS -> Atom e
+styles = css' True . classify
+  where
+    classify (Return r) = Return r
+    classify (Lift sup) = Lift (fmap classify sup)
+    classify (Do e) =
+      case prj e of
+        Just (CSS_ sel ss k) ->
+          Do (inj (CSS_ (Txt.cons '.' sel) ss (classify k)))
+        Just (CSS3_ at sel mcss k) ->
+          Do (inj (CSS3_ at sel (fmap classify mcss) (classify k))) 
+        _ -> error "impossible"
 
 -- Useful for standalone components without a Atomic root.
 renderConstruct' :: IsConstruct' ts ms m => Construct' ts ms m -> ENode -> Atom (Code ms IO ()) -> IO (Atom (Code ms IO ()))
@@ -346,177 +379,6 @@ rebuild c me h =
             forM_ mparent $ \parent ->
               embed_ parent h
 #endif
-
-
-data System
-  = System
-    { getHead :: Constr
-    , getContent :: Constr
-    }
-  | Subsystem
-    { getContent :: Constr
-    }
-  deriving Eq
-
-page :: ( IsConstruct' ts ms m
-        , IsConstruct' ts' ms' m'
-        )
-     => Construct' ts ms m
-     -> Construct' ts' ms' m'
-     -> System
-page h b = System (Construct' h) (Construct' b)
-
-partial :: IsConstruct' ts ms m
-        => Construct' ts ms m
-        -> System
-partial = Subsystem . Construct'
-
-renderSystem :: System -> Txt
-renderSystem (System h c) =
-  "<!DOCTYPE html>" <>
-    case h of
-      Construct' Construct {..} ->
-        toTxt $
-          html_ []
-            [ view model
-            , body []
-                [ case c of
-                    Construct' a@Construct {} -> construct div [ id_ "atomic" ] a
-                ]
-            ]
-renderSystem (Subsystem c) =
-  ("<!DOCTYPE html>" <>) $
-    toTxt $
-      html_ []
-        [ head []
-        , body []
-            [ case c of
-                Construct' a@Construct {} -> construct div [ id_ "atomic" ] a
-            ]
-        ]
-
-renderSystemBootstrap :: System -> Txt -> Txt
-renderSystemBootstrap (System h c) mainScript =
-  "<!DOCTYPE html>" <>
-    case h of
-      Construct' Construct {..} ->
-        toTxt $
-          html_ []
-            [ view model
-            , body []
-                [ case c of
-                    Construct' a@Construct {} -> construct div [ id_ "atomic" ] a
-                , script [ src mainScript, defer True ] []
-                ]
-            ]
-renderSystemBootstrap (Subsystem c) mainScript =
-  "<!DOCTYPE html>" <>
-    case c of
-      Construct' a@Construct {} ->
-        toTxt $
-          html_ []
-            [ head []
-            , body []
-                [ construct div [ id_ "atomic" ] a
-                , script [ src mainScript, defer True ] []
-                ]
-            ]
-
-renderDynamicSystem :: System -> IO Txt
-renderDynamicSystem (System (Construct' h) (Construct' c)) = do
-  let dt = "<!DOCTYPE html>"
-  Just h_ <- demandMaybe =<< currentView h
-  Just c_ <- demandMaybe =<< currentView c
-  head_html <- renderDynamicHTML h_
-  body_html <- renderDynamicHTML c_
-  return $ (dt <>) $ toTxt $
-    html_ []
-      [ raw "head" [] head_html
-      , body []
-          [ raw "div" [ id_ "atomic" ] body_html ]
-      ]
-renderDynamicSystem (Subsystem (Construct' c)) = do
-  let dt = "<!DOCTYPE html>"
-  Just c_ <- demandMaybe =<< currentView c
-  body_html <- renderDynamicHTML c_
-  return $ (dt <>) $ toTxt $
-    html_ []
-      [ head []
-      , body []
-          [ raw "div" [ id_ "atomic" ] body_html ]
-      ]
-
-renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
-renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript = do
-  let dt = "<!DOCTYPE html>"
-  Just h_ <- demandMaybe =<< currentView h
-  Just c_ <- demandMaybe =<< currentView c
-  head_html <- renderDynamicHTML h_
-  body_html <- renderDynamicHTML c_
-  return $ (dt <>) $ toTxt $
-    html_ []
-      [ raw "head" [] head_html
-      , body []
-          [ raw "div" [ id_ "atomic" ] body_html
-          , script [ src mainScript, defer True ] []
-          ]
-      ]
-renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
-  let dt = "<!DOCTYPE html>"
-  Just c_ <- demandMaybe =<< currentView c
-  body_html <- renderDynamicHTML c_
-  return $ (dt <>) $ toTxt $
-    html_ []
-      [ head []
-      , body []
-          [ raw "div" [ id_ "atomic" ] body_html
-          , script [ src mainScript, defer True ] []
-          ]
-      ]
-
-renderDynamicHTML :: Atom (Code ms IO ()) -> IO Txt
-renderDynamicHTML h =
-  case h of
-    NullAtom {} -> return mempty
-
-    Text {..} -> return _content
-
-    Raw {..} ->
-      return $ "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-                 ">" <> _content <> "</" <> _tag <> ">"
-
-    KAtom {..} ->
-      return $
-        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-          if selfClosing _tag then
-            "/>"
-          else
-            ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
-
-    Atom {..} ->
-      return $
-        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-          if selfClosing _tag then
-            "/>"
-          else
-            ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
-
-    SVGAtom {..} ->
-      return $
-        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-          if selfClosing _tag then
-            "/>"
-          else
-            ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
-
-    Managed {..} ->
-      case _constr of
-        Construct' a@Construct {..} -> do
-          Just v <- demandMaybe =<< currentView a
-          inner <- renderDynamicHTML v
-          return $
-            "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-              ">"  <> inner <> "</" <> _tag <> ">"
 
 reflect :: forall ts ms m c.
            ( IsConstruct' ts ms m
@@ -702,14 +564,6 @@ mkConstruct mDiffer mparent c@Construct {..} = do
   (obj',_) <- Ef.Base.Object built Ef.Base.! prime
   forkIO $ driverPrintExceptions ("Construct' (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Construct' may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception") sigBuf obj'
   return cs_live_
-
-static :: ConstructKey '[] () -> HTML '[] () -> Construct '[] ()
-static key view0 =
-  let view _ = view0
-      build = return
-      prime = return ()
-      model = ()
-  in Construct {..}
 
 diff :: forall m ms. ('[State () (ConstructState m)] <: ms)
      => Proxy m -> Code ms IO ()
@@ -1242,14 +1096,14 @@ diffHelper f doc = go
                   return $ Left new'
 
         go' old@(KAtom old_node old_tag old_attributes old_keyed)
-          mid@(KAtom mid_node _ mid_attributes mid_keyed)
+          mid@(KAtom midAnode _ midAattributes midAkeyed)
           new@(KAtom _ new_tag new_attributes new_keyed) =
           if prettyUnsafeEq old_tag new_tag
           then do let Just n = old_node
-                  a' <- if reallyUnsafeEq mid_attributes new_attributes then return old_attributes else
-                          runElementDiff f n old_attributes mid_attributes new_attributes
-                  c' <- if reallyUnsafeEq mid_keyed new_keyed then return old_keyed else
-                          diffKeyedChildren n old_keyed mid_keyed new_keyed
+                  a' <- if reallyUnsafeEq midAattributes new_attributes then return old_attributes else
+                          runElementDiff f n old_attributes midAattributes new_attributes
+                  c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
+                          diffKeyedChildren n old_keyed midAkeyed new_keyed
                   return $ Right $ KAtom old_node old_tag a' c'
           else do new' <- buildHTML doc f new
                   replace old new'
@@ -1962,551 +1816,7 @@ redirect redir = do
   return loc
 #endif
 
-
-instance Cond (Atom e) where
-  nil = NullAtom Nothing
-
-instance IsString (Atom e) where
-  fromString = jss . fromString
-
-instance FromTxt (Atom e) where
-  fromTxt = jss
-
-instance {-# OVERLAPS #-} IsString [Atom e] where
-  fromString s = [fromString s]
-
-instance FromTxt [Atom e] where
-  fromTxt t = [fromTxt t]
-
-newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)
-instance ToTxt StaticHTML where
-  toTxt (StaticHTML htmlt) = htmlt
-instance FromTxt StaticHTML where
-  fromTxt = StaticHTML
-instance Monoid StaticHTML where
-  mempty = fromTxt mempty
-  mappend htmlt1 htmlt2 = fromTxt $ toTxt htmlt1 <> toTxt htmlt2
-instance Lift StaticHTML where
-  lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
-
 #ifdef LENS
 makePrisms ''Atom
 makeLenses ''Atom
 #endif
-
-html :: Txt -> [Feature e] -> [Atom e] -> Atom e
-html _tag _attributes _children =
-  let _node = Nothing
-  in Atom {..}
-
-raw :: Txt -> [Feature e] -> Txt -> Atom e
-raw _tag _attributes _content =
-  let _node = Nothing
-  in Raw {..}
-
-notNil (NullAtom _) = False
-notNil _ = True
-
-cnode :: Bool -> Atom e -> Atom e
-cnode = cond
-
-keyed :: Txt -> [Feature e] -> [(Int,Atom e)] -> Atom e
-keyed _tag _attributes _keyed0 =
-  let _node = Nothing
-      _keyed = filter (notNil . snd) _keyed0
-  in KAtom {..}
-
-svgHTML :: Txt -> [Feature e] -> [Atom e] -> Atom e
-svgHTML _tag _attributes _children =
-  let _node = Nothing
-  in SVGAtom {..}
-
-jss :: Txt -> Atom e
-jss _content =
-  let _tnode = Nothing
-  in Text {..}
-
-ujss :: Txt -> Atom e
-ujss = jss . unindent
-
-construct :: forall ms ms' ts' m c e atom.
-        IsConstruct' ts' ms' m
-     => ([Feature e] -> [Atom e] -> Atom e)
-     -> ([Feature e] -> Construct' ts' ms' m -> Atom e)
-construct f = \as c ->
-  case f [] [] of
-    Atom _ t _ _ -> Managed Nothing t as (Construct' c)
-    _ -> error "Incorrect usage of construct; Constructs may only be embedded in Atoms."
-
--- tagged div [] [hashed 'a' (div [] []), hashed 4 (div [] [])]
-tagged :: ([Feature e] -> [Atom e] -> Atom e)
-      -> ([Feature e] -> [(Int,Atom e)] -> Atom e)
-tagged f = \as ks ->
-  let Atom _ t _ _ = f [] []
-  in keyed t as ks
-
-hashed :: Hashable a => a -> Atom e -> (Int,Atom e)
-hashed k h = (hash k,h)
-
-css :: CSS -> Atom e
-css = css' False
-
-css' :: Bool -> CSS -> Atom e
-css' b = html "style" [ type_ "text/css", scoped b ] . ((jss "\n"):) . go False
-  where
-    go :: Bool -> CSS -> [Atom e]
-    go b (Return _) = []
-    go b (Lift s) = go b (runIdentity s)
-    go b c@(Do msg) =
-      case prj msg of
-        Just (CSS3_ atRule sel mCSS k) ->
-          case mCSS of
-            Nothing ->
-              jss (atRule <> sel <> ";\n")
-              : go False k
-            Just c' ->
-              ( jss (atRule <> sel <> " {\n")
-              : go True c'
-              ) ++ ( jss "\n}\n\n"
-                   : go False k
-                   )
-        Just (CSS_ sel ss r) ->
-          ( jss ( (if b then "\t" else mempty)
-                     <> sel
-                     <> " {\n"
-                     <> (Txt.intercalate (if b then ";\n\t" else ";\n") $ renderStyles b ss)
-                     <> (if b then "\n\t}\n\n" else "\n}\n\n")
-                )
-          : go b r
-          )
-        _ -> []
-
-scss :: StaticCSS -> Atom e
-scss = scss' False
-
-scss' :: Bool -> StaticCSS -> Atom e
-scss' b = raw "style" [type_ "text/css", scoped b] . cssText
-
-styles :: CSS -> Atom e
-styles = css' True . classify
-  where
-    classify (Return r) = Return r
-    classify (Lift sup) = Lift (fmap classify sup)
-    classify (Do e) =
-      case prj e of
-        Just (CSS_ sel ss k) ->
-          Do (inj (CSS_ (Txt.cons '.' sel) ss (classify k)))
-        Just (CSS3_ at sel mcss k) ->
-          Do (inj (CSS3_ at sel (fmap classify mcss) (classify k))) 
-        _ -> error "impossible"
-
---------------------------------------------------------------------------------
--- Nodes
-
-abbr :: [Feature e] -> [Atom e] -> Atom e
-abbr = html "abbr"
-
-address :: [Feature e] -> [Atom e] -> Atom e
-address = html "address"
-
-area :: [Feature e] -> [Atom e] -> Atom e
-area = html "area"
-
-a :: [Feature e] -> [Atom e] -> Atom e
-a = html "a"
-
-article :: [Feature e] -> [Atom e] -> Atom e
-article = html "article"
-
-aside :: [Feature e] -> [Atom e] -> Atom e
-aside = html "aside"
-
-audio :: [Feature e] -> [Atom e] -> Atom e
-audio = html "audio"
-
-base :: [Feature e] -> [Atom e] -> Atom e
-base = html "base"
-
-bdi :: [Feature e] -> [Atom e] -> Atom e
-bdi = html "bdi"
-
-bdo :: [Feature e] -> [Atom e] -> Atom e
-bdo = html "bdo"
-
-big :: [Feature e] -> [Atom e] -> Atom e
-big = html "big"
-
-blockquote :: [Feature e] -> [Atom e] -> Atom e
-blockquote = html "blockquote"
-
-body :: [Feature e] -> [Atom e] -> Atom e
-body = html "body"
-
-b :: [Feature e] -> [Atom e] -> Atom e
-b = html "b"
-
-br :: Atom e
-br = html "br" [] []
-
-button :: [Feature e] -> [Atom e] -> Atom e
-button = html "button"
-
-canvas :: [Feature e] -> [Atom e] -> Atom e
-canvas = html "canvas"
-
-caption :: [Feature e] -> [Atom e] -> Atom e
-caption = html "caption"
-
-cite :: [Feature e] -> [Atom e] -> Atom e
-cite = html "cite"
-
-code :: [Feature e] -> [Atom e] -> Atom e
-code = html "code"
-
-col :: [Feature e] -> [Atom e] -> Atom e
-col = html "col"
-
-colgroup :: [Feature e] -> [Atom e] -> Atom e
-colgroup = html "colgroup"
-
-dataN :: [Feature e] -> [Atom e] -> Atom e
-dataN = html "data"
-
-datalist :: [Feature e] -> [Atom e] -> Atom e
-datalist = html "datalist"
-
-dd :: [Feature e] -> [Atom e] -> Atom e
-dd = html "dd"
-
-description :: Txt -> Atom e
-description d = meta [ name "description", content d ] []
-
-dl :: [Feature e] -> [Atom e] -> Atom e
-dl = html "dl"
-
-dt :: [Feature e] -> [Atom e] -> Atom e
-dt = html "dt"
-
-del :: [Feature e] -> [Atom e] -> Atom e
-del = html "del"
-
-details :: [Feature e] -> [Atom e] -> Atom e
-details = html "details"
-
-dfn :: [Feature e] -> [Atom e] -> Atom e
-dfn = html "dfn"
-
-dialog :: [Feature e] -> [Atom e] -> Atom e
-dialog = html "dialog"
-
-div :: [Feature e] -> [Atom e] -> Atom e
-div = html "div"
-
-em :: [Feature e] -> [Atom e] -> Atom e
-em = html "em"
-
-embed :: [Feature e] -> [Atom e] -> Atom e
-embed = html "embed"
-
-fieldset :: [Feature e] -> [Atom e] -> Atom e
-fieldset = html "fieldset"
-
-figcaption :: [Feature e] -> [Atom e] -> Atom e
-figcaption = html "figcaption"
-
-figure :: [Feature e] -> [Atom e] -> Atom e
-figure = html "figure"
-
-footer :: [Feature e] -> [Atom e] -> Atom e
-footer = html "footer"
-
-form :: [Feature e] -> [Atom e] -> Atom e
-form = html "form"
-
-head :: [Atom e] -> Atom e
-head = html "head" []
-
-header :: [Feature e] -> [Atom e] -> Atom e
-header = html "header"
-
-h1 :: [Feature e] -> [Atom e] -> Atom e
-h1 = html "h1"
-
-h2 :: [Feature e] -> [Atom e] -> Atom e
-h2 = html "h2"
-
-h3 :: [Feature e] -> [Atom e] -> Atom e
-h3 = html "h3"
-
-h4 :: [Feature e] -> [Atom e] -> Atom e
-h4 = html "h4"
-
-h5 :: [Feature e] -> [Atom e] -> Atom e
-h5 = html "h5"
-
-h6 :: [Feature e] -> [Atom e] -> Atom e
-h6 = html "h6"
-
-hgroup :: [Feature e] -> [Atom e] -> Atom e
-hgroup = html "hgroup"
-
-hr :: [Feature e] -> [Atom e] -> Atom e
-hr = html "hr"
-
-html_ :: [Feature e] -> [Atom e] -> Atom e
-html_ = html "html"
-
-iframe :: [Feature e] -> [Atom e] -> Atom e
-iframe = html "iframe"
-
-img :: [Feature e] -> [Atom e] -> Atom e
-img = html "img"
-
-input :: [Feature e] -> [Atom e] -> Atom e
-input = html "input"
-
-textInput :: [Feature e] -> [Atom e] -> Atom e
-textInput fs = html "input" (type_ "text":fs)
-
-ins :: [Feature e] -> [Atom e] -> Atom e
-ins = html "ins"
-
-iN :: [Feature e] -> [Atom e] -> Atom e
-iN = html "i"
-
-kbd :: [Feature e] -> [Atom e] -> Atom e
-kbd = html "kbd"
-
-keygen :: [Feature e] -> [Atom e] -> Atom e
-keygen = html "keygen"
-
-label :: [Feature e] -> [Atom e] -> Atom e
-label = html "label"
-
-legend :: [Feature e] -> [Atom e] -> Atom e
-legend = html "legend"
-
-li :: [Feature e] -> [Atom e] -> Atom e
-li = html "li"
-
-linkN :: [Feature e] -> [Atom e] -> Atom e
-linkN = html "link"
-
-mainN :: [Feature e] -> [Atom e] -> Atom e
-mainN = html "main"
-
-mapN :: [Feature e] -> [Atom e] -> Atom e
-mapN = html "map"
-
-mark :: [Feature e] -> [Atom e] -> Atom e
-mark = html "mark"
-
-menu :: [Feature e] -> [Atom e] -> Atom e
-menu = html "menu"
-
-menuitem :: [Feature e] -> [Atom e] -> Atom e
-menuitem = html "menuitem"
-
-meta :: [Feature e] -> [Atom e] -> Atom e
-meta = html "meta"
-
-meter :: [Feature e] -> [Atom e] -> Atom e
-meter = html "meter"
-
-nav :: [Feature e] -> [Atom e] -> Atom e
-nav = html "nav"
-
-noscript :: [Feature e] -> [Atom e] -> Atom e
-noscript = html "noscript"
-
-object_ :: [Feature e] -> [Atom e] -> Atom e
-object_ = html "object"
-
-optgroup :: [Feature e] -> [Atom e] -> Atom e
-optgroup = html "optgroup"
-
-option :: [Feature e] -> [Atom e] -> Atom e
-option = html "option"
-
-ol :: [Feature e] -> [Atom e] -> Atom e
-ol = html "ol"
-
-output :: [Feature e] -> [Atom e] -> Atom e
-output = html "output"
-
-p :: [Feature e] -> [Atom e] -> Atom e
-p = html "p"
-
-param :: [Feature e] -> [Atom e] -> Atom e
-param = html "param"
-
-picture :: [Feature e] -> [Atom e] -> Atom e
-picture = html "picture"
-
-pre :: [Feature e] -> [Atom e] -> Atom e
-pre = html "pre"
-
-progress :: [Feature e] -> [Atom e] -> Atom e
-progress = html "progress"
-
-q :: [Feature e] -> [Atom e] -> Atom e
-q = html "q"
-
-rp :: [Feature e] -> [Atom e] -> Atom e
-rp = html "rp"
-
-rt :: [Feature e] -> [Atom e] -> Atom e
-rt = html "rt"
-
-ruby :: [Feature e] -> [Atom e] -> Atom e
-ruby = html "ruby"
-
-samp :: [Feature e] -> [Atom e] -> Atom e
-samp = html "samp"
-
-script :: [Feature e] -> [Atom e] -> Atom e
-script = html "script"
-
-s :: [Feature e] -> [Atom e] -> Atom e
-s = html "s"
-
-section :: [Feature e] -> [Atom e] -> Atom e
-section = html "section"
-
-selectN :: [Feature e] -> [Atom e] -> Atom e
-selectN = html "select"
-
-small :: [Feature e] -> [Atom e] -> Atom e
-small = html "small"
-
-source :: [Feature e] -> [Atom e] -> Atom e
-source = html "source"
-
-span :: [Feature e] -> [Atom e] -> Atom e
-span = html "span"
-
-strong :: [Feature e] -> [Atom e] -> Atom e
-strong = html "strong"
-
-style :: [Feature e] -> [Atom e] -> Atom e
-style = html "style"
-
-sub :: [Feature e] -> [Atom e] -> Atom e
-sub = html "sub"
-
-summary :: [Feature e] -> [Atom e] -> Atom e
-summary = html "summary"
-
-sup :: [Feature e] -> [Atom e] -> Atom e
-sup = html "sup"
-
-table :: [Feature e] -> [Atom e] -> Atom e
-table = html "table"
-
-tbody :: [Feature e] -> [Atom e] -> Atom e
-tbody = html "tbody"
-
-td :: [Feature e] -> [Atom e] -> Atom e
-td = html "td"
-
-textarea :: [Feature e] -> [Atom e] -> Atom e
-textarea = html "textarea"
-
-tfoot :: [Feature e] -> [Atom e] -> Atom e
-tfoot = html "tfoot"
-
-th :: [Feature e] -> [Atom e] -> Atom e
-th = html "th"
-
-thead :: [Feature e] -> [Atom e] -> Atom e
-thead = html "thead"
-
-time :: [Feature e] -> [Atom e] -> Atom e
-time = html "time"
-
-title :: Txt -> Atom e
-title jst = html "title" [] [ jss jst ]
-
-tr :: [Feature e] -> [Atom e] -> Atom e
-tr = html "tr"
-
-track :: [Feature e] -> [Atom e] -> Atom e
-track = html "track"
-
-u :: [Feature e] -> [Atom e] -> Atom e
-u = html "u"
-
-ul :: [Feature e] -> [Atom e] -> Atom e
-ul = html "ul"
-
-varN :: [Feature e] -> [Atom e] -> Atom e
-varN = html "var"
-
-video :: [Feature e] -> [Atom e] -> Atom e
-video = html "video"
-
-viewport :: Txt -> Atom e
-viewport jst = html "meta" [ name "viewport", content jst ] []
-
-wbr :: [Feature e] -> [Atom e] -> Atom e
-wbr = html "wbr"
-
---------------------------------------------------------------------------------
--- SVG
-
-circle :: [Feature e] -> [Atom e] -> Atom e
-circle = svgHTML "circle"
-
-clipPath :: [Feature e] -> [Atom e] -> Atom e
-clipPath = svgHTML "clipPath"
-
-defs :: [Feature e] -> [Atom e] -> Atom e
-defs = svgHTML "defs"
-
-ellipse :: [Feature e] -> [Atom e] -> Atom e
-ellipse = svgHTML "ellipse"
-
-g :: [Feature e] -> [Atom e] -> Atom e
-g = svgHTML "g"
-
-image :: [Feature e] -> [Atom e] -> Atom e
-image = svgHTML "image"
-
-line :: [Feature e] -> [Atom e] -> Atom e
-line = svgHTML "line"
-
-linearGradient :: [Feature e] -> [Atom e] -> Atom e
-linearGradient = svgHTML "linearGradient"
-
-mask :: [Feature e] -> [Atom e] -> Atom e
-mask = svgHTML "mask"
-
-path :: [Feature e] -> [Atom e] -> Atom e
-path = svgHTML "path"
-
-patternN :: [Feature e] -> [Atom e] -> Atom e
-patternN = svgHTML "pattern"
-
-polygon :: [Feature e] -> [Atom e] -> Atom e
-polygon = svgHTML "polygon"
-
-polyline :: [Feature e] -> [Atom e] -> Atom e
-polyline = svgHTML "polyline"
-
-radialGradient :: [Feature e] -> [Atom e] -> Atom e
-radialGradient = svgHTML "radialGraedient"
-
-rect :: [Feature e] -> [Atom e] -> Atom e
-rect = svgHTML "rect"
-
-stop_ :: [Feature e] -> [Atom e] -> Atom e
-stop_ = svgHTML "stop"
-
-svg :: [Feature e] -> [Atom e] -> Atom e
-svg = svgHTML "svg"
-
-text :: [Feature e] -> [Atom e] -> Atom e
-text = svgHTML "text"
-
-tspan :: [Feature e] -> [Atom e] -> Atom e
-tspan = svgHTML "tspan"

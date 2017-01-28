@@ -77,8 +77,8 @@ instance FromTxt (Feature e) where
 instance FromTxt [Feature e] where
   fromTxt t = [fromTxt t]
 
-nullF :: Feature e
-nullF = NullFeature
+nullA :: Feature e
+nullA = NullFeature
 
 attribute :: Txt -> Txt -> Feature e
 attribute nm = Attribute nm . Right
@@ -114,25 +114,25 @@ makePrisms ''Options
 makeLenses ''Options
 #endif
 
-class_ :: Txt -> Feature e
-class_ = attr "class"
+classA :: Txt -> Feature e
+classA = attr "class"
 
 classes :: [(Txt,Bool)] -> Feature e
-classes = class_
+classes = classA
   . JSS.intercalate " "
   . mapMaybe (\(s,b) -> if b then Just s else Nothing)
 
-id_ :: Txt -> Feature e
-id_ = attr "id"
+idA :: Txt -> Feature e
+idA = attr "id"
 
-title_ :: Txt -> Feature e
-title_ = attr "title"
+titleA :: Txt -> Feature e
+titleA = attr "title"
 
 hidden :: Bool -> Feature e
 hidden = boolattr "hidden"
 
-type_ :: Txt -> Feature e
-type_ = attr "type"
+typeA :: Txt -> Feature e
+typeA = attr "type"
 
 initialValue :: Txt -> Feature e
 initialValue = attr "value"
@@ -179,8 +179,8 @@ maxlength = attr "maxlength" . toTxt
 minlength :: Int -> Feature e
 minlength = attr "minlength" . toTxt
 
-method_ :: Txt -> Feature e
-method_ = attr "method"
+methodA :: Txt -> Feature e
+methodA = attr "method"
 
 multiple :: Bool -> Feature e
 multiple = boolattr "multiple"
@@ -191,8 +191,8 @@ name = attr "name"
 novalidate :: Bool -> Feature e
 novalidate = boolattr "novalidate"
 
-pattern_ :: Txt -> Feature e
-pattern_ = attr "pattern"
+patternA :: Txt -> Feature e
+patternA = attr "pattern"
 
 readonly :: Bool -> Feature e
 readonly = boolattr "readonly"
@@ -203,17 +203,17 @@ required = boolattr "required"
 size :: Int -> Feature e
 size = attr "size" . toTxt
 
-for_ :: Txt -> Feature e
-for_ = attr "for"
+forA :: Txt -> Feature e
+forA = attr "for"
 
-form_ :: Txt -> Feature e
-form_ = attr "form"
+formA :: Txt -> Feature e
+formA = attr "form"
 
-max_ :: Txt -> Feature e
-max_ = attr "max"
+maxA :: Txt -> Feature e
+maxA = attr "max"
 
-min_ :: Txt -> Feature e
-min_ = attr "min"
+minA :: Txt -> Feature e
+minA = attr "min"
 
 step :: Txt -> Feature e
 step = attr "step"
@@ -224,8 +224,8 @@ cols = attr "cols" . toTxt
 rows :: Int -> Feature e
 rows = attr "rows" . toTxt
 
-wrap_ :: Txt -> Feature e
-wrap_ = attr "wrap"
+wrapA :: Txt -> Feature e
+wrapA = attr "wrap"
 
 href :: Txt -> Feature e
 href = attr "href"
@@ -254,11 +254,11 @@ shape = attr "shape"
 src :: Txt -> Feature e
 src = attr "src"
 
-height_ :: Int -> Feature e
-height_ = attr "height" . toTxt
+heightA :: Int -> Feature e
+heightA = attr "height" . toTxt
 
-width_ :: Int -> Feature e
-width_ = attr "width" . toTxt
+widthA :: Int -> Feature e
+widthA = attr "width" . toTxt
 
 alt :: Txt -> Feature e
 alt = attr "alt"
@@ -278,8 +278,8 @@ preload = attr "preload"
 poster :: Txt -> Feature e
 poster = attr "poster"
 
-default_ :: Bool -> Feature e
-default_ = boolattr "default"
+defaultA :: Bool -> Feature e
+defaultA = boolattr "default"
 
 kind :: Txt -> Feature e
 kind = attr "kind"
@@ -365,8 +365,8 @@ spellcheck = boolattr "spellcheck"
 tabindex :: Int -> Feature e
 tabindex = attr "tabindex" . toTxt
 
-cite_ :: Txt -> Feature e
-cite_ = attr "cite"
+citeA :: Txt -> Feature e
+citeA = attr "cite"
 
 datetime :: Txt -> Feature e
 datetime = attr "datetime"
@@ -384,32 +384,32 @@ xlinkhref = attr "xlink:href"
 clipPathUrl :: Txt -> Feature e
 clipPathUrl = attr "clip-path" . (\x -> "url(#" <> x <> ")")
 
-x_ :: Int -> Feature e
-x_ = attr "x" . toTxt
+xA :: Int -> Feature e
+xA = attr "x" . toTxt
 
-y_ :: Int -> Feature e
-y_ = attr "y" . toTxt
+yA :: Int -> Feature e
+yA = attr "y" . toTxt
 
-x1_ :: Int -> Feature e
-x1_ = attr "x1" . toTxt
+x1A :: Int -> Feature e
+x1A = attr "x1" . toTxt
 
-x2_ :: Int -> Feature e
-x2_ = attr "x2" . toTxt
+x2A :: Int -> Feature e
+x2A = attr "x2" . toTxt
 
-y1_ :: Int -> Feature e
-y1_ = attr "y1" . toTxt
+y1A :: Int -> Feature e
+y1A = attr "y1" . toTxt
 
-y2_ :: Int -> Feature e
-y2_ = attr "y2" . toTxt
+y2A :: Int -> Feature e
+y2A = attr "y2" . toTxt
 
-r_ :: Int -> Feature e
-r_ = attr "r" . toTxt
+rA :: Int -> Feature e
+rA = attr "r" . toTxt
 
-cx_ :: Int -> Feature e
-cx_ = attr "cx" . toTxt
+cxA :: Int -> Feature e
+cxA = attr "cx" . toTxt
 
-cy_ :: Int -> Feature e
-cy_ = attr "cy" . toTxt
+cyA :: Int -> Feature e
+cyA = attr "cy" . toTxt
 
 --------------------------------------------------------------------------------
 -- Event listener 'Attribute's

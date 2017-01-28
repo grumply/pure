@@ -296,44 +296,6 @@ deleteOrganism :: (MonadIO c)
              => Key phantom -> c ()
 deleteOrganism = vaultDelete organismVault__
 
-popstate :: EVName Win Obj
-popstate =
-#ifdef __GHCJS__
-  (Ev.unsafeEventName "popstate" :: EVName Win Obj)
-#else
-  "popstate"
-#endif
-
-#ifndef __GHCJS__
-{-# NOINLINE pathname_ #-}
-pathname_ :: IORef Txt
-pathname_ = unsafePerformIO (newIORef mempty)
-#endif
-
-#ifndef __GHCJS__
-{-# NOINLINE search_ #-}
-search_ :: IORef Txt
-search_ = unsafePerformIO (newIORef mempty)
-#endif
-
-getPathname :: MonadIO c => c Txt
-getPathname = do
-  loc <- getLocation
-#ifdef __GHCJS__
-  L.getPathname loc
-#else
-  liftIO $ readIORef pathname_
-#endif
-
-getSearch :: MonadIO c => c Txt
-getSearch = do
-  loc <- getLocation
-#ifdef __GHCJS__
-  L.getSearch loc
-#else
-  liftIO $ readIORef search_
-#endif
-
 setupRouter :: forall ms c routeType.
                (Eq routeType, MonadIO c, '[Revent,State () (Router routeType)] <: ms)
             => Proxy routeType

@@ -1,16 +1,20 @@
 {-# language CPP #-}
+{-# language TemplateHaskell #-}
+{-# language OverloadedStrings #-}
 module Atomic
   ( module Atomic
   , module Export
   ) where
 
-import Ef.Base as Export hiding (Object,watch,transform,construct)
+import Ef.Base as Export hiding (watch,transform,construct)
 
 import Data.Hashable as Export
 import Data.Typeable as Export
 import GHC.Generics as Export (Generic)
 
-import Data.Txt          as Export (Txt(..))
+import Atomic.Construct
+
+import qualified Data.Txt as Export (Txt(..))
 import Data.JSON         as Export hiding (defaultOptions,Options,(!))
 import Data.Millis       as Export
 import Data.Micros       as Export
@@ -25,6 +29,7 @@ import Atomic.Ease       as Export
 import Atomic.Endpoint   as Export
 import Atomic.FromBS     as Export
 import Atomic.FromTxt    as Export
+import Atomic.HTML       as Export
 import Atomic.Indexed    as Export
 import Atomic.Key        as Export
 import Atomic.Lazy       as Export
@@ -62,16 +67,12 @@ import qualified Prelude
 import Data.Monoid as Export
 import Data.Bifunctor as Export
 
-import Data.HashMap.Strict as Map
+import Data.HashMap.Strict as Map hiding (map)
 
-import qualified Data.Text.Lazy as TL (Text)
-import qualified Data.ByteString.Lazy as BSL (ByteString)
-
-import Data.Txt as Txt
+import Data.Txt as Txt hiding (head,map)
 import Data.JSON as JSON
 
-type LazyByteString = BSL.ByteString
-type LazyText = TL.Text
+import Language.Haskell.TH.Syntax
 
 instance FromMillis Micros where
  --  fromMillis :: Millis -> Micros
@@ -113,3 +114,290 @@ ghcjs =
 #else
   const (return ())
 #endif
+
+type Controller m = Construct '[] m
+controller :: ConstructKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
+controller key model view = Construct {..}
+  where
+    build = return
+    prime = return ()
+
+type Static = Construct '[] ()
+static :: ConstructKey '[] () -> HTML '[] () -> Static
+static key view0 =
+  let view _ = view0
+      build = return
+      prime = return ()
+      model = ()
+  in Construct {..}
+
+newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)
+instance ToTxt StaticHTML where
+  toTxt (StaticHTML htmlt) = htmlt
+instance FromTxt StaticHTML where
+  fromTxt = StaticHTML
+instance Monoid StaticHTML where
+  mempty = fromTxt mempty
+  mappend htmlt1 htmlt2 = fromTxt $ toTxt htmlt1 <> toTxt htmlt2
+instance Lift StaticHTML where
+  lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
+
+type HTML ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
+type Attribute ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
+
+instance ToTxt (Feature e) where
+  toTxt NullFeature          = mempty
+
+  toTxt (Attribute attr val) =
+    case val of
+      Left b  -> attr <> "=" <> if b then "true" else "false"
+      Right v -> attr <> "=\"" <> v <> "\""
+
+  toTxt (Style pairs) =
+    "style=\""
+      <> Txt.intercalate
+           (Txt.singleton ';')
+           (renderStyles False (mapM_ (uncurry (=:)) pairs))
+      <> "\""
+
+  toTxt (CurrentValue _) = mempty
+
+  toTxt (On _ _ _)       = mempty
+
+  toTxt (On' _ _ _ _)    = mempty
+
+  toTxt (Link href _)    = "href=\"" <> href <> "\""
+
+instance ToTxt [Feature e] where
+  toTxt fs =
+    Txt.intercalate
+     (Txt.singleton ' ')
+     (Prelude.filter (not . Txt.null) $ Prelude.map toTxt fs)
+
+selfClosing tag =
+  case tag of
+    "area"    -> True
+    "base"    -> True
+    "br"      -> True
+    "col"     -> True
+    "command" -> True
+    "embed"   -> True
+    "hr"      -> True
+    "img"     -> True
+    "input"   -> True
+    "keygen"  -> True
+    "link"    -> True
+    "meta"    -> True
+    "param"   -> True
+    "source"  -> True
+    "track"   -> True
+    "wbr"     -> True
+    _         -> False
+
+instance ToTxt (Atom e) where
+  toTxt NullAtom {} = mempty
+  toTxt Text {..} = _content
+  toTxt Raw {..} =
+    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+      ">" <> _content <> "</" <> _tag <> ">"
+  toTxt KAtom {..} =
+    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+      if selfClosing _tag then
+        "/>"
+      else
+        ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
+  toTxt Atom {..} =
+    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+      if selfClosing _tag then
+        "/>"
+      else
+        ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+  toTxt SVGAtom {..} =
+    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+      if selfClosing _tag then
+        "/>"
+      else
+        ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+  toTxt Managed {..} =
+    case _constr of
+      Construct' Construct {..} ->
+        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+          ">"  <> toTxt (view model) <> "</" <> _tag <> ">"
+
+staticHTML :: Atom e -> StaticHTML
+staticHTML = render
+
+shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
+shtml _tag _attributes = raw _tag _attributes . toTxt
+
+
+data System
+  = System
+    { getHead :: Constr
+    , getContent :: Constr
+    }
+  | Subsystem
+    { getContent :: Constr
+    }
+  deriving Eq
+
+page :: ( IsConstruct' ts ms m
+        , IsConstruct' ts' ms' m'
+        )
+     => Construct' ts ms m
+     -> Construct' ts' ms' m'
+     -> System
+page h b = System (Construct' h) (Construct' b)
+
+partial :: IsConstruct' ts ms m
+        => Construct' ts ms m
+        -> System
+partial = Subsystem . Construct'
+
+renderSystem :: System -> Txt
+renderSystem (System h c) =
+  "<!DOCTYPE html>" <>
+    case h of
+      Construct' Construct {..} ->
+        toTxt $
+          html_ []
+            [ view model
+            , body []
+                [ case c of
+                    Construct' a@Construct {} -> construct div [ idA "atomic" ] a
+                ]
+            ]
+renderSystem (Subsystem c) =
+  ("<!DOCTYPE html>" <>) $
+    toTxt $
+      html_ []
+        [ head []
+        , body []
+            [ case c of
+                Construct' a@Construct {} -> construct div [ idA "atomic" ] a
+            ]
+        ]
+
+renderSystemBootstrap :: System -> Txt -> Txt
+renderSystemBootstrap (System h c) mainScript =
+  "<!DOCTYPE html>" <>
+    case h of
+      Construct' Construct {..} ->
+        toTxt $
+          html_ []
+            [ view model
+            , body []
+                [ case c of
+                    Construct' a@Construct {} -> construct div [ idA "atomic" ] a
+                , script [ src mainScript, defer True ] []
+                ]
+            ]
+renderSystemBootstrap (Subsystem c) mainScript =
+  "<!DOCTYPE html>" <>
+    case c of
+      Construct' a@Construct {} ->
+        toTxt $
+          html_ []
+            [ head []
+            , body []
+                [ construct div [ idA "atomic" ] a
+                , script [ src mainScript, defer True ] []
+                ]
+            ]
+
+renderDynamicSystem :: System -> IO Txt
+renderDynamicSystem (System (Construct' h) (Construct' c)) = do
+  let dt = "<!DOCTYPE html>"
+  Just h_ <- demandMaybe =<< currentView h
+  Just c_ <- demandMaybe =<< currentView c
+  head_html <- renderDynamicHTML h_
+  body_html <- renderDynamicHTML c_
+  return $ (dt <>) $ toTxt $
+    html_ []
+      [ raw "head" [] head_html
+      , body []
+          [ raw "div" [ idA "atomic" ] body_html ]
+      ]
+renderDynamicSystem (Subsystem (Construct' c)) = do
+  let dt = "<!DOCTYPE html>"
+  Just c_ <- demandMaybe =<< currentView c
+  body_html <- renderDynamicHTML c_
+  return $ (dt <>) $ toTxt $
+    html_ []
+      [ head []
+      , body []
+          [ raw "div" [ idA "atomic" ] body_html ]
+      ]
+
+renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
+renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript = do
+  let dt = "<!DOCTYPE html>"
+  Just h_ <- demandMaybe =<< currentView h
+  Just c_ <- demandMaybe =<< currentView c
+  head_html <- renderDynamicHTML h_
+  body_html <- renderDynamicHTML c_
+  return $ (dt <>) $ toTxt $
+    html_ []
+      [ raw "head" [] head_html
+      , body []
+          [ raw "div" [ idA "atomic" ] body_html
+          , script [ src mainScript, defer True ] []
+          ]
+      ]
+renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
+  let dt = "<!DOCTYPE html>"
+  Just c_ <- demandMaybe =<< currentView c
+  body_html <- renderDynamicHTML c_
+  return $ (dt <>) $ toTxt $
+    html_ []
+      [ head []
+      , body []
+          [ raw "div" [ idA "atomic" ] body_html
+          , script [ src mainScript, defer True ] []
+          ]
+      ]
+
+renderDynamicHTML :: Atom e -> IO Txt
+renderDynamicHTML h =
+  case h of
+    NullAtom {} -> return mempty
+
+    Text {..} -> return _content
+
+    Raw {..} ->
+      return $ "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+                 ">" <> _content <> "</" <> _tag <> ">"
+
+    KAtom {..} ->
+      return $
+        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+          if selfClosing _tag then
+            "/>"
+          else
+            ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
+
+    Atom {..} ->
+      return $
+        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+          if selfClosing _tag then
+            "/>"
+          else
+            ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+
+    SVGAtom {..} ->
+      return $
+        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+          if selfClosing _tag then
+            "/>"
+          else
+            ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+
+    Managed {..} ->
+      case _constr of
+        Construct' a@Construct {..} -> do
+          Just v <- demandMaybe =<< currentView a
+          inner <- renderDynamicHTML v
+          return $
+            "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+              ">"  <> inner <> "</" <> _tag <> ">"
+

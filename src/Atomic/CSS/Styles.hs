@@ -52,8 +52,8 @@ valign = "valign"
 important :: Txt
 important = "!important"
 
-none_ :: Txt
-none_ = "none"
+noneS :: Txt
+noneS = "none"
 
 zero :: Txt
 zero = "0"
@@ -868,8 +868,8 @@ vText = "vertical-text"
 wResize :: Txt
 wResize = "w-resize"
 
-wait_ :: Txt
-wait_ = "wait"
+waitS :: Txt
+waitS = "wait"
 
 zoomIn :: Txt
 zoomIn = "zoom-in"
@@ -1020,8 +1020,8 @@ transformStyle = "transform-style"
 transformOrigin :: Txt
 transformOrigin = "transform-origin"
 
-ease_ :: Txt
-ease_ = "ease"
+easeS :: Txt
+easeS = "ease"
 
 easeIn :: Txt
 easeIn = "ease-in"

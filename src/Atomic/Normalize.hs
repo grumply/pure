@@ -40,7 +40,7 @@ normalize =
             outlineWidth =: int 0
 
           select "abbr[title]" $ do
-            borderBottom =: none_
+            borderBottom =: noneS
             textDecoration =: underline
             textDecoration =: underline <<>> dotted
 
@@ -77,7 +77,7 @@ normalize =
             top =: ems (-0.5)
 
           select "img" $ do
-            borderStyle =: none_
+            borderStyle =: noneS
 
           select "svg:not(:root)" $ do
             overflow =: "hidden"
@@ -92,7 +92,7 @@ normalize =
             overflow =: visible
 
           select ("button" <&>> "select") $ do
-            textTransform =: none_
+            textTransform =: noneS
 
           select ("button" <&>> "html [type=\"button\"]" <&>> "[type=\"reset\"]" <&>> "[type=\"submit\"]") $ do
             "-webkit-appearance" =: "button"
@@ -101,7 +101,7 @@ normalize =
                   <&>> "[type=\"button\"]::-moz-focus-inner"
                   <&>> "[type=\"reset\"]::-moz-focus-inner"
                   <&>> "[type=\"submit\"]::-moz-focus-inner") $ do
-            borderStyle =: none_
+            borderStyle =: noneS
             padding =: int 0
 
           select ("button:-moz-focusring"
@@ -144,7 +144,7 @@ normalize =
 
           select ("[type=\"search\"]::-webkit-search-cancel-button"
                   <&>> "[type=\"search\"]::-webkit-search-decoration") $ do
-            "-webkit-appearance" =: none_
+            "-webkit-appearance" =: noneS
 
           select "::-webkit-file-upload-button" $ do
             "-webkit-appearance" =: "button"
@@ -157,6 +157,6 @@ normalize =
             display =: listItem
 
           select "[hidden]" $ do
-            display =: none_
+            display =: noneS
      in [| nrmlz |]
    )
