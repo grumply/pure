@@ -198,22 +198,22 @@ instance ToTxt (Atom e) where
   toTxt NullAtom {} = mempty
   toTxt Text {..} = _content
   toTxt Raw {..} =
-    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+    "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       ">" <> _content <> "</" <> _tag <> ">"
   toTxt KAtom {..} =
-    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+    "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
         ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
   toTxt Atom {..} =
-    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+    "<" <> _tag <> (if null _attributes then " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
         ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
   toTxt SVGAtom {..} =
-    "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+    "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
@@ -221,7 +221,7 @@ instance ToTxt (Atom e) where
   toTxt Managed {..} =
     case _constr of
       Construct' Construct {..} ->
-        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
+        "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
           ">"  <> toTxt (view model) <> "</" <> _tag <> ">"
 
 staticHTML :: Atom e -> StaticHTML
@@ -365,32 +365,33 @@ renderDynamicHTML h =
     Text {..} -> return _content
 
     Raw {..} ->
-      return $ "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-                 ">" <> _content <> "</" <> _tag <> ">"
+      return $
+        "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
+          <> ">"<> _content <> "</" <> _tag <> ">"
 
     KAtom {..} ->
       return $
-        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-          if selfClosing _tag then
-            "/>"
-          else
-            ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
+        "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
+          <> if selfClosing _tag then
+               "/>"
+             else
+               ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
 
     Atom {..} ->
       return $
-        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-          if selfClosing _tag then
-            "/>"
-          else
-            ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+        "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
+          <> if selfClosing _tag then
+               "/>"
+             else
+               ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
 
     SVGAtom {..} ->
       return $
-        "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-          if selfClosing _tag then
-            "/>"
-          else
-            ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+        "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
+          <> if selfClosing _tag then
+               "/>"
+             else
+               ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
 
     Managed {..} ->
       case _constr of
@@ -398,6 +399,6 @@ renderDynamicHTML h =
           Just v <- demandMaybe =<< currentView a
           inner <- renderDynamicHTML v
           return $
-            "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
-              ">"  <> inner <> "</" <> _tag <> ">"
+            "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
+              <> ">"  <> inner <> "</" <> _tag <> ">"
 
