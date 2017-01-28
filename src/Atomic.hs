@@ -67,9 +67,10 @@ import qualified Prelude
 import Data.Monoid as Export
 import Data.Bifunctor as Export
 
-import Data.HashMap.Strict as Map hiding (map)
+import Data.HashMap.Strict as Map hiding (map,null)
 
-import Data.Txt as Txt hiding (head,map)
+import Data.Txt as Txt hiding (head,map,null)
+import qualified Data.Txt as Txt
 import Data.JSON as JSON
 
 import Language.Haskell.TH.Syntax
@@ -207,7 +208,7 @@ instance ToTxt (Atom e) where
       else
         ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
   toTxt Atom {..} =
-    "<" <> _tag <> (if null _attributes then " " <> Txt.intercalate " " (map toTxt _attributes)) <>
+    "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
