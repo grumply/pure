@@ -2,16 +2,11 @@
 {-# language CPP #-}
 module Atomic.CSS.Styles where
 
-import Data.Txt
+import Data.Txt as Txt (Txt,intercalate)
+
 
 import Atomic.ToTxt
 import Atomic.CSS.Helpers
-
-#ifdef __GHCJS__
-import Data.JSString as Txt (intercalate)
-#else
-import Data.Text as Txt (intercalate)
-#endif
 
 import Data.Monoid
 

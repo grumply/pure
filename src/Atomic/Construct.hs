@@ -6,15 +6,10 @@
 {-# language CPP #-}
 module Atomic.Construct (module Atomic.Construct) where
 
-import Ef.Base hiding (Client,After,Before,current,Lazy,Eager)
+import Ef.Base hiding (Client,After,Before,current,Lazy,Eager,construct)
 import qualified Ef.Base
 
-import Data.Txt
-#ifdef __GHCJS__
-import qualified Data.JSString as Txt
-#else
-import qualified Data.Text as Txt
-#endif
+import Data.Txt as Txt hiding (replace,map,head,filter)
 
 import Atomic.Attribute
 import Atomic.Cond
@@ -204,13 +199,14 @@ data Atom e where
     ::  { _node       :: Maybe ENode
         , _tag        :: Txt
         , _attributes :: [Feature e]
-        , _atom'      :: Construct'
+        , _constr      :: Constr
         } -> Atom e
   deriving Functor
 
-type HTML ms = Atom (Code ms IO ())
+type HTML ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
+type Attribute ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
 
-instance ToTxt (Attribute ms) where
+instance ToTxt (Feature (Code ms IO ())) where
   toTxt NullFeature          = mempty
 
   toTxt (Attribute attr val) =
@@ -233,7 +229,7 @@ instance ToTxt (Attribute ms) where
 
   toTxt (Link href _)    = "href=\"" <> href <> "\""
 
-instance ToTxt [Attribute ms] where
+instance ToTxt [Feature (Code ms IO ())] where
   toTxt fs =
     Txt.intercalate
      (Txt.singleton ' ')
@@ -259,7 +255,7 @@ selfClosing tag =
     "wbr"     -> True
     _         -> False
 
-instance ToTxt (HTML ms) where
+instance ToTxt (Atom (Code ms IO ())) where
   toTxt NullAtom {} = mempty
   toTxt Text {..} = _content
   toTxt Raw {..} =
@@ -284,42 +280,42 @@ instance ToTxt (HTML ms) where
       else
         ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
   toTxt Managed {..} =
-    case _atom' of
+    case _constr of
       Construct' Construct {..} ->
         "<" <> _tag <> " " <> Txt.intercalate " " (map toTxt _attributes) <>
           ">"  <> toTxt (view model) <> "</" <> _tag <> ">"
 
-staticHTML :: HTML ms -> StaticHTML
+staticHTML :: Atom (Code ms IO ()) -> StaticHTML
 staticHTML = render
 
-shtml :: Txt -> [Attribute ms] -> StaticHTML -> HTML ms
+shtml :: Txt -> [Feature (Code ms IO ())] -> StaticHTML -> Atom (Code ms IO ())
 shtml _tag _attributes = raw _tag _attributes . toTxt
 
-data Page
-  = Page
-    { getHead :: Construct'
-    , getContent :: Construct'
+data System
+  = System
+    { getHead :: Constr
+    , getContent :: Constr
     }
-  | Partial
-    { getContent :: Construct'
+  | Subsystem
+    { getContent :: Constr
     }
   deriving Eq
 
-page :: ( IsConstruct ts ms m
-        , IsConstruct ts' ms' m'
+page :: ( IsConstruct' ts ms m
+        , IsConstruct' ts' ms' m'
         )
-     => Construct ts ms m
-     -> Construct ts' ms' m'
-     -> Page
-page h b = Page (Construct' h) (Construct' b)
+     => Construct' ts ms m
+     -> Construct' ts' ms' m'
+     -> System
+page h b = System (Construct' h) (Construct' b)
 
-partial :: IsConstruct ts ms m
-        => Construct ts ms m
-        -> Page
-partial = Partial . Construct'
+partial :: IsConstruct' ts ms m
+        => Construct' ts ms m
+        -> System
+partial = Subsystem . Construct'
 
-renderPage :: Page -> Txt
-renderPage (Page h c) =
+renderSystem :: System -> Txt
+renderSystem (System h c) =
   "<!DOCTYPE html>" <>
     case h of
       Construct' Construct {..} ->
@@ -328,22 +324,22 @@ renderPage (Page h c) =
             [ view model
             , body []
                 [ case c of
-                    Construct' a@Construct {} -> atom div [ id_ "fusion" ] a
+                    Construct' a@Construct {} -> construct div [ id_ "fusion" ] a
                 ]
             ]
-renderPage (Partial c) =
+renderSystem (Subsystem c) =
   ("<!DOCTYPE html>" <>) $
     toTxt $
       html_ []
         [ head []
         , body []
             [ case c of
-                Construct' a@Construct {} -> atom div [ id_ "fusion" ] a
+                Construct' a@Construct {} -> construct div [ id_ "fusion" ] a
             ]
         ]
 
-renderPageBootstrap :: Page -> Txt -> Txt
-renderPageBootstrap (Page h c) mainScript =
+renderSystemBootstrap :: System -> Txt -> Txt
+renderSystemBootstrap (System h c) mainScript =
   "<!DOCTYPE html>" <>
     case h of
       Construct' Construct {..} ->
@@ -352,11 +348,11 @@ renderPageBootstrap (Page h c) mainScript =
             [ view model
             , body []
                 [ case c of
-                    Construct' a@Construct {} -> atom div [ id_ "fusion" ] a
+                    Construct' a@Construct {} -> construct div [ id_ "fusion" ] a
                 , script [ src mainScript, defer True ] []
                 ]
             ]
-renderPageBootstrap (Partial c) mainScript =
+renderSystemBootstrap (Subsystem c) mainScript =
   "<!DOCTYPE html>" <>
     case c of
       Construct' a@Construct {} ->
@@ -364,13 +360,13 @@ renderPageBootstrap (Partial c) mainScript =
           html_ []
             [ head []
             , body []
-                [ atom div [ id_ "fusion" ] a
+                [ construct div [ id_ "fusion" ] a
                 , script [ src mainScript, defer True ] []
                 ]
             ]
 
-renderDynamicPage :: Page -> IO Txt
-renderDynamicPage (Page (Construct' h) (Construct' c)) = do
+renderDynamicSystem :: System -> IO Txt
+renderDynamicSystem (System (Construct' h) (Construct' c)) = do
   let dt = "<!DOCTYPE html>"
   Just h_ <- demandMaybe =<< currentView h
   Just c_ <- demandMaybe =<< currentView c
@@ -382,7 +378,7 @@ renderDynamicPage (Page (Construct' h) (Construct' c)) = do
       , body []
           [ raw "div" [ id_ "fusion" ] body_html ]
       ]
-renderDynamicPage (Partial (Construct' c)) = do
+renderDynamicSystem (Subsystem (Construct' c)) = do
   let dt = "<!DOCTYPE html>"
   Just c_ <- demandMaybe =<< currentView c
   body_html <- renderDynamicHTML c_
@@ -393,8 +389,8 @@ renderDynamicPage (Partial (Construct' c)) = do
           [ raw "div" [ id_ "fusion" ] body_html ]
       ]
 
-renderDynamicPageBootstrap :: Page -> Txt -> IO Txt
-renderDynamicPageBootstrap (Page (Construct' h) (Construct' c)) mainScript = do
+renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
+renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript = do
   let dt = "<!DOCTYPE html>"
   Just h_ <- demandMaybe =<< currentView h
   Just c_ <- demandMaybe =<< currentView c
@@ -408,7 +404,7 @@ renderDynamicPageBootstrap (Page (Construct' h) (Construct' c)) mainScript = do
           , script [ src mainScript, defer True ] []
           ]
       ]
-renderDynamicPageBootstrap (Partial (Construct' c)) mainScript = do
+renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
   let dt = "<!DOCTYPE html>"
   Just c_ <- demandMaybe =<< currentView c
   body_html <- renderDynamicHTML c_
@@ -421,7 +417,7 @@ renderDynamicPageBootstrap (Partial (Construct' c)) mainScript = do
           ]
       ]
 
-renderDynamicHTML :: HTML ms -> IO Txt
+renderDynamicHTML :: Atom (Code ms IO ()) -> IO Txt
 renderDynamicHTML h =
   case h of
     NullAtom {} -> return mempty
@@ -457,7 +453,7 @@ renderDynamicHTML h =
             ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
 
     Managed {..} ->
-      case _atom' of
+      case _constr of
         Construct' a@Construct {..} -> do
           Just v <- demandMaybe =<< currentView a
           inner <- renderDynamicHTML v
@@ -466,109 +462,28 @@ renderDynamicHTML h =
               ">"  <> inner <> "</" <> _tag <> ">"
 
 reflect :: forall ts ms m c.
-           ( IsConstruct ts ms m
+           ( IsConstruct' ts ms m
            , MonadIO c
            )
-        => Construct ts ms m
-        -> c (Promise (HTML ms))
+        => Construct' ts ms m
+        -> c (Promise (Atom (Code ms IO ())))
 reflect c =
   with c $ do
     ConstructState {..} :: ConstructState m <- get
     (l,_,_) <- liftIO $ readIORef asLive
     return (unsafeCoerce l)
 
-atom :: forall ms ms' ts' m c e atom.
-        IsConstruct ts' ms' m
-     => ([Attribute ms] -> [HTML ms] -> HTML ms)
-     -> ([Attribute ms] -> Construct ts' ms' m -> HTML ms)
-atom f = \as c ->
-  let Atom _ t _ _ = f [] []
-  in Managed Nothing t as (Construct' c)
-
--- -- flow div [] [Nothing,Just $ div [] []]
--- flow :: ([Attribute ms] -> [HTML ms] -> HTML ms)
---      -> ([Attribute ms] -> [Maybe (HTML ms)] -> HTML ms)
--- flow f = \as fs ->
---   let Atom _ t _ _ = f [] []
---   in fnode t as fs
-
--- tagged div [] [(1,div [] [])]
-tagged :: ([Attribute ms] -> [HTML ms] -> HTML ms)
-      -> ([Attribute ms] -> [(Int,HTML ms)] -> HTML ms)
-tagged f = \as ks ->
-  let Atom _ t _ _ = f [] []
-  in keyed t as ks
-
-hashed :: Hashable a => a -> HTML ms -> (Int,HTML ms)
-hashed k h = (hash k,h)
-
-ujss :: Txt -> HTML ms
-ujss = jss . unindent
-
-
-css :: CSS -> HTML ms
-css = css' False
-
-css' :: Bool -> CSS -> HTML ms
-css' b = html "style" [ type_ "text/css", scoped b ] . ((jss "\n"):) . go False
-  where
-    go :: Bool -> CSS -> [HTML ms]
-    go b (Return _) = []
-    go b (Lift s) = go b (runIdentity s)
-    go b c@(Do msg) =
-      case prj msg of
-        Just (CSS3_ atRule sel mCSS k) ->
-          case mCSS of
-            Nothing ->
-              jss (atRule <> sel <> ";\n")
-              : go False k
-            Just c' ->
-              ( jss (atRule <> sel <> " {\n")
-              : go True c'
-              ) ++ ( jss "\n}\n\n"
-                   : go False k
-                   )
-        Just (CSS_ sel ss r) ->
-          ( jss ( (if b then "\t" else mempty)
-                     <> sel
-                     <> " {\n"
-                     <> (Txt.intercalate (if b then ";\n\t" else ";\n") $ renderStyles b ss)
-                     <> (if b then "\n\t}\n\n" else "\n}\n\n")
-                )
-          : go b r
-          )
-        _ -> []
-
-scss :: StaticCSS -> HTML ms
-scss = scss' False
-
-scss' :: Bool -> StaticCSS -> HTML ms
-scss' b = raw "style" [type_ "text/css", scoped b] . cssText
-
-styles :: CSS -> HTML ms
-styles = css' True . classify
-  where
-    classify (Return r) = Return r
-    classify (Lift sup) = Lift (fmap classify sup)
-    classify (Do e) =
-      case prj e of
-        Just (CSS_ sel ss k) ->
-          Do (inj (CSS_ (Txt.cons '.' sel) ss (classify k)))
-        Just (CSS3_ at sel mcss k) ->
-          Do (inj (CSS3_ at sel (fmap classify mcss) (classify k))) 
-        _ -> error "impossible"
-
 data DiffStrategy = Lazy | Eager | Manual deriving (Eq)
 
 type Differ ms m =
-       (m -> HTML ms)
-    -> ((m,HTML ms) -> IO ())
+       (m -> Atom (Code ms IO ()))
+    -> ((m,Atom (Code ms IO ())) -> IO ())
     -> (Code ms IO () -> IO ())
     -> ConstructState m
     -> Code ms IO ()
 
 data AState m = AState
-  { as_live :: forall ms. IORef (HTML ms, HTML ms, m)
+  { as_live :: forall ms. IORef (Atom (Code ms IO ()), Atom (Code ms IO ()), m)
   , as_model :: m
   }
 
@@ -577,64 +492,71 @@ data ConstructPatch m where
       -- only modify ap_AState with atomicModifyIORef
     { ap_send         :: Code ms IO () -> IO ()
     , ap_AState       :: IORef (Maybe (AState m),Bool) -- an AState record for manipulation; nullable by component to stop a patch.
-    , ap_patchView    :: (m -> HTML ms)
-    , ap_viewTrigger  :: (m,HTML ms) -> IO ()
+    , ap_patchView    :: (m -> Atom (Code ms IO ()))
+    , ap_viewTrigger  :: (m,Atom (Code ms IO ())) -> IO ()
     } -> ConstructPatch m
 
-type IsConstruct ts ms m =
-  ( A m <: ms
-  , A m <. ts
+type IsConstruct' ts ms m =
+  ( ConstructBase m <: ms
+  , ConstructBase m <. ts
   , Delta (Modules ts) (Messages ms)
   , Eq m
   )
+type IsConstruct ms m = IsConstruct' ms ms m
 
 data ConstructState m where
   ConstructState ::
     { asPatch        :: Maybe (ConstructPatch m)
     , asDiffer       :: ConstructState m -> Code ms IO ()
     , asDiffStrategy :: DiffStrategy
-    , asViews        :: Network (m,HTML ms)
+    , asViews        :: Network (m,Atom (Code ms IO ()))
     , asUpdates      :: Network m
     , asModel        :: m
-    , asLive         :: IORef (HTML ms, HTML ms, m)
+    , asLive         :: IORef (Atom (Code ms IO ()), Atom (Code ms IO ()), m)
     } -> ConstructState m
 
-type A m
+type ConstructBase m
   = '[ State () (ConstructState m)
      , State () Shutdown
      , Revent
      ]
 
-data Construct' where
-  Construct' :: IsConstruct ts ms m => Construct ts ms m -> Construct'
-instance Eq Construct' where
+data Constr where
+  Construct' :: IsConstruct' ts ms m => Construct' ts ms m -> Constr
+instance Eq Constr where
  (==) (Construct' c) (Construct' c') =
   let Key k1 :: Key GHC.Prim.Any = unsafeCoerce (key c)
       Key k2 :: Key GHC.Prim.Any = unsafeCoerce (key c')
   in prettyUnsafeEq k1 k2
 
-data Construct ts ms m
+type ConstructKey' ms m = Key (Code ms IO `As` IO, IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m))
+type ConstructKey ms m = ConstructKey' (Appended (ConstructBase m) ms) m
+type ConstructBuilder' ts m = Modules (ConstructBase m) (Action ts IO) -> IO (Modules ts (Action ts IO))
+type ConstructBuilder ts m = ConstructBuilder' (Appended (ConstructBase m) ts) m
+type ConstructPrimer' ms = Code ms IO ()
+type ConstructPrimer ms m = ConstructPrimer' (Appended (ConstructBase m) ms)
+type Construct ms m = Construct' (Appended (ConstructBase m) ms) (Appended (ConstructBase m) ms) m
+
+data Construct' ts ms m
   = Construct
-      { key       :: !(Key (Code ms IO `As` IO, IORef (HTML ms,HTML ms,m)))
-      , build     :: !(   Modules (A m) (Action ts IO)
-                       -> IO (Modules ts (Action ts IO))
-                      ) -- a builder from Construct_ (..) to the desired cModules
-      , prime     :: !(Code ms IO ())
-      , model     :: !(m) -- an initial m; used to seed the view
-      , view      :: !(m -> HTML ms)
+      { key       :: !(ConstructKey' ms m)
+      , build     :: !(ConstructBuilder' ts m)
+      , prime     :: !(ConstructPrimer' ms)
+      , model     :: !(m)
+      , view      :: !(m -> Atom (Code ms IO ()))
       }
 
-instance Eq (Construct ts ms m) where
+instance Eq (Construct' ts ms m) where
   (==) (Construct k _ _ _ _) (Construct k' _ _ _ _) =
     let Key k1 = k
         Key k2 = k'
-    in prettyUnsafeEq k1 k2 
+    in prettyUnsafeEq k1 k2
 
-instance Ord (Construct ts ms m) where
+instance Ord (Construct' ts ms m) where
   compare (Construct (Key k) _ _ _ _) (Construct (Key k') _ _ _ _) = compare k k'
 
-instance IsConstruct ts ms m
-  => With (Construct ts ms m)
+instance IsConstruct' ts ms m
+  => With (Construct' ts ms m)
           (Code ms IO)
           IO
   where
@@ -674,7 +596,7 @@ atomVault__ = Vault (unsafePerformIO (newMVar Map.empty))
 lookupConstruct :: (MonadIO c) => Key phantom -> c (Maybe phantom)
 lookupConstruct = vaultLookup atomVault__
 
-getConstructName :: IsConstruct t ms m => Construct ts ms m -> Txt
+getConstructName :: IsConstruct' t ms m => Construct' ts ms m -> Txt
 getConstructName = toTxt . key
 
 addConstruct :: (MonadIO c) => Key phantom -> phantom -> c ()
@@ -684,26 +606,26 @@ deleteConstruct :: (MonadIO c) => Key phantom -> c ()
 deleteConstruct = vaultDelete atomVault__
 
 mkConstruct :: forall ms ts m.
-          ( IsConstruct ts ms m
-          , A m <: ms
+          ( IsConstruct' ts ms m
+          , ConstructBase m <: ms
           )
        => Maybe (Differ ms m)
        -> Maybe ENode
-       -> Construct ts ms m
-       -> IO (IORef (HTML ms,HTML ms,m))
+       -> Construct' ts ms m
+       -> IO (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m))
 mkConstruct mDiffer mparent c@Construct {..} = do
   let !m = model
   sig :: Signal ms IO (Code ms IO ()) <- runner
   sigBuf <- newSignalBuffer
   updates :: Network m <- network
-  views :: Network (m,HTML ms) <- network
+  views :: Network (m,Atom (Code ms IO ())) <- network
   let asComp = constructAs sigBuf sig
       sendEv :: Code ms IO () -> IO ()
       sendEv = void . runAs asComp
   let !raw = view m
   doc <- getDocument
   i <- buildAndEmbedMaybe sendEv doc mparent raw
-  cs_live_ :: IORef (HTML ms,HTML ms,m) <- newIORef (i,raw,m)
+  cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
   let cs = AState (unsafeCoerce cs_live_) m
   sdn :: Network () <- network
   addConstruct key (asComp,cs_live_)
@@ -721,8 +643,16 @@ mkConstruct mDiffer mparent c@Construct {..} = do
                   *:* revent sigBuf
                   *:* Empty
   (obj',_) <- Ef.Base.Object built Ef.Base.! prime
-  forkIO $ driverPrintExceptions ("Construct (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Construct may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception") sigBuf obj'
+  forkIO $ driverPrintExceptions ("Construct' (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Construct' may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception") sigBuf obj'
   return cs_live_
+
+static :: ConstructKey '[] () -> HTML '[] () -> Construct '[] ()
+static key view0 =
+  let view _ = view0
+      build = return
+      prime = return ()
+      model = ()
+  in Construct {..}
 
 diff :: forall m ms. ('[State () (ConstructState m)] <: ms)
      => Proxy m -> Code ms IO ()
@@ -749,47 +679,47 @@ setManualDiff _ = do
   put ConstructState { asDiffStrategy = Manual, .. }
 
 currentView :: forall ts ms c m.
-               ( IsConstruct ts ms m
+               ( IsConstruct' ts ms m
                , MonadIO c
                )
-            => Construct ts ms m
-            -> c (Promise (HTML ms))
+            => Construct' ts ms m
+            -> c (Promise (Atom (Code ms IO ())))
 currentView c = with c $ ownView c
 
 ownView :: forall ts ms c m.
-           ( IsConstruct ts ms m
+           ( IsConstruct' ts ms m
            , MonadIO c
            )
-        => Construct ts ms m
-        -> Code ms c (HTML ms)
+        => Construct' ts ms m
+        -> Code ms c (Atom (Code ms IO ()))
 ownView _ = do
   ConstructState {..} :: ConstructState m <- get
   (h,_,_) <- liftIO $ readIORef asLive
   return (unsafeCoerce h)
 
 onViewChange :: forall ts ms ms' m c.
-                ( IsConstruct ts ms m
+                ( IsConstruct' ts ms m
                 , MonadIO c
                 , '[Revent] <: ms'
                 )
-            => Construct ts ms m
-            -> ((m,HTML ms) -> Code '[Event (m,HTML ms)] (Code ms' c) ())
-            -> Code ms' c (Subscription ms' c (m,HTML ms),Periodical ms' c (m,HTML ms))
+            => Construct' ts ms m
+            -> ((m,Atom (Code ms IO ())) -> Code '[Event (m,Atom (Code ms IO ()))] (Code ms' c) ())
+            -> Code ms' c (Subscription ms' c (m,Atom (Code ms IO ())),Periodical ms' c (m,Atom (Code ms IO ())))
 onViewChange c f = do
   p <- periodical
   Just s <- subscribe p f
   buf <- getReventBuffer
   with c $ do
     ConstructState {..} :: ConstructState m <- get
-    joinNetwork (unsafeCoerce asViews :: Network (m,HTML ms)) p buf
+    joinNetwork (unsafeCoerce asViews :: Network (m,Atom (Code ms IO ()))) p buf
   return (s,p)
 
 onModelChange :: forall ts ms ms' m c.
-                ( IsConstruct ts ms m
+                ( IsConstruct' ts ms m
                 , MonadIO c
                 , '[Revent] <: ms'
                 )
-              => Construct ts ms m
+              => Construct' ts ms m
               -> (m -> Code '[Event m] (Code ms' c) ())
               -> Code ms' c (Subscription ms' c m,Periodical ms' c m)
 onModelChange c f = do
@@ -853,7 +783,7 @@ update f = do
         Eager  -> d cmp'
         Manual -> return ()
 
-differ :: (A m <: ms) => Differ ms m
+differ :: (ConstructBase m <: ms) => Differ ms m
 differ view trig sendEv ConstructState {..} = do
   let setupDiff = do
         let !new_as = AState (unsafeCoerce asLive) asModel
@@ -961,7 +891,7 @@ swapContent t e =
 #endif
 
 {-# NOINLINE embed_ #-}
-embed_ :: ENode -> HTML ms -> IO ()
+embed_ :: ENode -> Atom (Code ms IO ()) -> IO ()
 embed_ parent Text {..} =
   forM_ _tnode $ \node -> do
     ae <- isAlreadyEmbeddedText node parent
@@ -973,7 +903,7 @@ embed_ parent n =
 
 -- rebuild finds managed nodes and re-embeds them in case they were
 -- removed for other uses
-rebuild :: IsConstruct ts ms m => Construct ts ms m -> Maybe ENode -> HTML ms -> IO ()
+rebuild :: IsConstruct' ts ms m => Construct' ts ms m -> Maybe ENode -> Atom (Code ms IO ()) -> IO ()
 rebuild c me h =
 #ifndef __GHCJS__
     return ()
@@ -1008,7 +938,7 @@ rebuild c me h =
         embed_ parent Text {..}
 
     go mparent m@Managed {..} =
-      case _atom' of
+      case _constr of
         Construct' c -> do
           mi_ <- lookupConstruct (key c)
           forM_ mi_ $ \(_,x_) -> do
@@ -1018,7 +948,7 @@ rebuild c me h =
               embed_ parent h
 #endif
 
-setAttributes :: [Attribute ms] -> (Code ms IO () -> IO ()) -> ENode -> IO [Attribute ms]
+setAttributes :: [Feature (Code ms IO ())] -> (Code ms IO () -> IO ()) -> ENode -> IO [Feature (Code ms IO ())]
 setAttributes as f el =
 #ifdef __GHCJS__
   forM as (setAttribute_ f el)
@@ -1028,11 +958,11 @@ setAttributes as f el =
 
 
 {-# NOINLINE buildAndEmbedMaybe #-}
-buildAndEmbedMaybe :: (Code ms IO () -> IO ()) -> Doc -> Maybe ENode -> HTML ms -> IO (HTML ms)
+buildAndEmbedMaybe :: (Code ms IO () -> IO ()) -> Doc -> Maybe ENode -> Atom (Code ms IO ()) -> IO (Atom (Code ms IO ()))
 buildAndEmbedMaybe f doc = go
   where
     go mparent nn@NullAtom {..} = do
-      _cond@(Just el) <- createElement doc "span" -- what's a better choice here? I need something that is unrenderable....
+      _cond@(Just el) <- createElement doc "template"
       forM_ mparent (flip appendChild el)
       return $ NullAtom _cond
 
@@ -1070,7 +1000,7 @@ buildAndEmbedMaybe f doc = go
       return $ Text _tnode _content
 
     go mparent Managed {..} =
-      case _atom' of
+      case _constr of
         Construct' a ->
           case _node of
             Nothing -> do
@@ -1100,12 +1030,12 @@ buildAndEmbedMaybe f doc = go
               return Managed {..}
 
 {-# NOINLINE buildHTML #-}
-buildHTML :: Doc -> (Code ms IO () -> IO ()) -> HTML ms -> IO (HTML ms)
+buildHTML :: Doc -> (Code ms IO () -> IO ()) -> Atom (Code ms IO ()) -> IO (Atom (Code ms IO ()))
 buildHTML doc f = buildAndEmbedMaybe f doc Nothing
 
 -- Useful for standalone components without a Fusion root.
-renderConstruct :: IsConstruct ts ms m => Construct ts ms m -> ENode -> HTML ms -> IO (HTML ms)
-renderConstruct a parent html = do
+renderConstruct' :: IsConstruct' ts ms m => Construct' ts ms m -> ENode -> Atom (Code ms IO ()) -> IO (Atom (Code ms IO ()))
+renderConstruct' a parent html = do
   let f e = void $ with a e
   doc <- getDocument
   html' <- buildHTML doc f html
@@ -1149,7 +1079,7 @@ diff_ APatch {..} = do
 #endif
 
 {-# NOINLINE replace #-}
-replace :: HTML ms0 -> HTML ms1 -> IO ()
+replace :: Atom (Code ms0 IO ()) -> Atom (Code ms1 IO ()) -> IO ()
 #ifndef __GHCJS__
 replace _ _ = return ()
 #else
@@ -1170,7 +1100,7 @@ replace old new = do
 #endif
 
 {-# NOINLINE delete #-}
-delete :: HTML ms -> IO ()
+delete :: Atom (Code ms IO ()) -> IO ()
 #ifndef __GHCJS__
 delete _ = return ()
 #else
@@ -1179,7 +1109,7 @@ delete n = forM_ (_node n) (delete_js . toNode)
 #endif
 
 {-# NOINLINE remove #-}
-remove :: HTML ms -> IO ()
+remove :: Atom (Code ms IO ()) -> IO ()
 #ifndef __GHCJS__
 remove _ = return ()
 #else
@@ -1188,7 +1118,7 @@ remove n = forM_ (_node n) (remove_js . toNode)
 #endif
 
 {-# NOINLINE cleanup #-}
-cleanup :: [HTML ms] -> IO ()
+cleanup :: [Atom (Code ms IO ())] -> IO ()
 #ifndef __GHCJS__
 cleanup _ = return ()
 #else
@@ -1215,7 +1145,7 @@ cleanup _ = return ()
 #endif
 
 {-# NOINLINE insertAt #-}
-insertAt :: ENode -> Int -> HTML ms -> IO ()
+insertAt :: ENode -> Int -> Atom (Code ms IO ()) -> IO ()
 #ifndef __GHCJS__
 insertAt _ _ _ = return ()
 #else
@@ -1224,7 +1154,7 @@ insertAt parent ind n = forM_ (_node n) $ insert_at_js parent ind . toNode
 #endif
 
 {-# NOINLINE prepend #-}
-prepend :: ENode -> HTML ms -> IO ()
+prepend :: ENode -> Atom (Code ms IO ()) -> IO ()
 #ifndef __GHCJS__
 prepend _ _ = return ()
 #else
@@ -1233,7 +1163,7 @@ prepend parent n = forM_ (_node n) $ prepend_child_js parent . toNode
 #endif
 
 {-# NOINLINE insertBefore_ #-}
-insertBefore_ :: ENode -> HTML ms -> HTML ms -> IO ()
+insertBefore_ :: ENode -> Atom (Code ms IO ()) -> Atom (Code ms IO ()) -> IO ()
 #ifndef __GHCJS__
 insertBefore_ _ _ _ = return ()
 #else
@@ -1243,7 +1173,7 @@ insertBefore_ parent child@(Text {}) new = void $ N.insertBefore parent (_node n
 insertBefore_ parent child new = void $ N.insertBefore parent (_node new) (_node child)
 #endif
 
-diffHelper :: (Code ms IO () -> IO ()) -> Doc -> HTML ms -> HTML ms -> HTML ms -> IO (Either (HTML ms) (HTML ms))
+diffHelper :: (Code ms IO () -> IO ()) -> Doc -> Atom (Code ms IO ()) -> Atom (Code ms IO ()) -> Atom (Code ms IO ()) -> IO (Either (Atom (Code ms IO ())) (Atom (Code ms IO ())))
 diffHelper f doc = go
   where
     go old mid new =
@@ -1355,13 +1285,13 @@ diffHelper f doc = go
                   return $ Left new'
 
         go' old@(Managed {}) mid new@(Managed {}) =
-          if    (_atom' old) == (_atom' new)
+          if    (_constr old) == (_constr new)
             && prettyUnsafeEq (_tag old) (_tag new)
           then do
             let Just n = _node old
             a' <- if reallyUnsafeEq (_attributes mid) (_attributes new) then return (_attributes old) else
                     runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
-            return $ Right $ Managed (_node old) (_tag old) a' (_atom' old)
+            return $ Right $ Managed (_node old) (_tag old) a' (_constr old)
           else do
             new' <- buildAndEmbedMaybe f doc Nothing new
             replace old new'
@@ -1565,7 +1495,7 @@ applyStyleDiffs el olds0 news0 = do
 #endif
 
 {-# NOINLINE runElementDiff #-}
-runElementDiff :: (Code ms IO () -> IO ()) -> ENode -> [Attribute ms] -> [Attribute ms] -> [Attribute ms] -> IO [Attribute ms]
+runElementDiff :: (Code ms IO () -> IO ()) -> ENode -> [Feature (Code ms IO ())] -> [Feature (Code ms IO ())] -> [Feature (Code ms IO ())] -> IO [Feature (Code ms IO ())]
 runElementDiff f el os0 ms0 ns0 =
 #ifndef __GHCJS__
     return ns0
@@ -1650,10 +1580,10 @@ runElementDiff f el os0 ms0 ns0 =
 {-# NOINLINE runElementDiffSVG #-}
 runElementDiffSVG :: (Code ms IO () -> IO ())
                   -> ENode
-                  -> [Attribute ms]
-                  -> [Attribute ms]
-                  -> [Attribute ms]
-                  -> IO [Attribute ms]
+                  -> [Feature (Code ms IO ())]
+                  -> [Feature (Code ms IO ())]
+                  -> [Feature (Code ms IO ())]
+                  -> IO [Feature (Code ms IO ())]
 runElementDiffSVG f el os0 ms0 ns0 =
 #ifndef __GHCJS__
     return ns0
@@ -1736,7 +1666,7 @@ runElementDiffSVG f el os0 ms0 ns0 =
 #endif
 
 {-# NOINLINE removeAttribute_ #-}
-removeAttribute_ :: ENode -> Attribute ms -> IO ()
+removeAttribute_ :: ENode -> Feature (Code ms IO ()) -> IO ()
 removeAttribute_ element attr =
 #ifndef __GHCJS__
   return ()
@@ -1768,7 +1698,7 @@ removeAttribute_ element attr =
 #endif
 
 {-# NOINLINE removeAttributeSVG_ #-}
-removeAttributeSVG_ :: ENode -> Attribute ms -> IO ()
+removeAttributeSVG_ :: ENode -> Feature (Code ms IO ()) -> IO ()
 removeAttributeSVG_ element attr =
 #ifndef __GHCJS__
   return ()
@@ -1800,7 +1730,7 @@ removeAttributeSVG_ element attr =
 #endif
 
 {-# NOINLINE setAttribute_ #-}
-setAttribute_ :: (Code ms IO () -> IO ()) -> ENode -> Attribute ms -> IO (Attribute ms)
+setAttribute_ :: (Code ms IO () -> IO ()) -> ENode -> Feature (Code ms IO ()) -> IO (Feature (Code ms IO ()))
 setAttribute_ c element attr =
 #ifndef __GHCJS__
   return attr
@@ -1870,7 +1800,7 @@ setAttribute_ c element attr =
 #endif
 
 {-# NOINLINE setAttributeSVG_ #-}
-setAttributeSVG_ :: (Code ms IO () -> IO ()) -> ENode -> Attribute ms -> IO (Attribute ms)
+setAttributeSVG_ :: (Code ms IO () -> IO ()) -> ENode -> Feature (Code ms IO ()) -> IO (Feature (Code ms IO ()))
 setAttributeSVG_ c element attr =
 #ifndef __GHCJS__
   return attr
@@ -1941,7 +1871,7 @@ setAttributeSVG_ c element attr =
 #endif
 
 {-# NOINLINE cleanupAttr #-}
-cleanupAttr :: Attribute ms -> IO ()
+cleanupAttr :: Feature (Code ms IO ()) -> IO ()
 cleanupAttr attr =
 #ifndef __GHCJS__
   return ()
@@ -2032,19 +1962,19 @@ redirect redir = do
 #endif
 
 
-instance Cond (HTML ms) where
+instance Cond (Atom (Code ms IO ())) where
   nil = NullAtom Nothing
 
-instance IsString (HTML ms) where
+instance IsString (Atom (Code ms IO ())) where
   fromString = jss . fromString
 
-instance FromTxt (HTML ms) where
+instance FromTxt (Atom (Code ms IO ())) where
   fromTxt = jss
 
-instance {-# OVERLAPS #-} IsString [HTML ms] where
+instance {-# OVERLAPS #-} IsString [Atom (Code ms IO ())] where
   fromString s = [fromString s]
 
-instance FromTxt [HTML ms] where
+instance FromTxt [Atom (Code ms IO ())] where
   fromTxt t = [fromTxt t]
 
 newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)
@@ -2063,12 +1993,12 @@ makePrisms ''Atom
 makeLenses ''Atom
 #endif
 
-html :: Txt -> [Attribute ms] -> [HTML ms] -> HTML ms
+html :: Txt -> [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 html _tag _attributes _children =
   let _node = Nothing
   in Atom {..}
 
-raw :: Txt -> [Attribute ms] -> Txt -> HTML ms
+raw :: Txt -> [Feature (Code ms IO ())] -> Txt -> Atom (Code ms IO ())
 raw _tag _attributes _content =
   let _node = Nothing
   in Raw {..}
@@ -2076,432 +2006,506 @@ raw _tag _attributes _content =
 notNil (NullAtom _) = False
 notNil _ = True
 
-cnode :: Bool -> HTML ms -> HTML ms
+cnode :: Bool -> Atom (Code ms IO ()) -> Atom (Code ms IO ())
 cnode = cond
 
-keyed :: Txt -> [Attribute ms] -> [(Int,HTML ms)] -> HTML ms
+keyed :: Txt -> [Feature (Code ms IO ())] -> [(Int,Atom (Code ms IO ()))] -> Atom (Code ms IO ())
 keyed _tag _attributes _keyed0 =
   let _node = Nothing
       _keyed = filter (notNil . snd) _keyed0
   in KAtom {..}
 
-svgHTML :: Txt -> [Attribute ms] -> [HTML ms] -> HTML ms
+svgHTML :: Txt -> [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 svgHTML _tag _attributes _children =
   let _node = Nothing
   in SVGAtom {..}
 
-jss :: Txt -> HTML ms
+jss :: Txt -> Atom (Code ms IO ())
 jss _content =
   let _tnode = Nothing
   in Text {..}
 
+ujss :: Txt -> Atom (Code ms IO ())
+ujss = jss . unindent
+
+construct :: forall ms ms' ts' m c e atom.
+        IsConstruct' ts' ms' m
+     => ([Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ()))
+     -> ([Feature (Code ms IO ())] -> Construct' ts' ms' m -> Atom (Code ms IO ()))
+construct f = \as c ->
+  case f [] [] of
+    Atom _ t _ _ -> Managed Nothing t as (Construct' c)
+    _ -> error "Incorrect usage of construct; Constructs may only be embedded in Atoms."
+
+-- tagged div [] [hashed 'a' (div [] []), hashed 4 (div [] [])]
+tagged :: ([Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ()))
+      -> ([Feature (Code ms IO ())] -> [(Int,Atom (Code ms IO ()))] -> Atom (Code ms IO ()))
+tagged f = \as ks ->
+  let Atom _ t _ _ = f [] []
+  in keyed t as ks
+
+hashed :: Hashable a => a -> Atom (Code ms IO ()) -> (Int,Atom (Code ms IO ()))
+hashed k h = (hash k,h)
+
+css :: CSS -> Atom (Code ms IO ())
+css = css' False
+
+css' :: Bool -> CSS -> Atom (Code ms IO ())
+css' b = html "style" [ type_ "text/css", scoped b ] . ((jss "\n"):) . go False
+  where
+    go :: Bool -> CSS -> [Atom (Code ms IO ())]
+    go b (Return _) = []
+    go b (Lift s) = go b (runIdentity s)
+    go b c@(Do msg) =
+      case prj msg of
+        Just (CSS3_ atRule sel mCSS k) ->
+          case mCSS of
+            Nothing ->
+              jss (atRule <> sel <> ";\n")
+              : go False k
+            Just c' ->
+              ( jss (atRule <> sel <> " {\n")
+              : go True c'
+              ) ++ ( jss "\n}\n\n"
+                   : go False k
+                   )
+        Just (CSS_ sel ss r) ->
+          ( jss ( (if b then "\t" else mempty)
+                     <> sel
+                     <> " {\n"
+                     <> (Txt.intercalate (if b then ";\n\t" else ";\n") $ renderStyles b ss)
+                     <> (if b then "\n\t}\n\n" else "\n}\n\n")
+                )
+          : go b r
+          )
+        _ -> []
+
+scss :: StaticCSS -> Atom (Code ms IO ())
+scss = scss' False
+
+scss' :: Bool -> StaticCSS -> Atom (Code ms IO ())
+scss' b = raw "style" [type_ "text/css", scoped b] . cssText
+
+styles :: CSS -> Atom (Code ms IO ())
+styles = css' True . classify
+  where
+    classify (Return r) = Return r
+    classify (Lift sup) = Lift (fmap classify sup)
+    classify (Do e) =
+      case prj e of
+        Just (CSS_ sel ss k) ->
+          Do (inj (CSS_ (Txt.cons '.' sel) ss (classify k)))
+        Just (CSS3_ at sel mcss k) ->
+          Do (inj (CSS3_ at sel (fmap classify mcss) (classify k))) 
+        _ -> error "impossible"
+
 --------------------------------------------------------------------------------
 -- Nodes
 
-abbr :: [Attribute ms] -> [HTML ms] -> HTML ms
+abbr :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 abbr = html "abbr"
 
-address :: [Attribute ms] -> [HTML ms] -> HTML ms
+address :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 address = html "address"
 
-area :: [Attribute ms] -> [HTML ms] -> HTML ms
+area :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 area = html "area"
 
-a :: [Attribute ms] -> [HTML ms] -> HTML ms
+a :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 a = html "a"
 
-article :: [Attribute ms] -> [HTML ms] -> HTML ms
+article :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 article = html "article"
 
-aside :: [Attribute ms] -> [HTML ms] -> HTML ms
+aside :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 aside = html "aside"
 
-audio :: [Attribute ms] -> [HTML ms] -> HTML ms
+audio :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 audio = html "audio"
 
-base :: [Attribute ms] -> [HTML ms] -> HTML ms
+base :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 base = html "base"
 
-bdi :: [Attribute ms] -> [HTML ms] -> HTML ms
+bdi :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 bdi = html "bdi"
 
-bdo :: [Attribute ms] -> [HTML ms] -> HTML ms
+bdo :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 bdo = html "bdo"
 
-big :: [Attribute ms] -> [HTML ms] -> HTML ms
+big :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 big = html "big"
 
-blockquote :: [Attribute ms] -> [HTML ms] -> HTML ms
+blockquote :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 blockquote = html "blockquote"
 
-body :: [Attribute ms] -> [HTML ms] -> HTML ms
+body :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 body = html "body"
 
-b :: [Attribute ms] -> [HTML ms] -> HTML ms
+b :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 b = html "b"
 
-br :: HTML ms
+br :: Atom (Code ms IO ())
 br = html "br" [] []
 
-button :: [Attribute ms] -> [HTML ms] -> HTML ms
+button :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 button = html "button"
 
-canvas :: [Attribute ms] -> [HTML ms] -> HTML ms
+canvas :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 canvas = html "canvas"
 
-caption :: [Attribute ms] -> [HTML ms] -> HTML ms
+caption :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 caption = html "caption"
 
-cite :: [Attribute ms] -> [HTML ms] -> HTML ms
+cite :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 cite = html "cite"
 
-code :: [Attribute ms] -> [HTML ms] -> HTML ms
+code :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 code = html "code"
 
-col :: [Attribute ms] -> [HTML ms] -> HTML ms
+col :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 col = html "col"
 
-colgroup :: [Attribute ms] -> [HTML ms] -> HTML ms
+colgroup :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 colgroup = html "colgroup"
 
-dataN :: [Attribute ms] -> [HTML ms] -> HTML ms
+dataN :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 dataN = html "data"
 
-datalist :: [Attribute ms] -> [HTML ms] -> HTML ms
+datalist :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 datalist = html "datalist"
 
-dd :: [Attribute ms] -> [HTML ms] -> HTML ms
+dd :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 dd = html "dd"
 
-description :: Txt -> HTML ms
+description :: Txt -> Atom (Code ms IO ())
 description d = meta [ name "description", content d ] []
 
-dl :: [Attribute ms] -> [HTML ms] -> HTML ms
+dl :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 dl = html "dl"
 
-dt :: [Attribute ms] -> [HTML ms] -> HTML ms
+dt :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 dt = html "dt"
 
-del :: [Attribute ms] -> [HTML ms] -> HTML ms
+del :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 del = html "del"
 
-details :: [Attribute ms] -> [HTML ms] -> HTML ms
+details :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 details = html "details"
 
-dfn :: [Attribute ms] -> [HTML ms] -> HTML ms
+dfn :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 dfn = html "dfn"
 
-dialog :: [Attribute ms] -> [HTML ms] -> HTML ms
+dialog :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 dialog = html "dialog"
 
-div :: [Attribute ms] -> [HTML ms] -> HTML ms
+div :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 div = html "div"
 
-em :: [Attribute ms] -> [HTML ms] -> HTML ms
+em :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 em = html "em"
 
-embed :: [Attribute ms] -> [HTML ms] -> HTML ms
+embed :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 embed = html "embed"
 
-fieldset :: [Attribute ms] -> [HTML ms] -> HTML ms
+fieldset :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 fieldset = html "fieldset"
 
-figcaption :: [Attribute ms] -> [HTML ms] -> HTML ms
+figcaption :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 figcaption = html "figcaption"
 
-figure :: [Attribute ms] -> [HTML ms] -> HTML ms
+figure :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 figure = html "figure"
 
-footer :: [Attribute ms] -> [HTML ms] -> HTML ms
+footer :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 footer = html "footer"
 
-form :: [Attribute ms] -> [HTML ms] -> HTML ms
+form :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 form = html "form"
 
-head :: [HTML ms] -> HTML ms
+head :: [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 head = html "head" []
 
-header :: [Attribute ms] -> [HTML ms] -> HTML ms
+header :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 header = html "header"
 
-h1 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h1 :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 h1 = html "h1"
 
-h2 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h2 :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 h2 = html "h2"
 
-h3 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h3 :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 h3 = html "h3"
 
-h4 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h4 :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 h4 = html "h4"
 
-h5 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h5 :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 h5 = html "h5"
 
-h6 :: [Attribute ms] -> [HTML ms] -> HTML ms
+h6 :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 h6 = html "h6"
 
-hgroup :: [Attribute ms] -> [HTML ms] -> HTML ms
+hgroup :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 hgroup = html "hgroup"
 
-hr :: [Attribute ms] -> [HTML ms] -> HTML ms
+hr :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 hr = html "hr"
 
-html_ :: [Attribute ms] -> [HTML ms] -> HTML ms
+html_ :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 html_ = html "html"
 
-iframe :: [Attribute ms] -> [HTML ms] -> HTML ms
+iframe :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 iframe = html "iframe"
 
-img :: [Attribute ms] -> [HTML ms] -> HTML ms
+img :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 img = html "img"
 
-input :: [Attribute ms] -> [HTML ms] -> HTML ms
+input :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 input = html "input"
 
-textInput :: [Attribute ms] -> [HTML ms] -> HTML ms
+textInput :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 textInput fs = html "input" (type_ "text":fs)
 
-ins :: [Attribute ms] -> [HTML ms] -> HTML ms
+ins :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 ins = html "ins"
 
-iN :: [Attribute ms] -> [HTML ms] -> HTML ms
+iN :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 iN = html "i"
 
-kbd :: [Attribute ms] -> [HTML ms] -> HTML ms
+kbd :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 kbd = html "kbd"
 
-keygen :: [Attribute ms] -> [HTML ms] -> HTML ms
+keygen :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 keygen = html "keygen"
 
-label :: [Attribute ms] -> [HTML ms] -> HTML ms
+label :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 label = html "label"
 
-legend :: [Attribute ms] -> [HTML ms] -> HTML ms
+legend :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 legend = html "legend"
 
-li :: [Attribute ms] -> [HTML ms] -> HTML ms
+li :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 li = html "li"
 
-linkN :: [Attribute ms] -> [HTML ms] -> HTML ms
+linkN :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 linkN = html "link"
 
-mainN :: [Attribute ms] -> [HTML ms] -> HTML ms
+mainN :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 mainN = html "main"
 
-mapN :: [Attribute ms] -> [HTML ms] -> HTML ms
+mapN :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 mapN = html "map"
 
-mark :: [Attribute ms] -> [HTML ms] -> HTML ms
+mark :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 mark = html "mark"
 
-menu :: [Attribute ms] -> [HTML ms] -> HTML ms
+menu :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 menu = html "menu"
 
-menuitem :: [Attribute ms] -> [HTML ms] -> HTML ms
+menuitem :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 menuitem = html "menuitem"
 
-meta :: [Attribute ms] -> [HTML ms] -> HTML ms
+meta :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 meta = html "meta"
 
-meter :: [Attribute ms] -> [HTML ms] -> HTML ms
+meter :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 meter = html "meter"
 
-nav :: [Attribute ms] -> [HTML ms] -> HTML ms
+nav :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 nav = html "nav"
 
-noscript :: [Attribute ms] -> [HTML ms] -> HTML ms
+noscript :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 noscript = html "noscript"
 
-object_ :: [Attribute ms] -> [HTML ms] -> HTML ms
+object_ :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 object_ = html "object"
 
-optgroup :: [Attribute ms] -> [HTML ms] -> HTML ms
+optgroup :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 optgroup = html "optgroup"
 
-option :: [Attribute ms] -> [HTML ms] -> HTML ms
+option :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 option = html "option"
 
-ol :: [Attribute ms] -> [HTML ms] -> HTML ms
+ol :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 ol = html "ol"
 
-output :: [Attribute ms] -> [HTML ms] -> HTML ms
+output :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 output = html "output"
 
-p :: [Attribute ms] -> [HTML ms] -> HTML ms
+p :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 p = html "p"
 
-param :: [Attribute ms] -> [HTML ms] -> HTML ms
+param :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 param = html "param"
 
-picture :: [Attribute ms] -> [HTML ms] -> HTML ms
+picture :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 picture = html "picture"
 
-pre :: [Attribute ms] -> [HTML ms] -> HTML ms
+pre :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 pre = html "pre"
 
-progress :: [Attribute ms] -> [HTML ms] -> HTML ms
+progress :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 progress = html "progress"
 
-q :: [Attribute ms] -> [HTML ms] -> HTML ms
+q :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 q = html "q"
 
-rp :: [Attribute ms] -> [HTML ms] -> HTML ms
+rp :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 rp = html "rp"
 
-rt :: [Attribute ms] -> [HTML ms] -> HTML ms
+rt :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 rt = html "rt"
 
-ruby :: [Attribute ms] -> [HTML ms] -> HTML ms
+ruby :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 ruby = html "ruby"
 
-samp :: [Attribute ms] -> [HTML ms] -> HTML ms
+samp :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 samp = html "samp"
 
-script :: [Attribute ms] -> [HTML ms] -> HTML ms
+script :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 script = html "script"
 
-s :: [Attribute ms] -> [HTML ms] -> HTML ms
+s :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 s = html "s"
 
-section :: [Attribute ms] -> [HTML ms] -> HTML ms
+section :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 section = html "section"
 
-selectN :: [Attribute ms] -> [HTML ms] -> HTML ms
+selectN :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 selectN = html "select"
 
-small :: [Attribute ms] -> [HTML ms] -> HTML ms
+small :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 small = html "small"
 
-source :: [Attribute ms] -> [HTML ms] -> HTML ms
+source :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 source = html "source"
 
-span :: [Attribute ms] -> [HTML ms] -> HTML ms
+span :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 span = html "span"
 
-strong :: [Attribute ms] -> [HTML ms] -> HTML ms
+strong :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 strong = html "strong"
 
-style :: [Attribute ms] -> [HTML ms] -> HTML ms
+style :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 style = html "style"
 
-sub :: [Attribute ms] -> [HTML ms] -> HTML ms
+sub :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 sub = html "sub"
 
-summary :: [Attribute ms] -> [HTML ms] -> HTML ms
+summary :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 summary = html "summary"
 
-sup :: [Attribute ms] -> [HTML ms] -> HTML ms
+sup :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 sup = html "sup"
 
-table :: [Attribute ms] -> [HTML ms] -> HTML ms
+table :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 table = html "table"
 
-tbody :: [Attribute ms] -> [HTML ms] -> HTML ms
+tbody :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 tbody = html "tbody"
 
-td :: [Attribute ms] -> [HTML ms] -> HTML ms
+td :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 td = html "td"
 
-textarea :: [Attribute ms] -> [HTML ms] -> HTML ms
+textarea :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 textarea = html "textarea"
 
-tfoot :: [Attribute ms] -> [HTML ms] -> HTML ms
+tfoot :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 tfoot = html "tfoot"
 
-th :: [Attribute ms] -> [HTML ms] -> HTML ms
+th :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 th = html "th"
 
-thead :: [Attribute ms] -> [HTML ms] -> HTML ms
+thead :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 thead = html "thead"
 
-time :: [Attribute ms] -> [HTML ms] -> HTML ms
+time :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 time = html "time"
 
-title :: Txt -> HTML ms
+title :: Txt -> Atom (Code ms IO ())
 title jst = html "title" [] [ jss jst ]
 
-tr :: [Attribute ms] -> [HTML ms] -> HTML ms
+tr :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 tr = html "tr"
 
-track :: [Attribute ms] -> [HTML ms] -> HTML ms
+track :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 track = html "track"
 
-u :: [Attribute ms] -> [HTML ms] -> HTML ms
+u :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 u = html "u"
 
-ul :: [Attribute ms] -> [HTML ms] -> HTML ms
+ul :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 ul = html "ul"
 
-varN :: [Attribute ms] -> [HTML ms] -> HTML ms
+varN :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 varN = html "var"
 
-video :: [Attribute ms] -> [HTML ms] -> HTML ms
+video :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 video = html "video"
 
-viewport :: Txt -> HTML ms
+viewport :: Txt -> Atom (Code ms IO ())
 viewport jst = html "meta" [ name "viewport", content jst ] []
 
-wbr :: [Attribute ms] -> [HTML ms] -> HTML ms
+wbr :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 wbr = html "wbr"
 
 --------------------------------------------------------------------------------
 -- SVG
 
-circle :: [Attribute ms] -> [HTML ms] -> HTML ms
+circle :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 circle = svgHTML "circle"
 
-clipPath :: [Attribute ms] -> [HTML ms] -> HTML ms
+clipPath :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 clipPath = svgHTML "clipPath"
 
-defs :: [Attribute ms] -> [HTML ms] -> HTML ms
+defs :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 defs = svgHTML "defs"
 
-ellipse :: [Attribute ms] -> [HTML ms] -> HTML ms
+ellipse :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 ellipse = svgHTML "ellipse"
 
-g :: [Attribute ms] -> [HTML ms] -> HTML ms
+g :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 g = svgHTML "g"
 
-image :: [Attribute ms] -> [HTML ms] -> HTML ms
+image :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 image = svgHTML "image"
 
-line :: [Attribute ms] -> [HTML ms] -> HTML ms
+line :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 line = svgHTML "line"
 
-linearGradient :: [Attribute ms] -> [HTML ms] -> HTML ms
+linearGradient :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 linearGradient = svgHTML "linearGradient"
 
-mask :: [Attribute ms] -> [HTML ms] -> HTML ms
+mask :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 mask = svgHTML "mask"
 
-path :: [Attribute ms] -> [HTML ms] -> HTML ms
+path :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 path = svgHTML "path"
 
-patternN :: [Attribute ms] -> [HTML ms] -> HTML ms
+patternN :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 patternN = svgHTML "pattern"
 
-polygon :: [Attribute ms] -> [HTML ms] -> HTML ms
+polygon :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 polygon = svgHTML "polygon"
 
-polyline :: [Attribute ms] -> [HTML ms] -> HTML ms
+polyline :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 polyline = svgHTML "polyline"
 
-radialGradient :: [Attribute ms] -> [HTML ms] -> HTML ms
+radialGradient :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 radialGradient = svgHTML "radialGraedient"
 
-rect :: [Attribute ms] -> [HTML ms] -> HTML ms
+rect :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 rect = svgHTML "rect"
 
-stop_ :: [Attribute ms] -> [HTML ms] -> HTML ms
+stop_ :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 stop_ = svgHTML "stop"
 
-svg :: [Attribute ms] -> [HTML ms] -> HTML ms
+svg :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 svg = svgHTML "svg"
 
-text :: [Attribute ms] -> [HTML ms] -> HTML ms
+text :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 text = svgHTML "text"
 
-tspan :: [Attribute ms] -> [HTML ms] -> HTML ms
+tspan :: [Feature (Code ms IO ())] -> [Atom (Code ms IO ())] -> Atom (Code ms IO ())
 tspan = svgHTML "tspan"

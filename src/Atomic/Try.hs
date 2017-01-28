@@ -1,6 +1,7 @@
 module Atomic.Try where
 
 import Data.Txt
+import Data.JSON
 import GHC.Generics
 
 data Try a

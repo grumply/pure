@@ -2,11 +2,12 @@
 {-# language CPP #-}
 module Atomic.Mediators.Window where
 
-import Ef.Base hiding (Object)
+import Ef.Base hiding (Obj)
 
 import Data.IORef
 
 import Data.Txt
+import Data.JSON
 
 import Atomic.Construct (Win,getWindow)
 import Atomic.Revent
@@ -18,9 +19,6 @@ import Atomic.With
 import qualified GHCJS.DOM.Window as W hiding (getWindow)
 import qualified GHCJS.DOM.EventM as Ev
 import qualified GHCJS.DOM.EventTargetClosures as ETC
-import qualified GHCJS.Marshal as M
-import qualified GHCJS.Marshal.Pure as M
-import qualified JavaScript.Object.Internal as O
 #endif
 
 import Unsafe.Coerce
@@ -45,9 +43,7 @@ data WindowState = WindowState
   , scrollYN          :: Network Int
   }
 
-type WindowS = (State () WindowState) ': Mediator_
-
-scrollEvent :: EVName Win Object
+scrollEvent :: EVName Win Obj
 scrollEvent =
 #ifdef __GHCJS__
    ETC.unsafeEventName "scroll"
@@ -55,7 +51,7 @@ scrollEvent =
   "scroll"
 #endif
 
-resize :: EVName Win Object
+resize :: EVName Win Obj
 resize =
 #ifdef __GHCJS__
   ETC.unsafeEventName "resize"
@@ -121,7 +117,7 @@ getInnerHeight = do
 #endif
   return ih
 
-windowS :: S '[State () WindowState]
+windowS :: Mediator '[State () WindowState]
 windowS = Mediator {..}
   where
     key = "Fusion.windowS"

@@ -1,6 +1,7 @@
 {-# language ConstraintKinds #-}
 {-# language FlexibleInstances #-}
 {-# language UndecidableInstances #-}
+{-# language MagicHash #-}
 module Atomic.Component (module Atomic.Component) where
 
 import Ef.Base hiding (Client,Server)
@@ -13,34 +14,50 @@ import Atomic.With
 
 import Control.Concurrent
 import Data.IORef
+import GHC.Prim
 
 import Data.HashMap.Strict as Map hiding ((!))
 
 import Unsafe.Coerce
 
-type IsComponent ts ms =
-  ( C <: ms
-  , C <. ts
+type IsComponent' ts ms =
+  ( ComponentBase <: ms
+  , ComponentBase <. ts
   , Delta (Modules ts) (Messages ms)
   )
+type IsComponent ms = IsComponent' ms ms
 
-type C =
+type ComponentBase =
   '[Revent
    ,State () Vault
    ,State () Shutdown
    ]
 
-data Component ts ms
+type ComponentKey' ms = Key (Code ms IO `As` IO)
+type ComponentKey ms = ComponentKey' (Appended ms ComponentBase)
+type ComponentBuilder' ts = Modules ComponentBase (Action ts IO) -> IO (Modules ts (Action ts IO))
+type ComponentBuilder ts = ComponentBuilder' (Appended ts ComponentBase)
+type ComponentPrimer' ms = Code ms IO ()
+type ComponentPrimer ms = Code (Appended ms ComponentBase) IO ()
+type Component ms = Component' (Appended ms ComponentBase) (Appended ms ComponentBase)
+
+data Component' ts ms
   = Component
-    { key        :: !(Key (Code ms IO `As` IO))
-    , build      :: !(    Modules C (Action ts IO)
-                       -> IO (Modules ts (Action ts IO))
-                     )
-    , prime      :: !(Code ms IO ())
+    { key        :: !(ComponentKey' ms)
+    , build      :: !(ComponentBuilder' ts)
+    , prime      :: !(ComponentPrimer' ms)
     }
 
-instance (IsComponent ts ms, MonadIO c, '[Revent,State () Vault] <: ms')
-  => With (Component ts ms) (Code ms IO) (Code ms' c)
+instance Eq (Component' ts ms) where
+  (==) (Component i _ _) (Component i' _ _) =
+    let Key k1 = i
+        Key k2 = i'
+    in case reallyUnsafePtrEquality# i i' of
+         1# -> True
+         _  -> k1 == k2
+
+instance (IsComponent' ts ms, MonadIO c, '[Revent,State () Vault] <: ms')
+  => With (Component' ts ms) (Code ms IO) (Code ms' c)
   where
     using_ c = do
       lv <- get
@@ -79,11 +96,11 @@ instance (IsComponent ts ms, MonadIO c, '[Revent,State () Vault] <: ms')
 
 startComponent :: forall ms' c ms ts.
              ( MonadIO c
-             , IsComponent ts ms
+             , IsComponent' ts ms
              )
           => Vault
           -> Signaled
-          -> Component ts ms
+          -> Component' ts ms
           -> c ()
 startComponent lv rb Component {..} = do
   sdn <- network

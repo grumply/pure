@@ -9,6 +9,7 @@ import GHC.Generics
 import Data.Ratio
 
 import Data.Txt
+import Data.JSON
 
 #ifndef __GHCJS__
 import Data.Time.Clock.POSIX

@@ -5,6 +5,7 @@ module Atomic.Mediators.SessionStorage where
 import Ef.Base
 
 import Data.Txt
+import Data.JSON
 
 import Atomic.Construct (Win,getWindow)
 import Atomic.Mediator
@@ -43,9 +44,7 @@ foreign import javascript unsafe
   readSessionStorage :: IO JSA.JSArray
 #endif
 
-type SessionStorageS = (State () (Map.HashMap Txt Value)) ': Mediator_
-
-sessionStorageS :: S '[State () (Map.HashMap Txt Value)]
+sessionStorageS :: Mediator '[State () (Map.HashMap Txt Value)]
 sessionStorageS = Mediator {..}
   where
     key = "Fusion.SessionStorage"

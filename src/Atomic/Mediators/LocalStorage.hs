@@ -4,7 +4,8 @@ module Atomic.Mediators.LocalStorage where
 
 import Ef.Base
 
-import Data.Txt as AE
+import Data.Txt
+import Data.JSON
 import Data.ByteString
 
 import Atomic.Construct (Win,getWindow)
@@ -49,9 +50,7 @@ foreign import javascript unsafe
   readLocalStorage :: IO JSA.JSArray
 #endif
 
-type LocalStorageS = (State () (Map.HashMap Txt Value)) ': Mediator_
-
-localStorageS :: S '[State () (Map.HashMap Txt Value)]
+localStorageS :: Mediator '[State () (Map.HashMap Txt Value)]
 localStorageS = Mediator {..}
   where
     key = "Fusion.LocalStorage"
@@ -60,7 +59,7 @@ localStorageS = Mediator {..}
 #ifdef __GHCJS__
       jsa <- readLocalStorage
       let jsvs = JSA.toList jsa
-      kvs :: [(Txt,AE.Value)] <- fmap catMaybes $ forM jsvs $ \jsv -> do
+      kvs :: [(Txt,Value)] <- fmap catMaybes $ forM jsvs $ \jsv -> do
         let o = O.Object jsv
         k <- O.unsafeGetProp "key" o
         v <- O.unsafeGetProp "value" o
@@ -74,7 +73,7 @@ localStorageS = Mediator {..}
 
     prime = return ()
 
-getLocalItem :: (MonadIO c, AE.FromJSON a) => Txt -> c (Promise (Maybe a))
+getLocalItem :: (MonadIO c, FromJSON a) => Txt -> c (Promise (Maybe a))
 getLocalItem k = do
   with localStorageS $ do
     hm <- get
@@ -82,15 +81,15 @@ getLocalItem k = do
     case mv of
       Nothing -> return Nothing
       Just v  ->
-        case AE.fromJSON v of
-          AE.Error _ -> return Nothing
-          AE.Success a -> return $ Just a
+        case fromJSON v of
+          Error _ -> return Nothing
+          Success a -> return $ Just a
 
-putLocalItem :: (MonadIO c, AE.ToJSON a) => Txt -> a -> c (Promise Bool)
+putLocalItem :: (MonadIO c, ToJSON a) => Txt -> a -> c (Promise Bool)
 putLocalItem k v = do
-  let value = AE.toJSON v
+  let value = toJSON v
   with localStorageS $ do
-    hm :: Map.HashMap Txt AE.Value <- get
+    hm :: Map.HashMap Txt Value <- get
     put $ Map.insert k value hm
     win <- getWindow
 #ifdef __GHCJS__
@@ -112,7 +111,7 @@ foreign import javascript unsafe
 removeLocalItem :: (MonadIO c) => Txt -> c (Promise ())
 removeLocalItem k = do
   with localStorageS $ do
-    hm :: Map.HashMap Txt AE.Value <- get
+    hm :: Map.HashMap Txt Value <- get
     put $ Map.delete k hm
     win <- getWindow
 #ifdef __GHCJS__
@@ -125,7 +124,7 @@ removeLocalItem k = do
 clearLocalStorage :: (MonadIO c) => c (Promise ())
 clearLocalStorage = do
   with localStorageS $ do
-    put (Map.empty :: Map.HashMap Txt AE.Value)
+    put (Map.empty :: Map.HashMap Txt Value)
     win <- getWindow
 #ifdef __GHCJS__
     Just ls <- W.getLocalStorage win
@@ -138,14 +137,14 @@ clearLocalStorage = do
 onStorage :: ( MonadIO c
              , '[Revent] <: ms
              )
-          => (Txt.Object -> Code '[Event Txt.Object] (Code ms c) ())
-          -> Code ms c (Subscription ms c Txt.Object,Periodical ms c Txt.Object)
+          => (Obj -> Code '[Event Obj] (Code ms c) ())
+          -> Code ms c (Subscription ms c Obj,Periodical ms c Obj)
 onStorage =
   onWindowNetwork
 #ifdef __GHCJS__
-    (Ev.unsafeEventName "storage" :: EVName Win Txt.Object)
+    (Ev.unsafeEventName "storage" :: EVName Win Obj)
 #else
-    ("storage" :: EVName Win Txt.Object)
+    ("storage" :: EVName Win Obj)
 #endif
 
 localMessage :: ( MonadIO c
@@ -165,7 +164,7 @@ proxyLocalMessage :: forall traits ms c msg message messageType.
 #else
                       , '[State () WebSocket] <: ms
 #endif
-                      , IsMediator traits ms
+                      , IsMediator' traits ms
                       , Typeable messageType
                       , Message messageType
                       , M messageType ~ message
@@ -173,9 +172,9 @@ proxyLocalMessage :: forall traits ms c msg message messageType.
                       , FromBS message
                       , FromJSON message
                       )
-                  => Mediator traits ms
+                  => Mediator' traits ms
                   -> Proxy messageType
-                  -> c (Subscription ms IO Txt.Object,Periodical ms IO Txt.Object)
+                  -> c (Subscription ms IO Obj,Periodical ms IO Obj)
 proxyLocalMessage s mty_proxy = do
   let header = messageHeader mty_proxy
   Right a <- (=<<) demand $ with s $
@@ -215,7 +214,7 @@ onLocalMessage :: forall ms c msg message messageType.
                   )
                => Proxy messageType
                -> (message -> Code ms c ())
-               -> Code ms c (Subscription ms c Txt.Object,Periodical ms c Txt.Object)
+               -> Code ms c (Subscription ms c Obj,Periodical ms c Obj)
 onLocalMessage mty_proxy f = do
   slf <- asSelf
   onStorage $ \se -> do

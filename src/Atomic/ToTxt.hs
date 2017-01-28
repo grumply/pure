@@ -7,9 +7,9 @@ import Atomic.ToBS
 import Numeric
 
 import Data.Txt
+import Data.JSON
 
 #ifdef __GHCJS__
-import Data.JSString
 import Data.JSString.RealFloat
 import Data.JSString.Int
 import GHCJS.Types

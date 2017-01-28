@@ -20,9 +20,9 @@ import Data.HashMap.Strict as Map hiding ((!))
 import System.IO.Unsafe
 import Unsafe.Coerce
 
-instance (IsMediator ts ms, MonadIO c) =>
+instance (IsMediator' ts ms, MonadIO c) =>
           With
-          (Mediator ts ms)
+          (Mediator' ts ms)
           (Code ms IO)
           c
   where
@@ -61,30 +61,35 @@ instance (IsMediator ts ms, MonadIO c) =>
       deleteMediator (key s)
 
 
-type IsMediator ts ms =
-  ( Mediator_ <: ms
-  , Mediator_ <. ts
+type IsMediator' ts ms =
+  ( MediatorBase <: ms
+  , MediatorBase <. ts
   , Delta (Modules ts) (Messages ms)
   )
+type IsMediator ms = IsMediator' (Appended MediatorBase ms) (Appended MediatorBase ms)
 
-type Mediator_ =
+type MediatorBase =
   '[Revent
    ,State () Vault
    ,State () Shutdown
    ]
 
-type S ms = Mediator (Appended ms Mediator_) (Appended ms Mediator_)
+type MediatorKey' ms = Key (Code ms IO `As` IO)
+type MediatorKey ms = MediatorKey' (Appended ms MediatorBase)
+type MediatorBuilder' ts = Modules MediatorBase (Action ts IO) -> IO (Modules ts (Action ts IO))
+type MediatorBuilder ts = MediatorBuilder' (Appended ts MediatorBase)
+type MediatorPrimer' ms = Code ms IO ()
+type MediatorPrimer ms = MediatorPrimer' (Appended ms MediatorBase)
+type Mediator ms = Mediator' (Appended ms MediatorBase) (Appended ms MediatorBase)
 
-data Mediator ts ms
+data Mediator' ts ms
   = Mediator
-      { key      :: !(Key (Code ms IO `As` IO))
-      , build    :: !(    Modules Mediator_ (Action ts IO)
-                        -> IO (Modules ts (Action ts IO))
-                      )
-      , prime     :: !(Code ms IO ())
+      { key      :: !(MediatorKey' ms)
+      , build    :: !(MediatorBuilder' ts)
+      , prime    :: !(MediatorPrimer' ms)
       }
 
-instance Eq (Mediator ts ms) where
+instance Eq (Mediator' ts ms) where
   (==) (Mediator i _ _) (Mediator i' _ _) =
     let Key k1 = i
         Key k2 = i'
@@ -94,10 +99,10 @@ instance Eq (Mediator ts ms) where
 
 startMediator :: forall ms ts c.
                 ( MonadIO c
-                , IsMediator ts ms
+                , IsMediator' ts ms
                 )
               => Signaled
-              -> Mediator ts ms
+              -> Mediator' ts ms
               -> c ()
 startMediator rb Mediator {..} = do
   sdn :: Network () <- network

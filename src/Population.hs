@@ -4,8 +4,10 @@
 {-# language CPP #-}
 module Population (module Population, module Export) where
 
-import Ef.Base as Export hiding (Object,watch,transform)
+import Ef.Base as Export hiding (watch,transform,construct)
+import qualified Ef.Event
 import qualified Ef.Base
+import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
 
 import Atomic as Export hiding (accept)
 
@@ -40,12 +42,12 @@ import System.IO.Unsafe
 data PopulationNotStarted = PopulationNotStarted deriving Show
 instance Exception PopulationNotStarted
 
-instance ( IsPopulation ts ms c
-         , IsPresence uTs uMs
+instance ( IsPopulation' ts ms c
+         , IsPresence' uTs uMs
          , MonadIO c
          , MonadIO c'
          )
-  => With (Population ts ms c uTs uMs)
+  => With (Population' ts ms c uTs uMs)
           (Code ms c)
           c'
   where
@@ -67,69 +69,84 @@ instance ( IsPopulation ts ms c
           myThreadId >>= killThread
       deletePopulation (key s)
 
-type IsPopulation ts ms c =
-  ( Population_ <: ms
-  , Population_ <. ts
+type IsPopulation' ts ms c =
+  ( PopulationBase <: ms
+  , PopulationBase <. ts
   , Delta (Modules ts) (Messages ms)
   , MonadIO c
   )
+type IsPopulation ms = IsPopulation' ms ms IO
 
 newtype Connections = Connections (Network (SockAddr,Socket,Signaled))
 
-type Population_ =
+type PopulationBase =
   '[Revent
    ,State () Connections
    ,State () Vault
    ,State () Shutdown
    ]
 
-data Population ts ms c pts pms
+type PopulationKey' ms c = Key (As (Code ms c) IO)
+type PopulationKey ms = PopulationKey' (Appended ms PopulationBase) IO
+type PopulationIP = String
+type PopulationPort = Int
+#ifdef SECURE
+type PopulationSSLKey = FilePath
+type PopulationSSLCert = FilePath
+type PopulationSSLChain = Maybe FilePath
+#endif
+type PopulationBuilder' ts c = Modules PopulationBase (Action ts c) -> c (Modules ts (Action ts c))
+type PopulationBuilder ts = PopulationBuilder' (Appended ts PopulationBase) IO
+type PopulationPrimer' ms c = Code ms c ()
+type PopulationPrimer ms = PopulationPrimer' (Appended ms PopulationBase) IO
+type PopulationPresence' pts pms ms c = As (Code ms c) IO -> Presence' pts pms
+type PopulationPresence pms ms = PopulationPresence' (Appended pms PresenceBase) (Appended pms PresenceBase) (Appended ms PopulationBase) IO
+
+type Population ms pms = Population' (Appended ms PopulationBase) (Appended ms PopulationBase) IO (Appended pms PresenceBase) (Appended pms PresenceBase)
+
+data Population' ts ms c pts pms
   =
 #ifdef SECURE
     SecurePopulation
-    { key      :: !(Key (As (Code ms c) IO))
-    , ip       :: !String
-    , port     :: !Int
-    , sslKey   :: !FilePath
-    , sslCert  :: !FilePath
-    , sslChain :: !(Maybe FilePath)
-    , build    :: !(    Modules Population_ (Action ts c)
-                     -> c (Modules ts (Action ts c))
-                   )
-    , prime    :: !(Code ms c ())
-    , presence :: !(As (Code ms c) IO -> Presence pts pms)
+    { key      :: !(PopulationKey' ms c)
+    , ip       :: !(PopulationIP)
+    , port     :: !(PopulationPort)
+    , sslKey   :: !(PopulationSSLKey)
+    , sslCert  :: !(PopulationSSLCert)
+    , sslChain :: !(PopulationSSLChain)
+    , build    :: !(PopulationBuilder' ts c)
+    , prime    :: !(PopulationPrimer' ms c)
+    , presence :: !(PopulationPrsence' pts pms ms c)
     }
   |
 #endif
     Population
-    { key    :: !(Key (As (Code ms c) IO))
-    , ip     :: !String
-    , port   :: !Int
-    , build  :: !(    Modules Population_ (Action ts c)
-                    -> c (Modules ts (Action ts c))
-                 )
-    , prime  :: !(Code ms c ())
-    , presence :: !(As (Code ms c) IO -> Presence pts pms)
+    { key      :: !(PopulationKey' ms c)
+    , ip       :: !(PopulationIP)
+    , port     :: !(PopulationPort)
+    , build    :: !(PopulationBuilder' ts c)
+    , prime    :: !(PopulationPrimer' ms c)
+    , presence :: !(PopulationPresence' pts pms ms c)
     }
 
 forkRun :: ( MonadIO c
-           , IsPresence uTs uMs
-           , IsPopulation ts ms IO
+           , IsPresence' uTs uMs
+           , IsPopulation' ts ms IO
            , Functor (Messages uMs) 
            )
-        => Population ts ms IO uTs uMs
+        => Population' ts ms IO uTs uMs
         -> c ThreadId
 forkRun = liftIO . forkIO . run
 
 {-# INLINE run #-}
 run :: forall ts ms c uTs uMs.
-       ( IsPresence uTs uMs
-       , IsPopulation ts ms c
+       ( IsPresence' uTs uMs
+       , IsPopulation' ts ms c
        , Functor (Messages uMs) -- why? ghc-8.0.1 bug; if I remove State () Connection, it works fine;
                                 -- something about the number of traits/messages since IsPresence contains
                                 -- `Presence_ m <: uMs` which terminates in Functor (Messages uMs)
        )
-    => Population ts ms c uTs uMs
+    => Population' ts ms c uTs uMs
     -> c ()
 #ifdef SECURE
 run SecurePopulation {..} = void $ do
@@ -145,7 +162,7 @@ run SecurePopulation {..} = void $ do
 
   connSignal
     :: Signal ms c (State () WebSocket (Action uTs IO),SockAddr,Signaled)
-    <- construct
+    <- Ef.Event.construct
 
   acSignal
     :: Network (Network uE)
@@ -200,7 +217,7 @@ run Population {..} = void $ do
 
   connSignal
     :: Signal ms c (State () WebSocket (Action uTs IO),SockAddr,Signaled)
-    <- construct
+    <- Ef.Event.construct
 
   acSignal
     :: Network (Network uE)
@@ -240,12 +257,12 @@ run Population {..} = void $ do
           go
 
 eventloop :: forall ts ms c uTs uMs.
-             ( IsPopulation ts ms c
-             , IsPresence uTs uMs
+             ( IsPopulation' ts ms c
+             , IsPresence' uTs uMs
              , Functor (Messages uMs)
              )
           => Code ms c ()
-          -> Presence uTs uMs
+          -> Presence' uTs uMs
           -> Signal ms c (State () WebSocket (Action uTs IO),SockAddr,Signaled)
           -> Signaled
           -> Ef.Base.Object ts c

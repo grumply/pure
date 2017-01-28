@@ -12,7 +12,8 @@ module Atomic.WebSocket
 
 import Ef.Base
 
-import Data.Txt as AE
+import Data.Txt
+import Data.JSON as AE
 import Data.Micros
 import Atomic.API
 import Atomic.Dispatch
@@ -104,7 +105,7 @@ data WSCloseReason
 data WSStatus
   = WSUnopened
   | WSClosed WSCloseReason
-  | WSOpen S.SockAddr S.Socket
+  | WSOpened
   | WSConnecting
   deriving (Eq,Show)
 
@@ -437,7 +438,7 @@ serverWS q sock tp = liftIO $ do
     { wsSocket = Just (sa,sock,c,wsStream)
     , wsReceiveThread = Just rt
     , wsMessageHandlers = unsafeCoerce mhs
-    , wsStatus = WSOpen sa sock
+    , wsStatus = WSOpened
     , wsStatusNetwork = wssn
     , wsThroughputLimits = (tp,tpl)
     , wsBytesReadRef = brr
@@ -459,7 +460,7 @@ initializeClientWS host port path = do
   wsstatus <- getWSStatus
   case wsstatus of
     WSConnecting -> return ()
-    WSOpen _ _   -> return ()
+    WSOpened     -> return ()
     _            -> do
       setWSStatus WSConnecting
       connectWithExponentialBackoff 0
@@ -504,7 +505,7 @@ initializeClientWS host port path = do
                 { wsSocket = Just (sa,sock,c,wsStream)
                 , wsReceiveThread = Just rt
                 , .. }
-          setWSStatus (WSOpen sa sock)
+          setWSStatus WSOpened
 
 #ifdef SECURE
 serverWSS :: forall ts ms c c'.
@@ -544,7 +545,7 @@ serverWSS q sock ssl tp = liftIO $ do
     { wsSocket = Just (sa,sock,c,wsStream)
     , wsReceiveThread = Just rt
     , wsMessageHandlers = unsafeCoerce mhs
-    , wsStatus          = WSOpen sa sock
+    , wsStatus          = WSOpened
     , wsStatusNetwork = wssn
     , wsBytesReadRef = brr
     , wsThroughputLimits = (tp,tpl)
@@ -563,7 +564,7 @@ initializeClientWSS host port path = do
   wsstatus <- getWSStatus
   case wsstatus of
     WSConnecting -> return ()
-    WSOpen _ _   -> return ()
+    WSOpened     -> return ()
     _            -> do
       setWSStatus WSConnecting
       connectWithExponentialBackoff 0
@@ -609,7 +610,7 @@ initializeClientWSS host port path = do
                 { wsSocket = Just (sa,sock,c,wsStream)
                 , wsReceiveThread = Just rt
                 , .. }
-          setWSStatus (WSOpen sa sock)
+          setWSStatus WSOpened
 #endif
 
 wsClose :: forall ms c.
@@ -1514,7 +1515,8 @@ module Atomic.WebSocket where
 
 import Ef.Base
 
-import Data.Txt as AE
+import Data.Txt
+import Data.JSON as AE
 import Atomic.API
 import Atomic.Dispatch
 import Atomic.Endpoint
@@ -1548,14 +1550,20 @@ import qualified JavaScript.Web.MessageEvent as WME
 import qualified Data.HashMap.Strict as Map
 import Control.Monad
 import Data.Data
+import Data.Int
 import Data.IORef
 import Data.Maybe
 import Data.Monoid
+import GHC.Generics
 import Unsafe.Coerce
 
 import Text.Read hiding (lift,get)
 
 import GHC.Prim
+
+import Data.ByteString.Lazy as BSL hiding (putStrLn)
+
+type LazyByteString = BSL.ByteString
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
@@ -1565,7 +1573,20 @@ foreign import javascript unsafe
   "$r = JSON.stringify($1);" jsonEncode :: T.JSVal -> IO Txt
 #endif
 
-data WebSocketState = WSUninitialized | WSOpened | WSError | WSClosed deriving Show
+data WSCloseReason
+  = MessageLengthLimitExceeded Int64
+  | MessageThroughputLimitExceeded
+     { msgsPerSecondSeen :: Int
+     , msgsPerSecondAllowed :: Int
+     , msgsPerMinuteSeen :: Int
+     , msgsPerMinuteAllowed :: Int
+     }
+  | BadMessageReceived Txt
+  | ClientClosedConnection
+  | ServerClosedConnection
+  deriving (Show,Eq,Generic,ToJSON,FromJSON)
+
+data WSStatus = WSUninitialized | WSOpened | WSClosed WSCloseReason deriving (Eq,Show)
 
 data WebSocket k
   = WebSocket
@@ -1575,11 +1596,11 @@ data WebSocket k
     , webSocketReconnecting       :: (Bool,k)
     , webSocketReconnectingSetter :: Bool -> k
 
-    , webSocketState       :: (WebSocketState,k)
-    , webSocketStateSetter :: WebSocketState -> k
+    , webSocketState       :: (WSStatus,k)
+    , webSocketStateSetter :: WSStatus -> k
 
-    , webSocketStates         :: (Network WebSocketState,k)
-    , webSocketStatesSetter   :: Network WebSocketState -> k
+    , webSocketStates         :: (Network WSStatus,k)
+    , webSocketStatesSetter   :: Network WSStatus -> k
 
     , webSocketMsgHandlers :: (IORef (Map.HashMap Txt (Network Dispatch)),k)
     , webSocketMsgHandlersSetter :: IORef (Map.HashMap Txt (Network Dispatch)) -> k
@@ -1595,11 +1616,11 @@ data WebSocket k
   | GetWebSocketReconnecting (Bool -> k)
   | SetWebSocketReconnecting Bool k
 
-  | GetWebSocketState (WebSocketState -> k)
-  | SetWebSocketState WebSocketState k
+  | GetWSStatus (WSStatus -> k)
+  | SetWSStatus WSStatus k
 
-  | GetWebSocketStates (Network WebSocketState -> k)
-  | SetWebSocketStates (Network WebSocketState) k
+  | GetWSStatuss (Network WSStatus -> k)
+  | SetWSStatuss (Network WSStatus) k
 
   | GetWebSocketMsgHandlers (IORef (Map.HashMap Txt (Network Dispatch)) -> k)
   | SetWebSocketMsgHandlers (IORef (Map.HashMap Txt (Network Dispatch))) k
@@ -1614,10 +1635,10 @@ instance Delta WebSocket WebSocket where
   delta eval WebSocket{..} (SetWebSocket ws k)          = delta eval webSocketSetter (ws,k)
   delta eval WebSocket{..} (GetWebSocketReconnecting tk)= delta eval webSocketReconnecting tk
   delta eval WebSocket{..} (SetWebSocketReconnecting t k) = delta eval webSocketReconnectingSetter (t,k)
-  delta eval WebSocket{..} (GetWebSocketState wssk)     = delta eval webSocketState wssk
-  delta eval WebSocket{..} (SetWebSocketState wss k)    = delta eval webSocketStateSetter (wss,k)
-  delta eval WebSocket{..} (GetWebSocketStates wssk)    = delta eval webSocketStates wssk
-  delta eval WebSocket{..} (SetWebSocketStates wss k)   = delta eval webSocketStatesSetter (wss,k)
+  delta eval WebSocket{..} (GetWSStatus wssk)     = delta eval webSocketState wssk
+  delta eval WebSocket{..} (SetWSStatus wss k)    = delta eval webSocketStateSetter (wss,k)
+  delta eval WebSocket{..} (GetWSStatuss wssk)    = delta eval webSocketStates wssk
+  delta eval WebSocket{..} (SetWSStatuss wss k)   = delta eval webSocketStatesSetter (wss,k)
   delta eval WebSocket{..} (GetWebSocketMsgHandlers wsmhk) = delta eval webSocketMsgHandlers wsmhk
   delta eval WebSocket{..} (SetWebSocketMsgHandlers wsmh k) = delta eval webSocketMsgHandlersSetter (wsmh,k)
   delta eval WebSocket{..} (InitializeWebSocket k)      = eval webSocketInitializer k
@@ -1641,7 +1662,7 @@ data RequestHandler ms c rqTy
          , ToJSON rsp
          )
       => Proxy rqTy
-      -> (Code ms c () -> Either Dispatch (rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
+      -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
       -> RequestHandler ms c rqTy
 
 responds :: ( MonadIO c
@@ -1659,7 +1680,7 @@ responds :: ( MonadIO c
             , ToJSON rsp
             )
           => Proxy rqTy
-          -> (Code ms c () -> Either Dispatch (rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
+          -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
           -> RequestHandler ms c rqTy
 responds = RequestHandler
 
@@ -1726,7 +1747,7 @@ instance ( GetHandler RequestHandler request rqs'
       RequestHandler _ f -> do
         let p = Proxy :: Proxy request
             mhs' = deleteHandler p mhs :: ReqHandlers ms c rqs''
-        amh <- respond p ((unsafeCoerce f) :: Code ms c () -> Either Dispatch (rsp -> Code ms c (),req) -> Code '[Event Dispatch] (Code ms c) ())
+        amh <- respond p ((unsafeCoerce f) :: Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),req) -> Code '[Event Dispatch] (Code ms c) ())
         ams <- enactEndpoints ms mhs'
         return $ ActiveEndpointsCons pm amh ams
 
@@ -1842,7 +1863,7 @@ ws_ hn p secure = WebSocket
         let Module ws _ = o
             (_,wsssGetter) = webSocketStates ws
             (_,wsmhsGetter) = webSocketMsgHandlers ws
-        in do statesNetwork :: Network WebSocketState <- network
+        in do statesNetwork :: Network WSStatus <- network
               msgHandlers <- liftIO $ newIORef (Map.empty :: Map.HashMap Txt (Network Dispatch))
               return $ Module ws
                 { webSocketStates = (statesNetwork,wsssGetter)
@@ -1866,8 +1887,8 @@ ws_ hn p secure = WebSocket
                     Nothing -> return Nothing
                     Just sock -> do
                       Ev.on sock WS.open $ lift $ syndicate statesNetwork WSOpened
-                      Ev.on sock WS.closeEvent $ lift $ syndicate statesNetwork WSClosed
-                      Ev.on sock WS.error $ lift $ syndicate statesNetwork WSError
+                      Ev.on sock WS.closeEvent $ lift $ syndicate statesNetwork $ WSClosed ServerClosedConnection
+                      Ev.on sock WS.error $ lift $ syndicate statesNetwork $ WSClosed ServerClosedConnection
                       Ev.on sock WS.message $ do
                         ev <- Ev.event
                         -- printAny ev
@@ -1968,13 +1989,13 @@ setWS mws = Send (SetWebSocket mws (Return ()))
 
 getWSState :: forall ms c.
               (Monad c, '[WebSocket] <: ms)
-           => Code ms c WebSocketState
-getWSState = Send (GetWebSocketState Return)
+           => Code ms c WSStatus
+getWSState = Send (GetWSStatus Return)
 
 setWSState :: forall ms c.
               (Monad c, '[WebSocket] <: ms)
-           => WebSocketState -> Code ms c ()
-setWSState wss = Send (SetWebSocketState wss (Return ()))
+           => WSStatus -> Code ms c ()
+setWSState wss = Send (SetWSStatus wss (Return ()))
 
 getWSMsgHandlers :: forall ms c.
                     (Monad c, '[WebSocket] <: ms)
@@ -1994,17 +2015,17 @@ wsSetup = Send (InitializeWebSocket (Return ()))
 
 wsInitialize :: forall ms c.
                 (MonadIO c, '[Revent,WebSocket] <: ms)
-             => Code ms c WebSocketState
+             => Code ms c WSStatus
 wsInitialize = do
   wsSetup
   buf <- getReventBuffer
-  wssn <- Send (GetWebSocketStates Return)
-  p :: Periodical ms c WebSocketState <- periodical
+  wssn <- Send (GetWSStatuss Return)
+  p :: Periodical ms c WSStatus <- periodical
   joinNetwork wssn p buf
   subscribe p $ \wss -> lift $ do
     setWSState wss
     case wss of
-      WSClosed -> void $ do
+      WSClosed _ -> void $ do
         setWS Nothing
         reconnectOnInterval 500000
       _ -> return ()
@@ -2012,7 +2033,7 @@ wsInitialize = do
 
 wsConnect :: forall ms c.
              (MonadIO c, '[Revent,WebSocket] <: ms)
-          => Code ms c WebSocketState
+          => Code ms c WSStatus
 wsConnect = do
   sig <- getReventBuffer
   Send (ConnectWebSocket sig (Return ()))
@@ -2027,9 +2048,10 @@ wsDisconnect = do
     Just ws -> liftIO (WS.close ws 1000 ("wsDisconnect called." :: String))
     Nothing -> return ()
 
+
 send' :: forall ms c.
         (MonadIO c, '[Revent,WebSocket] <: ms)
-     => Dispatch -> Code ms c (Either WSException SendStatus)
+     => Either LazyByteString Dispatch -> Code ms c (Either WSException SendStatus)
 send' m = go True
   where
     go b = do
@@ -2041,7 +2063,7 @@ send' m = go True
             -- If WSOpened, getWS => (Just ws)
             Nothing -> return (Left InvalidSocketState)
             Just ws -> do
-              let bs = toBS m
+              let bs = either id toBS m
                   (sbi,_,_) = GB.fromByteString $ strictify bs
                   sabi = GB.getArrayBuffer sbi
 #ifdef DEBUGWS
@@ -2052,14 +2074,14 @@ send' m = go True
         _ -> do
           -- buffer the message for when the socket opens back up
           -- note that this could lead to excessive memory usage!
-          onState $ \wss ->
+          onWSStatus $ \wss ->
             case wss of
               WSOpened -> do
                 mws <- lift getWS
                 case mws of
                   Nothing -> return () -- huh?
                   Just ws -> do
-                    let bs = toBS m
+                    let bs = either id toBS m
                         (sbi,_,_) = GB.fromByteString $ strictify bs
                         sabi = GB.getArrayBuffer sbi
 #ifdef DEBUGWS
@@ -2077,16 +2099,16 @@ data SendStatus = BufferedSend | Sent
 
 trySend' :: forall ms c.
            (MonadIO c, '[WebSocket] <: ms)
-        => Dispatch -> Code ms c (Either WebSocketState ())
+        => Either LazyByteString Dispatch -> Code ms c (Either WSStatus ())
 trySend' m = do
   wss <- getWSState
   case wss of
     WSOpened -> do
       mws <- getWS
       case mws of
-        Nothing -> return (Left WSClosed) -- not correct....
+        Nothing -> return (Left WSUninitialized) -- not correct....
         Just ws -> do
-          let (sbi,_,_) = GB.fromByteString $ strictify $ toBS m
+          let (sbi,_,_) = GB.fromByteString $ strictify $ either id toBS m
               sabi = GB.getArrayBuffer sbi
 #ifdef DEBUGWS
           liftIO $ putStrLn $ "trySend' sending: " ++ show (toTxt m)
@@ -2106,25 +2128,23 @@ unsubscribe :: forall ms c.
             => Behavior ms c WME.MessageEvent -> Code ms c ()
 unsubscribe = stop
 
-onState :: forall ms c.
+onWSStatus :: forall ms c.
            (MonadIO c, '[Revent,WebSocket] <: ms)
-        => (WebSocketState -> Code '[Event WebSocketState] (Code ms c) ())
-        -> Code ms c ()
-onState bhvr = do
+        => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
+        -> Code ms c (Subscription ms c WSStatus,Periodical ms c WSStatus)
+onWSStatus bhvr = do
   buf <- getReventBuffer
-  p :: Periodical ms c WebSocketState <- periodical
-  s <- subscribe p bhvr
-  wsn <- Send (GetWebSocketStates Return)
+  p :: Periodical ms c WSStatus <- periodical
+  Just s <- subscribe p bhvr
+  wsn <- Send (GetWSStatuss Return)
   joinNetwork wsn p buf
+  return (s,p)
 
-onClosed :: forall ms c.
+onWSClose :: forall ms c.
             (MonadIO c, '[Revent,WebSocket] <: ms)
-         => (Code '[Event WebSocketState] (Code ms c) ()) -> Code ms c ()
-onClosed bhvr =
-  onState $ \wss ->
-    case wss of
-      WSClosed -> bhvr
-      _ -> return ()
+        => (WSCloseReason -> Code '[Event WSStatus] (Code ms c) ())
+        -> Code ms c (Subscription ms c WSStatus,Periodical ms c WSStatus)
+onWSClose f = onWSStatus (\wss -> case wss of { WSClosed wscr -> f wscr; _ -> return () } )
 
 foreign import javascript unsafe
   "Math.floor((Math.random() * $1) + 1)" random :: Int -> Int
@@ -2162,7 +2182,7 @@ send :: ( ToJSON a
      -> Txt
      -> a
      -> Code ms c (Promise (Either WSException SendStatus))
-send s h a = with s $ send' $ Dispatch h $ toJSON a
+send s h a = with s $ send' $ Right $ Dispatch h $ toJSON a
 
 trySend :: ( ToJSON a
            , MonadIO c
@@ -2174,8 +2194,8 @@ trySend :: ( ToJSON a
         => w
         -> Txt
         -> a
-        -> Code ms c (Promise (Either WebSocketState ()))
-trySend s h a = with s $ trySend' $ Dispatch h $ toJSON a
+        -> Code ms c (Promise (Either WSStatus ()))
+trySend s h a = with s $ trySend' $ Right $ Dispatch h $ toJSON a
 
 
 -- use Endpoint
@@ -2248,7 +2268,7 @@ request rqty_proxy req f = do
             Just n -> (mhs,n)
   joinNetwork n p buf
   liftIO $ writeIORef s_ (sb,n)
-  send' (Dispatch (requestHeader rqty_proxy) (toJSON req))
+  send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
   return $ Endpoint header sb p
 
 apiRequest :: ( MonadIO c
@@ -2297,7 +2317,7 @@ apiRequest _ rqty_proxy req f = do
             Just n -> (mhs,n)
   joinNetwork n p buf
   liftIO $ writeIORef s_ (sb,n)
-  send' (Dispatch (requestHeader rqty_proxy) (toJSON req))
+  send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
   return $ Endpoint header sb p
 
 requestWith :: ( MonadIO c
@@ -2353,7 +2373,7 @@ requestWith s rqty_proxy req f = do
               Just n -> (mhs,n)
     joinNetwork n p buf
     liftIO $ writeIORef s_ (sb,n)
-    send' (Dispatch (requestHeader rqty_proxy) (toJSON req))
+    send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
   return $ Endpoint header sb p
 
 apiRequestWith :: ( MonadIO c
@@ -2412,7 +2432,7 @@ apiRequestWith _ s rqty_proxy req f = do
               Just n -> (mhs,n)
     joinNetwork n p buf
     liftIO $ writeIORef s_ (sb,n)
-    send' (Dispatch (requestHeader rqty_proxy) (toJSON req))
+    send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
   return $ Endpoint header sb p
 
 respondWith :: ( MonadIO c
@@ -2437,7 +2457,7 @@ respondWith :: ( MonadIO c
                )
             => w
             -> Proxy rqTy
-            -> (Code ms c () -> Either Dispatch (rsp -> Code ms c (Promise ()),request) -> Code '[Event Dispatch] (Code ms c) ())
+            -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (Promise ()),request) -> Code '[Event Dispatch] (Code ms c) ())
             -> Code ms c (Endpoint ms c)
 respondWith s rqty_proxy rr = do
   buf <- getReventBuffer
@@ -2457,7 +2477,7 @@ respondWith s rqty_proxy rr = do
                   liftIO $ atomicModifyIORef' mhs_ $ \old_mhs ->
                     let !new_mhs = Map.delete header old_mhs
                     in (new_mhs,())
-        in rr done (maybe (Left m) (\rq -> Right (with s . void . send' . Dispatch (responseHeader rqty_proxy rq) . toJSON,rq)) (decodeDispatch m))
+        in rr done (maybe (Left m) (\rq -> Right (with s . void . send' . either Left (Right . Dispatch (responseHeader rqty_proxy rq) . toJSON),rq)) (decodeDispatch m))
   Just sb <- subscribe p bhvr
   with s $ do
     mhs_ <- getWSMsgHandlers
@@ -2485,7 +2505,7 @@ respond :: ( MonadIO c
            , ToJSON rsp
            )
         => Proxy rqTy
-        -> (Code ms c () -> Either Dispatch (rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
+        -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
         -> Code ms c (Endpoint ms c)
 respond rqty_proxy rr = do
   buf <- getReventBuffer
@@ -2504,7 +2524,7 @@ respond rqty_proxy rr = do
                 liftIO $ atomicModifyIORef' mhs_ $ \old_mhs ->
                   let !new_mhs = Map.delete header old_mhs
                   in (new_mhs,())
-        in rr done (maybe (Left m) (\rq -> Right (void . send' . Dispatch (responseHeader rqty_proxy rq) . toJSON,rq)) (decodeDispatch m))
+        in rr done (maybe (Left m) (\rq -> Right (void . send' . either Left (Right . Dispatch (responseHeader rqty_proxy rq) . toJSON),rq)) (decodeDispatch m))
   Just sb <- subscribe p bhvr
   mhs_ <- getWSMsgHandlers
   n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
@@ -2558,7 +2578,7 @@ apiMessage :: ( MonadIO c
             -> Proxy mTy
             -> msg
             -> Code ms c (Either WSException SendStatus)
-apiMessage _ mty_proxy m = send' (Dispatch (messageHeader mty_proxy) (toJSON m))
+apiMessage _ mty_proxy m = send' $ Right (Dispatch (messageHeader mty_proxy) (toJSON m))
 
 message :: ( MonadIO c
            , '[Revent,WebSocket] <: ms
@@ -2569,7 +2589,7 @@ message :: ( MonadIO c
         => Proxy mTy
         -> msg
         -> Code ms c (Either WSException SendStatus)
-message mty_proxy m = send' (Dispatch (messageHeader mty_proxy) (toJSON m))
+message mty_proxy m = send' $ Right (Dispatch (messageHeader mty_proxy) (toJSON m))
 
 onMessageWith :: ( MonadIO c
                  , MonadIO c'

@@ -4,13 +4,14 @@ module Atomic
   , module Export
   ) where
 
-import Ef.Base as Export hiding (Object,watch,transform)
+import Ef.Base as Export hiding (Object,watch,transform,construct)
 
 import Data.Hashable as Export
 import Data.Typeable as Export
 import GHC.Generics as Export (Generic)
 
-import Data.Txt          as Export hiding (defaultOptions,Options,(!))
+import Data.Txt          as Export (Txt(..))
+import Data.JSON         as Export hiding (defaultOptions,Options,(!))
 import Data.Millis       as Export
 import Data.Micros       as Export
 import Atomic.API        as Export
@@ -56,12 +57,18 @@ import Atomic.With       as Export
 
 import Data.ByteString as Export (ByteString)
 
+import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
+import qualified Prelude
+import Data.Monoid as Export
+import Data.Bifunctor as Export
+
 import Data.HashMap.Strict as Map
 
 import qualified Data.Text.Lazy as TL (Text)
 import qualified Data.ByteString.Lazy as BSL (ByteString)
 
 import Data.Txt as Txt
+import Data.JSON as JSON
 
 type LazyByteString = BSL.ByteString
 type LazyText = TL.Text
@@ -75,16 +82,13 @@ instance FromMicros Millis where
   -- truncate rather than round
   fromMicros mt = Millis $ (getMicros mt) `Prelude.div` 1000
 
-#ifndef __GHCJS__
 instance {-# OVERLAPS #-} (ToJSON v,ToTxt k) => ToJSON (HashMap k v) where
-  toJSON = Txt.Object . Map.fromList . Prelude.map (\(k,v) -> (toTxt k,toJSON v)) . Map.toList
   {-# INLINE toJSON #-}
-#else
--- should be a faster encoding to Value that can be more quickly encoded to Txt for transfer
-instance {-# OVERLAPS #-} (ToJSON v,ToTxt k) => ToJSON (HashMap k v) where
-  toJSON = objectValue . Txt.object . Prelude.map (\(k,v) -> (toTxt k,toJSON v)) . Map.toList
-  {-# INLINE toJSON #-}
+  toJSON =
+#ifdef __GHCJS__
+    objectValue .
 #endif
+      JSON.object . Prelude.map (\(k,v) -> (toTxt k,toJSON v)) . Map.toList
 
 instance {-# OVERLAPS #-} (FromJSON v,Hashable k,Eq k,FromTxt k) => FromJSON (HashMap k v) where
   parseJSON x = do

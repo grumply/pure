@@ -3,7 +3,7 @@ module Atomic.Request where
 
 import Atomic.TypeRep
 
-import Data.Txt
+import Data.Txt hiding (index)
 import Data.Monoid
 import Data.Typeable
 

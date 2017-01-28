@@ -65,7 +65,7 @@ renderStyles b = go
           ((if b then "\t\t" else "\t") <> k <> ": " <> v)
           : go r
 
-styled :: Styles -> Attribute msg
+styled :: Styles -> Feature ms
 styled ss = Style $! go ss
   where
     go (Return _) = []
@@ -83,6 +83,51 @@ type CSS = Code '[CSS_] Identity ()
 
 select :: Txt -> Styles -> CSS
 select sel ss = Send (CSS_ sel ss (Return ()))
+
+selects :: [Txt] -> Styles -> CSS
+selects sels ss = sequence_ $ Prelude.map (flip select ss) sels 
+
+modifiers :: Txt -> CSS -> CSS
+modifiers sel = go
+  where
+    go (Return r) = Return r
+    go (Lift s) = go (runIdentity s)
+    go (Do msg) =
+      case prj msg of
+        Just (CSS_ suf ss rest) ->
+          if Txt.null suf then
+            Send (CSS_ sel ss (go rest))
+          else
+            Send (CSS_ (sel <> "__" <> suf) ss (go rest))
+        Just (CSS3_ at rule mcss rest) -> Send (CSS3_ at rule (fmap go mcss) (go rest))
+
+descendents :: Txt -> CSS -> CSS
+descendents sel = go
+  where
+    go (Return r) = Return r
+    go (Lift s) = go (runIdentity s)
+    go (Do msg) =
+      case prj msg of
+        Just (CSS_ suf ss rest) ->
+          if Txt.null suf then
+            Send (CSS_ sel ss (go rest))
+          else
+            Send (CSS_ (sel <> "_" <> suf) ss (go rest))
+        Just (CSS3_ at rule mcss rest) -> Send (CSS3_ at rule (fmap go mcss) (go rest))
+
+states :: Txt -> CSS -> CSS
+states sel = go
+  where
+    go (Return r) = Return r
+    go (Lift s) = go (runIdentity s)
+    go (Do msg) =
+      case prj msg of
+        Just (CSS_ suf ss rest) ->
+          if Txt.null suf then
+            Send (CSS_ sel ss (go rest))
+          else
+            Send (CSS_ (sel <> ".is-" <> suf) ss (go rest))
+        Just (CSS3_ at rule mcss rest) -> Send (CSS3_ at rule (fmap go mcss) (go rest))
 
 atCharset :: Txt -> CSS
 atCharset cs = Send (CSS3_ "@charset " cs Nothing (Return ()))

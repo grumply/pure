@@ -8,6 +8,7 @@ import Atomic.Request
 
 import Data.Proxy
 import Data.Txt
+import Data.JSON
 
 data Endpoint ms c
   = Endpoint

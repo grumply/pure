@@ -2,6 +2,7 @@
 module Atomic.FromBS where
 
 import Data.Txt
+import Data.JSON
 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Text as T

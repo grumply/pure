@@ -5,26 +5,32 @@ import Ef.Base
 import Atomic.Revent
 import Atomic.With
 
-data Observable observable = Observable
+type Observable o = State () (ObservableState o)
+
+data ObservableState observable = Observable
   { observableState :: observable
   , observableUpdates :: Network observable
   }
 
-updateO :: (MonadIO c, '[State () (Observable m)] <: ms) => (m -> m) -> Code ms c ()
+observable o = do
+  onw <- network
+  return $ state (Observable o onw)
+
+updateO :: (MonadIO c, '[Observable m] <: ms) => (m -> m) -> Code ms c ()
 updateO f = do
   m <- get
   let nm = f (observableState m)
   put $ m { observableState = nm }
   syndicate (observableUpdates m) nm
 
-setO :: (MonadIO c, '[State () (Observable m)] <: ms) => m -> Code ms c ()
+setO :: (MonadIO c, '[Observable m] <: ms) => m -> Code ms c ()
 setO nm = do
   m <- get
   put $ m { observableState = nm }
   syndicate (observableUpdates m) nm
 
-observeO :: (Monad c, '[State () (Observable m)] <: ms) => Code ms c m
-observeO = do
+getO :: (Monad c, '[Observable m] <: ms) => Code ms c m
+getO = do
   m <- get
   return (observableState m)
 
@@ -32,7 +38,7 @@ watch :: ( MonadIO c
          , MonadIO c'
          , With w (Code ms c) (Code ms' c')
          , '[Revent] <: ms'
-         , '[State () (Observable m)] <: ms
+         , '[Observable m] <: ms
          )
       => w
       -> (m -> Code '[Event m] (Code ms' c') ())

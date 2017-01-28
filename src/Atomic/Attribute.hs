@@ -4,7 +4,8 @@ module Atomic.Attribute where
 
 import Ef.Base
 
-import Data.Txt hiding (Options)
+import Data.Txt
+import Data.JSON hiding (Options)
 
 import Atomic.FromTxt
 import Atomic.ToTxt
@@ -52,7 +53,7 @@ data Feature e
   | On'
     { _event :: Txt
     , _eventOptions :: Options
-    , _eventECreate :: Data.Txt.Object -> IO (Maybe e)
+    , _eventECreate :: Obj -> IO (Maybe e)
     , _eventListener :: Maybe (IO ())
     }
   | Link
@@ -60,8 +61,6 @@ data Feature e
     , _eventListener :: Maybe (IO ())
     }
   deriving (Functor)
-
-type Attribute ms = Feature (Code ms IO ())
 
 instance Cond (Feature e) where
   nil = NullFeature
@@ -93,7 +92,7 @@ boolAttribute nm = Attribute nm . Left
 boolattr :: Txt -> Bool -> Feature e
 boolattr = boolAttribute
 
-on' :: Txt -> Options -> (Data.Txt.Object -> IO (Maybe e)) -> Feature e
+on' :: Txt -> Options -> (Obj -> IO (Maybe e)) -> Feature e
 on' ev os f = On' ev os f Nothing
 
 on :: Txt -> e -> Feature e

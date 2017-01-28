@@ -28,9 +28,7 @@ data FrameState = FrameState
   , isRunning :: Bool
   }
 
-type FrameS = (State () FrameState) ': Mediator_
-
-frameS :: S '[State () FrameState]
+frameS :: Mediator '[State () FrameState]
 frameS = Mediator {..}
   where
     key = "Fusion.frameS"
@@ -122,7 +120,7 @@ rAF win callback = do
   return 0
 #endif
 
-createFrameLoop :: Code FrameS IO ()
+createFrameLoop :: ('[State () FrameState,Revent] <: ms) => Code ms IO ()
 createFrameLoop = do
   FrameState {..} <- get
   rb <- getReventBuffer

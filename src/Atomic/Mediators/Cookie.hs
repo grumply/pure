@@ -39,9 +39,7 @@ setCookie_internal d mc =
   return ()
 #endif
 
-type CookieS = (State () (Map.HashMap Txt [Txt])) ': Mediator_
-
-cookieS :: S '[State () (Map.HashMap Txt [Txt])]
+cookieS :: Mediator '[State () (Map.HashMap Txt [Txt])]
 cookieS = Mediator {..}
   where
 
@@ -53,10 +51,10 @@ cookieS = Mediator {..}
 
     prime = return ()
 
-getCookies :: Code CookieS IO (Map.HashMap Txt [Txt])
+getCookies :: ('[State () (Map.HashMap Txt [Txt])] <: ms) => Code ms IO (Map.HashMap Txt [Txt])
 getCookies = get
 
-setCookies :: Map.HashMap Txt [Txt] -> Code CookieS IO ()
+setCookies :: ('[State () (Map.HashMap Txt [Txt])] <: ms) => Map.HashMap Txt [Txt] -> Code ms IO ()
 setCookies = put
 
 addCookie :: (Functor (Messages ms), MonadIO c)

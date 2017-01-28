@@ -2,9 +2,7 @@
 module Atomic.ToBS where
 
 import Data.Txt
-#ifdef __GHCJS__
-import Data.JSString
-#endif
+import Data.JSON
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC
 

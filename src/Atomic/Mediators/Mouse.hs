@@ -5,6 +5,7 @@ module Atomic.Mediators.Mouse where
 import Ef.Base hiding (Object)
 
 import Data.Txt
+import Data.JSON
 
 import Atomic.Construct (Win,getWindow)
 import Atomic.Revent
@@ -37,9 +38,7 @@ data MouseState = MouseState
   , mouseYN        :: Network Int
   }
 
-type MouseS = (State () MouseState) ': Mediator_
-
-mouseMove :: EVName Win Object
+mouseMove :: EVName Win Obj
 mouseMove =
 #ifdef __GHCJS__
    ETC.unsafeEventName "mousemove"
@@ -47,7 +46,7 @@ mouseMove =
    "mousemove"
 #endif
 
-mouseS :: S '[State () MouseState]
+mouseS :: Mediator '[State () MouseState]
 mouseS = Mediator {..}
   where
     key = "Fusion.mouseS"

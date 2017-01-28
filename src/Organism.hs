@@ -4,12 +4,15 @@
 {-# language CPP #-}
 module Organism (module Organism,module Export) where
 
-import Ef.Base as Export hiding (Object,transform,watch)
-import qualified Ef.Base (Object(..))
+import Ef.Base as Export hiding (transform,watch,construct)
+import qualified Ef.Base
 import Ef.Reflect as Export
+import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
 
 import Data.Millis
+import Data.Txt (Txt)
 import qualified Data.Txt as Txt
+import qualified Data.JSON as JSON
 
 #ifdef __GHCJS__
 import qualified GHCJS.DOM.Window as W
@@ -26,12 +29,6 @@ import qualified GHCJS.DOM.Types as T
 import qualified GHCJS.Types as T
 import GHCJS.DOM.RequestAnimationFrameCallback (newRequestAnimationFrameCallbackAsync)
 import GHCJS.DOM.Window (requestAnimationFrame)
-#endif
-
-#ifdef __GHCJS__
-import Data.JSString as Txt hiding (replace)
-#else
-import Data.Text as Txt hiding (replace)
 #endif
 
 import Control.Concurrent
@@ -73,33 +70,45 @@ __startTime__ = unsafePerformIO __timeInMicros
 hashWithStartTime :: Hashable a => a -> Int
 hashWithStartTime x = hash (__startTime__,x)
 
-type IsOrganism ts ms c r =
-  ( Organism_ r <: ms
-  , Organism_ r <. ts
+type IsOrganism' ts ms c r =
+  ( OrganismBase r <: ms
+  , OrganismBase r <. ts
   , Delta (Modules ts) (Messages ms)
   , Eq r
   , MonadIO c
   )
+type IsOrganism ms r = IsOrganism' ms ms IO r
 
-type Organism_ r =
+type OrganismBase r =
   '[ State () (Router r)
    , Revent
    , State () Shutdown
    ]
 
-data Organism ts ms c r
+type OrganismKey' ms c = Key (As (Code ms c) c)
+type OrganismKey ms r = OrganismKey' (Appended ms (OrganismBase r)) IO
+type OrganismBuilder' ts c r = Modules (OrganismBase r) (Action ts c) -> c (Modules ts (Action ts c))
+type OrganismBuilder ts r = OrganismBuilder' (Appended ts (OrganismBase r)) IO r
+type OrganismPrimer' ms c = Code ms c ()
+type OrganismPrimer ms r = OrganismPrimer' (Appended ms (OrganismBase r)) IO
+type OrganismRouter' ms c r = Code '[Route] (Code ms c) r
+type OrganismRouter ms r = OrganismRouter' (Appended ms (OrganismBase r)) IO r
+type OrganismPages' ms c r = r -> Code ms c System
+type OrganismPages ms r = OrganismPages' (Appended ms (OrganismBase r)) IO r
+type OrganismRoot = Maybe Txt
+type Organism ms r = Organism' (Appended ms (OrganismBase r)) (Appended ms (OrganismBase r)) IO r
+
+data Organism' ts ms c r
   = Organism
-    { site    :: !(Key (As (Code ms c) IO))
-    , root    :: !(Maybe Txt)
-    , build   :: !(    Modules (Organism_ r) (Action ts c)
-                    -> c (Modules ts (Action ts c))
-                  )
-    , prime   :: !(Code ms c ())
-    , routes  :: !(Code '[Route] (Code ms c) r)
-    , pages   :: !(r -> Code ms c Page)
+    { site    :: !(OrganismKey' ms c)
+    , root    :: !(OrganismRoot)
+    , build   :: !(OrganismBuilder' ts c r)
+    , prime   :: !(OrganismPrimer' ms c)
+    , routes  :: !(OrganismRouter' ms c r)
+    , pages   :: !(OrganismPages' ms c r)
     }
 
-instance Eq (Organism ts ms c r) where
+instance Eq (Organism' ts ms c r) where
   (==) (Organism s _ _ _ _ _) (Organism s' _ _ _ _ _) =
     let Key k1 = s
         Key k2 = s'
@@ -107,15 +116,15 @@ instance Eq (Organism ts ms c r) where
          1# -> True
          _  -> k1 == k2
 
-simpleF :: Code '[Route] (Code (Organism_ r) IO) r -> (r -> Code (Organism_ r) IO Page) -> Organism (Organism_ r) (Organism_ r) IO r
+simpleF :: Code '[Route] (Code (OrganismBase r) IO) r -> (r -> Code (OrganismBase r) IO System) -> Organism '[] r
 simpleF = Organism "main" Nothing return (return ())
 
-onRoute :: ( IsOrganism ts ms IO r
+onRoute :: ( IsOrganism' ts ms IO r
            , Monad c',  MonadIO c'
-           , With (Organism ts ms IO r) (Code ms IO) IO
+           , With (Organism' ts ms IO r) (Code ms IO) IO
            , '[Revent] <: ms'
            )
-         => Organism ts ms IO r
+         => Organism' ts ms IO r
          -> (r -> Code '[Event r] (Code ms' c') ())
          -> Code ms' c' (Subscription ms' c' r,Periodical ms' c' r)
 onRoute fus rf = do
@@ -128,12 +137,12 @@ onRoute fus rf = do
   return (s,p)
 
 data Carrier where
-  Carrier :: IORef (HTML ms,HTML ms,m)
+  Carrier :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)
           -> Carrier
 
 run :: forall ts ms c r.
-       IsOrganism ts ms c r
-    => Organism ts ms c r
+       IsOrganism' ts ms c r
+    => Organism' ts ms c r
     -> c ()
 run Organism {..} = do
   doc        <- getDocument
@@ -166,7 +175,7 @@ run Organism {..} = do
     go doc (Carrier rt) p = do
       go' p
       where
-        go' (Partial b'@(Construct' b)) = do
+        go' (Subsystem b'@(Construct' b)) = do
           b <- liftIO $ do
             mb_ <- lookupConstruct (key b)
             case mb_ of
@@ -186,7 +195,7 @@ run Organism {..} = do
             pg <- lift $ pages r
             go doc b pg
 
-        go' (Page hc'@(Construct' hc) b'@(Construct' b)) = do
+        go' (System hc'@(Construct' hc) b'@(Construct' b)) = do
           b <- liftIO $ do
             mh_ <- lookupConstruct (key hc)
             case mh_ of
@@ -246,12 +255,12 @@ getOrganismRoot mt = do
 data OrganismNotStarted = OrganismNotStarted deriving Show
 instance Exception OrganismNotStarted
 
-instance ( IsOrganism ts ms c r
+instance ( IsOrganism' ts ms c r
          , MonadIO c
          )
-  => With (Organism ts ms c r)
+  => With (Organism' ts ms c r)
           (Code ms c)
-          IO
+          c
   where
     using_ f = do
       mi_ <- lookupOrganism (site f)
@@ -286,10 +295,10 @@ deleteOrganism :: (MonadIO c)
              => Key phantom -> c ()
 deleteOrganism = vaultDelete organismVault__
 
-popstate :: EVName Win Txt.Object
+popstate :: EVName Win Obj
 popstate =
 #ifdef __GHCJS__
-  (Ev.unsafeEventName "popstate" :: EVName Win Txt.Object)
+  (Ev.unsafeEventName "popstate" :: EVName Win Obj)
 #else
   "popstate"
 #endif
@@ -327,7 +336,7 @@ getSearch = do
 setupRouter :: forall ms c routeType.
                (Eq routeType, MonadIO c, '[Revent,State () (Router routeType)] <: ms)
             => Proxy routeType
-            -> Code ms c (Behavior ms c (),Promise (Subscription ms c Txt.Object))
+            -> Code ms c (Behavior ms c (),Promise (Subscription ms c Obj))
 setupRouter _ = do
   crn :: Network routeType <- getRouteNetwork
   psn <- getWindowNetworkPreventDefault popstate
@@ -368,15 +377,15 @@ route rt = do
 #ifdef __GHCJS__
   liftIO triggerPopstate_js
 #else
-  triggerWindowPreventDefaultEvent popstate (mempty :: Txt.Object)
+  triggerWindowPreventDefaultEvent popstate (mempty :: Obj)
 #endif
 
 goto :: ( MonadIO c
-        , With (Organism ts ms IO r) (Code ms IO) IO
+        , With (Organism' ts ms IO r) (Code ms IO) IO
         , '[State () (Router r)] <: ms
         , '[Revent] <: ms'
         )
-     => Organism ts ms IO r -> Txt -> r -> Code ms' c (Promise ())
+     => Organism' ts ms IO r -> Txt -> r -> Code ms' c (Promise ())
 goto f rts rt = do
   pushPath rts
   with f $ do
