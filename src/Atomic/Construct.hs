@@ -132,6 +132,12 @@ foreign import javascript unsafe
 foreign import javascript unsafe
   "$1.appendChild($2);"
   append_child_js :: E.Element -> N.Node -> IO ()
+
+foreign import javascript unsafe
+  "$1.innerHTML = '';" clear_node_js :: N.Node -> IO ()
+
+foreign import javascript unsafe
+  "$1.parentNode.innerHTML = '';" clear_parent_js :: N.Node -> IO ()
 #endif
 
 type ENode =
@@ -751,6 +757,22 @@ createElementNS doc ns tag =
   return (Just ())
 #endif
 
+clearParent :: Maybe NNode -> IO ()
+clearParent mnode =
+#ifdef __GHCJS__
+  forM_ mnode clear_parent_js
+#else
+  return ()
+#endif
+
+clearNode :: Maybe NNode -> IO ()
+clearNode mnode =
+#ifdef __GHCJS__
+  forM_ mnode clear_node_js
+#else
+  return ()
+#endif
+
 #ifdef __GHCJS__
 appendChild :: T.IsNode n => ENode -> n -> IO ()
 appendChild parent child =
@@ -899,6 +921,10 @@ buildHTML doc f = buildAndEmbedMaybe f doc Nothing
 
 getElement Text {} = Nothing
 getElement n = _node n
+
+getNode Text {..} = fmap toNode _tnode
+getNode n = fmap toNode $ _node n
+
 
 diff_ :: ConstructPatch m -> IO Int
 diff_ APatch {..} = do

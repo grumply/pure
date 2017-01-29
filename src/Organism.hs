@@ -146,11 +146,13 @@ run :: forall ts ms c r.
     => Organism' ts ms c r
     -> c ()
 run Organism {..} = do
-  doc        <- getDocument
-  q          <- newSignalBuffer
-  rt         <- getOrganismRoot root
-  rt'        <- liftIO $ newIORef (NullAtom $ Just rt,NullAtom $ Just rt,())
-  nw :: Network r <- network
+  doc     <- getDocument
+  q       <- newSignalBuffer
+  ort     <- getOrganismRoot root
+  Just ph <- liftIO $ createElement doc "template"
+  liftIO $ appendChild ort ph
+  rt'     <- liftIO $ newIORef (NullAtom $ Just ph,NullAtom $ Just ph,())
+  nw :: Network r   <- network
   sdn :: Network () <- network
   built      <- build $ mkRouter nw routes
                      *:* revent q
@@ -162,7 +164,7 @@ run Organism {..} = do
     p' <- periodical
     subscribe p' $ \r -> do
       pg <- lift $ pages r
-      go doc (Carrier rt') pg
+      go True ort doc (Carrier rt') pg
     crn <- getRouteNetwork
     joinNetwork crn p' q
     prime
@@ -173,7 +175,7 @@ run Organism {..} = do
      ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'."
     ) q obj
   where
-    go doc (Carrier rt) p = do
+    go first ort doc (Carrier rt) p = do
       go' p
       where
         go' (Subsystem b'@(Construct' b)) = do
@@ -183,6 +185,9 @@ run Organism {..} = do
               Nothing -> do
                 (old,_,_) <- readIORef rt
                 iob <- mkConstruct (Just differ) Nothing b
+                when first $ do
+                  clearNode (Just (toNode ort))
+                  forM_ (getNode old) (appendChild ort)
                 (new,_,_) <- readIORef iob
                 replace old new
                 return (Carrier iob)
@@ -190,11 +195,14 @@ run Organism {..} = do
                 (old,_,_) <- readIORef rt
                 (new,_,_) <- readIORef x_
                 rebuild b Nothing new
+                when first $ do
+                  clearNode (Just (toNode ort))
+                  forM_ (getNode old) (appendChild ort)
                 replace old new
                 return (Carrier x_)
           become $ \r -> do
             pg <- lift $ pages r
-            go doc b pg
+            go False ort doc b pg
 
         go' (System hc'@(Construct' hc) b'@(Construct' b)) = do
           b <- liftIO $ do
@@ -226,17 +234,23 @@ run Organism {..} = do
                 (old,_,_) <- readIORef rt
                 iob <- mkConstruct (Just differ) Nothing b
                 (new,_,_) <- readIORef iob
+                when first $ do
+                  clearNode (Just (toNode ort))
+                  forM_ (getNode old) (appendChild ort)
                 replace old new
                 return (Carrier iob)
               Just (_,x_) -> do
                 (old,_,_) <- readIORef rt
                 (new,_,_) <- readIORef x_
                 rebuild b Nothing new
+                when first $ do
+                  clearNode (Just (toNode ort))
+                  forM_ (getNode old) (appendChild ort)
                 replace old new
                 return (Carrier x_)
           become $ \r -> do
             pg <- lift $ pages r
-            go doc b pg
+            go False ort doc b pg
 
 getOrganismRoot :: (MonadIO c) => Maybe Txt -> c ENode
 getOrganismRoot mt = do

@@ -263,9 +263,9 @@ renderSystem (System h c) =
         toTxt $
           html_ []
             [ view model
-            , body [ idA "atomic" ]
+            , body []
                 [ case c of
-                    Construct' a@Construct {} -> construct div [] a
+                    Construct' a@Construct {} -> construct div [ idA "atomic" ] a
                 ]
             ]
 renderSystem (Subsystem c) =
@@ -273,9 +273,9 @@ renderSystem (Subsystem c) =
     toTxt $
       html_ []
         [ head []
-        , body [ idA "atomic" ]
+        , body []
             [ case c of
-                Construct' a@Construct {} -> construct div [] a
+                Construct' a@Construct {} -> construct div [ idA "atomic" ] a
             ]
         ]
 
@@ -287,9 +287,9 @@ renderSystemBootstrap (System h c) mainScript =
         toTxt $
           html_ []
             [ view model
-            , body [idA "atomic"]
+            , body []
                 [ case c of
-                    Construct' a@Construct {} -> construct div [ ] a
+                    Construct' a@Construct {} -> construct div [ idA "atomic" ] a
                 , script [ src mainScript, defer "defer" ] []
                 ]
             ]
@@ -300,8 +300,8 @@ renderSystemBootstrap (Subsystem c) mainScript =
         toTxt $
           html_ []
             [ head []
-            , body [ idA "atomic" ]
-                [ construct div [] a
+            , body []
+                [ construct div [ idA "atomic" ] a
                 , script [ src mainScript, defer "defer" ] []
                 ]
             ]
@@ -316,8 +316,8 @@ renderDynamicSystem (System (Construct' h) (Construct' c)) = do
   return $ (dt <>) $ toTxt $
     html_ []
       [ raw "head" [] head_html
-      , body [ idA "atomic" ]
-          [ raw "div" [] body_html ]
+      , body []
+          [ raw "div" [ idA "atomic" ] body_html ]
       ]
 renderDynamicSystem (Subsystem (Construct' c)) = do
   let dt = "<!DOCTYPE html>"
@@ -326,8 +326,8 @@ renderDynamicSystem (Subsystem (Construct' c)) = do
   return $ (dt <>) $ toTxt $
     html_ []
       [ head []
-      , body [ idA "atomic" ]
-          [ raw "div" [ ] body_html ]
+      , body []
+          [ raw "div" [ idA "atomic" ] body_html ]
       ]
 
 renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
@@ -340,8 +340,8 @@ renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript =
   return $ (dt <>) $ toTxt $
     html_ []
       [ raw "head" [] head_html
-      , body [ idA "atomic" ]
-          [ raw "div" [ ] body_html
+      , body []
+          [ raw "div" [ idA "atomic" ] body_html
           , script [ src mainScript, defer "defer" ] []
           ]
       ]
@@ -352,8 +352,8 @@ renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
   return $ (dt <>) $ toTxt $
     html_ []
       [ head []
-      , body [ idA "atomic" ]
-          [ raw "div" [ ] body_html
+      , body []
+          [ raw "div" [ idA "atomic" ] body_html
           , script [ src mainScript, defer "defer" ] []
           ]
       ]
