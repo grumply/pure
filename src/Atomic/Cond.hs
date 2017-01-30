@@ -17,6 +17,12 @@ may = fromMaybe nil
 ncond :: Cond a => Bool -> a -> a
 ncond b = cond (not b)
 
+isNil :: (Cond a, Eq a) => a -> Bool
+isNil = (== nil)
+
+notNil :: (Cond a, Eq a) => a -> Bool
+notNil = (/= nil)
+
 instance Cond [a] where
   nil = []
 

@@ -138,7 +138,7 @@ onStorage :: ( MonadIO c
              , '[Revent] <: ms
              )
           => (Obj -> Code '[Event Obj] (Code ms c) ())
-          -> Code ms c (Subscription ms c Obj,Periodical ms c Obj)
+          -> Code ms c (IO ())
 onStorage =
   onWindowNetwork
 #ifdef __GHCJS__
@@ -174,7 +174,7 @@ proxyLocalMessage :: forall traits ms c msg message messageType.
                       )
                   => Mediator' traits ms
                   -> Proxy messageType
-                  -> c (Subscription ms IO Obj,Periodical ms IO Obj)
+                  -> c (IO ())
 proxyLocalMessage s mty_proxy = do
   let header = messageHeader mty_proxy
   Right a <- (=<<) demand $ with s $
@@ -214,7 +214,7 @@ onLocalMessage :: forall ms c msg message messageType.
                   )
                => Proxy messageType
                -> (message -> Code ms c ())
-               -> Code ms c (Subscription ms c Obj,Periodical ms c Obj)
+               -> Code ms c (IO ())
 onLocalMessage mty_proxy f = do
   slf <- asSelf
   onStorage $ \se -> do

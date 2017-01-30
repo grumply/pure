@@ -88,14 +88,14 @@ onWindowNetwork :: ( IsEv e
                    )
                 => EVName Win e
                 -> (e -> Code '[Event e] (Code ms c) ())
-                -> Code ms c (Subscription ms c e,Periodical ms c e)
+                -> Code ms c (IO ())
 onWindowNetwork en f = do
   rb <- getReventBuffer
   nw <- getWindowNetwork en
   p <- periodical
   Just s <- subscribe p f
   joinNetwork nw p rb
-  return (s,p)
+  return (stop s >> leaveNetwork nw p)
 
 {-# NOINLINE documentNetworks__ #-}
 documentNetworks__ :: NetworkVault
@@ -141,14 +141,14 @@ onDocumentNetwork :: ( IsEv e
                      )
                   => EVName Doc e
                   -> (e -> Code '[Event e] (Code ms c) ())
-                  -> Code ms c (Subscription ms c e,Periodical ms c e)
+                  -> Code ms c (IO ())
 onDocumentNetwork en f = do
   rb <- getReventBuffer
   nw <- getDocumentNetwork en
   p <- periodical
   Just s <- subscribe p f
   joinNetwork nw p rb
-  return (s,p)
+  return (stop s >> leaveNetwork nw p)
 
 {-# NOINLINE windowNetworksPreventDefault__ #-}
 windowNetworksPreventDefault__ :: NetworkVault
@@ -191,14 +191,14 @@ onWindowNetworkPreventDefault :: ( IsEv e
                                  )
                               => EVName Win e
                               -> (e -> Code '[Event e] (Code ms c) ())
-                              -> Code ms c (Subscription ms c e,Periodical ms c e)
+                              -> Code ms c (IO ())
 onWindowNetworkPreventDefault en f = do
   rb <- getReventBuffer
   nw <- getWindowNetworkPreventDefault en
   p <- periodical
   Just s <- subscribe p f
   joinNetwork nw p rb
-  return (s,p)
+  return (stop s >> leaveNetwork nw p)
 
 triggerWindowPreventDefaultEvent :: (IsEv e, MonadIO c) => EVName Win e -> e -> c ()
 triggerWindowPreventDefaultEvent ev e = do

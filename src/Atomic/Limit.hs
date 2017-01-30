@@ -36,7 +36,7 @@ limitify limiter duration count m = unsafePerformIO $ do
           else go (accN + 1) xs
 
 {-# NOINLINE limit #-}
-limit :: (Monad super, MonadIO super) => Millis -> Int -> IO () -> super Bool
+limit :: MonadIO c => Millis -> Int -> IO () -> c Bool
 limit durationMillis count m = do
   x <- liftIO $
     unsafePerformIO $ do

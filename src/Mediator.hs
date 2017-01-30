@@ -1,4 +1,4 @@
-module Mediator (module Export) where
+module Mediator (module Export, module Mediator) where
 
 import Ef.Base as Export hiding (watch,transform,construct)
 import Atomic.Mediator as Export

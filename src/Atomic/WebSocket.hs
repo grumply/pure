@@ -331,18 +331,18 @@ setMsgsPerMinute n = do
 
 onWSStatus :: ('[State () WebSocket, Revent] <: ms,MonadIO c)
         => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
-        -> Code ms c (Subscription ms c WSStatus,Periodical ms c WSStatus)
+        -> Code ms c (IO ())
 onWSStatus f = do
   buf <- getReventBuffer
   WebSocket {..} <- get
   p <- periodical
   Just s <- subscribe p f
   joinNetwork wsStatusNetwork p buf
-  return (s,p)
+  return (stop s >> leaveNetwork wsStatusNetwork p)
 
 onWSClose :: ('[State () WebSocket, Revent] <: ms,MonadIO c)
         => (WSCloseReason -> Code '[Event WSStatus] (Code ms c) ())
-        -> Code ms c (Subscription ms c WSStatus,Periodical ms c WSStatus)
+        -> Code ms c (IO ())
 onWSClose f = onWSStatus (\wss -> case wss of { WSClosed wscr -> f wscr; _ -> return () } )
 
 getWSStatus :: ('[State () WebSocket] <: ms, Monad c)
@@ -368,7 +368,7 @@ getWSInfo = do
 
 onWSCloseSimplyShutdown :: forall ms c.
                          ('[State () WebSocket, Revent, State () Shutdown] <: ms, MonadIO c)
-                      => Code ms c (Subscription ms c WSStatus,Periodical ms c WSStatus)
+                      => Code ms c (IO ())
 onWSCloseSimplyShutdown = do
   onWSClose $ \closeReason -> lift $ do
     buf <- getReventBuffer
@@ -2131,19 +2131,19 @@ unsubscribe = stop
 onWSStatus :: forall ms c.
            (MonadIO c, '[Revent,WebSocket] <: ms)
         => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
-        -> Code ms c (Subscription ms c WSStatus,Periodical ms c WSStatus)
+        -> Code ms c (IO ())
 onWSStatus bhvr = do
   buf <- getReventBuffer
   p :: Periodical ms c WSStatus <- periodical
   Just s <- subscribe p bhvr
   wsn <- Send (GetWSStatuss Return)
   joinNetwork wsn p buf
-  return (s,p)
+  return (stop s >> leaveNetwork wsn p)
 
 onWSClose :: forall ms c.
             (MonadIO c, '[Revent,WebSocket] <: ms)
         => (WSCloseReason -> Code '[Event WSStatus] (Code ms c) ())
-        -> Code ms c (Subscription ms c WSStatus,Periodical ms c WSStatus)
+        -> Code ms c (IO ())
 onWSClose f = onWSStatus (\wss -> case wss of { WSClosed wscr -> f wscr; _ -> return () } )
 
 foreign import javascript unsafe
@@ -2243,7 +2243,7 @@ request :: ( MonadIO c
          => Proxy rqTy
          -> request
          -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-         -> Code ms c (Endpoint ms c) -- (Subscription ms c Msg,Periodical ms c Msg)
+         -> Code ms c (Endpoint ms c) 
 request rqty_proxy req f = do
   buf <- getReventBuffer
   p   <- periodical
@@ -2292,7 +2292,7 @@ apiRequest :: ( MonadIO c
           -> Proxy rqTy
           -> request
           -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint ms c) -- (Subscription ms c Msg,Periodical ms c Msg)
+          -> Code ms c (Endpoint ms c) 
 apiRequest _ rqty_proxy req f = do
   buf <- getReventBuffer
   p   <- periodical
@@ -2344,7 +2344,7 @@ requestWith :: ( MonadIO c
             -> Proxy rqTy
             -> request
             -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Endpoint ms c) -- (Subscription ms c Msg,Periodical ms c Msg)
+            -> Code ms c (Endpoint ms c) 
 requestWith s rqty_proxy req f = do
   buf <- getReventBuffer
   p   <- periodical
@@ -2403,7 +2403,7 @@ apiRequestWith :: ( MonadIO c
                -> Proxy rqTy
                -> request
                -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-               -> Code ms c (Endpoint ms c) -- (Subscription ms c Msg,Periodical ms c Msg)
+               -> Code ms c (Endpoint ms c) 
 apiRequestWith _ s rqty_proxy req f = do
   buf <- getReventBuffer
   p   <- periodical
@@ -2603,7 +2603,7 @@ onMessageWith :: ( MonadIO c
                => w
                -> Proxy mTy
                -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-               -> Code ms c (Endpoint ms c) -- (Subscription ms c Msg,Periodical ms c Msg)
+               -> Code ms c (Endpoint ms c) 
 onMessageWith s mty_proxy f = do
   buf <- getReventBuffer
   s_ <- liftIO $ newIORef undefined
@@ -2642,7 +2642,7 @@ onMessage :: ( MonadIO c
              )
           => Proxy mTy
           -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint ms c) -- (Subscription ms c Msg,Periodical ms c Msg)
+          -> Code ms c (Endpoint ms c) 
 onMessage mty_proxy f = do
   buf <- getReventBuffer
   s_ <- liftIO $ newIORef undefined

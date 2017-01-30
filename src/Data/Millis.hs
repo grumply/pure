@@ -20,7 +20,7 @@ import Atomic.ToTxt
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
-  "var d = Date(); d.getTime();" getTime_millis_js :: IO Int
+  "$r = new Date().getTime();" getTime_millis_js :: IO Int
 #endif
 
 -- milliseconds since beginning of 1970

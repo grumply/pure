@@ -1,6 +1,6 @@
 module Atomic.Observable where
 
-import Ef.Base
+import Ef.Base hiding (watch)
 
 import Atomic.Revent
 import Atomic.With
@@ -34,21 +34,46 @@ getO = do
   m <- get
   return (observableState m)
 
-watch :: ( MonadIO c
+watch_ :: ( MonadIO c
          , MonadIO c'
-         , With w (Code ms c) (Code ms' c')
+         , With w (Code ms c) IO
          , '[Revent] <: ms'
          , '[Observable m] <: ms
          )
       => w
       -> (m -> Code '[Event m] (Code ms' c') ())
-      -> Code ms' c' (Subscription ms' c' m,Periodical ms' c' m)
-watch c f = do
+      -> Code ms' c' (IO ())
+watch_ c f = do
   p <- periodical
   Just s <- subscribe p f
   buf <- getReventBuffer
-  with_ c $ do
+  Just leaveNW <- demandMaybe =<< with c (do
     Observable _ us <- get
     joinNetwork us p buf
-  return (s,p)
+    return (leaveNetwork us p))
+  return (stop s >> leaveNW)
 
+watch :: ( MonadIO c
+         , MonadIO c'
+         , With w (Code ms c) IO
+         , '[Revent] <: ms'
+         , '[Observable m] <: ms
+         )
+      => w
+      -> (m -> Code ms' c' ())
+      -> Code ms' c' (IO ())
+watch c f = watch_ c (lift . f)
+
+watch' :: ( MonadIO c
+          , MonadIO c'
+          , With w (Code ms c) IO
+          , '[Revent] <: ms'
+          , '[Observable m] <: ms
+          )
+       => w
+       -> (m -> Code ms' c' ())
+       -> Code ms' c' (IO ())
+watch' c f = do
+  sp <- watch c f
+  with c getO >>= demandMaybe >>= mapM_ f
+  return sp

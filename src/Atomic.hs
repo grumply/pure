@@ -4,6 +4,13 @@
 module Atomic
   ( module Atomic
   , module Export
+  , Atom(..)
+  , html, jss, ujss, raw
+  , cnode, keyed, svgHTML, construct, tagged, hashed
+  , css, css', scss, scss', styles
+  , diff, setManualDiff, setEagerDiff, setLazyDiff
+  , observe, set, update
+  , onModelChange, onViewChange, ownView, currentView
   ) where
 
 import Ef.Base as Export hiding (watch,transform,construct)
@@ -13,6 +20,7 @@ import Data.Typeable as Export
 import GHC.Generics as Export (Generic)
 
 import Atomic.Construct
+import Atomic.Mediator
 
 import qualified Data.Txt as Export (Txt(..))
 import Data.JSON         as Export hiding (defaultOptions,Options,(!))
@@ -67,7 +75,7 @@ import qualified Prelude
 import Data.Monoid as Export
 import Data.Bifunctor as Export
 
-import Data.HashMap.Strict as Map hiding (map,null)
+import Data.HashMap.Strict as Map hiding (map,null,update)
 
 import Data.Txt as Txt hiding (head,map,null)
 import qualified Data.Txt as Txt
@@ -117,20 +125,48 @@ ghcjs =
 #endif
 
 type Controller m = Construct '[] m
-controller :: ConstructKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
-controller key model view = Construct {..}
+-- controller :: ConstructKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
+controller :: ConstructKey '[] m -> m -> (m -> Atom (Code (ConstructBase m) IO ())) -> Controller m
+controller key0 model0 view0 = Construct {..}
   where
+    key = key0
     build = return
     prime = return ()
+    model = model0
+    view = view0
 
 type Static = Construct '[] ()
-static :: ConstructKey '[] () -> HTML '[] () -> Static
-static key view0 =
-  let view _ = view0
-      build = return
-      prime = return ()
-      model = ()
-  in Construct {..}
+-- static :: ConstructKey '[] () -> HTML [] () -> Static
+static :: ConstructKey '[] () -> Atom (Code (ConstructBase ()) IO ()) -> Static
+static key0 view0 = Construct {..}
+  where
+    key = key0
+    build = return
+    prime = return ()
+    model = ()
+    view _ = view0
+
+type Store m = Mediator '[Observable m]
+store :: MediatorKey '[Observable m] -> m -> Store m
+store key initial = Mediator {..}
+  where
+    build base = do
+      o <- observable initial
+      return (o *:* base)
+    prime = return ()
+
+type Observer m = Construct '[] (Maybe m)
+-- observer :: Store m -> ConstructKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
+observer :: forall m ms w. (Eq m, With w (Code ms IO) (Code (ConstructBase (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
+         => w -> ConstructKey '[] (Maybe m) -> (m -> Atom (Code (ConstructBase (Maybe m)) IO ())) -> Observer m
+observer s key0 view0 = Construct {..}
+  where
+    key = key0
+    build = return
+    prime = void $ watch' s (set . Just :: m -> Code (ConstructBase (Maybe m)) IO ())
+    model = Nothing
+    view Nothing = nil
+    view (Just m) = view0 m
 
 newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)
 instance ToTxt StaticHTML where
@@ -142,6 +178,12 @@ instance Monoid StaticHTML where
   mappend htmlt1 htmlt2 = fromTxt $ toTxt htmlt1 <> toTxt htmlt2
 instance Lift StaticHTML where
   lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
+
+staticHTML :: Atom e -> StaticHTML
+staticHTML = render
+
+shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
+shtml _tag _attributes = raw _tag _attributes . toTxt
 
 type HTML ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
 type Attribute ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
@@ -224,13 +266,6 @@ instance ToTxt (Atom e) where
       Construct' Construct {..} ->
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
           ">"  <> toTxt (view model) <> "</" <> _tag <> ">"
-
-staticHTML :: Atom e -> StaticHTML
-staticHTML = render
-
-shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
-shtml _tag _attributes = raw _tag _attributes . toTxt
-
 
 data System
   = System

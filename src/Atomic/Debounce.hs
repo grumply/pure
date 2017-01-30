@@ -66,7 +66,7 @@ debounceify' bouncer delay m = unsafePerformIO $ do
 -- >    d                  -- (3) debounced
 -- >                       -- (3) succeeds after 200 milliseconds
 {-# NOINLINE debounce #-}
-debounce :: (Monad super, MonadIO super) => Int -> IO () -> super ()
+debounce :: MonadIO c => Int -> IO () -> c ()
 debounce delay io = do
   x <- liftIO $
     unsafePerformIO $ do
@@ -85,7 +85,7 @@ debounce delay io = do
 -- >    threadDelay 500000
 -- >    d                   -- call immediately successful
 {-# NOINLINE debounce' #-}
-debounce' :: (Monad super, MonadIO super) => Int -> IO () -> super Bool
+debounce' :: MonadIO c => Int -> IO () -> c Bool
 debounce' delay io = do
   x <- liftIO $
     unsafePerformIO $ do

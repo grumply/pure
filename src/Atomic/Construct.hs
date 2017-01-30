@@ -23,6 +23,8 @@ import Atomic.With
 import Atomic.ToTxt
 import Atomic.FromTxt
 
+import Atomic.Observable
+
 #ifdef __GHCJS__
 import qualified GHCJS.Types as T
 import qualified GHCJS.Marshal as M
@@ -229,13 +231,15 @@ html _tag _attributes _children =
   let _node = Nothing
   in Atom {..}
 
+jss :: Txt -> Atom e
+jss _content =
+  let _tnode = Nothing
+  in Text {..}
+
 raw :: Txt -> [Feature e] -> Txt -> Atom e
 raw _tag _attributes _content =
   let _node = Nothing
   in Raw {..}
-
-notNil (NullAtom _) = False
-notNil _ = True
 
 cnode :: Bool -> Atom e -> Atom e
 cnode = cond
@@ -243,18 +247,15 @@ cnode = cond
 keyed :: Txt -> [Feature e] -> [(Int,Atom e)] -> Atom e
 keyed _tag _attributes _keyed0 =
   let _node = Nothing
-      _keyed = filter (notNil . snd) _keyed0
+      _keyed = filter (notNullAtom . snd) _keyed0
+      notNullAtom (NullAtom _) = False
+      notNullAtom _ = True
   in KAtom {..}
 
 svgHTML :: Txt -> [Feature e] -> [Atom e] -> Atom e
 svgHTML _tag _attributes _children =
   let _node = Nothing
   in SVGAtom {..}
-
-jss :: Txt -> Atom e
-jss _content =
-  let _tnode = Nothing
-  in Text {..}
 
 ujss :: Txt -> Atom e
 ujss = jss . unindent
@@ -329,6 +330,7 @@ styles = css' True . classify
         Just (CSS3_ at sel mcss k) ->
           Do (inj (CSS3_ at sel (fmap classify mcss) (classify k))) 
         _ -> error "impossible"
+
 
 -- Useful for standalone components without a Atomic root.
 renderConstruct' :: IsConstruct' ts ms m => Construct' ts ms m -> ENode -> Atom (Code ms IO ()) -> IO (Atom (Code ms IO ()))
@@ -492,6 +494,7 @@ instance IsConstruct' ts ms m
       case mi_ of
         Just (as,_) -> return (runAs as)
         Nothing -> do
+          liftIO $ putStrLn "Creating construct"
           mkConstruct (Just differ) Nothing c
           using_ c
     with_ c m = do
@@ -515,20 +518,25 @@ instance IsConstruct' ts ms m
         _ -> return ()
       deleteConstruct (key c)
 
-atomVault__ :: Vault
-atomVault__ = Vault (unsafePerformIO (newMVar Map.empty))
+{-# NOINLINE constructShutdownNetwork #-}
+constructShutdownNetwork :: Network ()
+constructShutdownNetwork = unsafePerformIO network
+
+{-# NOINLINE constructVault__ #-}
+constructVault__ :: Vault
+constructVault__ = Vault (unsafePerformIO (newMVar Map.empty))
 
 lookupConstruct :: (MonadIO c) => Key phantom -> c (Maybe phantom)
-lookupConstruct = vaultLookup atomVault__
+lookupConstruct = vaultLookup constructVault__
 
 getConstructName :: IsConstruct' t ms m => Construct' ts ms m -> Txt
 getConstructName = toTxt . key
 
 addConstruct :: (MonadIO c) => Key phantom -> phantom -> c ()
-addConstruct = vaultAdd atomVault__
+addConstruct = vaultAdd constructVault__
 
 deleteConstruct :: (MonadIO c) => Key phantom -> c ()
-deleteConstruct = vaultDelete atomVault__
+deleteConstruct = vaultDelete constructVault__
 
 mkConstruct :: forall ms ts m.
           ( IsConstruct' ts ms m
@@ -567,8 +575,10 @@ mkConstruct mDiffer mparent c@Construct {..} = do
                   *:* state (Shutdown sdn)
                   *:* revent sigBuf
                   *:* Empty
-  (obj',_) <- Ef.Base.Object built Ef.Base.! prime
-  forkIO $ driverPrintExceptions ("Construct' (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Construct' may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception") sigBuf obj'
+  (obj',_) <- Ef.Base.Object built Ef.Base.! do
+                connect constructShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
+                prime
+  forkIO $ driverPrintExceptions ("Construct' (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Construct' may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception: ") sigBuf obj'
   return cs_live_
 
 diff :: forall m ms. ('[State () (ConstructState m)] <: ms)
@@ -621,15 +631,17 @@ onViewChange :: forall ts ms ms' m c.
                 )
             => Construct' ts ms m
             -> ((m,Atom (Code ms IO ())) -> Code '[Event (m,Atom (Code ms IO ()))] (Code ms' c) ())
-            -> Code ms' c (Subscription ms' c (m,Atom (Code ms IO ())),Periodical ms' c (m,Atom (Code ms IO ())))
+            -> Code ms' c (IO ())
 onViewChange c f = do
   p <- periodical
   Just s <- subscribe p f
   buf <- getReventBuffer
-  with c $ do
+  Just leaveNW <- demandMaybe =<< with c (do
     ConstructState {..} :: ConstructState m <- get
-    joinNetwork (unsafeCoerce asViews :: Network (m,Atom (Code ms IO ()))) p buf
-  return (s,p)
+    let av = unsafeCoerce asViews :: Network (m,Atom (Code ms IO ()))
+    joinNetwork av p buf
+    return (leaveNetwork av p))
+  return (stop s >> leaveNW)
 
 onModelChange :: forall ts ms ms' m c.
                 ( IsConstruct' ts ms m
@@ -638,15 +650,16 @@ onModelChange :: forall ts ms ms' m c.
                 )
               => Construct' ts ms m
               -> (m -> Code '[Event m] (Code ms' c) ())
-              -> Code ms' c (Subscription ms' c m,Periodical ms' c m)
+              -> Code ms' c (IO ())
 onModelChange c f = do
   p <- periodical
   Just s <- subscribe p f
   buf <- getReventBuffer
-  with c $ do
+  Just leaveNW <- demandMaybe =<< with c (do
     ConstructState {..} :: ConstructState m <- get
     joinNetwork asUpdates p buf
-  return (s,p)
+    return (leaveNetwork asUpdates p))
+  return (stop s >> leaveNW)
 
 {-# INLINE observe #-}
 observe :: ('[State () (ConstructState m)] <: ms) => Code ms IO m

@@ -18,6 +18,9 @@ using a = fmap (fmap liftIO) $ liftIO $ using_ a
 with :: (With a m IO, MonadIO n) => a -> m b -> n (Promise b)
 with a m = liftIO $ with_ a m
 
+(#) :: (With a m IO, MonadIO n) => a -> m b -> n (Promise b)
+(#) = with
+
 shutdown :: (With a m IO, MonadIO n) => a -> n ()
 shutdown a = liftIO $ shutdown_ a
 
@@ -34,6 +37,7 @@ connectWith w networkGetter f = do
     joinNetwork nw p buf
   return (s,p)
 
+-- Do not use this for a self shutdown network; it will block!
 onShutdown :: ( With a (Code ms IO) IO
               , MonadIO c
               , '[State () Shutdown] <: ms
@@ -41,29 +45,29 @@ onShutdown :: ( With a (Code ms IO) IO
               )
            => a
            -> Code ms IO ()
-           -> Code ms' c (Maybe (Subscription ms IO ()))
+           -> Code ms' c (IO ())
 onShutdown c ons = do
   buf <- getReventBuffer
   p <- periodical
-  bt <- subscribe p (const $ lift ons)
-  -- in case c == ms, queue the call to with
-  delay 0 $ with c $ do
+  Just s <- subscribe p (const $ lift ons)
+  Just leaveNW <- demandMaybe =<< with c (do
     Shutdown sdn <- get
     joinNetwork sdn p buf
-  return bt
+    return (leaveNetwork sdn p))
+  return (stop s >> leaveNW)
 
 onSelfShutdown :: ( MonadIO c
                 , '[Revent,State () Shutdown] <: ms
                 )
              => Code ms c ()
-             -> Code ms c (Subscription ms c (),Periodical ms c ())
+             -> Code ms c (IO ())
 onSelfShutdown ons = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (const $ lift ons)
   Shutdown sdn <- get
   joinNetwork sdn p buf
-  return (s,p)
+  return (stop s >> leaveNetwork sdn p)
 
 shutdownSelf :: (MonadIO c,'[State () Shutdown] <: ms) => Code ms c ()
 shutdownSelf = do

@@ -183,72 +183,78 @@ windowS = Mediator {..}
 
 onScrollX :: (MonadIO c, '[Revent] <: ms)
           => (Int -> Code ms c ())
-          -> Code ms c (Subscription ms c Int,Periodical ms c Int)
+          -> Code ms c (IO ())
 onScrollX f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with windowS $ do
+  Just leaveNW <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
     joinNetwork scrollXN p buf
-  return (s,p)
+    return (leaveNetwork scrollXN p))
+  return (stop s >> leaveNW)
 
 onScrollY :: (MonadIO c, '[Revent] <: ms)
           => (Int -> Code ms c ())
-          -> Code ms c (Subscription ms c Int,Periodical ms c Int)
+          -> Code ms c (IO ())
 onScrollY f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with windowS $ do
+  Just leaveNW <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
     joinNetwork scrollYN p buf
-  return (s,p)
+    return (leaveNetwork scrollYN p))
+  return (stop s >> leaveNW)
 
 onScrollPosition :: (MonadIO c, '[Revent] <: ms)
                  => (ScrollPosition -> Code ms c ())
-                 -> Code ms c (Subscription ms c ScrollPosition,Periodical ms c ScrollPosition)
+                 -> Code ms c (IO ())
 onScrollPosition f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with windowS $ do
+  Just leaveNW <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
     joinNetwork scrollPositionN p buf
-  return (s,p)
+    return (leaveNetwork scrollPositionN p))
+  return (stop s >> leaveNW)
 
 onWindowHeight :: (MonadIO c, '[Revent] <: ms)
                => (Int -> Code ms c ())
-               -> Code ms c (Subscription ms c Int,Periodical ms c Int)
+               -> Code ms c (IO ())
 onWindowHeight f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with windowS $ do
+  Just leaveNW <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
     joinNetwork windowHeightN p buf
-  return (s,p)
+    return (leaveNetwork windowHeightN p))
+  return (stop s >> leaveNW)
 
 onWindowWidth :: (MonadIO c, '[Revent] <: ms)
               => (Int -> Code ms c ())
-              -> Code ms c (Subscription ms c Int,Periodical ms c Int)
+              -> Code ms c (IO ())
 onWindowWidth f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with windowS $ do
+  Just leaveNW <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
     joinNetwork windowWidthN p buf
-  return (s,p)
+    return (leaveNetwork windowWidthN p))
+  return (stop s >> leaveNW)
 
 onWindowDimensions :: (MonadIO c, '[Revent] <: ms)
                    => (WindowDimensions -> Code ms c ())
-                   -> Code ms c (Subscription ms c WindowDimensions,Periodical ms c WindowDimensions)
+                   -> Code ms c (IO ())
 onWindowDimensions f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with windowS $ do
+  Just leaveNW <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
     joinNetwork windowDimensionsN p buf
-  return (s,p)
+    return (leaveNetwork windowDimensionsN p))
+  return (stop s >> leaveNW)

@@ -83,9 +83,11 @@ mouseS = Mediator {..}
           oldY <- liftIO $ readIORef mouseYRef
           liftIO $ do
             syndicate mousePositionN (MousePosition newX newY)
+
             when (oldX /= Just newX) $ do
               syndicate mouseXN newX
               writeIORef mouseXRef (Just newX)
+
             when (oldY /= Just newY) $ do
               syndicate mouseYN newY
               writeIORef mouseYRef (Just newY)
@@ -111,35 +113,38 @@ getMouseY = with mouseS $ do
   liftIO $ readIORef mouseYRef
 
 onMouseX :: (MonadIO c, '[Revent] <: ms)
-         => (Int -> Code ms c ()) -> Code ms c (Subscription ms c Int,Periodical ms c Int)
+         => (Int -> Code ms c ()) -> Code ms c (IO ())
 onMouseX f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with mouseS $ do
+  Just leaveNW <- demandMaybe =<< with mouseS (do
     MouseState {..} <- get
     joinNetwork mouseXN p buf
-  return (s,p)
+    return (leaveNetwork mouseXN p))
+  return (stop s >> leaveNW)
 
 onMouseY :: (MonadIO c, '[Revent] <: ms)
-         => (Int -> Code ms c ()) -> Code ms c (Subscription ms c Int,Periodical ms c Int)
+         => (Int -> Code ms c ()) -> Code ms c (IO ())
 onMouseY f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with mouseS $ do
+  Just leaveNW <- demandMaybe =<< with mouseS (do
     MouseState {..} <- get
     joinNetwork mouseYN p buf
-  return (s,p)
+    return (leaveNetwork mouseYN p))
+  return (stop s >> leaveNW)
 
 onMousePosition :: (MonadIO c, '[Revent] <: ms)
                 => (MousePosition -> Code ms c ())
-                -> Code ms c (Subscription ms c MousePosition,Periodical ms c MousePosition)
+                -> Code ms c (IO ())
 onMousePosition f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p (lift . f)
-  with mouseS $ do
+  Just leaveNW <- demandMaybe =<< with mouseS (do
     MouseState {..} <- get
     joinNetwork mousePositionN p buf
-  return (s,p)
+    return (leaveNetwork mousePositionN p))
+  return (stop s >> leaveNW)

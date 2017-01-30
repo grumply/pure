@@ -43,6 +43,7 @@ import Data.Ratio
 import qualified Data.HashMap.Strict as Map
 
 import Atomic.Construct
+import Atomic.Mediator hiding (key)
 import Atomic          as Export hiding (stop,accept)
 import qualified Atomic
 import Atomic.WebSocket as Export hiding (LazyByteString)
@@ -127,15 +128,16 @@ onRoute :: ( IsOrganism' ts ms IO r
            )
          => Organism' ts ms IO r
          -> (r -> Code '[Event r] (Code ms' c') ())
-         -> Code ms' c' (Subscription ms' c' r,Periodical ms' c' r)
+         -> Code ms' c' (IO ())
 onRoute fus rf = do
   p <- periodical
   Just s <- subscribe p rf
   buf <- getReventBuffer
-  with fus $ do
+  Just leaveNW <- demandMaybe =<< with fus (do
     crn <- getRouteNetwork
     joinNetwork crn p buf
-  return (s,p)
+    return (leaveNetwork crn p))
+  return (stop s >> leaveNW)
 
 data Carrier where
   Carrier :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)
@@ -167,12 +169,15 @@ run Organism {..} = do
       go True ort doc (Carrier rt') pg
     crn <- getRouteNetwork
     joinNetwork crn p' q
+    onSelfShutdown $ do
+      syndicate mediatorShutdownNetwork ()
+      syndicate constructShutdownNetwork ()
     prime
     setupRouter (Proxy :: Proxy r)
   driverPrintExceptions
     ("Organism "
      ++ show site
-     ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'."
+     ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
     ) q obj
   where
     go first ort doc (Carrier rt) p = do
@@ -240,6 +245,7 @@ run Organism {..} = do
                 replace old new
                 return (Carrier iob)
               Just (_,x_) -> do
+                liftIO $ putStrLn "Re-embedding construct!"
                 (old,_,_) <- readIORef rt
                 (new,_,_) <- readIORef x_
                 rebuild b Nothing new

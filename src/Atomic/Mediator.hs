@@ -10,6 +10,7 @@ import Atomic.Key
 import Atomic.Revent
 import Atomic.Vault
 import Atomic.With
+import Atomic.Observable
 
 import Control.Concurrent
 import Data.IORef
@@ -112,12 +113,18 @@ startMediator rb Mediator {..} = do
                          *:* state (Shutdown sdn)
                          *:* Empty
   void $ liftIO $ forkIO $ do
-    (obj,_) <- Object built ! prime
+    (obj,_) <- Object built ! do
+      connect mediatorShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
+      prime
     driverPrintExceptions
       ("Mediator "
           ++ show key
-          ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'."
+          ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
       ) rb obj
+
+{-# NOINLINE mediatorShutdownNetwork #-}
+mediatorShutdownNetwork :: Network ()
+mediatorShutdownNetwork = unsafePerformIO network
 
 {-# NOINLINE mediatorVault__ #-}
 mediatorVault__ = Vault (unsafePerformIO (newMVar Map.empty))

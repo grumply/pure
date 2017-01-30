@@ -18,7 +18,7 @@ throttleify throttler lim io = unsafePerformIO $ do
   return (not b)
 
 {-# NOINLINE throttle #-}
-throttle :: (Monad super, MonadIO super) => Int -> IO () -> super Bool
+throttle :: MonadIO c => Int -> IO () -> c Bool
 throttle lim io = do
   x <- liftIO $
     unsafePerformIO $ do
