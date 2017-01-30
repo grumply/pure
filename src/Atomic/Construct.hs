@@ -494,7 +494,6 @@ instance IsConstruct' ts ms m
       case mi_ of
         Just (as,_) -> return (runAs as)
         Nothing -> do
-          liftIO $ putStrLn "Creating construct"
           mkConstruct (Just differ) Nothing c
           using_ c
     with_ c m = do

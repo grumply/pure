@@ -319,7 +319,7 @@ deleteOrganism = vaultDelete organismVault__
 setupRouter :: forall ms c routeType.
                (Eq routeType, MonadIO c, '[Revent,State () (Router routeType)] <: ms)
             => Proxy routeType
-            -> Code ms c (Behavior ms c (),Promise (Subscription ms c Obj))
+            -> Code ms c (IO (),Promise (IO ()))
 setupRouter _ = do
   crn :: Network routeType <- getRouteNetwork
   psn <- getWindowNetworkPreventDefault popstate

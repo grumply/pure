@@ -41,13 +41,13 @@ revent buf = Revent (buf,return) $ \s o -> pure (Module (revent s) o)
 connect :: (MonadIO c,'[Revent] <: ms)
         => Network e
         -> (e -> Code '[Event e] (Code ms c) ())
-        -> Code ms c (Subscription ms c e)
+        -> Code ms c (IO ())
 connect netwrk f = do
   buf <- getReventBuffer
   p <- periodical
   Just st <- subscribe p f
   joinNetwork netwrk p buf
-  return st
+  return (stop st >> leaveNetwork netwrk p)
 
 -- | Using the local Revent Trait, delay execution of the given computation
 -- by the given amount of microseconds. This is non-blocking.
@@ -55,7 +55,7 @@ delay :: forall ms c a.
          (MonadIO c, '[Revent] <: ms)
       => Int
       -> Code ms c a
-      -> Code ms c (Behavior ms c (),Promise a)
+      -> Code ms c (IO (),Promise a)
 delay uSeconds nar = do
   p <- promise
   sig :: Signal ms c () <- Ef.Base.construct
@@ -68,7 +68,7 @@ delay uSeconds nar = do
     else liftIO $ void $ forkIO $ do
            threadDelay uSeconds
            buffer buf sig ()
-  return (bt,p)
+  return (stop bt,p)
 
 -- | Schedule a computation for execution by the local event loop. This
 -- will run as soon as everything that is currently in the Revent buffer
@@ -76,7 +76,7 @@ delay uSeconds nar = do
 schedule :: forall ms c a.
             (MonadIO c, '[Revent] <: ms)
          => Code ms c a
-         -> Code ms c (Behavior ms c (),Promise a)
+         -> Code ms c (IO (),Promise a)
 schedule = delay 0
 
 asSelf :: forall ms c external.
