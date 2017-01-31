@@ -3,6 +3,7 @@
 {-# language ViewPatterns #-}
 module Data.Txt (module Data.Txt, module Export) where
 import Data.Monoid as Export
+import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 #ifdef __GHCJS__
 import Data.JSString as Export
@@ -26,5 +27,3 @@ type Txt = Text
 instance Lift Text where
   lift (unpack -> str) = [| pack str |]
 #endif
-
-

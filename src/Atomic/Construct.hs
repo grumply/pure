@@ -283,7 +283,7 @@ css :: CSS -> Atom e
 css = css' False
 
 css' :: Bool -> CSS -> Atom e
-css' b = html "style" [ typeA "text/css", scoped b ] . ((jss "\n"):) . go False
+css' b = html "style" [ typeA "text/css", scopedA b ] . ((jss "\n"):) . go False
   where
     go :: Bool -> CSS -> [Atom e]
     go b (Return _) = []
@@ -316,7 +316,7 @@ scss :: StaticCSS -> Atom e
 scss = scss' False
 
 scss' :: Bool -> StaticCSS -> Atom e
-scss' b = raw "style" [typeA "text/css", scoped b] . cssText
+scss' b = raw "style" [typeA "text/css", scopedA b] . cssText
 
 styles :: CSS -> Atom e
 styles = css' True . classify
@@ -472,6 +472,9 @@ data Construct' ts ms m
       , model     :: !(m)
       , view      :: !(m -> Atom (Code ms IO ()))
       }
+
+instance ToTxt (Construct' ts ms m) where
+  toTxt = toTxt . key
 
 instance Eq (Construct' ts ms m) where
   (==) (Construct k _ _ _ _) (Construct k' _ _ _ _) =

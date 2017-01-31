@@ -37,6 +37,9 @@ infixr 5 =:
 comment :: Txt -> Styles
 comment com = (=:) ("//" <> com) ""
 
+classify :: Txt -> Txt
+classify = ("." <>) . toTxt
+
 -- useful for debugging; keep the styles on the page, but block them with //
 -- Can be used to comment out one or more styles
 --

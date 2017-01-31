@@ -1,6 +1,7 @@
 {-# language CPP #-}
 {-# language TemplateHaskell #-}
 {-# language OverloadedStrings #-}
+{-# language ImplicitParams #-}
 module Atomic
   ( module Atomic
   , module Export
@@ -81,6 +82,7 @@ import Data.Txt as Txt hiding (head,map,null)
 import qualified Data.Txt as Txt
 import Data.JSON as JSON
 
+import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 
 instance FromMillis Micros where
@@ -123,6 +125,18 @@ ghcjs =
 #else
   const (return ())
 #endif
+
+scoped :: (FromTxt x) => (?scope :: Txt) => Txt -> x
+scoped t = fromTxt (toTxt ?scope <> t)
+
+this :: Q Exp
+this = do
+  md <- fmap loc_module qLocation
+  let t = dash $ Txt.pack md
+  [| fromTxt t |]
+
+dash :: Txt -> Txt
+dash = Txt.map (\x -> if x == '.' then '-' else x)
 
 type Controller m = Construct '[] m
 -- controller :: ConstructKey '[] m -> m -> (m -> HTML '[] m) -> Controller m

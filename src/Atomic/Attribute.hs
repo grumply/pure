@@ -4,7 +4,7 @@ module Atomic.Attribute where
 
 import Ef.Base
 
-import Data.Txt
+import Data.Txt as T
 import Data.JSON hiding (Options)
 
 import Atomic.FromTxt
@@ -13,6 +13,8 @@ import Atomic.Cond
 
 import Data.String
 import Data.Maybe
+
+import GHC.Exts
 
 #ifdef LENS
 import Control.Lens (makePrisms,makeLenses)
@@ -67,6 +69,12 @@ instance Cond (Feature e) where
 
 instance IsString (Feature e) where
   fromString = Attribute "class" . Right . fromString
+
+instance IsList (Feature e) where
+  type Item (Feature e) = Txt
+  fromList = fromTxt . T.intercalate " "
+  toList (Attribute "class" (Right cs)) = T.words cs
+  toList _ = []
 
 instance {-# OVERLAPS #-} IsString [Feature e] where
   fromString s = [fromString s]
@@ -335,8 +343,8 @@ httpEquiv = attr "http-equiv"
 language :: Txt -> Feature e
 language = attr "language"
 
-scoped :: Bool -> Feature e
-scoped = boolattr "scoped"
+scopedA :: Bool -> Feature e
+scopedA = boolattr "scoped"
 
 accesskey :: Char -> Feature e
 accesskey = attr "accesskey" . JSS.singleton

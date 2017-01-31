@@ -11,8 +11,8 @@ class Cond a where
 cond :: Cond a => Bool -> a -> a
 cond b t = b ? t $ nil
 
-may :: Cond a => Maybe a -> a
-may = fromMaybe nil
+may :: Cond a => (b -> a) -> Maybe b -> a
+may = maybe nil
 
 ncond :: Cond a => Bool -> a -> a
 ncond b = cond (not b)
