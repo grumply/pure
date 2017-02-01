@@ -4,6 +4,7 @@ module Atomic.ToTxt where
 
 import Atomic.ToBS
 
+import Data.Coerce
 import Numeric
 
 import Data.Txt
@@ -41,12 +42,8 @@ import qualified Data.Text.Lazy.Builder.Int as Builder
 -- default instance, this won't matter much.
 class ToTxt a where
   toTxt :: a -> Txt
-  default toTxt :: ToBS a => a -> Txt
-#ifdef __GHCJS__
-  toTxt = pack . BSLC.unpack . toBS
-#else
-  toTxt = TL.toStrict . TL.decodeUtf8 . toBS
-#endif
+  default toTxt :: Coercible a Txt => a -> Txt
+  toTxt = coerce
 
 instance ToTxt Value where
 #ifdef __GHCJS__
@@ -122,8 +119,6 @@ instance ToTxt Double where
 #else
   toTxt = toTxt . ($ "") . showFFloat Nothing
 #endif
-
-
 
 instance ToTxt Bool where
   toTxt True  = "true"

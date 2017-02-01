@@ -34,7 +34,7 @@ getO = do
   m <- get
   return (observableState m)
 
-watch_ :: ( MonadIO c
+observe_ :: ( MonadIO c
          , MonadIO c'
          , With w (Code ms c) IO
          , '[Revent] <: ms'
@@ -43,7 +43,7 @@ watch_ :: ( MonadIO c
       => w
       -> (m -> Code '[Event m] (Code ms' c') ())
       -> Code ms' c' (IO ())
-watch_ c f = do
+observe_ c f = do
   p <- periodical
   Just s <- subscribe p f
   buf <- getReventBuffer
@@ -53,7 +53,7 @@ watch_ c f = do
     return (leaveNetwork us p))
   return (stop s >> leaveNW)
 
-watch :: ( MonadIO c
+observe :: ( MonadIO c
          , MonadIO c'
          , With w (Code ms c) IO
          , '[Revent] <: ms'
@@ -62,9 +62,9 @@ watch :: ( MonadIO c
       => w
       -> (m -> Code ms' c' ())
       -> Code ms' c' (IO ())
-watch c f = watch_ c (lift . f)
+observe c f = observe_ c (lift . f)
 
-watch' :: ( MonadIO c
+observe' :: ( MonadIO c
           , MonadIO c'
           , With w (Code ms c) IO
           , '[Revent] <: ms'
@@ -73,7 +73,7 @@ watch' :: ( MonadIO c
        => w
        -> (m -> Code ms' c' ())
        -> Code ms' c' (IO ())
-watch' c f = do
-  sp <- watch c f
+observe' c f = do
+  sp <- observe c f
   with c getO >>= demandMaybe >>= mapM_ f
   return sp

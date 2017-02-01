@@ -10,11 +10,11 @@ module Atomic
   , cnode, keyed, svgHTML, construct, tagged, hashed
   , css, css', scss, scss', styles
   , diff, setManualDiff, setEagerDiff, setLazyDiff
-  , observe, set, update
+  , gets, sets, updates
   , onModelChange, onViewChange, ownView, currentView
   ) where
 
-import Ef.Base as Export hiding (watch,transform,construct)
+import Ef.Base as Export hiding (transform,construct)
 
 import Data.Hashable as Export
 import Data.Typeable as Export
@@ -38,6 +38,7 @@ import Atomic.Ease       as Export
 import Atomic.Endpoint   as Export
 import Atomic.FromBS     as Export
 import Atomic.FromTxt    as Export
+import Atomic.Grid       as Export
 import Atomic.HTML       as Export
 import Atomic.Indexed    as Export
 import Atomic.Key        as Export
@@ -160,9 +161,9 @@ static key0 view0 = Construct {..}
     model = ()
     view _ = view0
 
-type Store m = Mediator '[Observable m]
-store :: MediatorKey '[Observable m] -> m -> Store m
-store key initial = Mediator {..}
+type Observatory m = Mediator '[Observable m]
+observatory :: MediatorKey '[Observable m] -> m -> Observatory m
+observatory key initial = Mediator {..}
   where
     build base = do
       o <- observable initial
@@ -170,14 +171,14 @@ store key initial = Mediator {..}
     prime = return ()
 
 type Observer m = Construct '[] (Maybe m)
--- observer :: Store m -> ConstructKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
+-- observer :: Observatory m -> ConstructKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
 observer :: forall m ms w. (Eq m, With w (Code ms IO) (Code (ConstructBase (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
          => w -> ConstructKey '[] (Maybe m) -> (m -> Atom (Code (ConstructBase (Maybe m)) IO ())) -> Observer m
 observer s key0 view0 = Construct {..}
   where
     key = key0
     build = return
-    prime = void $ watch' s (set . Just :: m -> Code (ConstructBase (Maybe m)) IO ())
+    prime = void $ observe' s (sets . Just :: m -> Code (ConstructBase (Maybe m)) IO ())
     model = Nothing
     view Nothing = nil
     view (Just m) = view0 m

@@ -1,4 +1,6 @@
 {-# language CPP #-}
+{-# language OverloadedStrings #-}
+{-# language TemplateHaskell #-}
 module Atomic.FromTxt where
 
 #ifdef __GHCJS__
@@ -6,6 +8,8 @@ import Data.JSString
 #endif
 
 import Data.Txt
+
+import Data.Coerce
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -17,6 +21,8 @@ import qualified Data.Text.Lazy as TL
 
 class FromTxt a where
   fromTxt :: Txt -> a
+  default fromTxt :: Coercible Txt a => Txt -> a
+  fromTxt = coerce
 
 instance FromTxt TL.Text where
 #ifdef __GHCJS__

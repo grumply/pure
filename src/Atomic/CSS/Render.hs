@@ -195,7 +195,7 @@ instance ToTxt CSS where
               Just c' ->
                 atRule <> sel <> " {\n" <> go True c' <> "\n}\n\n" <> go False k
           Just (CSS_ sel ss k) ->
-            let t = sel <> " {\n" <> Txt.intercalate (if b then ";\n\t" else ";\n") (renderStyles b ss) <> if b then "\n\t}\n\n" else "\n}\n\n"
+            let t = sel <> " {\n" <> Txt.intercalate ";\n" (renderStyles b ss) <> if b then "\n\t}\n\n" else "\n}\n\n"
             in (if b then "\t" <> t else t) <> go b k
           _ -> mempty
 

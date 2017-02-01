@@ -4,6 +4,7 @@ module Atomic.Normalize where
 
 import Atomic.CSS
 
+-- A port of Nicolas Gallagher's normalize.css from: https://github.com/necolas/normalize.css; MIT licensed
 normalize :: StaticCSS
 normalize =
   $( let nrmlz = staticCSS $ do

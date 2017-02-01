@@ -53,6 +53,7 @@ library
                       , Atomic.Endpoint
                       , Atomic.FromBS
                       , Atomic.FromTxt
+                      , Atomic.Grid
                       , Atomic.HTML
                       , Atomic.Indexed
                       , Atomic.Key

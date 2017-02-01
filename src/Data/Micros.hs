@@ -15,15 +15,11 @@ import Data.JSON
 import Data.Time.Clock.POSIX
 #endif
 
-import Atomic.ToBS
-import Atomic.FromBS
 import Atomic.ToTxt
 
 -- microseconds since beginning of 1970 to an accuracy of 1 millisecond in GHCJS and 1 microsecond in GHC
 newtype Micros = Micros { getMicros :: Integer }
   deriving (Show,Eq,Ord,Generic,ToJSON,FromJSON)
-instance ToBS Micros
-instance FromBS Micros
 instance ToTxt Micros where
   toTxt (Micros us) = toTxt us
 instance Num Micros where

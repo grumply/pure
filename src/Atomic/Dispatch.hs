@@ -15,21 +15,18 @@ data Dispatch
   = Dispatch
     { ep :: Txt
     , pl :: Value
-    } deriving (Generic)
-instance ToJSON Dispatch
-instance FromJSON Dispatch
+    } deriving (Generic,ToJSON,FromJSON)
 instance ToBS Dispatch
-instance ToTxt Dispatch
 #ifndef __GHCJS__
 instance FromBS Dispatch
   where
     fromBS = eitherDecode' . BSL.takeWhile (/= 0)
   -- NOTE on BSL.takeWhile (/= 0):
-  -- fixes a padding bug when used with Fusion. Is \NUL
+  -- fixes a padding bug when used with ghcjs/atomic. Is \NUL
   -- valid in a text component of an encoded message?
   -- Probably need to filter \NUL from encoded messages
-  -- in Fusion. Any use of a null byte is liable to clobber
-  -- a message and force a disconnect since Fission doesn't
+  -- in ghcjs/atomic. Any use of a null byte is liable to clobber
+  -- a message and force a disconnect since ghc/atomic doesn't
   -- permit malformed messages.
 #endif
 

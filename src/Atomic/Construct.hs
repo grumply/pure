@@ -663,19 +663,19 @@ onModelChange c f = do
     return (leaveNetwork asUpdates p))
   return (stop s >> leaveNW)
 
-{-# INLINE observe #-}
-observe :: ('[State () (ConstructState m)] <: ms) => Code ms IO m
-observe = do
+{-# INLINE gets #-}
+gets :: ('[State () (ConstructState m)] <: ms) => Code ms IO m
+gets = do
   ConstructState {..} <- get
   return asModel
 
-{-# INLINE set #-}
-set :: forall ms m.
+{-# INLINE sets #-}
+sets :: forall ms m.
         ( '[State () (ConstructState m)] <: ms
         , Eq m
         )
      => m -> Code ms IO ()
-set !new = do
+sets !new = do
   (ConstructState {..},(old,cmp')) <- modify $ \(ConstructState {..} :: ConstructState m) ->
     let !old = asModel
         cmp' = ConstructState { asModel = new, .. }
@@ -691,14 +691,14 @@ set !new = do
         Eager  -> d cmp'
         Manual -> return ()
 
-{-# INLINE update #-}
-update :: forall ms m.
+{-# INLINE updates #-}
+updates :: forall ms m.
            ( '[State () (ConstructState m)] <: ms
            , Eq m
            )
         => (m -> m)
         -> Code ms IO ()
-update f = do
+updates f = do
   (ConstructState {..},(old,new,cmp')) <- modify $ \ConstructState {..} ->
     let !old = asModel
         !new = f old
