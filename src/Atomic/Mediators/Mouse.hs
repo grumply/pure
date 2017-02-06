@@ -49,7 +49,7 @@ mouseMove =
 mouseS :: Mediator '[State () MouseState]
 mouseS = Mediator {..}
   where
-    key = "Fusion.mouseS"
+    key = "atomic.mouse"
 
     build base = do
       mouseXRef      <- newIORef Nothing

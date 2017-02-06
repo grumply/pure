@@ -47,7 +47,7 @@ foreign import javascript unsafe
 sessionStorageS :: Mediator '[State () (Map.HashMap Txt Value)]
 sessionStorageS = Mediator {..}
   where
-    key = "Fusion.SessionStorage"
+    key = "atomic.sessionStorage"
 
     build base = do
 #ifdef __GHCJS__

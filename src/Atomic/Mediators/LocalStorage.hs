@@ -53,7 +53,7 @@ foreign import javascript unsafe
 localStorageS :: Mediator '[State () (Map.HashMap Txt Value)]
 localStorageS = Mediator {..}
   where
-    key = "Fusion.LocalStorage"
+    key = "atomic.localStorage"
 
     build base = do
 #ifdef __GHCJS__

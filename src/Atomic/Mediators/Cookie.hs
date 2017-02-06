@@ -43,7 +43,7 @@ cookieS :: Mediator '[State () (Map.HashMap Txt [Txt])]
 cookieS = Mediator {..}
   where
 
-    key = "Fusion.cookieS"
+    key = "atomic.cookie"
 
     build base = do
       cs <- parseCookies

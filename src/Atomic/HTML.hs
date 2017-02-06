@@ -383,6 +383,21 @@ line = svgHTML "line"
 linearGradient :: [Feature e] -> [Atom e] -> Atom e
 linearGradient = svgHTML "linearGradient"
 
+filter_ :: [Feature e] -> [Atom e] -> Atom e
+filter_ = svgHTML "filter"
+
+feGaussianBlur :: [Feature e] -> [Atom e] -> Atom e
+feGaussianBlur = svgHTML "feGaussianBlur"
+
+feOffset :: [Feature e] -> [Atom e] -> Atom e
+feOffset = svgHTML "feOffset"
+
+feMerge :: [Feature e] -> [Atom e] -> Atom e
+feMerge = svgHTML "feMerge"
+
+feMergeNode :: [Feature e] -> [Atom e] -> Atom e
+feMergeNode = svgHTML "feMergeNode"
+
 mask :: [Feature e] -> [Atom e] -> Atom e
 mask = svgHTML "mask"
 

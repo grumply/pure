@@ -120,7 +120,7 @@ getInnerHeight = do
 windowS :: Mediator '[State () WindowState]
 windowS = Mediator {..}
   where
-    key = "Fusion.windowS"
+    key = "atomic.window"
 
     build base = do
       windowDimensionsN <- network

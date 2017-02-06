@@ -12,6 +12,7 @@ module Atomic
   , diff, setManualDiff, setEagerDiff, setLazyDiff
   , gets, sets, updates
   , onModelChange, onViewChange, ownView, currentView
+  , LazyByteString
   ) where
 
 import Ef.Base as Export hiding (transform,construct)
@@ -22,6 +23,9 @@ import GHC.Generics as Export (Generic)
 
 import Atomic.Construct
 import Atomic.Mediator
+
+import Data.Bool as Export
+import Data.Maybe as Export
 
 import qualified Data.Txt as Export (Txt(..))
 import Data.JSON         as Export hiding (defaultOptions,Options,(!))
@@ -64,9 +68,9 @@ import Atomic.TypeRep    as Export
 import Atomic.UnsafeEq   as Export
 import Atomic.Vault      as Export
 #ifdef __GHCJS__
-import Atomic.WebSocket  as Export hiding (LazyByteString)
+import Atomic.WebSocket  as Export
 #else
-import Atomic.WebSocket  as Export hiding (LazyByteString,accept)
+import Atomic.WebSocket  as Export hiding (accept)
 #endif
 import Atomic.With       as Export
 
@@ -178,7 +182,7 @@ observer s key0 view0 = Construct {..}
   where
     key = key0
     build = return
-    prime = void $ observe' s (sets . Just :: m -> Code (ConstructBase (Maybe m)) IO ())
+    prime = void $ observe' s $ \(m :: m) -> sets (Just m)
     model = Nothing
     view Nothing = nil
     view (Just m) = view0 m
@@ -208,7 +212,7 @@ instance ToTxt (Feature e) where
 
   toTxt (Attribute attr val) =
     case val of
-      Left b  -> attr <> "=" <> if b then "true" else "false"
+      Left b  -> if b then attr else mempty
       Right v -> attr <> "=\"" <> v <> "\""
 
   toTxt (Style pairs) =
@@ -225,6 +229,8 @@ instance ToTxt (Feature e) where
   toTxt (On' _ _ _ _)    = mempty
 
   toTxt (Link href _)    = "href=\"" <> href <> "\""
+
+  toTxt (XLink xl v)     = xl <> "=\"" <> v <> "\""
 
 instance ToTxt [Feature e] where
   toTxt fs =
@@ -336,7 +342,7 @@ renderSystemBootstrap (System h c) mainScript =
       Construct' Construct {..} ->
         toTxt $
           html_ []
-            [ view model
+            [ head []
             , body []
                 [ case c of
                     Construct' a@Construct {} -> construct div [ idA "atomic" ] a
@@ -358,55 +364,28 @@ renderSystemBootstrap (Subsystem c) mainScript =
 
 renderDynamicSystem :: System -> IO Txt
 renderDynamicSystem (System (Construct' h) (Construct' c)) = do
-  let dt = "<!DOCTYPE html>"
+  let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentView h
-  Just c_ <- demandMaybe =<< currentView c
   head_html <- renderDynamicHTML h_
-  body_html <- renderDynamicHTML c_
-  return $ (dt <>) $ toTxt $
-    html_ []
-      [ raw "head" [] head_html
-      , body []
-          [ raw "div" [ idA "atomic" ] body_html ]
-      ]
+  body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c])
+  return $ dt <> head_html <> body_html <> "</html>"
 renderDynamicSystem (Subsystem (Construct' c)) = do
-  let dt = "<!DOCTYPE html>"
+  let dt = "<!DOCTYPE html><head></head>"
   Just c_ <- demandMaybe =<< currentView c
-  body_html <- renderDynamicHTML c_
-  return $ (dt <>) $ toTxt $
-    html_ []
-      [ head []
-      , body []
-          [ raw "div" [ idA "atomic" ] body_html ]
-      ]
+  body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c ])
+  return $ dt <> body_html <> "</html>"
 
 renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
 renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript = do
-  let dt = "<!DOCTYPE html>"
+  let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentView h
-  Just c_ <- demandMaybe =<< currentView c
   head_html <- renderDynamicHTML h_
-  body_html <- renderDynamicHTML c_
-  return $ (dt <>) $ toTxt $
-    html_ []
-      [ raw "head" [] head_html
-      , body []
-          [ raw "div" [ idA "atomic" ] body_html
-          , script [ src mainScript, defer "defer" ] []
-          ]
-      ]
+  body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c, script [ src mainScript, defer "defer" ] [] ])
+  return $ dt <> head_html <> body_html <> "</html>"
 renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
-  let dt = "<!DOCTYPE html>"
-  Just c_ <- demandMaybe =<< currentView c
-  body_html <- renderDynamicHTML c_
-  return $ (dt <>) $ toTxt $
-    html_ []
-      [ head []
-      , body []
-          [ raw "div" [ idA "atomic" ] body_html
-          , script [ src mainScript, defer "defer" ] []
-          ]
-      ]
+  let dt = "<!DOCTYPE html><html><head></head>"
+  body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c, script [ src mainScript, defer "defer" ] [] ])
+  return $ dt <> body_html <> "</html>"
 
 renderDynamicHTML :: Atom e -> IO Txt
 renderDynamicHTML h =
@@ -420,29 +399,32 @@ renderDynamicHTML h =
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> ">"<> _content <> "</" <> _tag <> ">"
 
-    KAtom {..} ->
+    KAtom {..} -> do
+      cs <- mapM (\(_,c) -> renderDynamicHTML c) _keyed
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
                "/>"
              else
-               ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
+               ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
-    Atom {..} ->
+    Atom {..} -> do
+      cs <- mapM renderDynamicHTML _children
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
-               "/>"
-             else
-               ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+              "/>"
+            else
+              ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
-    SVGAtom {..} ->
+    SVGAtom {..} -> do
+      cs <- mapM renderDynamicHTML _children
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
                "/>"
              else
-               ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+               ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     Managed {..} ->
       case _constr of

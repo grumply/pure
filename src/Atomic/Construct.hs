@@ -497,7 +497,7 @@ instance IsConstruct' ts ms m
       case mi_ of
         Just (as,_) -> return (runAs as)
         Nothing -> do
-          mkConstruct (Just differ) Nothing c
+          mkConstruct Nothing c
           using_ c
     with_ c m = do
       run <- using_ c
@@ -544,20 +544,20 @@ mkConstruct :: forall ms ts m.
           ( IsConstruct' ts ms m
           , ConstructBase m <: ms
           )
-       => Maybe (Differ ms m)
-       -> Maybe ENode
+       => Maybe ENode
        -> Construct' ts ms m
        -> IO (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m))
-mkConstruct mDiffer mparent c@Construct {..} = do
+mkConstruct mparent c@Construct {..} = do
+  doc <- getDocument
   let !m = model
   sig :: Signal ms IO (Code ms IO ()) <- runner
   sigBuf <- newSignalBuffer
-  updates :: Network m <- network
+  us :: Network m <- network
   views :: Network (m,Atom (Code ms IO ())) <- network
   let asComp = constructAs sigBuf sig
       sendEv :: Code ms IO () -> IO ()
       sendEv = void . runAs asComp
-  let !raw = view m
+      !raw = view m
   doc <- getDocument
   i <- buildAndEmbedMaybe sendEv doc mparent raw
   cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
@@ -570,17 +570,24 @@ mkConstruct mDiffer mparent c@Construct {..} = do
                                (differ view trig sendEv)
                                Lazy
                                views
-                               updates
+                               us
                                model
                                cs_live_
                           )
                   *:* state (Shutdown sdn)
                   *:* revent sigBuf
                   *:* Empty
-  (obj',_) <- Ef.Base.Object built Ef.Base.! do
-                connect constructShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
-                prime
-  forkIO $ driverPrintExceptions ("Construct' (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Construct' may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception: ") sigBuf obj'
+  (obj',s) <- Ef.Base.Object built Ef.Base.! do
+    connect constructShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
+    prime
+  forkIO $
+#ifdef __GHCJS__
+    driverPrintExceptions
+      ("Construct' (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Construct' may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception: ")
+#else
+    driver
+#endif
+        sigBuf obj'
   return cs_live_
 
 diff :: forall m ms. ('[State () (ConstructState m)] <: ms)
@@ -683,6 +690,7 @@ sets !new = do
   syndicate asUpdates new
   let d :: ConstructState m -> Code ms IO ()
       d = unsafeCoerce asDiffer
+#ifdef __GHCJS__
   case reallyUnsafePtrEquality# old new of
     1# -> return ()
     _  ->
@@ -690,6 +698,9 @@ sets !new = do
         Lazy   -> unless (old == new) (d cmp')
         Eager  -> d cmp'
         Manual -> return ()
+#else
+  d cmp'
+#endif
 
 {-# INLINE updates #-}
 updates :: forall ms m.
@@ -707,6 +718,7 @@ updates f = do
   syndicate asUpdates new
   let d :: ConstructState m -> Code ms IO ()
       d = unsafeCoerce asDiffer
+#ifdef __GHCJS__
   case reallyUnsafePtrEquality# old new of
     1# -> return ()
     _  ->
@@ -714,9 +726,13 @@ updates f = do
         Lazy   -> unless (old == new) (d cmp')
         Eager  -> d cmp'
         Manual -> return ()
+#else
+  d cmp'
+#endif
 
 differ :: (ConstructBase m <: ms) => Differ ms m
 differ view trig sendEv ConstructState {..} = do
+#ifdef __GHCJS__
   let setupDiff = do
         let !new_as = AState (unsafeCoerce asLive) asModel
         new_ap_AState <- liftIO $ newIORef (Just new_as,False)
@@ -739,6 +755,13 @@ differ view trig sendEv ConstructState {..} = do
         when shouldSetupDiff $ do
           setupDiff
   return ()
+#else
+  let v = view asModel
+  liftIO $ do
+    Prelude.putStrLn "Writing new view"
+    writeIORef asLive $ unsafeCoerce (v,v,asModel)
+    syndicate asViews $ unsafeCoerce (asModel,v)
+#endif
 
 #ifdef __GHCJS__
 toNode :: T.IsNode n => n -> NNode
@@ -857,7 +880,6 @@ setAttributes as f el =
   return as
 #endif
 
-
 {-# NOINLINE buildAndEmbedMaybe #-}
 buildAndEmbedMaybe :: (e -> IO ()) -> Doc -> Maybe ENode -> Atom e -> IO (Atom e)
 buildAndEmbedMaybe f doc = go
@@ -911,7 +933,7 @@ buildAndEmbedMaybe f doc = go
               case mi_ of
                 Nothing -> do
                   -- never built before; make and embed
-                  mkConstruct (Just differ) _node a
+                  mkConstruct _node a
                   forM_ mparent (`embed_` Managed {..})
                   return Managed {..}
                 Just (_,x_) -> do
@@ -987,6 +1009,11 @@ replace old@Text {} new@Text {} = do
 replace old Text {..} = do
   forM_ (_node old) $ \o ->
     forM_ _tnode $ \n ->
+      swap_js (toNode o) (toNode n)
+
+replace Text {..} new = do
+  forM_ _tnode $ \o ->
+    forM_ (_node new) $ \n ->
       swap_js (toNode o) (toNode n)
 
 replace old new = do
@@ -1070,7 +1097,12 @@ insertBefore_ parent child new = void $ N.insertBefore parent (_node new) (_node
 #endif
 
 diffHelper :: (e -> IO ()) -> Doc -> Atom e -> Atom e -> Atom e -> IO (Either (Atom e) (Atom e))
-diffHelper f doc = go
+diffHelper f doc o m n =
+#ifdef __GHCJS__
+    go o m n
+#else
+    return $ Left n
+#endif
   where
     go old mid new =
       if reallyUnsafeEq mid new then
@@ -1123,7 +1155,7 @@ diffHelper f doc = go
                   a' <- if reallyUnsafeEq (_attributes mid) (_attributes new) then do
                           return (_attributes old)
                         else
-                          runElementDiffSVG f n (_attributes old) (_attributes mid) (_attributes new)
+                          runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
                   c' <- if reallyUnsafeEq (_children mid) (_children new) then do
                           return (_children old)
                         else
@@ -1199,7 +1231,7 @@ diffHelper f doc = go
           n' <- buildAndEmbedMaybe f doc Nothing n
           case old of
             t@(Text (Just o) _) ->
-              forM_ (_node n) $ \n -> swapContent o n
+              forM_ (_node n') (swapContent o)
             _ -> do
               replace old n'
               cleanup [old]
@@ -1473,94 +1505,6 @@ runElementDiff f el os0 ms0 ns0 =
               replace
 #endif
 
-{-# NOINLINE runElementDiffSVG #-}
-runElementDiffSVG :: (e -> IO ())
-                  -> ENode
-                  -> [Feature e]
-                  -> [Feature e]
-                  -> [Feature e]
-                  -> IO [Feature e]
-runElementDiffSVG f el os0 ms0 ns0 =
-#ifndef __GHCJS__
-    return ns0
-#else
-    go os0 ms0 ns0
-  where
-
-    go [] [] news =
-      mapM (setAttributeSVG_ f el) news
-
-    go olds _ [] =
-      mapM (\old -> removeAttributeSVG_ el old >> return NullFeature) olds
-
-    go (old:olds) (mid:mids) (new:news) =
-      let
-        remove =
-          removeAttributeSVG_ el old
-
-        set =
-          setAttributeSVG_ f el new
-
-        goRest =
-          go olds mids news
-
-        continue up = do
-          upds <- if reallyUnsafeEq mids news then return olds else goRest
-          return (up:upds)
-
-        update = do
-          new' <- set
-          continue new'
-
-        replace = do
-          remove
-          update
-
-      in
-        if reallyUnsafeEq mid new then
-          continue old
-        else
-          case (mid,new) of
-            (_,NullFeature) -> do
-              remove
-              continue new
-
-            (NullFeature,_) ->
-              update
-
-            (CurrentValue oldV,CurrentValue newV) ->
-              if prettyUnsafeEq oldV newV then
-                continue old
-              else
-                update
-
-            (Style oldS,Style newS) -> do
-              -- we know /something/ changed
-              applyStyleDiffs el oldS newS
-              continue new
-
-            (Attribute nm val,Attribute nm' val') ->
-              if prettyUnsafeEq nm nm' then
-                update
-              else
-                replace
-
-            (On e m _,On e' m' _) ->
-              if prettyUnsafeEq e e' && reallyUnsafeEq m m' then
-                continue old
-              else
-                replace
-
-            (On' e os g _,On' e' os' g' _) ->
-              if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then
-                continue old
-              else
-                replace
-
-            _ ->
-              replace
-#endif
-
 {-# NOINLINE removeAttribute_ #-}
 removeAttribute_ :: ENode -> Feature e -> IO ()
 removeAttribute_ element attr =
@@ -1591,38 +1535,9 @@ removeAttribute_ element attr =
       obj <- O.create
       forM_ styles $ \(nm,val) -> O.unsafeSetProp nm (M.pToJSVal val) obj
       clearStyle_js element obj
-#endif
 
-{-# NOINLINE removeAttributeSVG_ #-}
-removeAttributeSVG_ :: ENode -> Feature e -> IO ()
-removeAttributeSVG_ element attr =
-#ifndef __GHCJS__
-  return ()
-#else
-  case attr of
-    NullFeature ->
-      return ()
-
-    CurrentValue _ ->
-      set_value_js element ""
-
-    Attribute nm _ ->
-      E.removeAttributeNS element (Just ("http://www.w3.org/2000/svg" :: Txt)) nm
-
-    Link _ unreg -> do
-      forM_ unreg id
-      E.removeAttributeNS element (Just ("http://www.w3.org/2000/svg" :: Txt)) ("href" :: Txt)
-
-    On _ _ unreg ->
-      forM_ unreg id
-
-    On' ev _ _ unreg ->
-      forM_ unreg id
-
-    Style styles -> do
-      obj <- O.create
-      forM_ styles $ \(nm,val) -> O.unsafeSetProp nm (M.pToJSVal val) obj
-      clearStyle_js element obj
+    XLink nm _ ->
+      E.removeAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) nm
 #endif
 
 {-# NOINLINE setAttribute_ #-}
@@ -1693,76 +1608,9 @@ setAttribute_ c element attr =
       forM_ styles $ \(nm,val) -> O.unsafeSetProp nm (M.pToJSVal val) obj
       setStyle_js element obj
       return attr
-#endif
 
-{-# NOINLINE setAttributeSVG_ #-}
-setAttributeSVG_ :: (e -> IO ()) -> ENode -> Feature e -> IO (Feature e)
-setAttributeSVG_ c element attr =
-#ifndef __GHCJS__
-  return attr
-#else
-  case attr of
-    NullFeature ->
-      return NullFeature
-
-    CurrentValue v -> do
-      set_value_js element v
-      return attr
-
-    -- optimize this; we're doing a little more work than necessary!
-    Attribute nm eval -> do
-      either (\b -> void $
-                      if b then
-                        E.setAttributeNS element (Just ("http://www.w3.org/2000/svg" :: Txt)) nm (mempty :: Txt)
-                      else
-                        E.removeAttributeNS element (Just ("http://www.w3.org/2000/svg" :: Txt)) nm
-             )
-             (void . E.setAttributeNS element (Just ("http://www.w3.org/2000/svg" :: Txt)) nm)
-             eval
-      return attr
-
-    Link href _ -> do
-      E.setAttributeNS element (Just ("http://www.w3.org/2000/svg" :: Txt)) ("href" :: Txt) href
-      stopListener <-
-        Ev.on
-          element
-          (Ev.unsafeEventName "click" :: Ev.EventName E.Element T.MouseEvent)
-            $ do Ev.preventDefault
-                 liftIO $ do
-                   win <- getWindow
-                   Just hist <- W.getHistory win
-                   H.pushState hist (M.pToJSVal (0 :: Int)) ("" :: Txt) href
-                   triggerPopstate_js
-                   scrollToTop
-      return (Link href (Just stopListener))
-
-    On ev e _ -> do
-      stopListener <-
-        Ev.on
-          element
-          (Ev.unsafeEventName ev :: Ev.EventName E.Element T.MouseEvent) -- faked
-            $ do Ev.preventDefault
-                 Ev.stopPropagation
-                 liftIO $ void $ c e
-      return (On ev e (Just stopListener))
-
-    On' ev os f _ -> do
-      stopListener <-
-        Ev.on
-          element
-          (Ev.unsafeEventName ev :: Ev.EventName E.Element T.CustomEvent) -- for the type checking; actually just an object
-            $ do ce <- Ev.event
-                 when (_preventDefault os) Ev.preventDefault
-                 when (_stopPropagation os) Ev.stopPropagation
-                 v <- liftIO $ M.toJSVal ce
-                 liftIO $ f (unsafeCoerce ce) >>= mapM_ c 
-                 return ()
-      return (On' ev os f (Just stopListener))
-
-    Style styles -> do
-      obj <- O.create
-      forM_ styles $ \(nm,val) -> O.unsafeSetProp nm (M.pToJSVal val) obj
-      setStyle_js element obj
+    XLink nm val -> do
+      E.setAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) nm val
       return attr
 #endif
 

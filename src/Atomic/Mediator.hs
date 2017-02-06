@@ -2,6 +2,7 @@
 {-# language FlexibleInstances #-}
 {-# language UndecidableInstances #-}
 {-# language MagicHash #-}
+{-# language CPP #-}
 module Atomic.Mediator (module Atomic.Mediator) where
 
 import Ef.Base hiding (Client,Server)
@@ -116,11 +117,16 @@ startMediator rb Mediator {..} = do
     (obj,_) <- Object built ! do
       connect mediatorShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
       prime
+#ifdef __GHCJS__
     driverPrintExceptions
       ("Mediator "
           ++ show key
           ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
-      ) rb obj
+      )
+#else
+    driver
+#endif
+      rb obj
 
 {-# NOINLINE mediatorShutdownNetwork #-}
 mediatorShutdownNetwork :: Network ()

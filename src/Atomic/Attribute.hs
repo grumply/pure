@@ -34,6 +34,9 @@ data Options = Options
 defaultOptions :: Options
 defaultOptions = Options False False
 
+noDefaultOptions :: Options
+noDefaultOptions = Options True False
+
 interceptOptions :: Options
 interceptOptions = Options True True
 
@@ -62,6 +65,10 @@ data Feature e
     { _event :: Txt
     , _eventListener :: Maybe (IO ())
     }
+  | XLink
+    { _attr :: Txt
+    , _xlinkValue :: Txt
+    }
   deriving (Functor)
 
 instance Cond (Feature e) where
@@ -75,6 +82,15 @@ instance IsList (Feature e) where
   fromList = fromTxt . T.intercalate " "
   toList (Attribute "class" (Right cs)) = T.words cs
   toList _ = []
+
+-- is this a terrible idea?
+instance IsList ([a] -> [a]) where
+  type Item ([a] -> [a]) = a
+  fromList = go
+    where
+      go [] xs' = xs'
+      go (x:xs) xs' = x:go xs xs'
+  toList f = f []
 
 instance {-# OVERLAPS #-} IsString [Feature e] where
   fromString s = [fromString s]
@@ -106,6 +122,18 @@ on' ev os f = On' ev os f Nothing
 on :: Txt -> e -> Feature e
 on ev e = On ev e Nothing
 
+onPreventDefault :: Txt -> e -> Feature e
+onPreventDefault ev e = on' ev noDefaultOptions (\_ -> return (Just e))
+
+onPreventDefault' :: Txt -> (Obj -> IO (Maybe e)) -> Feature e
+onPreventDefault' ev f = on' ev noDefaultOptions f
+
+onIntercept :: Txt -> e -> Feature e
+onIntercept ev e = on' ev interceptOptions (\_ -> return (Just e))
+
+onIntercept' :: Txt -> (Obj -> IO (Maybe e)) -> Feature e
+onIntercept' ev f = on' ev interceptOptions f
+
 styleList :: [(Txt,Txt)] -> Feature e
 styleList = Style
 
@@ -114,6 +142,9 @@ link = flip Link Nothing
 
 value :: Txt -> Feature e
 value jst = CurrentValue jst
+
+xlink :: Txt -> Txt -> Feature e
+xlink xl v = XLink xl v
 
 #ifdef LENS
 makePrisms ''Feature
@@ -262,10 +293,10 @@ shape = attr "shape"
 src :: Txt -> Feature e
 src = attr "src"
 
-heightA :: Int -> Feature e
+heightA :: ToTxt a => a -> Feature e
 heightA = attr "height" . toTxt
 
-widthA :: Int -> Feature e
+widthA :: ToTxt a => a -> Feature e
 widthA = attr "width" . toTxt
 
 alt :: Txt -> Feature e
@@ -382,12 +413,11 @@ datetime = attr "datetime"
 manifest :: Txt -> Feature e
 manifest = attr "manifest"
 
-
 --------------------------------------------------------------------------------
 -- SVG Attributes
 
 xlinkhref :: Txt -> Feature e
-xlinkhref = attr "xlink:href"
+xlinkhref = xlink "xlink:href"
 
 clipPathUrl :: Txt -> Feature e
 clipPathUrl = attr "clip-path" . (\x -> "url(#" <> x <> ")")
@@ -419,6 +449,42 @@ cxA = attr "cx" . toTxt
 cyA :: Int -> Feature e
 cyA = attr "cy" . toTxt
 
+dxA :: Int -> Feature e
+dxA = attr "dx" . toTxt
+
+dyA :: Int -> Feature e
+dyA = attr "dy" . toTxt
+
+patternUnitsA :: Txt -> Feature e
+patternUnitsA = attr "patternUnits"
+
+fillA :: Txt -> Feature e
+fillA = attr "fill"
+
+filterA :: Txt -> Feature e
+filterA = attr "filter"
+
+inA :: Txt -> Feature e
+inA = attr "in"
+
+resultA :: Txt -> Feature e
+resultA = attr "result"
+
+inSourceAlpha :: Feature e
+inSourceAlpha = inA "SourceAlpha"
+
+inSourceGraphic :: Feature e
+inSourceGraphic = inA "SourceGraphic"
+
+stdDeviationA :: Double -> Feature e
+stdDeviationA = attr "stdDeviation" . toTxt
+
+pointsA :: Txt -> Feature e
+pointsA = attr "points"
+
+viewBoxA :: Txt -> Feature e
+viewBoxA = attr "viewBox"
+
 --------------------------------------------------------------------------------
 -- Event listener 'Attribute's
 
@@ -434,6 +500,12 @@ onMouseDown = on "mousedown"
 onMouseUp :: e -> Feature e
 onMouseUp = on "mouseup"
 
+onTouchStart :: e -> Feature e
+onTouchStart = on "touchstart"
+
+onTouchEnd :: e -> Feature e
+onTouchEnd = on "touchend"
+
 onMouseEnter :: e -> Feature e
 onMouseEnter = on "mouseenter"
 
@@ -445,6 +517,15 @@ onMouseOver = on "mouseover"
 
 onMouseOut :: e -> Feature e
 onMouseOut = on "mouseout"
+
+onMouseMove :: e -> Feature e
+onMouseMove = on "mousemove"
+
+onTouchMove :: e -> Feature e
+onTouchMove = on "touchmove"
+
+onTouchCancel :: e -> Feature e
+onTouchCancel = on "touchcancel"
 
 onInput :: (Txt -> e) -> Feature e
 onInput f = on' "input" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do

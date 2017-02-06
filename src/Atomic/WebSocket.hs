@@ -8,6 +8,7 @@ module Atomic.WebSocket
   , SSL.withOpenSSL
 #endif
   , module Atomic.WebSocket
+  , LazyByteString
   ) where
 
 import Ef.Base
@@ -1511,7 +1512,10 @@ onMessage mty_proxy f = do
 {-# language KindSignatures #-}
 {-# language TypeFamilies #-}
 {-# language GADTs #-}
-module Atomic.WebSocket where
+module Atomic.WebSocket
+  ( module Atomic.WebSocket
+  , LazyByteString
+  ) where
 
 import Ef.Base
 

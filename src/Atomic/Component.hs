@@ -2,6 +2,7 @@
 {-# language FlexibleInstances #-}
 {-# language UndecidableInstances #-}
 {-# language MagicHash #-}
+{-# language CPP #-}
 module Atomic.Component (module Atomic.Component) where
 
 import Ef.Base hiding (Client,Server)
@@ -113,5 +114,14 @@ startComponent lv rb Component {..} = do
 
   void $ liftIO $ forkIO $ void $ do
     (obj,_) <- Object built ! prime
-    driver rb obj
+#ifdef __GHCJS__
+    driverPrintExceptions
+      ("Component "
+      ++ show key
+      ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
+      )
+#else
+    driver
+#endif
+      rb obj
 

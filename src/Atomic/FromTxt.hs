@@ -1,6 +1,7 @@
 {-# language CPP #-}
 {-# language OverloadedStrings #-}
 {-# language TemplateHaskell #-}
+{-# language UndecidableInstances #-}
 module Atomic.FromTxt where
 
 #ifdef __GHCJS__
@@ -8,6 +9,8 @@ import Data.JSString
 #endif
 
 import Data.Txt
+
+import Data.String
 
 import Data.Coerce
 
@@ -23,6 +26,9 @@ class FromTxt a where
   fromTxt :: Txt -> a
   default fromTxt :: Coercible Txt a => Txt -> a
   fromTxt = coerce
+
+instance {-# OVERLAPPABLE #-} FromTxt a => IsString a where
+  fromString = fromTxt . pack
 
 instance FromTxt TL.Text where
 #ifdef __GHCJS__

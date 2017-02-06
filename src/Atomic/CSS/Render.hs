@@ -1,6 +1,7 @@
 {-# language OverloadedStrings #-}
 {-# language CPP #-}
 {-# language TemplateHaskell #-}
+{-# language ViewPatterns #-}
 module Atomic.CSS.Render where
 
 import Ef.Base
@@ -39,6 +40,16 @@ comment com = (=:) ("//" <> com) ""
 
 classify :: Txt -> Txt
 classify = ("." <>) . toTxt
+
+important :: Styles -> Styles
+important = go
+  where
+    go (Return r) = Return r
+    go (Lift s) = go (runIdentity s)
+    go (Do msg) =
+      case prj msg of
+        ~(Just (Style_ k v r)) ->
+          Do (inj (Style_ k (v <> " !important") (go r)))
 
 -- useful for debugging; keep the styles on the page, but block them with //
 -- Can be used to comment out one or more styles
@@ -90,47 +101,22 @@ select sel ss = Send (CSS_ sel ss (Return ()))
 selects :: [Txt] -> Styles -> CSS
 selects sels ss = sequence_ $ Prelude.map (flip select ss) sels 
 
-modifiers :: Txt -> CSS -> CSS
-modifiers sel = go
+nested :: Txt -> CSS -> CSS
+nested (classify -> sel) = go
   where
     go (Return r) = Return r
     go (Lift s) = go (runIdentity s)
     go (Do msg) =
       case prj msg of
-        Just (CSS_ suf ss rest) ->
-          if Txt.null suf then
-            Send (CSS_ sel ss (go rest))
-          else
-            Send (CSS_ (sel <> "__" <> suf) ss (go rest))
-        Just (CSS3_ at rule mcss rest) -> Send (CSS3_ at rule (fmap go mcss) (go rest))
 
-descendents :: Txt -> CSS -> CSS
-descendents sel = go
-  where
-    go (Return r) = Return r
-    go (Lift s) = go (runIdentity s)
-    go (Do msg) =
-      case prj msg of
         Just (CSS_ suf ss rest) ->
           if Txt.null suf then
             Send (CSS_ sel ss (go rest))
           else
-            Send (CSS_ (sel <> "_" <> suf) ss (go rest))
-        Just (CSS3_ at rule mcss rest) -> Send (CSS3_ at rule (fmap go mcss) (go rest))
+            Send (CSS_ (sel <> suf) ss (go rest))
 
-states :: Txt -> CSS -> CSS
-states sel = go
-  where
-    go (Return r) = Return r
-    go (Lift s) = go (runIdentity s)
-    go (Do msg) =
-      case prj msg of
-        Just (CSS_ suf ss rest) ->
-          if Txt.null suf then
-            Send (CSS_ sel ss (go rest))
-          else
-            Send (CSS_ (sel <> ".is-" <> suf) ss (go rest))
-        Just (CSS3_ at rule mcss rest) -> Send (CSS3_ at rule (fmap go mcss) (go rest))
+        Just (CSS3_ at rule mcss rest) ->
+          Send (CSS3_ at rule (fmap go mcss) (go rest))
 
 atCharset :: Txt -> CSS
 atCharset cs = Send (CSS3_ "@charset " cs Nothing (Return ()))

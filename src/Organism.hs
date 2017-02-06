@@ -174,11 +174,16 @@ run Organism {..} = do
       syndicate constructShutdownNetwork ()
     prime
     setupRouter (Proxy :: Proxy r)
+#ifdef __GHCJS__
   driverPrintExceptions
     ("Organism "
      ++ show site
      ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
-    ) q obj
+    )
+#else
+  driver
+#endif
+    q obj
   where
     go first ort doc (Carrier rt) p = do
       go' p
@@ -189,7 +194,7 @@ run Organism {..} = do
             case mb_ of
               Nothing -> do
                 (old,_,_) <- readIORef rt
-                iob <- mkConstruct (Just differ) Nothing b
+                iob <- mkConstruct Nothing b
                 when first $ do
                   clearNode (Just (toNode ort))
                   forM_ (getNode old) (appendChild ort)
@@ -220,7 +225,7 @@ run Organism {..} = do
 #else
                 let h = ()
 #endif
-                iohhm <- mkConstruct (Just differ) Nothing hc
+                iohhm <- mkConstruct Nothing hc
                 (new,_,_) <- readIORef iohhm
                 replace (NullAtom $ Just h) new
               Just (_,x_) -> do
@@ -237,7 +242,7 @@ run Organism {..} = do
             case mb_ of
               Nothing -> do
                 (old,_,_) <- readIORef rt
-                iob <- mkConstruct (Just differ) Nothing b
+                iob <- mkConstruct Nothing b
                 (new,_,_) <- readIORef iob
                 when first $ do
                   clearNode (Just (toNode ort))

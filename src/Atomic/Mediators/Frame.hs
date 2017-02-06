@@ -31,7 +31,7 @@ data FrameState = FrameState
 frameS :: Mediator '[State () FrameState]
 frameS = Mediator {..}
   where
-    key = "Fusion.frameS"
+    key = "atomic.frame"
 
     build base = do
       frames <- network

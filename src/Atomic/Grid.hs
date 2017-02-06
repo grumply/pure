@@ -51,7 +51,7 @@ grid =
              msFlexDirection =: columnReverse
              flexDirection =: columnReverse
 
-           forM_ [("xs",Nothing),("sm",Just 48),("md",Just 64),("lg",Just 75)] $ \(sz,mn) ->
+           forM_ [("xs",Nothing),("sm",Just 48),("md",Just 64),("lg",Just 75),("xl",Just 90)] $ \(sz,mn) ->
             maybe id (\n -> atMedia ("only screen and (min-width: " <> toTxt n <> "em)")) mn $ do
 
               forM_ mn $ \n ->

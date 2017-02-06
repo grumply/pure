@@ -49,9 +49,6 @@ subject = "subject"
 valign :: Txt
 valign = "valign"
 
-important :: Txt
-important = "!important"
-
 noneS :: Txt
 noneS = "none"
 
@@ -721,14 +718,8 @@ farthestCorner = "farthest-corner"
 background :: Txt
 background = "background"
 
-bgColor :: Txt
-bgColor = backgroundColor
-
 backgroundColor :: Txt
 backgroundColor = "background-color"
-
-bgImage :: Txt
-bgImage = backgroundImage
 
 backgroundImage :: Txt
 backgroundImage = "background-image"
@@ -742,20 +733,11 @@ backgroundRepeat = "background-repeat"
 noRepeat :: Txt
 noRepeat = "no-repeat"
 
-bgRepeat :: Txt
-bgRepeat = backgroundRepeat
-
 backgroundAttachment :: Txt
 backgroundAttachment = "background-attachment"
 
-bgAttachment :: Txt
-bgAttachment = backgroundAttachment
-
 backgroundPosition :: Txt
 backgroundPosition = "background-position"
-
-bgPosition :: Txt
-bgPosition = bgPosition
 
 backgroundSize :: Txt
 backgroundSize = "background-size"
@@ -763,20 +745,11 @@ backgroundSize = "background-size"
 cover :: Txt
 cover = "cover"
 
-bgSize :: Txt
-bgSize = backgroundSize
-
 backgroundOrigin :: Txt
 backgroundOrigin = "background-origin"
 
-bgOrigin :: Txt
-bgOrigin = backgroundOrigin
-
 backgroundClip :: Txt
 backgroundClip = "background-clip"
-
-bgClip :: Txt
-bgClip = backgroundClip
 
 imageFilter :: Txt
 imageFilter = "filter"
