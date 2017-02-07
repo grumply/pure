@@ -345,8 +345,8 @@ renderConstruct' a parent html = do
 
 -- rebuild finds managed nodes and re-embeds them in case they were
 -- removed for other uses
-rebuild :: IsConstruct' ts ms m => Construct' ts ms m -> Maybe ENode -> Atom (Code ms IO ()) -> IO ()
-rebuild c me h =
+rebuild :: Maybe ENode -> Atom (Code ms IO ()) -> IO ()
+rebuild me h =
 #ifndef __GHCJS__
     return ()
 #else
@@ -385,7 +385,7 @@ rebuild c me h =
           mi_ <- lookupConstruct (key c)
           forM_ mi_ $ \(_,x_) -> do
             (h,_,_) <- readIORef x_
-            rebuild c _node h
+            rebuild _node h
             forM_ mparent $ \parent ->
               embed_ parent h
 #endif
@@ -587,49 +587,50 @@ mkConstruct :: forall ms ts m.
           )
        => MkConstructAction
        -> Construct' ts ms m
-       -> IO (MVar (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)))
+       -> IO (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m))
 mkConstruct mkConstructAction c@Construct {..} = do
-  res <- newEmptyMVar
   let !m = model
       !raw = view m
   cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (nil,raw,m)
+  doc <- getDocument
+  sig :: Signal ms IO (Code ms IO ()) <- runner
+  sigBuf <- newSignalBuffer
+  us :: Network m <- network
+  views :: Network (m,Atom (Code ms IO ())) <- network
+  let asComp = constructAs sigBuf sig
+      sendEv :: Code ms IO () -> IO ()
+      sendEv = void . runAs asComp
+      initialize =
+        case mkConstructAction of
+          ClearAndAppend n -> do
+            i <- buildAndEmbedMaybe sendEv doc Nothing raw
+            clearNode (Just $ toNode n)
+            forM_ (getNode i) (appendChild n)
+            return i
+          Replace a -> do
+            i <- buildAndEmbedMaybe sendEv doc Nothing raw
+            replace a i
+            return i
+          Append en -> do
+            i <- buildAndEmbedMaybe sendEv doc (Just en) raw
+            return i
+          BuildOnly -> do
+            i <- buildAndEmbedMaybe sendEv doc Nothing raw
+            return i
+  doc <- getDocument
+
+  -- Initially, I thought I could put this in an animation frame, but that has strange effects on iOS;
+  -- a dynamically added margin-top was causing the page to load pre-scrolled by the height of the margin.
+  i <- initialize
+
+  cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
+
+  -- keep out of forkIO to prevent double-initialization
+  addConstruct key (asComp,cs_live_)
+
   forkIO $ do
-    doc <- getDocument
-    sig :: Signal ms IO (Code ms IO ()) <- runner
-    sigBuf <- newSignalBuffer
-    us :: Network m <- network
-    views :: Network (m,Atom (Code ms IO ())) <- network
-    let asComp = constructAs sigBuf sig
-        sendEv :: Code ms IO () -> IO ()
-        sendEv = void . runAs asComp
-        initialize =
-          case mkConstructAction of
-            ClearAndAppend n -> do
-              i <- buildAndEmbedMaybe sendEv doc Nothing raw
-              clearNode (Just $ toNode n)
-              forM_ (getNode i) (appendChild n)
-              return i
-            Replace a -> do
-              i <- buildAndEmbedMaybe sendEv doc Nothing raw
-              replace a i
-              return i
-            Append en -> do
-              i <- buildAndEmbedMaybe sendEv doc (Just en) raw
-              return i
-            BuildOnly -> do
-              i <- buildAndEmbedMaybe sendEv doc Nothing raw
-              return i
-    doc <- getDocument
-
-    -- Initially, I thought I could put this in an animation frame, but that has strange effects on iOS;
-    -- a dynamically added margin-top was causing the page to load pre-scrolled by the height of the margin.
-    i <- initialize
-
-    cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
-    putMVar res cs_live_
     let cs = AState (unsafeCoerce cs_live_) m
     sdn :: Network () <- network
-    addConstruct key (asComp,cs_live_)
     let trig = syndicate views
     built <- build $ state (ConstructState
                                 Nothing
@@ -653,7 +654,7 @@ mkConstruct mkConstructAction c@Construct {..} = do
     driver
 #endif
         sigBuf obj'
-  return res
+  return cs_live_
 
 diff :: forall m ms. ('[State () (ConstructState m)] <: ms)
      => Proxy m -> Code ms IO ()
@@ -1003,7 +1004,7 @@ buildAndEmbedMaybe f doc = go
                 Just (_,x_) -> do
                   -- built before but not in this context; rebuild and embed
                   (h,_,_) <- readIORef x_
-                  rebuild a mparent h
+                  rebuild mparent h
 --                  forM_ mparent (`embed` Managed {..})
                   return Managed {..}
 
@@ -1012,7 +1013,7 @@ buildAndEmbedMaybe f doc = go
               forM_ mi_ $ \(_,x_) -> do
                 -- build before in this context; rebuild and embed
                 (h,_,_) <- readIORef x_
-                rebuild a mparent (unsafeCoerce h) -- should be safe
+                rebuild mparent (unsafeCoerce h) -- should be safe
                 -- forM_ mparent (`embed` Managed {..})
               return Managed {..}
 
