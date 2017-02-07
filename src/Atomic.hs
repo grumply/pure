@@ -207,37 +207,6 @@ shtml _tag _attributes = raw _tag _attributes . toTxt
 type HTML ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
 type Attribute ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
 
-instance ToTxt (Feature e) where
-  toTxt NullFeature          = mempty
-
-  toTxt (Attribute attr val) =
-    case val of
-      Left b  -> if b then attr else mempty
-      Right v -> attr <> "=\"" <> v <> "\""
-
-  toTxt (Style pairs) =
-    "style=\""
-      <> Txt.intercalate
-           (Txt.singleton ';')
-           (renderStyles False (mapM_ (uncurry (=:)) pairs))
-      <> "\""
-
-  toTxt (CurrentValue _) = mempty
-
-  toTxt (On _ _ _)       = mempty
-
-  toTxt (On' _ _ _ _)    = mempty
-
-  toTxt (Link href _)    = "href=\"" <> href <> "\""
-
-  toTxt (XLink xl v)     = xl <> "=\"" <> v <> "\""
-
-instance ToTxt [Feature e] where
-  toTxt fs =
-    Txt.intercalate
-     (Txt.singleton ' ')
-     (Prelude.filter (not . Txt.null) $ Prelude.map toTxt fs)
-
 selfClosing tag =
   case tag of
     "area"    -> True

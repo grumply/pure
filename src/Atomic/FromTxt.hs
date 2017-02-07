@@ -26,11 +26,13 @@ class FromTxt a where
   fromTxt :: Txt -> a
   default fromTxt :: Coercible Txt a => Txt -> a
   fromTxt = coerce
+  {-# INLINE fromTxt #-}
 
 instance {-# OVERLAPPABLE #-} FromTxt a => IsString a where
   fromString = fromTxt . pack
 
 instance FromTxt TL.Text where
+  {-# INLINE fromTxt #-}
 #ifdef __GHCJS__
   fromTxt = lazyTextFromJSString
 #else
@@ -38,6 +40,7 @@ instance FromTxt TL.Text where
 #endif
 
 instance FromTxt T.Text where
+  {-# INLINE fromTxt #-}
 #ifdef __GHCJS__
   fromTxt = textFromJSString
 #else
@@ -46,10 +49,12 @@ instance FromTxt T.Text where
 
 #ifdef __GHCJS__
 instance FromTxt JSString where
+  {-# INLINE fromTxt #-}
   fromTxt = id
 #endif
 
 instance FromTxt [Char] where
+  {-# INLINE fromTxt #-}
 #ifdef __GHCJS__
   fromTxt = unpack
 #else
@@ -57,6 +62,7 @@ instance FromTxt [Char] where
 #endif
 
 instance FromTxt B.ByteString where
+  {-# INLINE fromTxt #-}
 #ifdef __GHCJS__
   fromTxt = BC.pack . unpack
 #else
@@ -64,6 +70,7 @@ instance FromTxt B.ByteString where
 #endif
 
 instance FromTxt BSL.ByteString where
+  {-# INLINE fromTxt #-}
 #ifdef __GHCJS__
   fromTxt = BSLC.pack . unpack
 #else

@@ -30,6 +30,8 @@ import qualified GHCJS.Types as T
 import qualified GHCJS.Marshal as M
 import qualified GHCJS.Marshal.Pure as M
 
+import GHCJS.Foreign.Callback
+
 import qualified JavaScript.Object.Internal as O
 
 import qualified GHCJS.DOM as DOM
@@ -170,44 +172,44 @@ data Atom e where
        } -> Atom e
 
   Text
-    ::  { _tnode      :: Maybe TNode
-        , _content    :: Txt
+    ::  { _tnode      :: !(Maybe TNode)
+        , _content    :: !Txt
         } -> Atom e
 
   Raw
-    :: { _node        :: Maybe ENode
-       , _tag         :: Txt
-       , _attributes  :: [Feature e]
-       , _content     :: Txt
+    :: { _node        :: !(Maybe ENode)
+       , _tag         :: !Txt
+       , _attributes  :: ![Feature e]
+       , _content     :: !Txt
        } -> Atom e
 
   KAtom
-    ::  { _node       :: Maybe ENode
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _keyed      :: [(Int,Atom e)]
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: !Txt
+        , _attributes :: ![Feature e]
+        , _keyed      :: ![(Int,Atom e)]
         } -> Atom e
 
   Atom
-    ::  { _node       :: Maybe ENode
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _children   :: [Atom e]
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: !Txt
+        , _attributes :: ![Feature e]
+        , _children   :: ![Atom e]
         } -> Atom e
 
   -- TODO: SVG keyed node
   SVGAtom
-    ::  { _node       :: Maybe ENode
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _children   :: [Atom e]
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: !Txt
+        , _attributes :: ![Feature e]
+        , _children   :: ![Atom e]
         } -> Atom e
 
   Managed
-    ::  { _node       :: Maybe ENode
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _constr      :: Constr
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: !Txt
+        , _attributes :: ![Feature e]
+        , _constr      :: !Constr
         } -> Atom e
   deriving Functor
 
@@ -464,6 +466,37 @@ type ConstructPrimer' ms = Code ms IO ()
 type ConstructPrimer ms m = ConstructPrimer' (Appended (ConstructBase m) ms)
 type Construct ms m = Construct' (Appended (ConstructBase m) ms) (Appended (ConstructBase m) ms) m
 
+instance ToTxt (Feature e) where
+  toTxt NullFeature          = mempty
+
+  toTxt (Attribute attr val) =
+    case val of
+      Left b  -> if b then attr else mempty
+      Right v -> attr <> "=\"" <> v <> "\""
+
+  toTxt (Style pairs) =
+    "style=\""
+      <> Txt.intercalate
+           (Txt.singleton ';')
+           (renderStyles False (mapM_ (uncurry (=:)) pairs))
+      <> "\""
+
+  toTxt (CurrentValue _) = mempty
+
+  toTxt (On _ _ _)       = mempty
+
+  toTxt (On' _ _ _ _)    = mempty
+
+  toTxt (Link href _)    = "href=\"" <> href <> "\""
+
+  toTxt (XLink xl v)     = xl <> "=\"" <> v <> "\""
+
+instance ToTxt [Feature e] where
+  toTxt fs =
+    Txt.intercalate
+     (Txt.singleton ' ')
+     (Prelude.filter (not . Txt.null) $ Prelude.map toTxt fs)
+
 data Construct' ts ms m
   = Construct
       { key       :: !(ConstructKey' ms m)
@@ -497,7 +530,7 @@ instance IsConstruct' ts ms m
       case mi_ of
         Just (as,_) -> return (runAs as)
         Nothing -> do
-          mkConstruct Nothing c
+          mkConstruct BuildOnly c
           using_ c
     with_ c m = do
       run <- using_ c
@@ -540,47 +573,77 @@ addConstruct = vaultAdd constructVault__
 deleteConstruct :: (MonadIO c) => Key phantom -> c ()
 deleteConstruct = vaultDelete constructVault__
 
+data MkConstructAction
+  = ClearAndAppend ENode
+  | forall e. Replace (Atom e)
+  | Append ENode
+  | BuildOnly
+
 mkConstruct :: forall ms ts m.
           ( IsConstruct' ts ms m
           , ConstructBase m <: ms
           )
-       => Maybe ENode
+       => MkConstructAction
        -> Construct' ts ms m
-       -> IO (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m))
-mkConstruct mparent c@Construct {..} = do
-  doc <- getDocument
+       -> IO (MVar (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)))
+mkConstruct mkConstructAction c@Construct {..} = do
+  res <- newEmptyMVar
   let !m = model
-  sig :: Signal ms IO (Code ms IO ()) <- runner
-  sigBuf <- newSignalBuffer
-  us :: Network m <- network
-  views :: Network (m,Atom (Code ms IO ())) <- network
-  let asComp = constructAs sigBuf sig
-      sendEv :: Code ms IO () -> IO ()
-      sendEv = void . runAs asComp
       !raw = view m
-  doc <- getDocument
-  i <- buildAndEmbedMaybe sendEv doc mparent raw
-  cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
-  let cs = AState (unsafeCoerce cs_live_) m
-  sdn :: Network () <- network
-  addConstruct key (asComp,cs_live_)
-  let trig = syndicate views
-  built <- build $ state (ConstructState
-                               Nothing
-                               (differ view trig sendEv)
-                               Lazy
-                               views
-                               us
-                               model
-                               cs_live_
-                          )
-                  *:* state (Shutdown sdn)
-                  *:* revent sigBuf
-                  *:* Empty
-  (obj',s) <- Ef.Base.Object built Ef.Base.! do
-    connect constructShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
-    prime
-  forkIO $
+  cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (nil,raw,m)
+  forkIO $ do
+    doc <- getDocument
+    sig :: Signal ms IO (Code ms IO ()) <- runner
+    sigBuf <- newSignalBuffer
+    us :: Network m <- network
+    views :: Network (m,Atom (Code ms IO ())) <- network
+    let asComp = constructAs sigBuf sig
+        sendEv :: Code ms IO () -> IO ()
+        sendEv = void . runAs asComp
+        initialize =
+          case mkConstructAction of
+            ClearAndAppend n -> do
+              i <- buildAndEmbedMaybe sendEv doc Nothing raw
+              clearNode (Just $ toNode n)
+              forM_ (getNode i) (appendChild n)
+              return i
+            Replace a -> do
+              i <- buildAndEmbedMaybe sendEv doc Nothing raw
+              replace a i
+              return i
+            Append en -> do
+              i <- buildAndEmbedMaybe sendEv doc (Just en) raw
+              return i
+            BuildOnly -> do
+              i <- buildAndEmbedMaybe sendEv doc Nothing raw
+              return i
+    doc <- getDocument
+
+    -- Initially, I thought I could put this in an animation frame, but that has strange effects on iOS;
+    -- a dynamically added margin-top was causing the page to load pre-scrolled by the height of the margin.
+    i <- initialize
+
+    cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
+    putMVar res cs_live_
+    let cs = AState (unsafeCoerce cs_live_) m
+    sdn :: Network () <- network
+    addConstruct key (asComp,cs_live_)
+    let trig = syndicate views
+    built <- build $ state (ConstructState
+                                Nothing
+                                (differ view trig sendEv)
+                                Lazy
+                                views
+                                us
+                                model
+                                cs_live_
+                            )
+                    *:* state (Shutdown sdn)
+                    *:* revent sigBuf
+                    *:* Empty
+    (obj',_) <- Ef.Base.Object built Ef.Base.! do
+      connect constructShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
+      prime
 #ifdef __GHCJS__
     driverPrintExceptions
       ("Construct' (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Construct' may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception: ")
@@ -588,7 +651,7 @@ mkConstruct mparent c@Construct {..} = do
     driver
 #endif
         sigBuf obj'
-  return cs_live_
+  return res
 
 diff :: forall m ms. ('[State () (ConstructState m)] <: ms)
      => Proxy m -> Code ms IO ()
@@ -710,7 +773,7 @@ updates :: forall ms m.
         => (m -> m)
         -> Code ms IO ()
 updates f = do
-  (ConstructState {..},(old,new,cmp')) <- modify $ \ConstructState {..} ->
+  (ConstructState {..},(old,!new,cmp')) <- modify $ \ConstructState {..} ->
     let !old = asModel
         !new = f old
         cmp' = ConstructState { asModel = new, ..  }
@@ -758,7 +821,6 @@ differ view trig sendEv ConstructState {..} = do
 #else
   let v = view asModel
   liftIO $ do
-    Prelude.putStrLn "Writing new view"
     writeIORef asLive $ unsafeCoerce (v,v,asModel)
     syndicate asViews $ unsafeCoerce (asModel,v)
 #endif
@@ -933,7 +995,7 @@ buildAndEmbedMaybe f doc = go
               case mi_ of
                 Nothing -> do
                   -- never built before; make and embed
-                  mkConstruct _node a
+                  mkConstruct (Append el) a
                   forM_ mparent (`embed_` Managed {..})
                   return Managed {..}
                 Just (_,x_) -> do
@@ -963,12 +1025,13 @@ getNode Text {..} = fmap toNode _tnode
 getNode n = fmap toNode $ _node n
 
 
-diff_ :: ConstructPatch m -> IO Int
+diff_ :: ConstructPatch m -> IO ()
 diff_ APatch {..} = do
 #ifdef __GHCJS__
   -- made a choice here to do all the diffing in the animation frame; this way we
   -- can avoid recalculating changes multiple times during a frame. No matter how
   -- many changes occur in any component, the diff is only calculated once per frame.
+  mv <- newEmptyMVar
   rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
     (mcs,b) <- atomicModifyIORef' ap_AState $ \(mcs,b) -> ((Nothing,True),(mcs,b))
     case mcs of
@@ -980,8 +1043,11 @@ diff_ APatch {..} = do
         new_live_html <- either id id <$> diffHelper ap_send doc live_html raw_html new_html
         writeIORef as_live (new_live_html,new_html,as_model)
         ap_viewTrigger (as_model,new_html)
+        putMVar mv ()
   win <- getWindow
   requestAnimationFrame win (Just rafCallback)
+  return ()
+  -- void $ forkIO $ takeMVar mv >> releaseCallback (unsafeCoerce rafCallback :: Callback (T.JSVal -> IO ()))
 #else
   (mcs,b) <- atomicModifyIORef' ap_AState $ \(mcs,b) -> ((Nothing,True),(mcs,b))
   case mcs of
@@ -993,7 +1059,6 @@ diff_ APatch {..} = do
       new_live_html <- either id id <$> diffHelper ap_send doc live_html raw_html new_html
       writeIORef as_live (new_live_html,new_html,as_model)
       ap_viewTrigger (as_model,new_html)
-  return 0
 #endif
 
 {-# NOINLINE replace #-}
@@ -1097,11 +1162,11 @@ insertBefore_ parent child new = void $ N.insertBefore parent (_node new) (_node
 #endif
 
 diffHelper :: (e -> IO ()) -> Doc -> Atom e -> Atom e -> Atom e -> IO (Either (Atom e) (Atom e))
-diffHelper f doc o m n =
+diffHelper f doc =
 #ifdef __GHCJS__
-    go o m n
+    go
 #else
-    return $ Left n
+    \_ _ n -> return $ Left n
 #endif
   where
     go old mid new =
@@ -1152,16 +1217,24 @@ diffHelper f doc o m n =
           if prettyUnsafeEq (_tag old) (_tag new)
           then do let Just n = _node old
                       Just m = _node mid
+                  -- liftIO $ putStrLn "SVG Atoms with same tag"
                   a' <- if reallyUnsafeEq (_attributes mid) (_attributes new) then do
+                          -- liftIO $ putStrLn "SVG attribtues reallyUnsafeEq"
                           return (_attributes old)
-                        else
+                        else do
+                          -- liftIO $ putStrLn "SVG attributes not reallyUnsafeEq"
+                          -- liftIO $ print (map toTxt (_attributes mid))
+                          -- liftIO $ print (map toTxt (_attributes new))
                           runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
                   c' <- if reallyUnsafeEq (_children mid) (_children new) then do
+                          -- liftIO $ putStrLn "SVG children reallyUnsafeEq"
                           return (_children old)
-                        else
+                        else do
+                          -- liftIO $ putStrLn "SVG children not reallyUnsafeEq"
                           diffChildren n (_children old) (_children mid) (_children new)
-                  return $ Right $ Atom (_node old) (_tag old) a' c'
+                  return $ Right $ SVGAtom (_node old) (_tag old) a' c'
           else do new' <- buildHTML doc f new
+                  -- liftIO $ putStrLn "SVG atoms have different tags"
                   -- shouldn't ever hit a nothing, but I stil don't like it
                   replace old new'
                   cleanup [old]
@@ -1186,11 +1259,9 @@ diffHelper f doc o m n =
 
         go' txt@(Text (Just t) cnt) mid@(Text _ mcnt) new@(Text _ cnt') =
           if reallyUnsafeEq mcnt cnt' then do
-            -- putStrLn "Short circuit on text mid/text new in diffHelper.go'.Text/Text/Text"
             return $ Right txt
           else
             if prettyUnsafeEq cnt cnt' then do
-              -- putStrLn "Equal text in diffHelper.go'.Text/Text/Text; short circuit failed"
               return $ Right txt
             else do
               changeText t cnt'
@@ -1449,7 +1520,12 @@ runElementDiff f el os0 ms0 ns0 =
           go olds mids news
 
         continue up = do
-          upds <- if reallyUnsafeEq mids news then return olds else goRest
+          upds <- if reallyUnsafeEq mids news then do
+                    -- liftIO $ putStrLn "mids === news"
+                    return olds
+                  else do
+                    -- liftIO $ putStrLn "mids /== news"
+                    goRest
           return (up:upds)
 
         update = do
@@ -1461,7 +1537,8 @@ runElementDiff f el os0 ms0 ns0 =
           update
 
       in
-        if reallyUnsafeEq mid new then
+        if reallyUnsafeEq mid new then do
+          -- liftIO $ putStrLn "Really unsafe equality of element attributes"
           continue old
         else
           case (mid,new) of
@@ -1485,19 +1562,37 @@ runElementDiff f el os0 ms0 ns0 =
 
             (Attribute nm val,Attribute nm' val') ->
               if prettyUnsafeEq nm nm' then
-                update
+                if prettyUnsafeEq val val' then do
+                  -- liftIO $ putStrLn $ "nm == nm' and val == val':" ++ show (nm,val)
+                  continue old
+                else do
+                  -- liftIO $ putStrLn $ show (nm,val,nm',val')
+                  update
               else
                 replace
 
             (On e m _,On e' m' _) ->
-              if prettyUnsafeEq e e' && reallyUnsafeEq m m' then
+              if prettyUnsafeEq e e' && reallyUnsafeEq m m' then do
+                -- liftIO $ putStrLn $ "On: Event types same, IO actons really unsafe eq: " ++ show (e,e')
                 continue old
-              else
+              else do
+                -- liftIO $ putStrLn $ "On: Event type not eq or IO actions not eq: " ++ show (e,e')
                 replace
 
-            (On' e os g _,On' e' os' g' _) ->
-              if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then
+            (On' e os g _,On' e' os' g' _) -> do
+              if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then do
+                -- liftIO $ putStrLn $ "On': Event types same, IO actons really unsafe eq: " ++ show (e,e')
                 continue old
+              else do
+                -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
+                replace
+
+            (XLink olda oldv,XLink newa newv) -> do
+              if prettyUnsafeEq olda newa then
+                if prettyUnsafeEq oldv newv then
+                  continue old
+                else
+                  update
               else
                 replace
 
@@ -1556,6 +1651,7 @@ setAttribute_ c element attr =
 
     -- optimize this; we're doing a little more work than necessary!
     Attribute nm eval -> do
+      -- liftIO $ putStrLn $ "Setting attribute: " ++ show (nm,eval)
       either (\b -> void $
                       if b then
                         E.setAttribute element nm (mempty :: Txt)

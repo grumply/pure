@@ -194,12 +194,11 @@ run Organism {..} = do
             case mb_ of
               Nothing -> do
                 (old,_,_) <- readIORef rt
-                iob <- mkConstruct Nothing b
-                when first $ do
-                  clearNode (Just (toNode ort))
-                  forM_ (getNode old) (appendChild ort)
-                (new,_,_) <- readIORef iob
-                replace old new
+                iob_ <- if first then
+                          mkConstruct (ClearAndAppend ort) b
+                        else
+                          mkConstruct (Replace old) b
+                iob <- takeMVar iob_
                 return (Carrier iob)
               Just (_,x_) -> do
                 (old,_,_) <- readIORef rt
@@ -218,16 +217,14 @@ run Organism {..} = do
           b <- liftIO $ do
             mh_ <- lookupConstruct (key hc)
             case mh_ of
-              Nothing -> do
+              Nothing -> void $ do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
                 let h = T.castToElement h_
 #else
                 let h = ()
 #endif
-                iohhm <- mkConstruct Nothing hc
-                (new,_,_) <- readIORef iohhm
-                replace (NullAtom $ Just h) new
+                mkConstruct (Replace (NullAtom (Just h))) hc
               Just (_,x_) -> do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
@@ -242,15 +239,13 @@ run Organism {..} = do
             case mb_ of
               Nothing -> do
                 (old,_,_) <- readIORef rt
-                iob <- mkConstruct Nothing b
-                (new,_,_) <- readIORef iob
-                when first $ do
-                  clearNode (Just (toNode ort))
-                  forM_ (getNode old) (appendChild ort)
-                replace old new
+                iob_ <- if first then
+                          mkConstruct (ClearAndAppend ort) b
+                        else do
+                          mkConstruct (Replace old) b
+                iob <- takeMVar iob_
                 return (Carrier iob)
               Just (_,x_) -> do
-                liftIO $ putStrLn "Re-embedding construct!"
                 (old,_,_) <- readIORef rt
                 (new,_,_) <- readIORef x_
                 rebuild b Nothing new

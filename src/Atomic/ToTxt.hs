@@ -44,8 +44,10 @@ class ToTxt a where
   toTxt :: a -> Txt
   default toTxt :: Coercible a Txt => a -> Txt
   toTxt = coerce
+  {-# INLINE toTxt #-}
 
 instance ToTxt Value where
+  {-# INLINE toTxt #-}
 #ifdef __GHCJS__
   toTxt = encode
 #else
@@ -53,25 +55,31 @@ instance ToTxt Value where
 #endif
 
 instance ToTxt () where
+  {-# INLINE toTxt #-}
   toTxt _ = "()"
 
 instance ToTxt BSL.ByteString where
+  {-# INLINE toTxt #-}
   -- can this fail at runtime from a bad encoding?
   toTxt = toTxt . TL.decodeUtf8
 
 instance ToTxt B.ByteString where
   -- can this fail at runtime from a bad encoding?
+  {-# INLINE toTxt #-}
   toTxt = toTxt . T.decodeUtf8
 
 instance ToTxt Txt where
+  {-# INLINE toTxt #-}
   toTxt = id
 
 #ifdef __GHCJS__
 instance ToTxt T.Text where
+  {-# INLINE toTxt #-}
   toTxt = textToJSString
 #endif
 
 instance ToTxt TL.Text where
+  {-# INLINE toTxt #-}
 #ifdef __GHCJS__
   toTxt = lazyTextToJSString
 #else
@@ -79,6 +87,7 @@ instance ToTxt TL.Text where
 #endif
 
 instance ToTxt Char where
+  {-# INLINE toTxt #-}
 #ifdef __GHCJS__
   toTxt = singleton
 #else
@@ -86,6 +95,7 @@ instance ToTxt Char where
 #endif
 
 instance ToTxt String where
+  {-# INLINE toTxt #-}
 #ifdef __GHCJS__
   toTxt = pack
 #else
@@ -93,6 +103,7 @@ instance ToTxt String where
 #endif
 
 instance ToTxt Int where
+  {-# INLINE toTxt #-}
 #ifdef __GHCJS__
   toTxt = decimal
 #else
@@ -100,6 +111,7 @@ instance ToTxt Int where
 #endif
 
 instance ToTxt Integer where
+  {-# INLINE toTxt #-}
 #ifdef __GHCJS__
   toTxt = decimal
 #else
@@ -107,6 +119,7 @@ instance ToTxt Integer where
 #endif
 
 instance ToTxt Float where
+  {-# INLINE toTxt #-}
 #ifdef __GHCJS__
   toTxt = realFloat
 #else
@@ -114,6 +127,7 @@ instance ToTxt Float where
 #endif
 
 instance ToTxt Double where
+  {-# INLINE toTxt #-}
 #ifdef __GHCJS__
   toTxt = realFloat
 #else
@@ -121,9 +135,11 @@ instance ToTxt Double where
 #endif
 
 instance ToTxt Bool where
+  {-# INLINE toTxt #-}
   toTxt True  = "true"
   toTxt False = "false"
 
+{-# INLINE shortText #-}
 shortText :: Builder.Builder -> T.Text
 shortText = TL.toStrict . Builder.toLazyTextWith 32
 
