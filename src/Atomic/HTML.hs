@@ -359,77 +359,284 @@ wbr = html "wbr"
 --------------------------------------------------------------------------------
 -- SVG
 
-circle :: [Feature e] -> [Atom e] -> Atom e
-circle = svgHTML "circle"
+svgA :: [Feature e] -> [Atom e] -> Atom e
+svgA = svgHTML "a"
 
-clipPath :: [Feature e] -> [Atom e] -> Atom e
-clipPath = svgHTML "clipPath"
+svgAudio :: [Feature e] -> [Atom e] -> Atom e
+svgAudio = svgHTML "audio"
 
-defs :: [Feature e] -> [Atom e] -> Atom e
-defs = svgHTML "defs"
+svgAltGlyph :: [Feature e] -> [Atom e] -> Atom e
+svgAltGlyph = svgHTML "altGlyph"
 
-ellipse :: [Feature e] -> [Atom e] -> Atom e
-ellipse = svgHTML "ellipse"
+svgAltGlyphDef :: [Feature e] -> [Atom e] -> Atom e
+svgAltGlyphDef = svgHTML "altGlyphDef"
 
-g :: [Feature e] -> [Atom e] -> Atom e
-g = svgHTML "g"
+svgAltGlyphItem :: [Feature e] -> [Atom e] -> Atom e
+svgAltGlyphItem = svgHTML "altGlyphItem"
 
-image :: [Feature e] -> [Atom e] -> Atom e
-image = svgHTML "image"
+svgAnimate :: [Feature e] -> [Atom e] -> Atom e
+svgAnimate = svgHTML "animate"
 
-line :: [Feature e] -> [Atom e] -> Atom e
-line = svgHTML "line"
+svgAnimateColor :: [Feature e] -> [Atom e] -> Atom e
+svgAnimateColor = svgHTML "animateColor"
 
-linearGradient :: [Feature e] -> [Atom e] -> Atom e
-linearGradient = svgHTML "linearGradient"
+svgAnimateMotion :: [Feature e] -> [Atom e] -> Atom e
+svgAnimateMotion = svgHTML "animateMotion"
 
-filter_ :: [Feature e] -> [Atom e] -> Atom e
-filter_ = svgHTML "filter"
+svgAnimateTransform :: [Feature e] -> [Atom e] -> Atom e
+svgAnimateTransform = svgHTML "animateTransform"
 
-feGaussianBlur :: [Feature e] -> [Atom e] -> Atom e
-feGaussianBlur = svgHTML "feGaussianBlur"
+svgCanvas :: [Feature e] -> [Atom e] -> Atom e
+svgCanvas = svgHTML "canvas"
 
-feOffset :: [Feature e] -> [Atom e] -> Atom e
-feOffset = svgHTML "feOffset"
+svgCircle :: [Feature e] -> [Atom e] -> Atom e
+svgCircle = svgHTML "circle"
 
-feMerge :: [Feature e] -> [Atom e] -> Atom e
-feMerge = svgHTML "feMerge"
+svgClipPath :: [Feature e] -> [Atom e] -> Atom e
+svgClipPath = svgHTML "clipPath"
 
-feMergeNode :: [Feature e] -> [Atom e] -> Atom e
-feMergeNode = svgHTML "feMergeNode"
+svgColorProfile :: [Feature e] -> [Atom e] -> Atom e
+svgColorProfile = svgHTML "color-profile"
 
-mask :: [Feature e] -> [Atom e] -> Atom e
-mask = svgHTML "mask"
+svgCursor :: [Feature e] -> [Atom e] -> Atom e
+svgCursor = svgHTML "cursor"
 
-path_ :: [Feature e] -> [Atom e] -> Atom e
-path_ = svgHTML "path"
+svgDefs :: [Feature e] -> [Atom e] -> Atom e
+svgDefs = svgHTML "defs"
 
-pattern_ :: [Feature e] -> [Atom e] -> Atom e
-pattern_ = svgHTML "pattern"
+svgDesc :: [Feature e] -> [Atom e] -> Atom e
+svgDesc = svgHTML "desc"
 
-polygon :: [Feature e] -> [Atom e] -> Atom e
-polygon = svgHTML "polygon"
+svgDiscard :: [Feature e] -> [Atom e] -> Atom e
+svgDiscard = svgHTML "discard"
 
-polyline :: [Feature e] -> [Atom e] -> Atom e
-polyline = svgHTML "polyline"
+svgEllipse :: [Feature e] -> [Atom e] -> Atom e
+svgEllipse = svgHTML "ellipse"
 
-radialGradient :: [Feature e] -> [Atom e] -> Atom e
-radialGradient = svgHTML "radialGraedient"
+svgFeBlend :: [Feature e] -> [Atom e] -> Atom e
+svgFeBlend = svgHTML "feBlend"
 
-rect :: [Feature e] -> [Atom e] -> Atom e
-rect = svgHTML "rect"
+svgFeColorMatrix :: [Feature e] -> [Atom e] -> Atom e
+svgFeColorMatrix = svgHTML "feColorMatrix"
 
-stop_ :: [Feature e] -> [Atom e] -> Atom e
-stop_ = svgHTML "stop"
+svgFeComponentTransfer :: [Feature e] -> [Atom e] -> Atom e
+svgFeComponentTransfer = svgHTML "feComponentTransfer"
 
-svg :: [Feature e] -> [Atom e] -> Atom e
-svg = svgHTML "svg"
+svgFeComposite :: [Feature e] -> [Atom e] -> Atom e
+svgFeComposite = svgHTML "feComposite"
 
-text :: [Feature e] -> [Atom e] -> Atom e
-text = svgHTML "text"
+svgFeConvolveMatrix :: [Feature e] -> [Atom e] -> Atom e
+svgFeConvolveMatrix = svgHTML "feConvolveMatrix"
 
-tspan :: [Feature e] -> [Atom e] -> Atom e
-tspan = svgHTML "tspan"
+svgFeDiffuseLighting :: [Feature e] -> [Atom e] -> Atom e
+svgFeDiffuseLighting = svgHTML "feDiffuseLighting"
 
-svga :: [Feature e] -> [Atom e] -> Atom e
-svga = svgHTML "a"
+svgFeDisplacementMap :: [Feature e] -> [Atom e] -> Atom e
+svgFeDisplacementMap = svgHTML "feDisplacementMap"
+
+svgFeDistantLight :: [Feature e] -> [Atom e] -> Atom e
+svgFeDistantLight = svgHTML "feDistantLight"
+
+svgFeDropShadow :: [Feature e] -> [Atom e] -> Atom e
+svgFeDropShadow = svgHTML "feDropShadow"
+
+svgFeFlood :: [Feature e] -> [Atom e] -> Atom e
+svgFeFlood = svgHTML "feFlood"
+
+svgFeFuncA :: [Feature e] -> [Atom e] -> Atom e
+svgFeFuncA = svgHTML "feFuncA"
+
+svgFeFuncB :: [Feature e] -> [Atom e] -> Atom e
+svgFeFuncB = svgHTML "feFuncB"
+
+svgFeFuncG :: [Feature e] -> [Atom e] -> Atom e
+svgFeFuncG = svgHTML "feFuncG"
+
+svgFeFuncR :: [Feature e] -> [Atom e] -> Atom e
+svgFeFuncR = svgHTML "feFuncR"
+
+svgFeGaussianBlur :: [Feature e] -> [Atom e] -> Atom e
+svgFeGaussianBlur = svgHTML "feGaussianBlur"
+
+svgFeImage :: [Feature e] -> [Atom e] -> Atom e
+svgFeImage = svgHTML "feImage"
+
+svgFeMerge :: [Feature e] -> [Atom e] -> Atom e
+svgFeMerge = svgHTML "feMerge"
+
+svgFeMergeNode :: [Feature e] -> [Atom e] -> Atom e
+svgFeMergeNode = svgHTML "feMergeNode"
+
+svgFeMorphology :: [Feature e] -> [Atom e] -> Atom e
+svgFeMorphology = svgHTML "feMorphology"
+
+svgFeOffset :: [Feature e] -> [Atom e] -> Atom e
+svgFeOffset = svgHTML "feOffset"
+
+svgFePointLight :: [Feature e] -> [Atom e] -> Atom e
+svgFePointLight = svgHTML "fePointLight"
+
+svgFeSpecularLighting :: [Feature e] -> [Atom e] -> Atom e
+svgFeSpecularLighting = svgHTML "feSpecularLighting"
+
+svgFeSpotLight :: [Feature e] -> [Atom e] -> Atom e
+svgFeSpotLight = svgHTML "feSpotLight"
+
+svgFeTile :: [Feature e] -> [Atom e] -> Atom e
+svgFeTile = svgHTML "feTile"
+
+svgFeTurbulence :: [Feature e] -> [Atom e] -> Atom e
+svgFeTurbulence = svgHTML "feTurbulence"
+
+svgFilter :: [Feature e] -> [Atom e] -> Atom e
+svgFilter = svgHTML "filter"
+
+svgFont :: [Feature e] -> [Atom e] -> Atom e
+svgFont = svgHTML "font"
+
+svgFontFace :: [Feature e] -> [Atom e] -> Atom e
+svgFontFace = svgHTML "font-face"
+
+svgFontFaceFormat :: [Feature e] -> [Atom e] -> Atom e
+svgFontFaceFormat = svgHTML "font-face-format"
+
+svgFontFaceName :: [Feature e] -> [Atom e] -> Atom e
+svgFontFaceName = svgHTML "font-face-name"
+
+svgFontFaceSrc :: [Feature e] -> [Atom e] -> Atom e
+svgFontFaceSrc = svgHTML "font-face-src"
+
+svgFontFaceUri :: [Feature e] -> [Atom e] -> Atom e
+svgFontFaceUri = svgHTML "font-face-uri"
+
+svgForeignObject :: [Feature e] -> [Atom e] -> Atom e
+svgForeignObject = svgHTML "foreignObject"
+
+svgG :: [Feature e] -> [Atom e] -> Atom e
+svgG = svgHTML "g"
+
+svgGlyph :: [Feature e] -> [Atom e] -> Atom e
+svgGlyph = svgHTML "glyph"
+
+svgGlyphRef :: [Feature e] -> [Atom e] -> Atom e
+svgGlyphRef = svgHTML "glyphRef"
+
+svgHatch :: [Feature e] -> [Atom e] -> Atom e
+svgHatch = svgHTML "hatch"
+
+svgHatchpath :: [Feature e] -> [Atom e] -> Atom e
+svgHatchpath = svgHTML "hatchpath"
+
+svgHkern :: [Feature e] -> [Atom e] -> Atom e
+svgHkern = svgHTML "hkern"
+
+svgIframe :: [Feature e] -> [Atom e] -> Atom e
+svgIframe = svgHTML "iframe"
+
+svgImage :: [Feature e] -> [Atom e] -> Atom e
+svgImage = svgHTML "image"
+
+svgLine :: [Feature e] -> [Atom e] -> Atom e
+svgLine = svgHTML "line"
+
+svgLinearGradient :: [Feature e] -> [Atom e] -> Atom e
+svgLinearGradient = svgHTML "linearGradient"
+
+svgMarker :: [Feature e] -> [Atom e] -> Atom e
+svgMarker = svgHTML "marker"
+
+svgMask :: [Feature e] -> [Atom e] -> Atom e
+svgMask = svgHTML "mask"
+
+svgMesh :: [Feature e] -> [Atom e] -> Atom e
+svgMesh = svgHTML "mesh"
+
+svgMeshgradient :: [Feature e] -> [Atom e] -> Atom e
+svgMeshgradient = svgHTML "meshgradient"
+
+svgMeshpatch :: [Feature e] -> [Atom e] -> Atom e
+svgMeshpatch = svgHTML "meshpatch"
+
+svgMeshrow :: [Feature e] -> [Atom e] -> Atom e
+svgMeshrow = svgHTML "meshrow"
+
+svgMetadata :: [Feature e] -> [Atom e] -> Atom e
+svgMetadata = svgHTML "metadata"
+
+svgMissingGlyph :: [Feature e] -> [Atom e] -> Atom e
+svgMissingGlyph = svgHTML "missing-glyph"
+
+svgMpath :: [Feature e] -> [Atom e] -> Atom e
+svgMpath = svgHTML "mpath"
+
+svgPath :: [Feature e] -> [Atom e] -> Atom e
+svgPath = svgHTML "path"
+
+svgPattern :: [Feature e] -> [Atom e] -> Atom e
+svgPattern = svgHTML "pattern"
+
+svgPolygon :: [Feature e] -> [Atom e] -> Atom e
+svgPolygon = svgHTML "polygon"
+
+svgPolyline :: [Feature e] -> [Atom e] -> Atom e
+svgPolyline = svgHTML "polyline"
+
+svgRadialGradient :: [Feature e] -> [Atom e] -> Atom e
+svgRadialGradient = svgHTML "radialGradient"
+
+svgRect :: [Feature e] -> [Atom e] -> Atom e
+svgRect = svgHTML "rect"
+
+svgScript :: [Feature e] -> [Atom e] -> Atom e
+svgScript = svgHTML "script"
+
+svgSet :: [Feature e] -> [Atom e] -> Atom e
+svgSet = svgHTML "set"
+
+svgSolidcolor :: [Feature e] -> [Atom e] -> Atom e
+svgSolidcolor = svgHTML "solidcolor"
+
+svgStop :: [Feature e] -> [Atom e] -> Atom e
+svgStop = svgHTML "stop"
+
+svgStyle :: [Feature e] -> [Atom e] -> Atom e
+svgStyle = svgHTML "style"
+
+svgSvg :: [Feature e] -> [Atom e] -> Atom e
+svgSvg = svgHTML "svg"
+
+svgSwitch :: [Feature e] -> [Atom e] -> Atom e
+svgSwitch = svgHTML "switch"
+
+svgSymbol :: [Feature e] -> [Atom e] -> Atom e
+svgSymbol = svgHTML "symbol"
+
+svgText :: [Feature e] -> [Atom e] -> Atom e
+svgText = svgHTML "text"
+
+svgTextPath :: [Feature e] -> [Atom e] -> Atom e
+svgTextPath = svgHTML "textPath"
+
+svgTitle :: [Feature e] -> [Atom e] -> Atom e
+svgTitle = svgHTML "title"
+
+svgTref :: [Feature e] -> [Atom e] -> Atom e
+svgTref = svgHTML "tref"
+
+svgTspan :: [Feature e] -> [Atom e] -> Atom e
+svgTspan = svgHTML "tspan"
+
+svgUnknown :: [Feature e] -> [Atom e] -> Atom e
+svgUnknown = svgHTML "unknown"
+
+svgUse :: [Feature e] -> [Atom e] -> Atom e
+svgUse = svgHTML "use"
+
+svgVideo :: [Feature e] -> [Atom e] -> Atom e
+svgVideo = svgHTML "video"
+
+svgView :: [Feature e] -> [Atom e] -> Atom e
+svgView = svgHTML "view"
+
+svgVkern :: [Feature e] -> [Atom e] -> Atom e
+svgVkern = svgHTML "vkern"
