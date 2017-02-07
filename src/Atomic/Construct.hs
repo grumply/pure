@@ -489,6 +489,8 @@ instance ToTxt (Feature e) where
 
   toTxt (Link href _)    = "href=\"" <> href <> "\""
 
+  toTxt (SVGLink href _) = "xlink:href=\"" <> href <> "\""
+
   toTxt (XLink xl v)     = xl <> "=\"" <> v <> "\""
 
 instance ToTxt [Feature e] where
@@ -1579,7 +1581,7 @@ runElementDiff f el os0 ms0 ns0 =
                 -- liftIO $ putStrLn $ "On: Event type not eq or IO actions not eq: " ++ show (e,e')
                 replace
 
-            (On' e os g _,On' e' os' g' _) -> do
+            (On' e os g _,On' e' os' g' _) ->
               if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then do
                 -- liftIO $ putStrLn $ "On': Event types same, IO actons really unsafe eq: " ++ show (e,e')
                 continue old
@@ -1587,7 +1589,19 @@ runElementDiff f el os0 ms0 ns0 =
                 -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
                 replace
 
-            (XLink olda oldv,XLink newa newv) -> do
+            (Link olda oldv, Link newa newv) ->
+              if prettyUnsafeEq olda newa && reallyUnsafeEq oldv newv then
+                continue old
+              else
+                replace
+
+            (SVGLink olda oldv, SVGLink newa newv) ->
+              if prettyUnsafeEq olda newa && reallyUnsafeEq oldv newv then
+                continue old
+              else
+                replace
+
+            (XLink olda oldv,XLink newa newv) ->
               if prettyUnsafeEq olda newa then
                 if prettyUnsafeEq oldv newv then
                   continue old
@@ -1630,6 +1644,10 @@ removeAttribute_ element attr =
       obj <- O.create
       forM_ styles $ \(nm,val) -> O.unsafeSetProp nm (M.pToJSVal val) obj
       clearStyle_js element obj
+
+    SVGLink _ unreg -> do
+      forM_ unreg id
+      E.removeAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) ("xlink:href" :: Txt)
 
     XLink nm _ ->
       E.removeAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) nm
@@ -1705,6 +1723,21 @@ setAttribute_ c element attr =
       setStyle_js element obj
       return attr
 
+    SVGLink href _ -> do
+      E.setAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) ("xlink:href" :: Txt) href
+      stopListener <-
+        Ev.on
+          element
+          (Ev.unsafeEventName "click" :: Ev.EventName E.Element T.MouseEvent)
+            $ do Ev.preventDefault
+                 liftIO $ do
+                   win <- getWindow
+                   Just hist <- W.getHistory win
+                   H.pushState hist (M.pToJSVal (0 :: Int)) ("" :: Txt) href
+                   triggerPopstate_js
+                   scrollToTop
+      return (SVGLink href (Just stopListener))
+
     XLink nm val -> do
       E.setAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) nm val
       return attr
@@ -1717,6 +1750,7 @@ cleanupAttr attr =
   return ()
 #else
   case attr of
+    SVGLink _ unreg -> forM_ unreg id
     Link _ unreg -> forM_ unreg id
     On _ _ unreg -> forM_ unreg id
     On' _ _ _ unreg -> forM_ unreg id

@@ -430,3 +430,6 @@ text = svgHTML "text"
 
 tspan :: [Feature e] -> [Atom e] -> Atom e
 tspan = svgHTML "tspan"
+
+svga :: [Feature e] -> [Atom e] -> Atom e
+svga = svgHTML "a"

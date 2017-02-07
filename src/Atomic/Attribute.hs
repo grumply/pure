@@ -65,6 +65,10 @@ data Feature e
     { _event :: Txt
     , _eventListener :: Maybe (IO ())
     }
+  | SVGLink
+    { _event :: Txt
+    , _eventListener :: Maybe (IO ())
+    }
   | XLink
     { _attr :: Txt
     , _xlinkValue :: Txt
@@ -145,6 +149,9 @@ value jst = CurrentValue jst
 
 xlink :: Txt -> Txt -> Feature e
 xlink xl v = XLink xl v
+
+svgLink :: Txt -> Feature e
+svgLink = flip SVGLink Nothing
 
 #ifdef LENS
 makePrisms ''Feature
