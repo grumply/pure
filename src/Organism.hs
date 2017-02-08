@@ -194,11 +194,10 @@ run Organism {..} = do
             case mb_ of
               Nothing -> do
                 (old,_,_) <- readIORef rt
-                iob_ <- if first then
-                          mkConstruct (ClearAndAppend ort) b
-                        else
-                          mkConstruct (Replace old) b
-                iob <- takeMVar iob_
+                iob <- if first then
+                         mkConstruct (ClearAndAppend ort) b
+                       else
+                         mkConstruct (Replace old) b
                 return (Carrier iob)
               Just (_,x_) -> do
                 (old,_,_) <- readIORef rt
@@ -240,11 +239,10 @@ run Organism {..} = do
             case mb_ of
               Nothing -> do
                 (old,_,_) <- readIORef rt
-                iob_ <- if first then
-                          mkConstruct (ClearAndAppend ort) b
-                        else do
-                          mkConstruct (Replace old) b
-                iob <- takeMVar iob_
+                iob <- if first then
+                         mkConstruct (ClearAndAppend ort) b
+                       else do
+                         mkConstruct (Replace old) b
                 return (Carrier iob)
               Just (_,x_) -> do
                 (old,_,_) <- readIORef rt
