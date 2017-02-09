@@ -45,6 +45,18 @@ infixr 6 <<>>
 (<<>>) :: Txt -> Txt -> Txt
 (<<>>) x y = x <> " " <> y
 
+infixr 6 <.>
+(<.>) :: Txt -> Txt -> Txt
+(<.>) x y = x <> "." <> y
+
+infixr 6 <<.>
+(<<.>) :: Txt -> Txt -> Txt
+(<<.>) x y = x <> " ." <> y
+
+infixr 6 <.>>
+(<.>>) :: Txt -> Txt -> Txt
+(<.>>) x y = x <> ". " <> y
+
 unindent :: Txt -> Txt
 unindent =
       lines_

@@ -61,6 +61,7 @@ instance (IsComponent' ts ms, MonadIO c, '[Revent,State () Vault] <: ms')
   => With (Component' ts ms) (Code ms IO) (Code ms' c)
   where
     using_ c = do
+      -- NOTE: this atomic mvar modification is unnecessary for local components, no?
       lv <- get
       mi_ <- vaultLookup lv (key c)
       case mi_ of

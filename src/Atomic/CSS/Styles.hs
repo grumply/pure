@@ -4,23 +4,28 @@ module Atomic.CSS.Styles where
 
 import Data.Txt as Txt (Txt,intercalate)
 
-
 import Atomic.ToTxt
 import Atomic.CSS.Helpers
 
 import Data.Monoid
 
-screenMinWidth :: Int -> Txt
-screenMinWidth w = "only screen and (min-width:" <> px w <> ")"
+screenMinWidth :: Txt -> Txt
+screenMinWidth w = "only screen and (min-width:" <> w <> ")"
 
-allMinWidth :: Int -> Txt
-allMinWidth w = "all and (min-width" <> px w <> ")"
+allMinWidth :: Txt -> Txt
+allMinWidth w = "all and (min-width" <> w <> ")"
 
-screenMaxWidth :: Int -> Txt
-screenMaxWidth w = "only screen and (max-width:" <> px w <> ")"
+screenMaxWidth :: Txt -> Txt
+screenMaxWidth w = "only screen and (max-width:" <> w <> ")"
 
-allMaxWidth :: Int -> Txt
-allMaxWidth w = "all and (max-width:" <> px w <> ")"
+allMaxWidth :: Txt -> Txt
+allMaxWidth w = "all and (max-width:" <> w <> ")"
+
+emptyQuotes :: Txt
+emptyQuotes = "\"\""
+
+noBreakSpace :: Txt
+noBreakSpace = "\"\\00a0\""
 
 true :: Txt
 true = "true"
@@ -52,6 +57,9 @@ valign = "valign"
 noneS :: Txt
 noneS = "none"
 
+buttonS :: Txt
+buttonS = "button"
+
 zero :: Txt
 zero = "0"
 
@@ -79,6 +87,9 @@ center = "center"
 normal :: Txt
 normal = "normal"
 
+neg :: Txt -> Txt
+neg i = "-" <> i
+
 int :: Int -> Txt
 int = toTxt
 
@@ -89,58 +100,58 @@ sec :: Double -> Txt
 sec n = (toTxt n) <> "s"
 
 ms :: Int -> Txt
-ms n = (toTxt n) <> "ms"
+ms n = toTxt n <> "ms"
 
 per :: Double -> Txt
-per n = (toTxt n) <> "%"
+per n = toTxt n <> "%"
 
 deg :: Double -> Txt
-deg n = (toTxt n) <> "deg"
+deg n = toTxt n <> "deg"
 
 per2 :: Double -> Double -> Txt
-per2 n1 n2 = per n1 <+> per n2
+per2 n1 n2 = per n1 <<>> per n2
 
 per3 :: Double -> Double -> Double -> Txt
-per3 n1 n2 n3 = per n1 <+> per n2 <+> per n3
+per3 n1 n2 n3 = per n1 <<>> per n2 <<>> per n3
 
 per4 :: Double -> Double -> Double -> Double -> Txt
-per4 n1 n2 n3 n4 = per n1 <+> per n2 <+> per n3 <+> per n4
+per4 n1 n2 n3 n4 = per n1 <<>> per n2 <<>> per n3 <<>> per n4
 
-px :: Int -> Txt
-px n = int n <> "px"
+pxs :: Int -> Txt
+pxs n = int n <> "px"
 
-px2 :: Int -> Int -> Txt
-px2 n1 n2 = px n1 <+> px n2
+pxs2 :: Int -> Int -> Txt
+pxs2 n1 n2 = pxs n1 <<>> pxs n2
 
-px3 :: Int -> Int -> Int -> Txt
-px3 n1 n2 n3 = px n1 <+> px n2 <+> px n3
+pxs3 :: Int -> Int -> Int -> Txt
+pxs3 n1 n2 n3 = pxs n1 <<>> pxs n2 <<>> pxs n3
 
-px4 :: Int -> Int -> Int -> Int -> Txt
-px4 n1 n2 n3 n4 = px n1 <+> px n2 <+> px n3 <+> px n4
+pxs4 :: Int -> Int -> Int -> Int -> Txt
+pxs4 n1 n2 n3 n4 = pxs n1 <<>> pxs n2 <<>> pxs n3 <<>> pxs n4
 
 ems :: Double -> Txt
 ems n = dec n <> "em"
 
 ems2 :: Double -> Double -> Txt
-ems2 n1 n2 = ems n1 <+> ems n2
+ems2 n1 n2 = ems n1 <<>> ems n2
 
 ems3 :: Double -> Double -> Double -> Txt
-ems3 n1 n2 n3 = ems n1 <+> ems n2 <+> ems n3
+ems3 n1 n2 n3 = ems n1 <<>> ems n2 <<>> ems n3
 
 ems4 :: Double -> Double -> Double -> Double -> Txt
-ems4 n1 n2 n3 n4 = ems n1 <+> ems n2 <+> ems n3 <+> ems n4
+ems4 n1 n2 n3 n4 = ems n1 <<>> ems n2 <<>> ems n3 <<>> ems n4
 
 rems :: Double -> Txt
 rems n = dec n <> "rem"
 
 rems2 :: Double -> Double -> Txt
-rems2 n1 n2 = rems n1 <+> rems n2
+rems2 n1 n2 = rems n1 <<>> rems n2
 
 rems3 :: Double -> Double -> Double -> Txt
-rems3 n1 n2 n3 = rems n1 <+> rems n2 <+> rems n3
+rems3 n1 n2 n3 = rems n1 <<>> rems n2 <<>> rems n3
 
 rems4 :: Double -> Double -> Double -> Double -> Txt
-rems4 n1 n2 n3 n4 = rems n1 <+> rems n2 <+> rems n3 <+> rems n4
+rems4 n1 n2 n3 n4 = rems n1 <<>> rems n2 <<>> rems n3 <<>> rems n4
 
 individual :: Txt -> Txt
 individual = ("#" <>)
@@ -427,6 +438,9 @@ block = "block"
 inlineBlock :: Txt
 inlineBlock = "inline-block"
 
+tableS :: Txt
+tableS = "table"
+
 inlineTable :: Txt
 inlineTable = "inline-table"
 
@@ -510,6 +524,9 @@ overflow = "overflow"
 
 visible :: Txt
 visible = "visible"
+
+hiddenS :: Txt
+hiddenS = "hidden"
 
 scroll :: Txt
 scroll = "scroll"
@@ -630,6 +647,9 @@ textAlign = "text-align"
 
 verticalAlign :: Txt
 verticalAlign = "vertical-align"
+
+baseline :: Txt
+baseline = "baseline"
 
 middle :: Txt
 middle = "middle"
@@ -753,6 +773,9 @@ backgroundClip = "background-clip"
 
 imageFilter :: Txt
 imageFilter = "filter"
+
+defaultS :: Txt
+defaultS = "default"
 
 cursor :: Txt
 cursor = "cursor"
@@ -1487,26 +1510,8 @@ yellowgree = "yellowgree"
 alignSelf :: Txt
 alignSelf = "align-self"
 
-webkitJustifyContent :: Txt
-webkitJustifyContent = "-webkit-justify-content"
-
-msFlexPack :: Txt
-msFlexPack = "-ms-flex-pack"
-
-webkitBoxPack :: Txt
-webkitBoxPack = "-webkit-box-pack"
-
 justifyContent :: Txt
 justifyContent = "justify-content"
-
-webkitAlignItems :: Txt
-webkitAlignItems = "-webkit-align-items"
-
-msFlexAlign :: Txt
-msFlexAlign = "-ms-flex-align"
-
-webkitBoxAlign :: Txt
-webkitBoxAlign = "-webkit-box-aign"
 
 alignItems :: Txt
 alignItems = "align-items"
@@ -1520,6 +1525,9 @@ flexEnd = "flex-end"
 endS :: Txt
 endS = "end"
 
+startS :: Txt
+startS = "start"
+
 spaceAround :: Txt
 spaceAround = "space-around"
 
@@ -1532,62 +1540,20 @@ distribute = "distribute"
 justify :: Txt
 justify = "justify"
 
-webkitOrder :: Txt
-webkitOrder = "-webkit-order"
-
-msFlexOrder :: Txt
-msFlexOrder = "-ms-flex-order"
-
-webkitBoxOrdinalGroup :: Txt
-webkitBoxOrdinalGroup = "-webkit-box-ordinal-group"
-
 order :: Txt
 order = "order"
-
-msFlexPreferredSize :: Txt
-msFlexPreferredSize = "-ms-flex-preferred-size"
-
-webkitFlexBasis :: Txt
-webkitFlexBasis = "-webkit-flex-basis"
 
 flexBasis :: Txt
 flexBasis = "flex-basis"
 
-webkitFlexGrow :: Txt
-webkitFlexGrow = "-webkit-flex-grow"
-
-msFlexPositive :: Txt
-msFlexPositive = "-ms-flex-positive"
-
-webkitBoxFlex :: Txt
-webkitBoxFlex = "-webkit-box-flex"
-
 flexGrow :: Txt
 flexGrow = "flex-grow"
-
-webkitFlex :: Txt
-webkitFlex = "-webkit-flex"
-
-msFlex :: Txt
-msFlex = "-ms-flex"
 
 flex :: Txt
 flex = "flex"
 
 flexFlow :: Txt
 flexFlow = "flex-flow"
-
-webkitFlexDirection :: Txt
-webkitFlexDirection = "-webkit-flex-direction"
-
-msFlexDirection :: Txt
-msFlexDirection = "-ms-flex-direction"
-
-webkitBoxOrient :: Txt
-webkitBoxOrient = "-webkit-box-orient"
-
-webkitBoxDirection :: Txt
-webkitBoxDirection = "-webkit-box-direction"
 
 flexDirection :: Txt
 flexDirection = "flex-direction"
@@ -1607,20 +1573,8 @@ rowReverse = "row-reverse"
 horizontal :: Txt
 horizontal = "horizontal"
 
-webkitFlexWrap :: Txt
-webkitFlexWrap = "-webkit-flex-wrap"
-
-msFlexWrap :: Txt
-msFlexWrap = "-ms-flex-wrap"
-
 flexWrap :: Txt
 flexWrap = "flex-wrap"
-
-msFlexBox :: Txt
-msFlexBox = "-ms-flexbox"
-
-webkitBox :: Txt
-webkitBox = "-webkit-box"
 
 rowS :: Txt
 rowS = "row"
@@ -1691,6 +1645,9 @@ bias = "bias"
 
 by :: Txt
 by = "by"
+
+calc :: Txt -> Txt
+calc c = "calc(" <> c <> ")"
 
 calcMode :: Txt
 calcMode = "calcMode"
@@ -2227,6 +2184,9 @@ unicodeRange = "unicode-range"
 unitsPerEm :: Txt
 unitsPerEm = "units-per-em"
 
+userSelect :: Txt
+userSelect = "user-select"
+
 vAlphabetic :: Txt
 vAlphabetic = "v-alphabetic"
 
@@ -2298,3 +2258,123 @@ zS = "z"
 
 zoomAndPan :: Txt
 zoomAndPan = "zoomAndPan"
+
+--------------------------------------------------------------------------------
+-- Vender CSS
+
+----------------------------------------
+-- MS
+
+--------------------
+-- FlexBox
+
+msFlexPositive :: Txt
+msFlexPositive = "-ms-flex-positive"
+
+msFlexPreferredSize :: Txt
+msFlexPreferredSize = "-ms-flex-preferred-size"
+
+msFlexAlign :: Txt
+msFlexAlign = "-ms-flex-align"
+
+msFlexPack :: Txt
+msFlexPack = "-ms-flex-pack"
+
+msFlexOrder :: Txt
+msFlexOrder = "-ms-flex-order"
+
+msFlex :: Txt
+msFlex = "-ms-flex"
+
+msFlexDirection :: Txt
+msFlexDirection = "-ms-flex-direction"
+
+msFlexWrap :: Txt
+msFlexWrap = "-ms-flex-wrap"
+
+msFlexBox :: Txt
+msFlexBox = "-ms-flexbox"
+
+msTransform :: Txt
+msTransform = "-ms-transform"
+
+msTextSizeAdjust :: Txt
+msTextSizeAdjust = "-ms-text-size-adjust"
+
+msUserSelect :: Txt
+msUserSelect = "-ms-user-select"
+
+----------------------------------------
+-- Webkit
+
+webkitJustifyContent :: Txt
+webkitJustifyContent = "-webkit-justify-content"
+
+webkitBoxPack :: Txt
+webkitBoxPack = "-webkit-box-pack"
+
+webkitAlignItems :: Txt
+webkitAlignItems = "-webkit-align-items"
+
+webkitBoxAlign :: Txt
+webkitBoxAlign = "-webkit-box-align"
+
+webkitTouchCallout :: Txt
+webkitTouchCallout = "-webkit-touch-callout"
+
+webkitUserSelect :: Txt
+webkitUserSelect = "-webkit-user-select"
+
+webkitOrder :: Txt
+webkitOrder = "-webkit-order"
+
+webkitBoxOrdinalGroup :: Txt
+webkitBoxOrdinalGroup = "-webkit-box-ordinal-group"
+
+webkitFlexBasis :: Txt
+webkitFlexBasis = "-webkit-flex-basis"
+
+webkitFlexGrow :: Txt
+webkitFlexGrow = "-webkit-flex-grow"
+
+webkitBoxFlex :: Txt
+webkitBoxFlex = "-webkit-box-flex"
+
+webkitFlex :: Txt
+webkitFlex = "-webkit-flex"
+
+webkitFlexDirection :: Txt
+webkitFlexDirection = "-webkit-flex-direction"
+
+webkitBoxOrient :: Txt
+webkitBoxOrient = "-webkit-box-orient"
+
+webkitBoxDirection :: Txt
+webkitBoxDirection = "-webkit-box-direction"
+
+webkitFlexWrap :: Txt
+webkitFlexWrap = "-webkit-flex-wrap"
+
+webkitBox :: Txt
+webkitBox = "-webkit-box"
+
+webkitTransform :: Txt
+webkitTransform = "-webkit-transform"
+
+webkitTextSizeAdjust :: Txt
+webkitTextSizeAdjust = "-webkit-text-size-adjust"
+
+webkitTextDecorationSkip :: Txt
+webkitTextDecorationSkip = "-webkit-text-decoration-skip"
+
+webkitAppearance :: Txt
+webkitAppearance = "-webkit-appearance"
+
+----------------------------------------
+-- Mozilla
+
+mozAppearance :: Txt
+mozAppearance = "-moz-appearance"
+
+mozUserSelect :: Txt
+mozUserSelect = "-moz-user-select"

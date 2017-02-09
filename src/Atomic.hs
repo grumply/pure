@@ -213,6 +213,7 @@ selfClosing tag =
     "base"    -> True
     "br"      -> True
     "col"     -> True
+    "frame"   -> True
     "command" -> True
     "embed"   -> True
     "hr"      -> True
@@ -403,4 +404,3 @@ renderDynamicHTML h =
           return $
             "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
               <> ">"  <> inner <> "</" <> _tag <> ">"
-

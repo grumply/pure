@@ -14,8 +14,8 @@ abbr = html "abbr"
 address :: [Feature e] -> [Atom e] -> Atom e
 address = html "address"
 
-area :: [Feature e] -> [Atom e] -> Atom e
-area = html "area"
+area :: [Feature e] -> Atom e
+area fs = html "area" fs []
 
 a :: [Feature e] -> [Atom e] -> Atom e
 a = html "a"
@@ -29,8 +29,8 @@ aside = html "aside"
 audio :: [Feature e] -> [Atom e] -> Atom e
 audio = html "audio"
 
-base :: [Feature e] -> [Atom e] -> Atom e
-base = html "base"
+base :: [Feature e] -> Atom e
+base fs = html "base" fs []
 
 bdi :: [Feature e] -> [Atom e] -> Atom e
 bdi = html "bdi"
@@ -68,8 +68,8 @@ cite = html "cite"
 code :: [Feature e] -> [Atom e] -> Atom e
 code = html "code"
 
-col :: [Feature e] -> [Atom e] -> Atom e
-col = html "col"
+col :: [Feature e] -> Atom e
+col fs = html "col" fs []
 
 colgroup :: [Feature e] -> [Atom e] -> Atom e
 colgroup = html "colgroup"
@@ -84,7 +84,7 @@ dd :: [Feature e] -> [Atom e] -> Atom e
 dd = html "dd"
 
 description :: Txt -> Atom e
-description d = meta [ name "description", content d ] []
+description d = meta [ name "description", content d ]
 
 dl :: [Feature e] -> [Atom e] -> Atom e
 dl = html "dl"
@@ -128,6 +128,9 @@ footer = html "footer"
 form :: [Feature e] -> [Atom e] -> Atom e
 form = html "form"
 
+frame :: [Feature e] ->Atom e
+frame fs = html "frame" fs []
+
 head :: [Atom e] -> Atom e
 head = html "head" []
 
@@ -155,8 +158,8 @@ h6 = html "h6"
 hgroup :: [Feature e] -> [Atom e] -> Atom e
 hgroup = html "hgroup"
 
-hr :: [Feature e] -> [Atom e] -> Atom e
-hr = html "hr"
+hr :: [Feature e] -> Atom e
+hr fs = html "hr" fs []
 
 html_ :: [Feature e] -> [Atom e] -> Atom e
 html_ = html "html"
@@ -164,11 +167,11 @@ html_ = html "html"
 iframe :: [Feature e] -> [Atom e] -> Atom e
 iframe = html "iframe"
 
-img :: [Feature e] -> [Atom e] -> Atom e
-img = html "img"
+img :: [Feature e] -> Atom e
+img fs = html "img" fs []
 
-input :: [Feature e] -> [Atom e] -> Atom e
-input = html "input"
+input :: [Feature e] -> Atom e
+input fs = html "input" fs []
 
 textInput :: [Feature e] -> [Atom e] -> Atom e
 textInput fs = html "input" (typeA "text":fs)
@@ -194,8 +197,8 @@ legend = html "legend"
 li :: [Feature e] -> [Atom e] -> Atom e
 li = html "li"
 
-link_ :: [Feature e] -> [Atom e] -> Atom e
-link_ = html "link"
+link_ :: [Feature e] -> Atom e
+link_ fs = html "link" fs []
 
 main_ :: [Feature e] -> [Atom e] -> Atom e
 main_ = html "main"
@@ -212,8 +215,8 @@ menu = html "menu"
 menuitem :: [Feature e] -> [Atom e] -> Atom e
 menuitem = html "menuitem"
 
-meta :: [Feature e] -> [Atom e] -> Atom e
-meta = html "meta"
+meta :: [Feature e] -> Atom e
+meta fs = html "meta" fs []
 
 meter :: [Feature e] -> [Atom e] -> Atom e
 meter = html "meter"
@@ -242,8 +245,8 @@ output = html "output"
 p :: [Feature e] -> [Atom e] -> Atom e
 p = html "p"
 
-param :: [Feature e] -> [Atom e] -> Atom e
-param = html "param"
+param :: [Feature e] -> Atom e
+param fs = html "param" fs []
 
 picture :: [Feature e] -> [Atom e] -> Atom e
 picture = html "picture"

@@ -526,8 +526,7 @@ instance IsConstruct' ts ms m
           IO
   where
     using_ c = do
-      -- keep an eye on this; there was a bug in fission that caused multiple-instantiation
-      -- (since the lookup+mk is non-atomic) but I'm not sure it will arise here.
+      -- FIXME: likely a bug here with double initialization in multithreaded contexts!
       mi_ <- lookupConstruct (key c)
       case mi_ of
         Just (as,_) -> return (runAs as)
