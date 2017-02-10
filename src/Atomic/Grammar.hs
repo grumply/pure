@@ -318,4 +318,5 @@ instance (MonadIO c, '[State () Parsers] <: ms, Typeable (p :: *), Evaluate ms c
             liftIO $ syndicate (unsafeCoerce nw) res
             return (Right ())
 
+runLanguage :: Evaluate ms c as => Language ms c as as' -> Txt -> Code ms c (Either [Txt] ())
 runLanguage (Language ps _) t = evaluate ps [] t
