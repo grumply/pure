@@ -1,3 +1,4 @@
+{-# language OverloadedStrings #-}
 module Atomic.Key where
 
 import Data.Txt
@@ -24,8 +25,8 @@ instance IsString (Key a) where
     in h `seq` Key (fromString str,h)
 
 instance Monoid (Key phantom) where
-  mempty = Key (fromString "",hash "")
+  mempty = Key ("",hash ("" :: Txt))
   mappend (Key (jss0,_)) (Key (jss1,_)) =
-    let h = hash (fromTxt jss0 ++ fromTxt jss1 :: String)
+    let h = hash (jss0 <> jss1)
     in Key (jss0 <> jss1,h)
 

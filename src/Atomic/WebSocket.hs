@@ -1043,7 +1043,7 @@ requestWith :: ( MonadIO c
             -> Proxy rqTy
             -> request
             -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Endpoint ms c)
+            -> Code ms c (Endpoint ms c Dispatch)
 requestWith srv rqty_proxy req f = do
   buf <- getReventBuffer
   p <- periodical
@@ -1106,7 +1106,7 @@ apiRequestWith :: ( MonadIO c
                 -> Proxy rqTy
                 -> request
                 -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-                -> Code ms c (Endpoint ms c)
+                -> Code ms c (Endpoint ms c Dispatch)
 apiRequestWith _ srv rqty_proxy req f = do
   buf <- getReventBuffer
   p <- periodical
@@ -1159,7 +1159,7 @@ request :: ( MonadIO c
         => Proxy rqTy
         -> request
         -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-        -> Code ms c (Endpoint ms c)
+        -> Code ms c (Endpoint ms c Dispatch)
 request rqty_proxy req f = do
   buf <- getReventBuffer
   p <- periodical
@@ -1212,7 +1212,7 @@ apiRequest :: forall c ms rqTy request rqI response rqs msgs.
            -> Proxy rqTy
            -> request
            -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-           -> Code ms c (Endpoint ms c)
+           -> Code ms c (Endpoint ms c Dispatch)
 apiRequest _ rqty_proxy req f = do
   buf <- getReventBuffer
   p :: Periodical ms c Dispatch <- periodical
@@ -1268,7 +1268,7 @@ respondWith :: ( MonadIO c
             -> Proxy rqTy
             -> (Code ms c () -> Either Dispatch (Either LazyByteString response -> Code ms c (Promise (Either WSStatus ())),request) -> Code '[Event Dispatch] (Code ms c) ()
                )
-            -> Code ms c (Endpoint ms c)
+            -> Code ms c (Endpoint ms c Dispatch)
 respondWith srv rqty_proxy rr = do
   buf <- getReventBuffer
   p <- periodical
@@ -1325,7 +1325,7 @@ respond :: ( MonadIO c
            )
         => Proxy rqTy
         -> (Code ms c () -> Either Dispatch (Either LazyByteString response -> Code ms c (Either WSStatus ()),request) -> Code '[Event Dispatch] (Code ms c) ())
-        -> Code ms c (Endpoint ms c)
+        -> Code ms c (Endpoint ms c Dispatch)
 respond rqty_proxy rr = do
   buf <- getReventBuffer
   p <- periodical
@@ -1432,7 +1432,7 @@ onMessageWith :: ( MonadIO c
               => w
               -> Proxy mTy
               -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-              -> Code ms c (Endpoint ms c)
+              -> Code ms c (Endpoint ms c Dispatch)
 onMessageWith s mty_proxy f = do
   buf <- getReventBuffer
   p <- periodical
@@ -1473,7 +1473,7 @@ onMessage :: ( MonadIO c
              )
           => Proxy mTy
           -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint ms c)
+          -> Code ms c (Endpoint ms c Dispatch)
 onMessage mty_proxy f = do
   buf <- getReventBuffer
   p <- periodical
@@ -2247,7 +2247,7 @@ request :: ( MonadIO c
          => Proxy rqTy
          -> request
          -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-         -> Code ms c (Endpoint ms c) 
+         -> Code ms c (Endpoint ms c Dispatch) 
 request rqty_proxy req f = do
   buf <- getReventBuffer
   p   <- periodical
@@ -2296,7 +2296,7 @@ apiRequest :: ( MonadIO c
           -> Proxy rqTy
           -> request
           -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint ms c) 
+          -> Code ms c (Endpoint ms c Dispatch) 
 apiRequest _ rqty_proxy req f = do
   buf <- getReventBuffer
   p   <- periodical
@@ -2348,7 +2348,7 @@ requestWith :: ( MonadIO c
             -> Proxy rqTy
             -> request
             -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Endpoint ms c) 
+            -> Code ms c (Endpoint ms c Dispatch) 
 requestWith s rqty_proxy req f = do
   buf <- getReventBuffer
   p   <- periodical
@@ -2407,7 +2407,7 @@ apiRequestWith :: ( MonadIO c
                -> Proxy rqTy
                -> request
                -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-               -> Code ms c (Endpoint ms c) 
+               -> Code ms c (Endpoint ms c Dispatch) 
 apiRequestWith _ s rqty_proxy req f = do
   buf <- getReventBuffer
   p   <- periodical
@@ -2462,7 +2462,7 @@ respondWith :: ( MonadIO c
             => w
             -> Proxy rqTy
             -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (Promise ()),request) -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Endpoint ms c)
+            -> Code ms c (Endpoint ms c Dispatch)
 respondWith s rqty_proxy rr = do
   buf <- getReventBuffer
   p <- periodical
@@ -2510,7 +2510,7 @@ respond :: ( MonadIO c
            )
         => Proxy rqTy
         -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
-        -> Code ms c (Endpoint ms c)
+        -> Code ms c (Endpoint ms c Dispatch)
 respond rqty_proxy rr = do
   buf <- getReventBuffer
   p <- periodical
@@ -2607,7 +2607,7 @@ onMessageWith :: ( MonadIO c
                => w
                -> Proxy mTy
                -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-               -> Code ms c (Endpoint ms c) 
+               -> Code ms c (Endpoint ms c Dispatch) 
 onMessageWith s mty_proxy f = do
   buf <- getReventBuffer
   s_ <- liftIO $ newIORef undefined
@@ -2646,7 +2646,7 @@ onMessage :: ( MonadIO c
              )
           => Proxy mTy
           -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint ms c) 
+          -> Code ms c (Endpoint ms c Dispatch) 
 onMessage mty_proxy f = do
   buf <- getReventBuffer
   s_ <- liftIO $ newIORef undefined

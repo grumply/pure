@@ -7,7 +7,7 @@ import Ef.Type.List
 
 -- Utilities to build lists of proxies that have shared shape.
 
-data PList_ f (elems :: [k])
+data PList_ (f :: k -> *) (elems :: [k])
   where
 
     PNull

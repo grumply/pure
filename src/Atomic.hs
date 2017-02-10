@@ -28,10 +28,11 @@ import Data.Bool as Export
 import Data.Maybe as Export
 
 import qualified Data.Txt as Export (Txt(..))
-import Data.JSON         as Export hiding (defaultOptions,Options,(!))
+import Data.JSON         as Export hiding (defaultOptions,Options,(!),Parser,parse)
 import Data.Millis       as Export
 import Data.Micros       as Export
 import Atomic.API        as Export
+import Atomic.Grammar    as Export
 import Atomic.Attribute  as Export
 import Atomic.CSS        as Export
 import Atomic.Cond       as Export

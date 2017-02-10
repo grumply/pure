@@ -12,6 +12,7 @@ import Atomic.Endpoint
 import Atomic.API.Interface
 
 import Data.Proxy
+import Data.Typeable
 
 data Endpoints (hndlr :: [* -> *] -> (* -> *) -> * -> *) (ms :: [* -> *]) (c :: * -> *) (es :: [*])
   where
@@ -102,7 +103,7 @@ data ActiveEndpoints ms c es
 
     ActiveEndpointsCons
       :: Proxy e
-      -> Endpoint ms c
+      -> Endpoint ms c a
       -> ActiveEndpoints ms c es
       -> ActiveEndpoints ms c (e ': es)
 
