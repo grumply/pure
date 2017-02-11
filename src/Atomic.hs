@@ -144,6 +144,24 @@ this = do
 dash :: Txt -> Txt
 dash = Txt.map (\x -> if x == '.' then '-' else x)
 
+type CLI m = Construct '[State () Parsers] m
+cli :: Evaluate (Appended '[State () Parsers] (ConstructBase m)) IO as
+    => ConstructKey '[State () Parsers] m
+    -> Language (Appended '[State () Parsers] (ConstructBase m)) IO as as'
+    -> m
+    -> (m -> Atom (Code (Appended '[State () Parsers] (ConstructBase m)) IO ()))
+    -> CLI m
+cli key0 lang model0 view0 = Construct {..}
+  where
+    key = key0
+    build base = do
+      ps <- parsers
+      return (ps *:* base)
+    prime =
+      void (buildLanguage lang)
+    model = model0
+    view = view0
+
 type Controller m = Construct '[] m
 -- controller :: ConstructKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
 controller :: ConstructKey '[] m -> m -> (m -> Atom (Code (ConstructBase m) IO ())) -> Controller m

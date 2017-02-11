@@ -459,12 +459,12 @@ instance Eq Constr where
   in prettyUnsafeEq k1 k2
 
 type ConstructKey' ms m = Key (Code ms IO `As` IO, IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m))
-type ConstructKey ms m = ConstructKey' (Appended (ConstructBase m) ms) m
+type ConstructKey ms m = ConstructKey' (Appended ms (ConstructBase m)) m
 type ConstructBuilder' ts m = Modules (ConstructBase m) (Action ts IO) -> IO (Modules ts (Action ts IO))
-type ConstructBuilder ts m = ConstructBuilder' (Appended (ConstructBase m) ts) m
+type ConstructBuilder ts m = ConstructBuilder' (Appended ts (ConstructBase m)) m
 type ConstructPrimer' ms = Code ms IO ()
-type ConstructPrimer ms m = ConstructPrimer' (Appended (ConstructBase m) ms)
-type Construct ms m = Construct' (Appended (ConstructBase m) ms) (Appended (ConstructBase m) ms) m
+type ConstructPrimer ms m = ConstructPrimer' (Appended ms (ConstructBase m))
+type Construct ms m = Construct' (Appended ms (ConstructBase m)) (Appended ms (ConstructBase m)) m
 
 instance ToTxt (Feature e) where
   toTxt NullFeature          = mempty

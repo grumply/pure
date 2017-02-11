@@ -378,8 +378,8 @@ defer = attr "defer"
 httpEquiv :: Txt -> Feature e
 httpEquiv = attr "http-equiv"
 
-language :: Txt -> Feature e
-language = attr "language"
+languageA :: Txt -> Feature e
+languageA = attr "language"
 
 scopedA :: Bool -> Feature e
 scopedA = boolattr "scoped"
