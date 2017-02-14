@@ -10,11 +10,15 @@ import Data.JSON hiding (Options)
 import Atomic.FromTxt
 import Atomic.ToTxt
 import Atomic.Cond
+import Atomic.UnsafeEq
 
 import Data.String
 import Data.Maybe
 
 import GHC.Exts
+
+import qualified Data.Function as F
+import Data.List (sortBy)
 
 #ifdef LENS
 import Control.Lens (makePrisms,makeLenses)
@@ -74,6 +78,25 @@ data Feature e
     , _xlinkValue :: Txt
     }
   deriving (Functor)
+
+instance Eq (Feature e) where
+  (==) NullFeature NullFeature = True
+  (==) (Attribute a v) (Attribute a' v') =
+    prettyUnsafeEq a a' && prettyUnsafeEq v v'
+  (==) (Style ss) (Style ss') =
+    reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
+  (==) (CurrentValue v) (CurrentValue v') =
+    prettyUnsafeEq v v'
+  (==) (On e ev _) (On e' ev' _) =
+    prettyUnsafeEq e e' && reallyUnsafeEq ev ev'
+  (==) (On' e os ev _) (On' e' os' ev' _) =
+    prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
+  (==) (Link t _) (Link t' _) =
+    prettyUnsafeEq t t'
+  (==) (SVGLink t _) (SVGLink t' _) =
+    prettyUnsafeEq t t'
+  (==) (XLink t _) (XLink t' _) =
+    prettyUnsafeEq t t'
 
 instance Cond (Feature e) where
   nil = NullFeature

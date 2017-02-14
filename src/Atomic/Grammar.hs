@@ -45,29 +45,29 @@ pos vs nm = do
     mapHead f [] = []
     mapHead f (x:xs) = f x : xs
 
--- usage: noun "item" / noun "Item"
+-- usage: mkNoun "item" / mkNoun "Item"
 -- produces:
 --   > data Item
 --   > item :: Proxy Item
 --   > item = Proxy
-noun :: String -> Q [Dec]
-noun = pos []
+mkNoun :: String -> Q [Dec]
+mkNoun = pos []
 
--- usage: verb "create" / verb "Create"
+-- usage: mkVerb "create" / mkVerb "Create"
 -- produces:
 --   > data Create (a :: *)
 --   > create :: Proxy Create
 --   > create = Proxy
-verb :: String -> Q [Dec]
-verb = pos [KindedTV (mkName "a") StarT]
+mkVerb :: String -> Q [Dec]
+mkVerb = pos [KindedTV (mkName "a") StarT]
 
--- usage: conjunction "And" / conjunction "and"
+-- usage: mkConjunction "And" / mkConjunction "and"
 -- produces:
 --   > data And (a :: k -> *) (b :: k -> *) (c :: k)
 --   > and :: Proxy And
 --   > and = Proxy
-conjunction :: String -> Q [Dec]
-conjunction =
+mkConjunction :: String -> Q [Dec]
+mkConjunction =
   let
     k = VarT (mkName "k")
     kToStar = AppT (AppT ArrowT k) StarT
@@ -76,58 +76,58 @@ conjunction =
   in
     pos [KindedTV (mkName "a") kToStar, KindedTV (mkName "b") kToStar, KindedTV (mkName "c") k]
 
--- usage: preposition "with" / preposition "With"
+-- usage: mkPreposition "best" / mkPreposition "Best"
+-- produces:
+--   > data Best (a :: *) (b :: *)
+--   > best :: Proxy Best
+--   > best = Proxy
+mkPreposition :: String -> Q [Dec]
+mkPreposition = pos [KindedTV (mkName "a") StarT, KindedTV (mkName "b") StarT]
+
+-- usage: mkAdjective "with" / mkAdjective "With"
 -- produces:
 --   > data With (a :: *) (b :: *)
 --   > with :: Proxy With
 --   > with = Proxy
-preposition :: String -> Q [Dec]
-preposition = pos [KindedTV (mkName "a") StarT, KindedTV (mkName "b") StarT]
+mkAdjective :: String -> Q [Dec]
+mkAdjective = pos [KindedTV (mkName "a") StarT]
 
--- usage: adjective "with" / adjective "With"
--- produces:
---   > data With (a :: *) (b :: *)
---   > with :: Proxy With
---   > with = Proxy
-adjective :: String -> Q [Dec]
-adjective = pos [KindedTV (mkName "a") StarT]
-
--- usage: determiner "some" / determiner "Some"
+-- usage: mkDeterminer "some" / mkDeterminer "Some"
 -- produces:
 --   > data Some (a :: *)
 --   > some :: Proxy Some
 --   > some = Proxy
-determiner :: String -> Q [Dec]
-determiner = pos [KindedTV (mkName "a") StarT]
+mkDeterminer :: String -> Q [Dec]
+mkDeterminer = pos [KindedTV (mkName "a") StarT]
 
--- usage: adjective "quickly" / adjective "Quickly"
+-- usage: mkAdverb "quickly" / mkAdverb "Quickly"
 -- produces:
 --   > data Quickly (a :: k -> *) (b :: k)
 --   > quickly :: Proxy Quickly
 --   > quickly = Proxy
-adverb :: String -> Q [Dec]
-adverb =
+mkAdverb :: String -> Q [Dec]
+mkAdverb =
   let
     kTy = VarT (mkName "k")
     verbType = AppT (AppT ArrowT kTy) StarT
   in
     pos [KindedTV (mkName "a") verbType, KindedTV (mkName "b") kTy]
 
--- usage: pronoun "it" / pronoun "It"
+-- usage: mkPronoun "it" / mkPronoun "It"
 -- produces:
 --   > data It
 --   > it :: Proxy It
 --   > it = Proxy
-pronoun :: String -> Q [Dec]
-pronoun = pos []
+mkPronoun :: String -> Q [Dec]
+mkPronoun = pos []
 
--- usage: interjection "wow" / interjection "Wow"
+-- usage: mkInterjection "wow" / mkInterjection "Wow"
 -- produces:
 --   > data Wow
 --   > wow :: Proxy Wow
 --   > wow = Proxy
-interjection :: String -> Q [Dec]
-interjection = pos []
+mkInterjection :: String -> Q [Dec]
+mkInterjection = pos []
 
 -- type Id a = a
 
@@ -138,103 +138,34 @@ data Parse k where
   Fail :: Parse k
   deriving Functor
 
-getNext :: forall a ms c. ('[] <: ms, Monad c) => Parser ms c (Maybe Char)
-getNext = Parser (Send (Next Return :: Parse (Code '[Parse] (Code ms c) (Maybe Char))))
+getNext :: forall a c. (Monad c) => Parser c (Maybe Char)
+getNext = Parser (Send (Next Return :: Parse (Code '[Parse] (Code c) (Maybe Char))))
 
-getInput :: forall a ms c. ('[] <: ms, Monad c) => Parser ms c Txt
-getInput = Parser $ Send (GetInput Return :: Parse (Code '[Parse] (Code ms c) Txt))
+getInput :: forall a c. (Monad c) => Parser c Txt
+getInput = Parser $ Send (GetInput Return :: Parse (Code '[Parse] (Code c) Txt))
 
-setInput :: forall a ms c. ('[] <: ms, Monad c) => Txt -> Parser ms c ()
-setInput t = Parser $ Send (SetInput t (Return ()) :: Parse (Code '[Parse] (Code ms c) ()))
+setInput :: forall a c. (Monad c) => Txt -> Parser c ()
+setInput t = Parser $ Send (SetInput t (Return ()) :: Parse (Code '[Parse] (Code c) ()))
 
-failed :: forall a ms c r. ('[] <: ms, Monad c) => Parser ms c r
-failed = Parser $ Send (Fail :: Parse (Code '[Parse] (Code ms c) r))
+failed :: forall a c r. (Monad c) => Parser c r
+failed = Parser $ Send (Fail :: Parse (Code '[Parse] (Code c) r))
 
-try :: (Monad c, '[] <: ms) => Parser ms c () -> Parser ms c ()
-try p = do
-  inp <- getInput
-  r <- Parser $ lift (runParser p inp)
-  case r of
-    Nothing -> failed
-    Just (lo,_) -> setInput lo
-
--- use: exhaust (spaces <|> punctuation)
-exhaust :: (Monad c, '[] <: ms) => Parser ms c () -> Parser ms c ()
-exhaust l = do
-  inp <- getInput
-  r <- Parser $ lift (runParser l inp)
-  forM_ r (\(lo,_) -> setInput lo >> exhaust l)
-
-spaces :: (Monad c, '[] <: ms) => Parser ms c ()
-spaces = do
-  inp <- getInput
-  setInput $ T.filter (not . isSpace) inp
-
-punctuation :: (Monad c, '[] <: ms) => Parser ms c ()
-punctuation = do
-  inp <- getInput
-  setInput $ T.filter (not . isPunctuation) inp
-
-string :: (Monad c, '[] <: ms) => Txt -> Parser ms c ()
-string t = do
-  let l = T.length t
-  inp <- getInput
-  case T.compareLength inp l of
-    LT -> failed
-    _ -> do
-      let (pre,suf) = T.splitAt l inp
-      if pre == t then do
-        setInput suf
-      else
-        failed
-
-takeWithoutPunctuation :: Int -> Txt -> Maybe (Txt,Txt)
-takeWithoutPunctuation = go mempty
-  where
-    go res 0 cnt = Just (T.reverse res,cnt)
-    go res n cnt =
-      case T.uncons cnt of
-        Nothing -> Nothing
-        Just (h,r) ->
-          if isPunctuation h then
-            go res n r
-          else
-            go (T.cons h res) (n - 1) r
-
-word :: (Monad c, '[] <: ms) => Txt -> Parser ms c ()
-word t = do
-  let unpunctuated = T.filter isPunctuation t
-  inp <- getInput
-  case takeWithoutPunctuation (T.length unpunctuated) inp of
-    Nothing -> failed
-    Just (t',r) ->
-      if unpunctuated == t' then
-        setInput r
-      else
-        failed
-
-instance (Monad c,'[] <: ms,a ~ ()) => IsString (Parser ms c a) where
-  fromString = try . Prelude.foldr1 (<|>) . Prelude.map word . T.words . toTxt
-
-instance (Monad c,'[] <: ms,a ~ ()) => IsList (Parser ms c a) where
-  type Item (Parser ms c a) = String
-  fromList = mapM_ (\s -> exhaust (spaces <|> punctuation) >> fromString s)
-  toList _ = []
-
-runParser :: forall ms c a. ('[] <: ms, Monad c) => Parser ms c a -> Txt -> Code ms c (Maybe (Txt,a))
+runParser :: forall c a. (Monad c) => Parser c a -> Txt -> c (Maybe (Txt,a))
 runParser (Parser p) = flip go p
   where
-    go :: Txt -> Code '[Parse] (Code ms c) a -> Code ms c (Maybe (Txt,a))
+    go :: Txt -> Code '[Parse] c a -> c (Maybe (Txt,a))
     go t (Return a) = return (Just (t,a))
     go t (Lift m) = m >>= go t
     go t (Do m) =
       case prj m of
-        Just (c :: Parse (Code '[Parse] (Code ms c) a)) ->
+        Just (c :: Parse (Code '[Parse] c a)) ->
           case c of
             Next f ->
-              case T.uncons t of
-                Nothing -> go t (f Nothing)
-                Just (c,t') -> go t' (f (Just c))
+              if T.null t then
+                go t (f Nothing)
+              else
+                case T.uncons t of
+                  Just (c,t') -> go t' (f (Just c))
             GetInput f ->
               go t (f t)
             SetInput t' k ->
@@ -243,6 +174,117 @@ runParser (Parser p) = flip go p
               return Nothing
         Nothing ->
           return Nothing
+
+try :: (Monad c) => Parser c () -> Parser c ()
+try p = do
+  inp <- getInput
+  r <- Parser $ lift (runParser p inp)
+  case r of
+    Nothing -> failed
+    Just (lo,_) -> setInput lo
+
+-- use: exhaust (spaces <|> punctuation)
+exhaust :: (Monad c) => Parser c () -> Parser c ()
+exhaust l = do
+  inp <- getInput
+  r <- Parser $ lift (runParser l inp)
+  case r of
+    Nothing -> return ()
+    Just (lo,_) -> do
+      setInput lo
+      exhaust l
+
+data Pos = Pos { getPos :: Int } deriving (Eq,Num,Ord,Show)
+
+lengthAtLeast :: Post -> Int -> Buffer
+ensure :: (Monad c) => Int -> Parser c (Pos,Txt)
+ensure n = do
+  
+
+satisfy
+
+satisfy :: (Monad c) => (Char -> Bool) -> Parser c ()
+satisfy cond = do
+  inp <- getInput
+  if T.null inp then
+    failed
+  else
+    case T.uncons inp of
+      Just (c,cs) -> do
+        if cond c then
+          setInput cs
+        else
+          failed
+
+satisfyMany :: (Monad c) => (Char -> Bool) -> Parser c ()
+satisfyMany cond = forever $ satisfy cond
+
+spaces :: (Monad c) => Parser c ()
+spaces = satisfyMany isSpace
+
+punctuation :: (Monad c) => Parser c ()
+punctuation = satisfyMany isPunctuation
+
+string :: (Monad c) => Txt -> Parser c Txt
+string t = do
+  let l = T.length t
+  inp <- getInput
+  case T.compareLength inp l of
+    LT -> failed
+    _ -> do
+      let (pre,suf) = T.splitAt l inp
+      if (T.toLower pre) == t then do
+        setInput suf
+      else
+        failed
+
+txtToWords :: Monad c => Txt -> Parser c ()
+txtToWords = mapM_ (\s -> exhaust (satisfy (\x -> isSpace x || isPunctuation x)) >> string s) . T.words
+
+newtype Parser c r = Parser (Code '[Parse] c r)
+instance (Monad c) => Functor (Parser c) where
+  fmap f (Parser p) = Parser (fmap f p)
+instance (Monad c) => Applicative (Parser c) where
+  pure = Parser . pure
+  (Parser fab) <*> (Parser fa) = Parser (fab <*> fa)
+instance (Monad c) => Monad (Parser c) where
+  return = Parser . return
+  (Parser ma) >>= amb = Parser $ do
+    a <- ma
+    let Parser mb = amb a
+    mb
+  fail _ = failed
+instance MonadTrans Parser where
+  lift = Parser . lift
+instance (MonadIO c) => MonadIO (Parser c) where
+  liftIO = Parser . liftIO
+instance (Monad c) => Alternative (Parser c) where
+  empty = failed
+  l <|> r = do
+    inp <- getInput
+    res <- Parser $ lift (runParser l inp)
+    case res of
+      Nothing -> do
+        res' <- Parser $ lift (runParser r inp)
+        case res' of
+          Nothing    -> failed
+          Just (lo,a) -> setInput lo >> return a
+      Just (lo,a) ->
+        setInput lo >> return a
+instance (Monad c) => MonadPlus (Parser c) where
+  mzero = empty
+  mplus = (<|>)
+instance (Monad c) => Monoid (Parser c a) where
+  mempty = empty
+  mappend = (<|>)
+
+instance (Monad c,a ~ Txt) => IsString (Parser c a) where
+  fromString = string
+
+instance (Monad c,a ~ ()) => IsList (Parser c a) where
+  type Item (Parser ms c a) = Txt
+  fromList = try . Prelude.foldr1 (<|>) . Prelude.map string
+  toList _ = []
 
 data Parsers
   = Parsers
@@ -263,44 +305,7 @@ proxyResult proxy pr = return (ProductionRep (qualRep proxy),pr)
 
 class Typeable a => Production ms c a where -- munging jargon here, but I like this name
   type Produced a :: *
-  parse :: Proxy a -> ProductionRep -> Parser ms c (ProductionRep,Produced a)
-
-newtype Parser ms c r = Parser (Code '[Parse] (Code ms c) r)
-instance (Monad c, Functor (Messages ms)) => Functor (Parser ms c) where
-  fmap f (Parser p) = Parser (fmap f p)
-instance (Monad c, Functor (Messages ms)) => Applicative (Parser ms c) where
-  pure = Parser . pure
-  (Parser fab) <*> (Parser fa) = Parser (fab <*> fa)
-instance (Monad c,Functor (Messages ms)) => Monad (Parser ms c) where
-  return = Parser . return
-  (Parser ma) >>= amb = Parser $ do
-    a <- ma
-    let Parser mb = amb a
-    mb
-  fail _ = failed
-instance (Functor (Messages ms)) => MonadTrans (Parser ms) where
-  lift = Parser . lift . lift
-instance (MonadIO c, Functor (Messages ms)) => MonadIO (Parser ms c) where
-  liftIO = Parser . liftIO
-instance (Monad c, Functor (Messages ms)) => Alternative (Parser ms c) where
-  empty = failed
-  l <|> r = do
-    inp <- getInput
-    res <- Parser $ lift (runParser l inp)
-    case res of
-      Nothing -> do
-        res' <- Parser $ lift (runParser r inp)
-        case res' of
-          Nothing    -> failed
-          Just (_,a) -> return a
-      Just (_,a) ->
-        return a
-instance (Monad c, Functor (Messages ms)) => MonadPlus (Parser ms c) where
-  mzero = empty
-  mplus = (<|>)
-instance (Monad c, Functor (Messages ms)) => Monoid (Parser ms c a) where
-  mempty = empty
-  mappend = (<|>)
+  parse :: Proxy a -> ProductionRep -> Parser (Code ms c) (ProductionRep,Produced a)
 
 data ProductionHandler ms c a
   where
@@ -408,8 +413,11 @@ instance (MonadIO c, '[State () Parsers] <: ms, Typeable (p :: *), Evaluate ms c
 sentences :: ToAPI (Production ms c) as => PList as -> API (Production ms c) as
 sentences = toAPI
 
-buildLanguage :: Language ms c as as' -> Code ms c (ActiveEndpoints ms c as)
-buildLanguage (Language ps eps) = enactEndpoints ps eps
+buildLanguage :: ('[State () Parsers] <: ms, MonadIO c) => Language ms c as as' -> Code ms c (ActiveEndpoints ms c as)
+buildLanguage (Language ps eps) = do
+  Parsers {..} <- get
+  liftIO $ atomicModifyIORef' pHandlers $ \_ -> (Map.empty,())
+  enactEndpoints ps eps
 
 runLanguage :: Evaluate ms c as => Language ms c as as' -> Txt -> Code ms c (Maybe ())
 runLanguage (Language ps _) t = evaluate ps t
@@ -425,3 +433,4 @@ instance FromAPI (Production ms c) '[] where
 
 instance (Production ms c x, FromAPI (Production ms c) xs) => FromAPI (Production ms c) (x ': xs) where
   fromAPI (APICons p ps) = PCons p (fromAPI ps)
+

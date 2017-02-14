@@ -11,6 +11,16 @@ import Data.Monoid
 
 import Prelude hiding (rem,reverse)
 
+onXS = id
+
+onSM = atMedia (screenMinWidth (ems 48))
+
+onMD = atMedia (screenMinWidth (ems 64))
+
+onLG = atMedia (screenMinWidth (ems 75))
+
+onXL = atMedia (screenMinWidth (ems 90))
+
 -- a port of Kristofer Joseph's flexboxgrid css from: https://github.com/kristoferjoseph/flexboxgrid; Apache licensed
 grid :: StaticCSS
 grid =

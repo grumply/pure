@@ -17,13 +17,12 @@ import Atomic.CSS
 import Atomic.Key
 import Atomic.Render
 import Atomic.Revent
-import Atomic.UnsafeEq
 import Atomic.Vault
 import Atomic.With
 import Atomic.ToTxt
 import Atomic.FromTxt
-
 import Atomic.Observable
+import Atomic.UnsafeEq
 
 #ifdef __GHCJS__
 import qualified GHCJS.Types as T
@@ -212,6 +211,31 @@ data Atom e where
         , _constr      :: !Constr
         } -> Atom e
   deriving Functor
+
+instance Eq (Atom e) where
+  (==) (NullAtom _) (NullAtom _) =
+    True
+
+  (==) (Text _ t) (Text _ t') =
+    prettyUnsafeEq t t'
+
+  (==) (Raw _ t fs c) (Raw _ t' fs' c') =
+    prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq c c'
+
+  (==) (KAtom _ t fs ks) (KAtom _ t' fs' ks') =
+    prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq ks ks'
+
+  (==) (Atom _ t fs cs) (Atom _ t' fs' cs') =
+    prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq cs cs'
+
+  (==) (SVGAtom _ t fs cs) (SVGAtom _ t' fs' cs') =
+    prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq cs cs'
+
+  (==) (Managed _ t fs c) (Managed _ t' fs' c') =
+    prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq c c'
+
+  (==) _ _ =
+    False
 
 instance Cond (Atom e) where
   nil = NullAtom Nothing

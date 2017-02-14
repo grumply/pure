@@ -90,6 +90,15 @@ normal = "normal"
 neg :: Txt -> Txt
 neg i = "-" <> i
 
+vhs :: Int -> Txt
+vhs i = toTxt i <> "vh"
+
+vws :: Int -> Txt
+vws i = toTxt i <> "vw"
+
+vms :: Int -> Txt
+vms i = toTxt i <> "vm"
+
 int :: Int -> Txt
 int = toTxt
 

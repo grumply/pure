@@ -24,6 +24,7 @@ import GHC.Generics as Export (Generic)
 import Atomic.Construct
 import Atomic.Mediator
 
+import Data.Bifunctor as Export
 import Data.Bool as Export
 import Data.Maybe as Export
 
@@ -223,8 +224,8 @@ staticHTML = render
 shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
 shtml _tag _attributes = raw _tag _attributes . toTxt
 
-type HTML ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
-type Attribute ms m = Atom (Code (Appended (ConstructBase m) ms) IO ())
+type HTML ms m = Atom (Code (Appended ms (ConstructBase m)) IO ())
+type Attribute ms m = Atom (Code (Appended ms (ConstructBase m)) IO ())
 
 selfClosing tag =
   case tag of
