@@ -65,6 +65,7 @@ library
                       , Atomic.Normalize
                       , Atomic.Dispatch
                       , Atomic.Observable
+                      , Atomic.Parser
                       , Atomic.Render
                       , Atomic.Request
                       , Atomic.Revent
@@ -146,6 +147,7 @@ library
                       , Atomic.Normalize
                       , Atomic.Dispatch
                       , Atomic.Observable
+                      , Atomic.Parser
                       , Atomic.Render
                       , Atomic.Request
                       , Atomic.Revent
