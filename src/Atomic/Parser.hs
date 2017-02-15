@@ -1,5 +1,6 @@
 {-# language FunctionalDependencies #-}
 {-# language OverloadedStrings #-}
+-- lightweight parser
 module Atomic.Parser where
 
 import Ef.Base hiding (sequence)
@@ -17,88 +18,96 @@ import Data.String
 
 import GHC.Exts
 
-import Unsafe.Coerce
-
 import Debug.Trace
 
 import qualified Prelude
 import Prelude hiding (take,takeWhile,sequence)
+
 
 class Monoid s => TokenStream s i | s -> i where
   uncons :: s -> Maybe (i,s)
   cons :: i -> s -> s
 
 instance TokenStream T.Txt Char where
+  {-# INLINE uncons #-}
   uncons t =
     if T.null t then
       Nothing
     else
       let ~(Just ~(c,rest)) = T.uncons t
       in (Just (c,rest))
+  {-# INLINE cons #-}
   cons = T.cons
 
 instance TokenStream [tok] tok where
+  {-# INLINE uncons #-}
   uncons [] = Nothing
   uncons (x:xs) = Just (x,xs)
+  {-# INLINE cons #-}
   cons = (:)
 
 data Parse ts e k where
-  GetTokens :: (ts -> k) -> Parse ts e k
-  SetTokens :: ts -> k -> Parse ts e k
-  Satisfy   :: (t -> Bool) -> (t -> k) -> Parse ts e k
-  Plus      :: k -> k -> Parse ts e k
-  Ann       :: k -> [e] -> Parse ts e k
+  GetTokens :: !(ts -> k) -> Parse ts e k
+  SetTokens :: !ts -> !k -> Parse ts e k
+  Satisfy   :: TokenStream ts t => !(t -> Bool) -> !(t -> k) -> Parse ts e k
+  Ann       :: !k -> [e] -> Parse ts e k
   Failed    :: [e] -> Parse ts e k
 
 instance Functor (Parse ts e) where
   fmap f (GetTokens tsk) = GetTokens (fmap f tsk)
   fmap f (SetTokens ts k) = SetTokens ts (f k)
-  fmap f (Satisfy ib ik) = Satisfy ib (fmap f ik)
-  fmap f (Plus l r) = Plus (f l) (f r)
+  fmap f (Satisfy p tk) = Satisfy p (fmap f tk)
   fmap f (Ann k es) = Ann (f k) es
   fmap f (Failed msg) = (Failed msg)
 
+{-# INLINE getTokens #-}
 getTokens :: forall ts e c. (Monad c) => Parser ts e c ts
 getTokens = Parser (Send (GetTokens Return :: Parse ts e (Code '[Parse ts e] c ts)))
 
+{-# INLINE setTokens #-}
 setTokens :: forall ts e c. (Monad c) => ts -> Parser ts e c ()
 setTokens ts = Parser (Send (SetTokens ts (Return ()) :: Parse ts e (Code '[Parse ts e] c ())))
 
-satisfy :: forall ts e c t. (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c t
-satisfy f = Parser (Send (Satisfy f Return :: Parse ts e (Code '[Parse ts e] c t)))
-
-plus :: forall ts e c a. (Monad c) => Parser ts e c a -> Parser ts e c a -> Parser ts e c a
-plus (Parser l) (Parser r) = Parser (Send (Plus l r :: Parse ts e (Code '[Parse ts e] c a)))
-
+{-# INLINE (<?>) #-}
 infix 0 <?>
 (<?>) :: forall ts e c a. (Monad c) => Parser ts e c a -> [e] -> Parser ts e c a
 (<?>) (Parser p) ann = Parser (Send (Ann p ann :: Parse ts e (Code '[Parse ts e] c a)))
 
+{-# INLINE failed #-}
 failed :: forall ts e c r. (Monad c) => [e] -> Parser ts e c r
 failed msg = Parser (Send (Failed msg :: Parse ts e (Code '[Parse ts e] c r)))
 
+{-# INLINE satisfy #-}
+satisfy :: forall ts e c t. (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c t
+satisfy p = Parser (Send (Satisfy p Return :: Parse ts e (Code '[Parse ts e] c t)))
+
+{-# INLINE satisfyWith #-}
 satisfyWith :: (Monad c, FromTxt e, TokenStream ts t) => (t -> a) -> (a -> Bool) -> Parser ts e c a
 satisfyWith f p = do
   t <- f <$> anyToken
   if p t then
     return t
   else do
-    failed [fromTxt "satisfyWith"]
+    failed []
 
+{-# INLINE skip #-}
 skip :: (Monad c, FromTxt e, TokenStream ts t) => (t -> Bool) -> Parser ts e c ()
 skip f = do
   t <- anyToken
   if f t then
     return ()
   else
-    failed [fromTxt "skip"]
+    failed []
 
+{-# INLINE anyToken #-}
 anyToken :: (Monad c, TokenStream ts t) => Parser ts e c t
 anyToken = satisfy (const True)
 
+{-# INLINE pushback #-}
 pushback :: (Monad c, TokenStream ts t) => t -> Parser ts e c ()
 pushback t = getTokens >>= setTokens . cons t
 
+{-# INLINE take #-}
 take :: (Monad c, Monoid ts, TokenStream ts t) => Int -> Parser ts e c ts
 take n
   | n < 0 = error "getItemsN: requested item count less than 0"
@@ -113,17 +122,20 @@ take n
         rest <- go (n - 1)
         return (cons t rest)
 
-takeWith :: (Monad c, Monoid ts, FromTxt e, TokenStream ts t) => Int -> (ts -> Bool) -> Parser ts e c ts
+{-# INLINE takeWith #-}
+takeWith :: (Monad c, Monoid ts, TokenStream ts t) => Int -> (ts -> Bool) -> Parser ts e c ts
 takeWith n f = do
   ts <- take n
   if f ts then
     return ts
   else
-    failed [fromTxt "takeWith"]
+    failed []
 
+{-# INLINE peek #-}
 peek :: (Monad c, TokenStream ts t) => Parser ts e c (Maybe t)
 peek = peekN 1
 
+{-# INLINE peekN #-}
 peekN :: (Monad c, TokenStream ts t) => Int -> Parser ts e c (Maybe t)
 peekN n
   | n < 0 = return Nothing
@@ -137,6 +149,7 @@ peekN n
       else
         go (t:acc) (n - 1)
 
+{-# INLINE takeWhile #-}
 takeWhile :: (Monad c, Monoid ts, TokenStream ts t) => (t -> Bool) -> Parser ts e c ts
 takeWhile f = go
   where
@@ -149,9 +162,11 @@ takeWhile f = go
         pushback t
         return mempty
 
+{-# INLINE takeUntil #-}
 takeUntil :: (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c ts
 takeUntil f = takeWhile (not . f)
 
+{-# INLINE skipWhile #-}
 skipWhile :: (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c ()
 skipWhile f = go
   where
@@ -162,9 +177,11 @@ skipWhile f = go
       else
         pushback t
 
+{-# INLINE skipUntil #-}
 skipUntil :: (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c ()
 skipUntil f = skipWhile (not . f)
 
+{-# INLINE sequence #-}
 sequence :: (Monad c, Eq t, TokenStream ts t, TokenStream ts' t) => ts' -> Parser ts e c ts'
 sequence ts0 = go ts0
   where
@@ -175,36 +192,42 @@ sequence ts0 = go ts0
           satisfy (== t)
           go rest
 
-string :: (Monad c, FromTxt e, TokenStream ts Char) => T.Txt -> Parser ts e c T.Txt
-string s = sequence s <?> [fromTxt $ "string: " <> toTxt s]
+{-# INLINE string #-}
+string :: (Monad c) => T.Txt -> Parser T.Txt e c T.Txt
+string s = sequence s
 
-asciiCI :: (Monad c, FromTxt e, TokenStream ts Char) => T.Txt -> Parser ts e c T.Txt
+{-# INLINE asciiCI #-}
+asciiCI :: (Monad c) => T.Txt -> Parser T.Txt e c T.Txt
 asciiCI ts0 = go ts0
   where
     go ts =
       case uncons ts of
         Nothing -> return ts
         Just (t,rest) -> do
-          satisfy (\x -> toLower x == toLower t) <?> [fromTxt $ "asciiCI: " <> ts0 <> ", " <> rest]
+          satisfy (\x -> toLower x == toLower t)
           go rest
 
-char :: (Monad c, FromTxt e, TokenStream ts Char) => Char -> Parser ts e c Char
-char c = satisfy (== c) <?> [ fromTxt $ T.singleton c ]
+{-# INLINE char #-}
+char :: (Monad c, TokenStream ts Char) => Char -> Parser ts e c Char
+char c = satisfy (== c)
 
-notChar :: (Monad c, FromTxt e, TokenStream ts Char) => Char -> Parser ts e c Char
-notChar c = satisfy (/= c) <?> [fromTxt $ "not " <> T.singleton c]
+{-# INLINE notChar #-}
+notChar :: (Monad c, TokenStream ts Char) => Char -> Parser ts e c Char
+notChar c = satisfy (/= c)
 
-endOfLine :: (Monad c, FromTxt e, TokenStream ts Char) => Parser ts e c ()
+{-# INLINE endOfLine #-}
+endOfLine :: (Monad c) => Parser T.Txt e c ()
 endOfLine = (char '\n' >> return ()) <|> (string "\r\n" >> return ())
 
-endOfInput :: (Monad c, ToTxt ts, FromTxt e, TokenStream ts t) => Parser ts e c ()
+{-# INLINE endOfInput #-}
+endOfInput :: (Monad c, TokenStream ts t) => Parser ts e c ()
 endOfInput = do
   ts <- getTokens
   case uncons ts of
     Nothing -> return ()
-    Just _ -> failed [fromTxt $ "endOfInput: " <> toTxt ts]
+    Just _ -> failed []
 
-
+{-# INLINE lookahead #-}
 lookahead :: (Monad c) => Parser ts e c a -> Parser ts e c a
 lookahead p = do
   ts <- getTokens
@@ -216,131 +239,147 @@ lookahead p = do
 
 newtype Parser ts e c r = Parser { parser :: Code '[Parse ts e] c r }
 instance (Monad c) => Functor (Parser ts e c) where
+  {-# INLINE fmap #-}
   fmap f (Parser p) = Parser (fmap f p)
 instance (Monad c) => Applicative (Parser ts e c) where
+  {-# INLINE pure #-}
   pure = Parser . pure
+  {-# INLINE (<*>) #-}
   fab <*> fa = do
     ab <- fab
     a <- fa
     return (ab a)
+  {-# INLINE (*>) #-}
   l *> r = l >>= \_ -> r
+  {-# INLINE (<*) #-}
   l <* r = l >>= \a -> r >> return a
 instance (Monad c) => Monad (Parser ts e c) where
+  {-# INLINE return #-}
   return = Parser . return
+  {-# INLINE (>>=) #-}
   ma >>= amb = Parser $ parser ma >>= parser . amb
 instance MonadTrans (Parser ts e) where
+  {-# INLINE lift #-}
   lift = Parser . lift
 instance (MonadIO c) => MonadIO (Parser ts e c) where
+  {-# INLINE liftIO #-}
   liftIO = Parser . liftIO
 instance (Monad c) => Alternative (Parser ts e c) where
+  {-# INLINE empty #-}
   empty = failed []
-  (<|>) = plus
+  {-# INLINE (<|>) #-}
+  (<|>) l r = do
+    ts <- getTokens
+    res <- lift $ runParser l ts
+    case res of
+      Failure ms _ -> do
+        res' <- lift $ runParser r ts
+        case res' of
+          Failure ms' _ -> failed (ms ++ ms')
+          Done ts r -> do
+            setTokens ts
+            return r
+      Done ts r -> do
+        setTokens ts
+        return r
 instance (Monad c) => MonadPlus (Parser ts e c) where
+  {-# INLINE mzero #-}
   mzero = failed []
+  {-# INLINE mplus #-}
   mplus = (<|>)
 instance (Monad c) => Monoid (Parser ts e c a) where
+  {-# INLINE mempty #-}
   mempty = failed []
+  {-# INLINE mappend #-}
   mappend = (<|>)
 
-instance (Monad c,FromTxt e,TokenStream ts Char,a ~ T.Txt) => IsString (Parser ts e c a) where
+instance (Monad c,FromTxt e,ts ~ T.Txt,a ~ T.Txt) => IsString (Parser ts e c a) where
+  {-# INLINE fromString #-}
   fromString = asciiCI . toTxt
 
-instance (Monad c,FromTxt e,TokenStream ts Char,a ~ T.Txt) => IsList (Parser ts e c a) where
+instance (Monad c,FromTxt e,ts ~ T.Txt, a ~ T.Txt) => IsList (Parser ts e c a) where
   type Item (Parser ts e c a) = T.Txt
+  {-# INLINE fromList #-}
   fromList = Prelude.foldr1 (<|>) . Prelude.map asciiCI
   toList _ = []
 
+{-# INLINE choice #-}
 choice :: Alternative f => [f a] -> f a
 choice = foldr (<|>) empty
 
+{-# INLINE option #-}
 option :: Alternative f => a -> f a -> f a
 option x p = p <|> pure x
 
+{-# INLINE many1 #-}
 many1 :: Alternative f => f a -> f [a]
 many1 p = liftA2 (:) p (many p)
 
+{-# INLINE sepBy #-}
 sepBy :: Alternative f => f a -> f s -> f [a]
 sepBy p s = liftA2 (:) p (( s *> sepBy1 p s) <|> pure []) <|> pure []
 
+{-# INLINE sepBy1 #-}
 sepBy1 :: Alternative f => f a -> f s -> f [a]
 sepBy1 p s = scan
   where
     scan = liftA2 (:) p ((s *> scan) <|> pure [])
 
+{-# INLINE manyTill #-}
 manyTill :: Alternative f => f a -> f b -> f [a]
 manyTill p end = scan
   where
     scan = (end *> pure []) <|> liftA2 (:) p scan
 
+{-# INLINE skipMany #-}
 skipMany :: Alternative f => f a -> f ()
 skipMany p = scan
   where
     scan = (p *> scan) <|> pure ()
 
+{-# INLINE skipMany1 #-}
 skipMany1 :: Alternative f => f a -> f ()
 skipMany1 p = p *> skipMany p
 
+{-# INLINE count #-}
 count :: Monad m => Int -> m a -> m [a]
 count n p = Prelude.sequence (replicate n p)
 
+{-# INLINE eitherP #-}
 eitherP :: Alternative f => f a -> f b -> f (Either a b)
 eitherP l r = (Left <$> l) <|> (Right <$> r)
-
--- interesting; not useful, but interesting
--- instance (Monad c,TokenStream ts c a) => TokenStream (Parser ts c a) (Parser ts c) a where
---   uncons :: Parser ts c a -> Parser ts c (Maybe (a,Parser ts c a))
---   uncons p = do
---     ts <- getTokens
---     res <- lift $ runParser p ts
---     case res of
---       Done ts' r -> do
---         setTokens ts'
---         return (Just (r,p))
---       _ ->
---         return Nothing
 
 data ParseResult ts e r
   = Done ts r
   | Failure [e] ts
   deriving (Show)
 
-runParser :: forall t ts e c a. (MonadIO c, Show t, Show ts, TokenStream ts t) => Parser ts e c a -> ts -> c (ParseResult ts e a)
+{-# INLINE runParser #-}
+runParser :: forall ts e c a. (Monad c) => Parser ts e c a -> ts -> c (ParseResult ts e a)
 runParser (Parser p) = flip go p
   where
-    go ts (Return a) = return (Done ts a)
-    go ts (Lift m) = m >>= go ts
+    {-# INLINE go #-}
+    go :: ts -> Code '[Parse ts e] c a -> c (ParseResult ts e a)
     go ts (Do m) =
       case prj m of
         ~(Just (c :: Parse ts e (Code '[Parse ts e] c a))) ->
           case c of
-            GetTokens f ->
-              go ts (f ts)
-            SetTokens ts' k ->
-              go ts' k
-            Ann k msg -> do
-              res <- go ts k
-              case res of
-                Done ts' a -> return (Done ts' a)
-                Failure ms _ -> return (Failure ms ts)
-            Satisfy ib ik ->
+            GetTokens f -> go ts (f ts)
+            SetTokens ts' k -> go ts' k
+            Satisfy tb tk ->
               case uncons ts of
                 Nothing -> return (Failure [] ts)
-                Just (i,ts') -> do
-                  if unsafeCoerce ib i then do
-                    go ts' (unsafeCoerce ik i)
-                  else do
+                Just (t,rest) ->
+                  if tb t then
+                    go rest (tk t)
+                  else
                     return (Failure [] ts)
-            Plus l r -> do
-              res <- go ts l
+            Ann k ms -> do
+              res <- go ts k
               case res of
-                Done ts' a ->
-                  return (Done ts' a)
-                Failure ms _ -> do
-                  res' <- go ts r
-                  case res' of
-                    Done ts' a ->
-                      return (Done ts' a)
-                    Failure ms' _ ->
-                      return (Failure (ms ++ ms') ts)
-            Failed msg ->
-              return (Failure msg ts)
+                Failure ms' _ -> return (Failure (ms' ++ ms) ts)
+                r -> return r
+            Failed ms ->
+              return (Failure ms ts)
+    go ts (Return a) = return (Done ts a)
+    go ts (Lift m) = m >>= go ts
