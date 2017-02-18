@@ -82,7 +82,7 @@ satisfy :: forall ts e c t. (Monad c, TokenStream ts t) => (t -> Bool) -> Parser
 satisfy p = Parser (Send (Satisfy p Return :: Parse ts e (Code '[Parse ts e] c t)))
 
 {-# INLINE satisfyWith #-}
-satisfyWith :: (Monad c, FromTxt e, TokenStream ts t) => (t -> a) -> (a -> Bool) -> Parser ts e c a
+satisfyWith :: (Monad c, TokenStream ts t) => (t -> a) -> (a -> Bool) -> Parser ts e c a
 satisfyWith f p = do
   t <- f <$> anyToken
   if p t then
@@ -91,7 +91,7 @@ satisfyWith f p = do
     failed []
 
 {-# INLINE skip #-}
-skip :: (Monad c, FromTxt e, TokenStream ts t) => (t -> Bool) -> Parser ts e c ()
+skip :: (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c ()
 skip f = do
   t <- anyToken
   if f t then
@@ -162,6 +162,13 @@ takeWhile f = go
         pushback t
         return mempty
 
+{-# INLINE takeWhile1 #-}
+takeWhile1 :: (Monad c, Monoid ts, TokenStream ts t) => (t -> Bool) -> Parser ts e c ts
+takeWhile1 f = do
+  c <- satisfy f
+  rest <- takeWhile f
+  return (cons c rest)
+
 {-# INLINE takeUntil #-}
 takeUntil :: (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c ts
 takeUntil f = takeWhile (not . f)
@@ -176,6 +183,12 @@ skipWhile f = go
         go
       else
         pushback t
+
+{-# INLINE skipWhile1 #-}
+skipWhile1 :: (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c ()
+skipWhile1 f = do
+  skip f
+  skipWhile f
 
 {-# INLINE skipUntil #-}
 skipUntil :: (Monad c, TokenStream ts t) => (t -> Bool) -> Parser ts e c ()
@@ -331,15 +344,19 @@ manyTill p end = scan
   where
     scan = (end *> pure []) <|> liftA2 (:) p scan
 
+{-# INLINE someTill #-}
+someTill :: Alternative f => f a -> f b -> f [a]
+someTill p end = liftA2 (:) p (manyTill p end)
+
 {-# INLINE skipMany #-}
 skipMany :: Alternative f => f a -> f ()
 skipMany p = scan
   where
     scan = (p *> scan) <|> pure ()
 
-{-# INLINE skipMany1 #-}
-skipMany1 :: Alternative f => f a -> f ()
-skipMany1 p = p *> skipMany p
+{-# INLINE skipSome #-}
+skipSome :: Alternative f => f a -> f ()
+skipSome p = p *> skipMany p
 
 {-# INLINE count #-}
 count :: Monad m => Int -> m a -> m [a]
@@ -352,7 +369,8 @@ eitherP l r = (Left <$> l) <|> (Right <$> r)
 data ParseResult ts e r
   = Done ts r
   | Failure [e] ts
-  deriving (Show)
+  deriving (Show,Functor)
+
 
 {-# INLINE runParser #-}
 runParser :: forall ts e c a. (Monad c) => Parser ts e c a -> ts -> c (ParseResult ts e a)
