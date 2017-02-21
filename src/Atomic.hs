@@ -17,7 +17,11 @@ module Atomic
 
 import Ef.Base as Export hiding (transform,construct)
 
+#if MIN_VERSION_hashable(1,2,5)
+import Data.Hashable as Export hiding (hashed)
+#else
 import Data.Hashable as Export
+#endif
 import Data.Typeable as Export
 import GHC.Generics as Export (Generic)
 
@@ -100,6 +104,7 @@ instance FromMicros Millis where
   -- truncate rather than round
   fromMicros mt = Millis $ (getMicros mt) `Prelude.div` 1000
 
+#if !MIN_VERSION_aeson(0,11,3)
 instance {-# OVERLAPS #-} (ToJSON v,ToTxt k) => ToJSON (HashMap k v) where
   {-# INLINE toJSON #-}
   toJSON =
@@ -115,6 +120,7 @@ instance {-# OVERLAPS #-} (FromJSON v,Hashable k,Eq k,FromTxt k) => FromJSON (Ha
       v' <- parseJSON v
       pure (fromTxt k,v')
     pure $ Map.fromList kvs
+#endif
 
 ghc :: Monad m => m () -> m ()
 ghc =

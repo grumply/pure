@@ -202,7 +202,7 @@ run Organism {..} = do
               Just (_,x_) -> do
                 (old,_,_) <- readIORef rt
                 (new,_,_) <- readIORef x_
-                rebuild Nothing new
+                rebuild new
                 if first then do
                   clearNode (Just (toNode ort))
                   forM_ (getNode new) (appendChild ort)
@@ -233,7 +233,7 @@ run Organism {..} = do
                 let h = ()
 #endif
                 (new,_,_) <- readIORef x_
-                rebuild Nothing new
+                rebuild new
                 replace (NullAtom $ Just h) new
             mb_ <- lookupConstruct (key b)
             case mb_ of
@@ -247,10 +247,8 @@ run Organism {..} = do
               Just (_,x_) -> do
                 (old,_,_) <- readIORef rt
                 (new,_,_) <- readIORef x_
-                liftIO $ putStrLn "Rebuilding body"
-                rebuild Nothing new
+                rebuild new
                 if first then do
-                  liftIO $ putStrLn "First render; clearing node and appending component to root."
                   clearNode (Just (toNode ort))
                   forM_ (getNode new) (appendChild ort)
                 else

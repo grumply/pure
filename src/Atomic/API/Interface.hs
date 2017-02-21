@@ -95,8 +95,19 @@ data FullAPI messages requests
         , requestAPI :: RequestAPI requests
         }
 
+api :: (ToAPI Message ms, ToAPI Request rs) => PList ms -> PList rs -> FullAPI ms rs
 api msgs reqs = API (toAPI msgs) (toAPI reqs)
 
+(<:+:>) :: ( FromAPI Message ms
+           , FromAPI Message ms'
+           , FromAPI Request rs
+           , FromAPI Request rs'
+           , TListAppend PList ms ms' ms''
+           , TListAppend PList rs rs' rs''
+           , ToAPI Message ms''
+           , ToAPI Request rs''
+           )
+        => FullAPI ms rs -> FullAPI ms' rs' -> FullAPI (Appended ms ms') (Appended rs rs')
 (<:+:>) (API msl rsl) (API msr rsr) =
   api (fromAPI msl <++> fromAPI msr) (fromAPI rsl <++> fromAPI rsr)
 

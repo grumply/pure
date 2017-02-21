@@ -116,7 +116,7 @@ data Population' ts ms c pts pms
     , sslChain :: !(PopulationSSLChain)
     , build    :: !(PopulationBuilder' ts c)
     , prime    :: !(PopulationPrimer' ms c)
-    , presence :: !(PopulationPrsence' pts pms ms c)
+    , presence :: !(PopulationPresence' pts pms ms c)
     }
   |
 #endif
@@ -249,6 +249,7 @@ run Population {..} = void $ do
       where
         go = do
           (conn,sockAddr) <- accept sock
+          liftIO $ print $ "Got connection from " ++ show sockAddr
           buf <- newSignalBuffer
           forkIO $ void $
             E.handle (\(e :: E.SomeException) -> sClose conn) $ do
@@ -267,15 +268,15 @@ eventloop :: forall ts ms c uTs uMs.
           -> Signaled
           -> Ef.Base.Object ts c
           -> c ()
-eventloop primeS Presence {..} connSignal q populationObj = do
+eventloop primeS pres connSignal q populationObj = do
   (obj,_) <- populationObj ! do
     primeS
     void $ behavior connSignal $ \(websock,sockAddr,buf) -> do
       Mediator.startMediator buf Mediator.Mediator
         { key = fromTxt (toTxt (show sockAddr))
         , build = \base -> do
-            build (websock *:* state (Origin sockAddr) *:* base)
-        , prime = prime
+            Presence.build pres (websock *:* state (Origin sockAddr) *:* base)
+        , prime = Presence.prime pres
         }
   driver q obj
 

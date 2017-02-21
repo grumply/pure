@@ -2375,8 +2375,8 @@ requestWith s rqty_proxy req f = do
            case Map.lookup header mhs of
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
-    joinNetwork n p buf
     liftIO $ writeIORef s_ (sb,n)
+    joinNetwork n p buf
     send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
   return $ Endpoint header sb p
 

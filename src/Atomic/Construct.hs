@@ -77,7 +77,7 @@ import Control.Lens (makePrisms,makeLenses)
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
-  "$r = $1.parentNode == $2;"
+  "$r = $2.parentNode == $1;"
   is_already_embedded_js :: E.Element -> E.Element -> IO Bool
 
 foreign import javascript unsafe
@@ -91,14 +91,6 @@ foreign import javascript unsafe
 foreign import javascript unsafe
   "$1.insertBefore($3,$1.children[$2]);"
   insert_at_js :: E.Element -> Int -> N.Node -> IO ()
-
-foreign import javascript unsafe
-  "$1.parentNode.removeChild($1);"
-  remove_js :: N.Node -> IO ()
-
-foreign import javascript unsafe
-  "$1.insertBefore($2,$1.children[0]);"
-  prepend_child_js :: E.Element -> N.Node -> IO ()
 
 foreign import javascript unsafe
   "$1[\"parentNode\"][\"replaceChild\"]($2,$1);"
@@ -138,9 +130,6 @@ foreign import javascript unsafe
 
 foreign import javascript unsafe
   "$1.innerHTML = '';" clear_node_js :: N.Node -> IO ()
-
-foreign import javascript unsafe
-  "$1.parentNode.innerHTML = '';" clear_parent_js :: N.Node -> IO ()
 #endif
 
 type ENode =
@@ -369,49 +358,27 @@ renderConstruct' a parent html = do
 
 -- rebuild finds managed nodes and re-embeds them in case they were
 -- removed for other uses
-rebuild :: Maybe ENode -> Atom (Code ms IO ()) -> IO ()
-rebuild me h =
+rebuild :: Atom e -> IO ()
+rebuild h =
 #ifndef __GHCJS__
     return ()
 #else
-    go me h
+    go h
   where
-    go mparent NullAtom {..} =
-      forM_ mparent $ \parent ->
-        embed_ parent NullAtom {..}
-
-    go mparent Raw {..} =
-      forM_ mparent $ \parent ->
-        embed_ parent Raw {..}
-
-    go mparent Atom {..} = do
-      forM_ mparent $ \parent ->
-        embed_ parent Atom {..}
-      forM_ _children (go _node)
-
-    go mparent SVGAtom {..} = do
-      forM_ mparent $ \parent ->
-        embed_ parent SVGAtom {..}
-      forM_ _children (go _node)
-
-    go mparent KAtom {..} = do
-      forM_ mparent $ \parent ->
-        embed_ parent KAtom {..}
-      forM_ _keyed $ go _node . snd
-
-    go mparent Text {..} =
-      forM_ mparent $ \parent ->
-        embed_ parent Text {..}
-
-    go mparent m@Managed {..} =
+    go Atom {..}    = mapM_ go _children
+    go SVGAtom {..} = mapM_ go _children
+    go KAtom {..}   = mapM_ (go . snd) _keyed
+    go m@Managed {..} =
       case _constr of
         Construct' c -> do
           mi_ <- lookupConstruct (key c)
           forM_ mi_ $ \(_,x_) -> do
             (h,_,_) <- readIORef x_
-            rebuild _node h
-            forM_ mparent $ \parent ->
-              embed_ parent h
+            rebuild h
+            forM_ _node $ \node ->
+              embed_ node h
+    go _ =
+      return ()
 #endif
 
 reflect :: forall ts ms m c.
@@ -614,7 +581,6 @@ mkConstruct :: forall ms ts m.
 mkConstruct mkConstructAction c@Construct {..} = do
   let !m = model
       !raw = view m
-  cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (nil,raw,m)
   doc <- getDocument
   sig :: Signal ms IO (Code ms IO ()) <- runner
   sigBuf <- newSignalBuffer
@@ -883,14 +849,6 @@ createElementNS doc ns tag =
   return (Just ())
 #endif
 
-clearParent :: Maybe NNode -> IO ()
-clearParent mnode =
-#ifdef __GHCJS__
-  forM_ mnode clear_parent_js
-#else
-  return ()
-#endif
-
 clearNode :: Maybe NNode -> IO ()
 clearNode mnode =
 #ifdef __GHCJS__
@@ -1010,9 +968,9 @@ buildAndEmbedMaybe f doc = go
       forM_ mparent (flip appendChild el)
       return $ Text _tnode _content
 
-    go mparent Managed {..} =
+    go mparent m@Managed {..} =
       case _constr of
-        Construct' a ->
+        Construct' a -> do
           case _node of
             Nothing -> do
               _node@(Just el) <- createElement doc _tag
@@ -1021,24 +979,33 @@ buildAndEmbedMaybe f doc = go
               case mi_ of
                 Nothing -> do
                   -- never built before; make and embed
-                  mkConstruct (Append el) a
+                  x_ <- mkConstruct BuildOnly a
+                  (h,_,_) <- liftIO $ readIORef x_
                   forM_ mparent (`embed_` Managed {..})
+                  embed_ el h
                   return Managed {..}
                 Just (_,x_) -> do
-                  -- built before but not in this context; rebuild and embed
-                  (h,_,_) <- readIORef x_
-                  rebuild mparent h
---                  forM_ mparent (`embed` Managed {..})
+                  (h,_,_) <- liftIO $ readIORef x_
+                  rebuild Managed {..}
+                  embed_ el h
+                  forM_ mparent (`embed_` Managed {..})
                   return Managed {..}
 
             Just e -> do
               mi_ <- lookupConstruct (key a)
-              forM_ mi_ $ \(_,x_) -> do
-                -- build before in this context; rebuild and embed
-                (h,_,_) <- readIORef x_
-                rebuild mparent (unsafeCoerce h) -- should be safe
-                -- forM_ mparent (`embed` Managed {..})
-              return Managed {..}
+              case mi_ of
+                Nothing -> do
+                  -- shut down?
+                  x_ <- mkConstruct BuildOnly a
+                  (h,_,_) <- liftIO $ readIORef x_
+                  forM_ mparent (`embed_` Managed {..})
+                  embed_ e h
+                  return Managed {..}
+                Just (_,x_) -> do
+                  (h,_,_) <- liftIO $ readIORef x_
+                  rebuild m
+                  embed_ e h
+                  return m
 
 {-# NOINLINE buildHTML #-}
 buildHTML :: Doc -> (e -> IO ()) -> Atom e -> IO (Atom e)
@@ -1122,15 +1089,6 @@ delete Text {..} = forM_ _tnode (delete_js . toNode)-- this won't work, will it?
 delete n = forM_ (_node n) (delete_js . toNode)
 #endif
 
-{-# NOINLINE remove #-}
-remove :: Atom e -> IO ()
-#ifndef __GHCJS__
-remove _ = return ()
-#else
-remove (Text {..}) = forM_ _tnode (remove_js . toNode)
-remove n = forM_ (_node n) (remove_js . toNode)
-#endif
-
 {-# NOINLINE cleanup #-}
 cleanup :: [Atom e] -> IO ()
 #ifndef __GHCJS__
@@ -1165,15 +1123,6 @@ insertAt _ _ _ = return ()
 #else
 insertAt parent ind Text {..} = forM_ _tnode $ insert_at_js parent ind . toNode
 insertAt parent ind n = forM_ (_node n) $ insert_at_js parent ind . toNode
-#endif
-
-{-# NOINLINE prepend #-}
-prepend :: ENode -> Atom e -> IO ()
-#ifndef __GHCJS__
-prepend _ _ = return ()
-#else
-prepend parent Text {..} = forM_ _tnode $ prepend_child_js parent . toNode
-prepend parent n = forM_ (_node n) $ prepend_child_js parent . toNode
 #endif
 
 {-# NOINLINE insertBefore_ #-}
@@ -1355,13 +1304,6 @@ diffHelper f doc =
                 remove = do
                   cleanup [old]
                   delete old
-
-                add = do
-                  new' <- buildAndEmbedMaybe f doc Nothing new
-                  case ml of
-                    Nothing -> prepend n new'
-                    Just l  -> insertBefore_ n old new'
-                  return new'
 
                 continue up = do
                   upds <-
