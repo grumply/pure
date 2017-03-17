@@ -3,7 +3,7 @@
 -- lightweight parser
 module Atomic.Parser where
 
-import Ef.Base hiding (sequence)
+import Ef.Base hiding (sequence,uncons)
 
 import Atomic.FromTxt
 import Atomic.ToTxt

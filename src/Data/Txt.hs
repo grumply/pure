@@ -27,3 +27,4 @@ type Txt = Text
 instance Lift Text where
   lift (unpack -> str) = [| pack str |]
 #endif
+

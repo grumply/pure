@@ -1,6 +1,6 @@
 module Atomic.Observable where
 
-import Ef.Base hiding (watch)
+import Ef.Base hiding (observe,watch)
 
 import Atomic.Revent
 import Atomic.With

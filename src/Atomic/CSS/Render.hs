@@ -9,7 +9,6 @@ import Ef.Base
 import Data.Txt
 
 import Atomic.Attribute
-import Atomic.Render
 import Atomic.ToTxt
 import Atomic.FromTxt
 import Atomic.CSS.Helpers
@@ -102,7 +101,7 @@ selects :: [Txt] -> Styles -> CSS
 selects sels ss = sequence_ $ Prelude.map (flip select ss) sels 
 
 nested :: Txt -> CSS -> CSS
-nested (classify -> sel) = go
+nested sel = go
   where
     go (Return r) = Return r
     go (Lift s) = go (runIdentity s)
@@ -186,4 +185,4 @@ instance ToTxt CSS where
           _ -> mempty
 
 staticCSS :: CSS -> StaticCSS
-staticCSS = render
+staticCSS = fromTxt . toTxt

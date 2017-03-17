@@ -2,20 +2,21 @@
 {-# language TemplateHaskell #-}
 {-# language OverloadedStrings #-}
 {-# language ImplicitParams #-}
+{-# language ViewPatterns #-}
+{-# language PatternSynonyms #-}
 module Atomic
   ( module Atomic
   , module Export
   , Atom(..)
-  , html, jss, ujss, raw
-  , cnode, keyed, svgHTML, construct, tagged, hashed
+  , mkAtom, mkSVGAtom, text, unindent, raw, keyed, hashed, construct
   , css, css', scss, scss', styles
-  , diff, setManualDiff, setEagerDiff, setLazyDiff
-  , gets, sets, updates
+  , diff, setManualDiff, setEagerDiff, setUnequalDiff
+  , gets, puts, updates
   , onModelChange, onViewChange, ownView, currentView
   , LazyByteString
   ) where
 
-import Ef.Base as Export hiding (transform,construct)
+import Ef.Base as Export hiding (As,Index,transform,construct,observe,uncons,distribute,embed)
 
 #if MIN_VERSION_hashable(1,2,5)
 import Data.Hashable as Export hiding (hashed)
@@ -28,15 +29,21 @@ import GHC.Generics as Export (Generic)
 import Atomic.Construct
 import Atomic.Mediator
 
+import Control.Lens as Export hiding
+  (lazy,Empty,none,(<~),(.=),(<.>))
+import Control.Lens.Extras as Export
+
+import Data.Function as Export hiding (on)
 import Data.Bifunctor as Export
 import Data.Bool as Export
 import Data.Maybe as Export
+import Data.Void as Export
 
 import qualified Data.Txt as Export (Txt(..))
 import Data.JSON         as Export hiding (defaultOptions,Options,(!),Parser,parse)
 import Data.Millis       as Export
 import Data.Micros       as Export
-import Atomic.API        as Export
+import Atomic.API        as Export hiding (Index)
 import Atomic.Attribute  as Export
 import Atomic.CSS        as Export
 import Atomic.Cond       as Export
@@ -49,7 +56,7 @@ import Atomic.FromBS     as Export
 import Atomic.FromTxt    as Export
 import Atomic.Grid       as Export
 import Atomic.HTML       as Export
-import Atomic.Indexed    as Export
+import Atomic.Identify   as Export
 import Atomic.Key        as Export
 import Atomic.Lazy       as Export
 import Atomic.Limit      as Export
@@ -57,14 +64,12 @@ import Atomic.Memo       as Export
 import Atomic.Message    as Export
 import Atomic.Normalize  as Export
 import Atomic.Observable as Export
-import Atomic.Render     as Export
 import Atomic.Request    as Export
 import Atomic.Revent     as Export
 import Atomic.Route      as Export hiding (route)
 import Atomic.Router     as Export
 import Atomic.Mediators  as Export
 import Atomic.Signals    as Export
-import Atomic.Strict     as Export
 import Atomic.Throttle   as Export
 import Atomic.ToBS       as Export
 import Atomic.ToTxt      as Export
@@ -87,6 +92,7 @@ import Data.Monoid as Export
 import Data.Bifunctor as Export
 
 import Data.HashMap.Strict as Map hiding (map,null,update)
+import Data.Tree as Tree
 
 import Data.Txt as Txt hiding (head,map,null)
 import qualified Data.Txt as Txt
@@ -120,6 +126,13 @@ instance {-# OVERLAPS #-} (FromJSON v,Hashable k,Eq k,FromTxt k) => FromJSON (Ha
       v' <- parseJSON v
       pure (fromTxt k,v')
     pure $ Map.fromList kvs
+
+instance (ToJSON v) => ToJSON (Tree v) where
+  toJSON (Node root branches) = toJSON (root,branches)
+
+instance (FromJSON v) => FromJSON (Tree v) where
+  parseJSON j = uncurry Node <$> parseJSON j
+
 #endif
 
 ghc :: Monad m => m () -> m ()
@@ -138,8 +151,17 @@ ghcjs =
   const (return ())
 #endif
 
+txt :: (ToTxt a, FromTxt a) => Iso' a Txt
+txt = iso toTxt fromTxt
+
+pattern Txt a <- (view txt -> a) where
+  Txt a = review txt a
+
+rendered :: (ToTxt a, FromTxt b, Profunctor p, Contravariant f, Functor f) => Optic' p f a b
+rendered = to (fromTxt . toTxt)
+
 scoped :: (FromTxt x) => (?scope :: Txt) => Txt -> x
-scoped t = fromTxt (toTxt ?scope <> t)
+scoped t = fromTxt (?scope <> t)
 
 this :: Q Exp
 this = do
@@ -153,24 +175,24 @@ dash = Txt.map (\x -> if x == '.' then '-' else x)
 type Controller m = Construct '[] m
 -- controller :: ConstructKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
 controller :: ConstructKey '[] m -> m -> (m -> Atom (Code (ConstructBase m) IO ())) -> Controller m
-controller key0 model0 view0 = Construct {..}
+controller key0 model0 render0 = Construct {..}
   where
     key = key0
     build = return
     prime = return ()
     model = model0
-    view = view0
+    render = render0
 
 type Static = Construct '[] ()
 -- static :: ConstructKey '[] () -> HTML [] () -> Static
 static :: ConstructKey '[] () -> Atom (Code (ConstructBase ()) IO ()) -> Static
-static key0 view0 = Construct {..}
+static key0 render0 = Construct {..}
   where
     key = key0
     build = return
     prime = return ()
     model = ()
-    view _ = view0
+    render _ = render0
 
 type Observatory m = Mediator '[Observable m]
 observatory :: MediatorKey '[Observable m] -> m -> Observatory m
@@ -185,14 +207,22 @@ type Observer m = Construct '[] (Maybe m)
 -- observer :: Observatory m -> ConstructKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
 observer :: forall m ms w. (Eq m, With w (Code ms IO) (Code (ConstructBase (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
          => w -> ConstructKey '[] (Maybe m) -> (m -> Atom (Code (ConstructBase (Maybe m)) IO ())) -> Observer m
-observer s key0 view0 = Construct {..}
+observer s key0 render0 = Construct {..}
   where
     key = key0
     build = return
-    prime = void $ observe' s $ \(m :: m) -> sets (Just m)
+    prime = void $ observe' s $ \(m :: m) -> puts (Just m)
     model = Nothing
-    view Nothing = nil
-    view (Just m) = view0 m
+    render Nothing = nil
+    render (Just m) = render0 m
+
+-- specialized to Observatory to avoid inline type signatures
+observes :: (MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (IO ())
+observes = observe
+
+-- specialized to Observatory to avoid inline type signatures
+observes' :: (MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (IO ())
+observes' = observe'
 
 newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)
 instance ToTxt StaticHTML where
@@ -206,10 +236,10 @@ instance Lift StaticHTML where
   lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
 
 staticHTML :: Atom e -> StaticHTML
-staticHTML = render
+staticHTML = fromTxt . toTxt
 
 shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
-shtml _tag _attributes = raw _tag _attributes . toTxt
+shtml _tag _attributes = raw (mkAtom _tag) _attributes . toTxt
 
 type HTML ms m = Atom (Code (Appended ms (ConstructBase m)) IO ())
 type Attribute ms m = Atom (Code (Appended ms (ConstructBase m)) IO ())
@@ -252,18 +282,21 @@ instance ToTxt (Atom e) where
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map toTxt _atoms) <> "</" <> _tag <> ">"
   toTxt SVGAtom {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map toTxt _children) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map toTxt _atoms) <> "</" <> _tag <> ">"
   toTxt Managed {..} =
     case _constr of
       Construct' Construct {..} ->
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
-          ">"  <> toTxt (view model) <> "</" <> _tag <> ">"
+          ">"  <> toTxt (render model) <> "</" <> _tag <> ">"
+
+instance ToTxt [Atom e] where
+  toTxt = mconcat . map toTxt
 
 data System
   = System
@@ -295,7 +328,7 @@ renderSystem (System h c) =
       Construct' Construct {..} ->
         toTxt $
           html_ []
-            [ view model
+            [ render model
             , body []
                 [ case c of
                     Construct' a@Construct {} -> construct div [ idA "atomic" ] a
@@ -386,7 +419,7 @@ renderDynamicHTML h =
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     Atom {..} -> do
-      cs <- mapM renderDynamicHTML _children
+      cs <- mapM renderDynamicHTML _atoms
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -395,7 +428,7 @@ renderDynamicHTML h =
               ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     SVGAtom {..} -> do
-      cs <- mapM renderDynamicHTML _children
+      cs <- mapM renderDynamicHTML _atoms
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then

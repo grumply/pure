@@ -67,11 +67,28 @@ grid =
              msFlexDirection    =: columnReverse
              flexDirection      =: columnReverse
 
-           forM_ [("xs",Nothing),("sm",Just 48),("md",Just 64),("lg",Just 75),("xl",Just 90)] $ \(sz,mn) ->
+           select ".u-hidden-xs-up" $ do
+             display =: noneS
+
+           select ".u-hidden-xl-down" $ do
+             display =: noneS
+
+           forM_ [("xs",Nothing),("sm",Just 48),("md",Just 64),("lg",Just 75),("xl",Just 90)] $ \(sz,mn) -> do
+
+            maybe id (atMedia . screenMaxWidth . ems) mn $ do
+
+              select (".u-hidden-" <> sz <> "-down") $ important $ do
+                display =: noneS
+
             maybe id (atMedia . screenMinWidth . ems) mn $ do
+
+              select (".u-hidden-" <> sz <> "-up") $ important $ do
+                display =: noneS
 
               forM_ mn $ \n ->
                 select ".u-container" $
+                  -- really, relative ems here? Our breakpoint is em-based....
+                  -- I don't quite understand the interaction here.
                   width =: rems (n + 1)
 
               let col n | n == 0    = ".u-col-" <> sz <&>> ".u-col-" <> sz <> "-offset-0"
@@ -103,7 +120,11 @@ grid =
                 flexBasis           =: per 100
                 maxWidth            =: per 100
 
-              forM [1..11] $ \i -> do
+              select (".u-col-" <> sz <> "-0") $ do
+                overflow =: hiddenS
+                height =: per 0
+
+              forM [0..11] $ \i -> do
                 -- close enough?
                 let p = per (fromIntegral i * 8.33333333)
 

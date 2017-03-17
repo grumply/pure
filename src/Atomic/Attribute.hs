@@ -1,8 +1,10 @@
-{-# language CPP #-}
+{-# language DeriveDataTypeable #-}
 {-# language OverloadedStrings #-}
+{-# language TemplateHaskell #-}
+{-# language CPP #-}
 module Atomic.Attribute where
 
-import Ef.Base
+import Ef.Base hiding (Object,object)
 
 import Data.Txt as T
 import Data.JSON hiding (Options)
@@ -12,28 +14,30 @@ import Atomic.ToTxt
 import Atomic.Cond
 import Atomic.UnsafeEq
 
-import Data.String
+import Data.Data
 import Data.Maybe
+import Data.String
+import Data.Typeable
+import Data.Void
 
 import GHC.Exts
 
 import qualified Data.Function as F
 import Data.List (sortBy)
 
-#ifdef LENS
 import Control.Lens (makePrisms,makeLenses)
-#endif
 
 #ifdef __GHCJS__
 import qualified Data.JSString as JSS
 #else
 import qualified Data.Text as JSS
+import Data.Aeson (Value(..))
 #endif
 
 data Options = Options
   { _preventDefault :: Bool
   , _stopPropagation :: Bool
-  } deriving Eq
+  } deriving (Eq)
 
 defaultOptions :: Options
 defaultOptions = Options False False
@@ -48,36 +52,84 @@ data Feature e
   = NullFeature
   | Attribute
     { _attr :: Txt
-    , _value :: Either Bool Txt
+    , _value :: Txt
     }
   | Style
     { _stylePairs :: [(Txt,Txt)] }
   | CurrentValue
-    { _currentValue :: Txt }
+    { _value :: Txt }
   | On
-    { _event :: Txt
-    , _eventE :: e
+    { _eventName :: Txt
+    , _event :: e
     , _eventListener :: Maybe (IO ())
     }
   | On'
-    { _event :: Txt
+    { _eventName :: Txt
     , _eventOptions :: Options
-    , _eventECreate :: Obj -> IO (Maybe e)
+    , _eventCreate :: Obj -> IO (Maybe e)
     , _eventListener :: Maybe (IO ())
     }
   | Link
-    { _event :: Txt
+    { _link :: Txt
     , _eventListener :: Maybe (IO ())
     }
   | SVGLink
-    { _event :: Txt
+    { _link :: Txt
     , _eventListener :: Maybe (IO ())
     }
   | XLink
     { _attr :: Txt
-    , _xlinkValue :: Txt
+    , _value :: Txt
     }
   deriving (Functor)
+
+instance ToJSON (Feature e) where
+  toJSON f =
+#ifdef __GHCJS__
+    objectValue $
+#endif
+      go f
+    where
+      go NullFeature = object [ "type" .= ("null" :: Txt)]
+      go (Attribute k v) = object [ "type" .= ("attr" :: Txt), "attr" .= k, "val" .= v]
+      go (Style ss) = object [ "type" .= ("style" :: Txt), "styles" .= ss ]
+      go (CurrentValue cv) = object [ "type" .= ("value" :: Txt), "val" .= cv ]
+      go (Link e _) = object [ "type" .= ("link" :: Txt), "link" .= e]
+      go (SVGLink e _) = object [ "type" .= ("svglink" :: Txt), "link" .= e ]
+      go (XLink k v) = object [ "type" .= ("xlink" :: Txt), "key" .= k, "val" .= v]
+
+instance FromJSON (Feature e) where
+  parseJSON o0 = do
+#ifdef __GHCJS__
+    flip (withObject "obj") o0 $ \o -> do
+#else
+      let (Object o) = o0
+#endif
+      t <- o .: "type"
+      case t :: Txt of
+        "null" ->
+          pure NullFeature
+        "attr" -> do
+          k <- o .: "attr"
+          v <- o .: "val"
+          pure $ Attribute k v
+        "style" -> do
+          ss <- o .: "styles"
+          pure $ Style ss
+        "value" -> do
+          v <- o .: "val"
+          pure $ CurrentValue v
+        "link" -> do
+          l <- o .: "link"
+          pure $ Link l Nothing
+        "svglink" -> do
+          l <- o .: "link"
+          pure $ SVGLink l Nothing
+        "xlink" -> do
+          k <- o .: "key"
+          v <- o .: "val"
+          pure $ XLink k v
+        _ -> Ef.Base.empty
 
 instance Eq (Feature e) where
   (==) NullFeature NullFeature = True
@@ -102,12 +154,12 @@ instance Cond (Feature e) where
   nil = NullFeature
 
 instance IsString (Feature e) where
-  fromString = Attribute "class" . Right . fromString
+  fromString = Attribute "class" . fromString
 
 instance IsList (Feature e) where
   type Item (Feature e) = Txt
   fromList = fromTxt . T.intercalate " "
-  toList (Attribute "class" (Right cs)) = T.words cs
+  toList (Attribute "class" cs) = T.words cs
   toList _ = []
 
 -- is this a terrible idea?
@@ -123,7 +175,7 @@ instance {-# OVERLAPS #-} IsString [Feature e] where
   fromString s = [fromString s]
 
 instance FromTxt (Feature e) where
-  fromTxt = Attribute "class" . Right . fromTxt
+  fromTxt = Attribute "class" . fromTxt
 
 instance FromTxt [Feature e] where
   fromTxt t = [fromTxt t]
@@ -132,16 +184,10 @@ nullA :: Feature e
 nullA = NullFeature
 
 attribute :: Txt -> Txt -> Feature e
-attribute nm = Attribute nm . Right
+attribute nm = Attribute nm
 
-attr :: Txt -> Txt -> Feature e
-attr = attribute
-
-boolAttribute :: Txt -> Bool -> Feature e
-boolAttribute nm = Attribute nm . Left
-
-boolattr :: Txt -> Bool -> Feature e
-boolattr = boolAttribute
+boolAttribute :: Txt -> Feature e
+boolAttribute nm = Attribute nm ""
 
 on' :: Txt -> Options -> (Obj -> IO (Maybe e)) -> Feature e
 on' ev os f = On' ev os f Nothing
@@ -164,11 +210,14 @@ onIntercept' ev f = on' ev interceptOptions f
 styleList :: [(Txt,Txt)] -> Feature e
 styleList = Style
 
-link :: Txt -> Feature e
-link = flip Link Nothing
+hrefLocal :: Txt -> Feature e
+hrefLocal = flip Link Nothing
 
-value :: Txt -> Feature e
-value jst = CurrentValue jst
+hrefRemote :: Txt -> Feature e
+hrefRemote = attribute "href"
+
+val :: Txt -> Feature e
+val jst = CurrentValue jst
 
 xlink :: Txt -> Txt -> Feature e
 xlink xl v = XLink xl v
@@ -176,15 +225,13 @@ xlink xl v = XLink xl v
 svgLink :: Txt -> Feature e
 svgLink = flip SVGLink Nothing
 
-#ifdef LENS
 makePrisms ''Feature
 makeLenses ''Feature
 makePrisms ''Options
 makeLenses ''Options
-#endif
 
 classA :: Txt -> Feature e
-classA = attr "class"
+classA = attribute "class"
 
 classes :: [(Txt,Bool)] -> Feature e
 classes = classA
@@ -192,1016 +239,1016 @@ classes = classA
   . mapMaybe (\(s,b) -> if b then Just s else Nothing)
 
 idA :: Txt -> Feature e
-idA = attr "id"
+idA = attribute "id"
 
 titleA :: Txt -> Feature e
-titleA = attr "title"
+titleA = attribute "title"
 
-hidden :: Bool -> Feature e
-hidden = boolattr "hidden"
+hidden :: Feature e
+hidden = boolAttribute "hidden"
 
 typeA :: Txt -> Feature e
-typeA = attr "type"
+typeA = attribute "type"
 
 initialValue :: Txt -> Feature e
-initialValue = attr "value"
+initialValue = attribute "value"
 
 defaultValue :: Txt -> Feature e
-defaultValue = attr "default-value"
+defaultValue = attribute "default-value"
 
-checked :: Bool -> Feature e
-checked = boolattr "checked"
+checked :: Feature e
+checked = boolAttribute "checked"
 
 placeholder :: Txt -> Feature e
-placeholder = attr "placeholder"
+placeholder = attribute "placeholder"
 
-selected :: Bool -> Feature e
-selected = boolattr "selected"
+selected :: Feature e
+selected = boolAttribute "selected"
 
 accept :: Txt -> Feature e
-accept = attr "accept"
+accept = attribute "accept"
 
 acceptCharset :: Txt -> Feature e
-acceptCharset = attr "accept-charset"
+acceptCharset = attribute "accept-charset"
 
 autocomplete :: Bool -> Feature e
-autocomplete b = attr "autocomplete" (if b then "on" else "off")
+autocomplete b = attribute "autocomplete" (if b then "on" else "off")
 
-autofocus :: Bool -> Feature e
-autofocus = boolattr "autofocus"
+autofocus :: Feature e
+autofocus = boolAttribute "autofocus"
 
-disabled :: Bool -> Feature e
-disabled = boolattr "disabled"
+disabled :: Feature e
+disabled = boolAttribute "disabled"
 
 enctype :: Txt -> Feature e
-enctype = attr "enctyp"
+enctype = attribute "enctyp"
 
 formaction :: Txt -> Feature e
-formaction = attr "formaction"
+formaction = attribute "formaction"
 
-list :: Txt -> Feature e
-list = attr "list"
+listA :: Txt -> Feature e
+listA = attribute "list"
 
 maxlength :: Int -> Feature e
-maxlength = attr "maxlength" . toTxt
+maxlength = attribute "maxlength" . toTxt
 
 minlength :: Int -> Feature e
-minlength = attr "minlength" . toTxt
+minlength = attribute "minlength" . toTxt
 
 methodA :: Txt -> Feature e
-methodA = attr "method"
+methodA = attribute "method"
 
-multiple :: Bool -> Feature e
-multiple = boolattr "multiple"
+multiple :: Feature e
+multiple = boolAttribute "multiple"
 
 name :: Txt -> Feature e
-name = attr "name"
+name = attribute "name"
 
-novalidate :: Bool -> Feature e
-novalidate = boolattr "novalidate"
+novalidate :: Feature e
+novalidate = boolAttribute "novalidate"
 
 patternA :: Txt -> Feature e
-patternA = attr "pattern"
+patternA = attribute "pattern"
 
-readonly :: Bool -> Feature e
-readonly = boolattr "readonly"
+readonly :: Feature e
+readonly = boolAttribute "readonly"
 
-required :: Bool -> Feature e
-required = boolattr "required"
+required :: Feature e
+required = boolAttribute "required"
 
 size :: Int -> Feature e
-size = attr "size" . toTxt
+size = attribute "size" . toTxt
 
 forA :: Txt -> Feature e
-forA = attr "for"
+forA = attribute "for"
 
 formA :: Txt -> Feature e
-formA = attr "form"
+formA = attribute "form"
 
 maxA :: Txt -> Feature e
-maxA = attr "max"
+maxA = attribute "max"
 
 minA :: Txt -> Feature e
-minA = attr "min"
+minA = attribute "min"
 
 step :: Txt -> Feature e
-step = attr "step"
+step = attribute "step"
 
 cols :: Int -> Feature e
-cols = attr "cols" . toTxt
+cols = attribute "cols" . toTxt
 
 rows :: Int -> Feature e
-rows = attr "rows" . toTxt
+rows = attribute "rows" . toTxt
 
 wrapA :: Txt -> Feature e
-wrapA = attr "wrap"
+wrapA = attribute "wrap"
 
-href :: Txt -> Feature e
-href = attr "href"
+-- href :: Txt -> Feature e
+-- href = attribute "href"
 
 target :: Txt -> Feature e
-target = attr "target"
+target = attribute "target"
 
 hreflang :: Txt -> Feature e
-hreflang = attr "hreflang"
+hreflang = attribute "hreflang"
 
 media :: Txt -> Feature e
-media = attr "media"
+media = attribute "media"
 
 rel :: Txt -> Feature e
-rel = attr "rel"
+rel = attribute "rel"
 
-ismap :: Bool -> Feature e
-ismap = boolattr "ismap"
+ismap :: Feature e
+ismap = boolAttribute "ismap"
 
 usemap :: Txt -> Feature e
-usemap = attr "usemap"
+usemap = attribute "usemap"
 
 shape :: Txt -> Feature e
-shape = attr "shape"
+shape = attribute "shape"
 
 src :: Txt -> Feature e
-src = attr "src"
+src = attribute "src"
 
 heightA :: ToTxt a => a -> Feature e
-heightA = attr "height" . toTxt
+heightA = attribute "height" . toTxt
 
 widthA :: ToTxt a => a -> Feature e
-widthA = attr "width" . toTxt
+widthA = attribute "width" . toTxt
 
 alt :: Txt -> Feature e
-alt = attr "alt"
+alt = attribute "alt"
 
-autoplay :: Bool -> Feature e
-autoplay = boolattr "autoplay"
+autoplay :: Feature e
+autoplay = boolAttribute "autoplay"
 
-controls :: Bool -> Feature e
-controls = boolattr "controls"
+controls :: Feature e
+controls = boolAttribute "controls"
 
-loop :: Bool -> Feature e
-loop = boolattr "loop"
+loop :: Feature e
+loop = boolAttribute "loop"
 
 preload :: Txt -> Feature e
-preload = attr "preload"
+preload = attribute "preload"
 
 poster :: Txt -> Feature e
-poster = attr "poster"
+poster = attribute "poster"
 
-defaultA :: Bool -> Feature e
-defaultA = boolattr "default"
+defaultA :: Feature e
+defaultA = boolAttribute "default"
 
 kind :: Txt -> Feature e
-kind = attr "kind"
+kind = attribute "kind"
 
 srclang :: Txt -> Feature e
-srclang = attr "srclang"
+srclang = attribute "srclang"
 
 sandbox :: Txt -> Feature e
-sandbox = attr "sandbox"
+sandbox = attribute "sandbox"
 
-seamless :: Bool -> Feature e
-seamless = boolattr "seamless"
+seamless :: Feature e
+seamless = boolAttribute "seamless"
 
 srcdoc :: Txt -> Feature e
-srcdoc = attr "srcdoc"
+srcdoc = attribute "srcdoc"
 
-reversed :: Bool -> Feature e
-reversed = boolattr "reversed"
+reversedA :: Feature e
+reversedA = boolAttribute "reversed"
 
 start :: Int -> Feature e
-start = attr "start" . toTxt
+start = attribute "start" . toTxt
 
 align :: Txt -> Feature e
-align = attr "align"
+align = attribute "align"
 
 colspan :: Int -> Feature e
-colspan = attr "colspan" . toTxt
+colspan = attribute "colspan" . toTxt
 
 rowspan :: Int -> Feature e
-rowspan = attr "rowspan" . toTxt
+rowspan = attribute "rowspan" . toTxt
 
 headers :: [Txt] -> Feature e
-headers = attr "headers" . JSS.intercalate " "
+headers = attribute "headers" . JSS.intercalate " "
 
 scope :: Txt -> Feature e
-scope = attr "scope"
+scope = attribute "scope"
 
 async :: Txt -> Feature e
-async = attr "async"
+async = attribute "async"
 
 charset :: Txt -> Feature e
-charset = attr "charset"
+charset = attribute "charset"
 
-content :: Txt -> Feature e
-content = attr "content"
+contentA :: Txt -> Feature e
+contentA = attribute "content"
 
 defer :: Txt -> Feature e
-defer = attr "defer"
+defer = attribute "defer"
 
 httpEquiv :: Txt -> Feature e
-httpEquiv = attr "http-equiv"
+httpEquiv = attribute "http-equiv"
 
 languageA :: Txt -> Feature e
-languageA = attr "language"
+languageA = attribute "language"
 
-scopedA :: Bool -> Feature e
-scopedA = boolattr "scoped"
+scopedA :: Feature e
+scopedA = boolAttribute "scoped"
 
 accesskey :: Char -> Feature e
-accesskey = attr "accesskey" . JSS.singleton
+accesskey = attribute "accesskey" . JSS.singleton
 
-contenteditable :: Bool -> Feature e
-contenteditable = boolattr "contenteditable"
+contenteditable :: Feature e
+contenteditable = boolAttribute "contenteditable"
 
 contextmenu :: Txt -> Feature e
-contextmenu = attr "contextmenu"
+contextmenu = attribute "contextmenu"
 
 dir :: Txt -> Feature e
-dir = attr "dir"
+dir = attribute "dir"
 
 draggable :: Bool -> Feature e
-draggable b = attr "draggable" (if b then "true" else "false")
+draggable b = attribute "draggable" (if b then "true" else "false")
 
 itemprop :: Txt -> Feature e
-itemprop = attr "itemprop"
+itemprop = attribute "itemprop"
 
 lang :: Txt -> Feature e
-lang = attr "lang"
+lang = attribute "lang"
 
-spellcheck :: Bool -> Feature e
-spellcheck = boolattr "spellcheck"
+spellcheck :: Feature e
+spellcheck = boolAttribute "spellcheck"
 
 tabindex :: Int -> Feature e
-tabindex = attr "tabindex" . toTxt
+tabindex = attribute "tabindex" . toTxt
 
 citeA :: Txt -> Feature e
-citeA = attr "cite"
+citeA = attribute "cite"
 
 datetime :: Txt -> Feature e
-datetime = attr "datetime"
+datetime = attribute "datetime"
 
 manifest :: Txt -> Feature e
-manifest = attr "manifest"
+manifest = attribute "manifest"
 
 --------------------------------------------------------------------------------
 -- SVG Attributes
 
 svgAccentHeight :: Txt -> Feature e
-svgAccentHeight = attr "accent-height"
+svgAccentHeight = attribute "accent-height"
 
 svgAccumulate :: Txt -> Feature e
-svgAccumulate = attr "accumulate"
+svgAccumulate = attribute "accumulate"
 
 svgAdditive :: Txt -> Feature e
-svgAdditive = attr "additive"
+svgAdditive = attribute "additive"
 
 svgAlignmentBaseline :: Txt -> Feature e
-svgAlignmentBaseline = attr "alignment-baseline"
+svgAlignmentBaseline = attribute "alignment-baseline"
 
 svgAllowReorder :: Txt -> Feature e
-svgAllowReorder = attr "allowReorder"
+svgAllowReorder = attribute "allowReorder"
 
 svgAlphabetic :: Txt -> Feature e
-svgAlphabetic = attr "alphabetic"
+svgAlphabetic = attribute "alphabetic"
 
 svgArabicForm :: Txt -> Feature e
-svgArabicForm = attr "arabic-form"
+svgArabicForm = attribute "arabic-form"
 
 svgAscent :: Txt -> Feature e
-svgAscent = attr "ascent"
+svgAscent = attribute "ascent"
 
 svgAttributeName :: Txt -> Feature e
-svgAttributeName = attr "attributeName"
+svgAttributeName = attribute "attributeName"
 
 svgAttributeType :: Txt -> Feature e
-svgAttributeType = attr "attributeType"
+svgAttributeType = attribute "attributeType"
 
 svgAutoReverse :: Txt -> Feature e
-svgAutoReverse = attr "autoReverse"
+svgAutoReverse = attribute "autoReverse"
 
 svgAzimuth :: Txt -> Feature e
-svgAzimuth = attr "azimuth"
+svgAzimuth = attribute "azimuth"
 
 svgBaseFrequency :: Txt -> Feature e
-svgBaseFrequency = attr "baseFrequency"
+svgBaseFrequency = attribute "baseFrequency"
 
 svgBaslineShift :: Txt -> Feature e
-svgBaslineShift = attr "basline-shift"
+svgBaslineShift = attribute "basline-shift"
 
 svgBaseProfile :: Txt -> Feature e
-svgBaseProfile = attr "baseProfile"
+svgBaseProfile = attribute "baseProfile"
 
 svgBbox :: Txt -> Feature e
-svgBbox = attr "bbox"
+svgBbox = attribute "bbox"
 
 svgBegin :: Txt -> Feature e
-svgBegin = attr "begin"
+svgBegin = attribute "begin"
 
 svgBias :: Txt -> Feature e
-svgBias = attr "bias"
+svgBias = attribute "bias"
 
 svgBy :: Txt -> Feature e
-svgBy = attr "by"
+svgBy = attribute "by"
 
 svgCalcMode :: Txt -> Feature e
-svgCalcMode = attr "calcMode"
+svgCalcMode = attribute "calcMode"
 
 svgCapHeight :: Txt -> Feature e
-svgCapHeight = attr "cap-height"
+svgCapHeight = attribute "cap-height"
 
 svgClass :: Txt -> Feature e
-svgClass = attr "class"
+svgClass = attribute "class"
 
 svgClip :: Txt -> Feature e
-svgClip = attr "clip"
+svgClip = attribute "clip"
 
 svgClipPathUnits :: Txt -> Feature e
-svgClipPathUnits = attr "clipPathUnits"
+svgClipPathUnits = attribute "clipPathUnits"
 
 svgClipPathA :: Txt -> Feature e
-svgClipPathA = attr "clip-path"
+svgClipPathA = attribute "clip-path"
 
 svgClipRule :: Txt -> Feature e
-svgClipRule = attr "clip-rule"
+svgClipRule = attribute "clip-rule"
 
 svgColor :: Txt -> Feature e
-svgColor = attr "color"
+svgColor = attribute "color"
 
 svgColorInterpolation :: Txt -> Feature e
-svgColorInterpolation = attr "color-interpolation"
+svgColorInterpolation = attribute "color-interpolation"
 
 svgColorInterpolationFilters :: Txt -> Feature e
-svgColorInterpolationFilters = attr "color-interpolation-filters"
+svgColorInterpolationFilters = attribute "color-interpolation-filters"
 
 svgColorProfileA :: Txt -> Feature e
-svgColorProfileA = attr "color-profile"
+svgColorProfileA = attribute "color-profile"
 
 svgColorRendering :: Txt -> Feature e
-svgColorRendering = attr "color-rendering"
+svgColorRendering = attribute "color-rendering"
 
 svgContentScriptType :: Txt -> Feature e
-svgContentScriptType = attr "contentScriptType"
+svgContentScriptType = attribute "contentScriptType"
 
 svgContentStyleType :: Txt -> Feature e
-svgContentStyleType = attr "contentStyleType"
+svgContentStyleType = attribute "contentStyleType"
 
 svgCursorA :: Txt -> Feature e
-svgCursorA = attr "cursor"
+svgCursorA = attribute "cursor"
 
 svgCx :: Txt -> Feature e
-svgCx = attr "cx"
+svgCx = attribute "cx"
 
 svgCy :: Txt -> Feature e
-svgCy = attr "cy"
+svgCy = attribute "cy"
 
 svgD :: Txt -> Feature e
-svgD = attr "d"
+svgD = attribute "d"
 
 svgDecelerate :: Txt -> Feature e
-svgDecelerate = attr "decelerate"
+svgDecelerate = attribute "decelerate"
 
 svgDescent :: Txt -> Feature e
-svgDescent = attr "descent"
+svgDescent = attribute "descent"
 
 svgDiffuseConstant :: Txt -> Feature e
-svgDiffuseConstant = attr "diffuseConstant"
+svgDiffuseConstant = attribute "diffuseConstant"
 
 svgDirection :: Txt -> Feature e
-svgDirection = attr "direction"
+svgDirection = attribute "direction"
 
 svgDisplay :: Txt -> Feature e
-svgDisplay = attr "display"
+svgDisplay = attribute "display"
 
 svgDivisor :: Txt -> Feature e
-svgDivisor = attr "divisor"
+svgDivisor = attribute "divisor"
 
 svgDominantBaseline :: Txt -> Feature e
-svgDominantBaseline = attr "dominant-baseline"
+svgDominantBaseline = attribute "dominant-baseline"
 
 svgDur :: Txt -> Feature e
-svgDur = attr "dur"
+svgDur = attribute "dur"
 
 svgDx :: Txt -> Feature e
-svgDx = attr "dx"
+svgDx = attribute "dx"
 
 svgDy :: Txt -> Feature e
-svgDy = attr "dy"
+svgDy = attribute "dy"
 
 svgEdgeMode :: Txt -> Feature e
-svgEdgeMode = attr "edgeMode"
+svgEdgeMode = attribute "edgeMode"
 
 svgElevation :: Txt -> Feature e
-svgElevation = attr "elevation"
+svgElevation = attribute "elevation"
 
 svgEnableBackground :: Txt -> Feature e
-svgEnableBackground = attr "enable-background"
+svgEnableBackground = attribute "enable-background"
 
 svgEnd :: Txt -> Feature e
-svgEnd = attr "end"
+svgEnd = attribute "end"
 
 svgExponent :: Txt -> Feature e
-svgExponent = attr "exponent"
+svgExponent = attribute "exponent"
 
 svgExternalResourcesRequired :: Txt -> Feature e
-svgExternalResourcesRequired = attr "externalResourcesRequired"
+svgExternalResourcesRequired = attribute "externalResourcesRequired"
 
 svgFill :: Txt -> Feature e
-svgFill = attr "fill"
+svgFill = attribute "fill"
 
 svgFillOpacity :: Txt -> Feature e
-svgFillOpacity = attr "fill-opacity"
+svgFillOpacity = attribute "fill-opacity"
 
 svgFillRule :: Txt -> Feature e
-svgFillRule = attr "fill-rule"
+svgFillRule = attribute "fill-rule"
 
 svgFilterA :: Txt -> Feature e
-svgFilterA = attr "filter"
+svgFilterA = attribute "filter"
 
 svgFilterRes :: Txt -> Feature e
-svgFilterRes = attr "filterRes"
+svgFilterRes = attribute "filterRes"
 
 svgFilterUnits :: Txt -> Feature e
-svgFilterUnits = attr "filterUnits"
+svgFilterUnits = attribute "filterUnits"
 
 svgFloodColor :: Txt -> Feature e
-svgFloodColor = attr "flood-color"
+svgFloodColor = attribute "flood-color"
 
 svgFontFamily :: Txt -> Feature e
-svgFontFamily = attr "font-family"
+svgFontFamily = attribute "font-family"
 
 svgFontSize :: Txt -> Feature e
-svgFontSize = attr "font-size"
+svgFontSize = attribute "font-size"
 
 svgFontSizeAdjust :: Txt -> Feature e
-svgFontSizeAdjust = attr "font-size-adjust"
+svgFontSizeAdjust = attribute "font-size-adjust"
 
 svgFontStretch :: Txt -> Feature e
-svgFontStretch = attr "font-stretch"
+svgFontStretch = attribute "font-stretch"
 
 svgFontStyle :: Txt -> Feature e
-svgFontStyle = attr "font-style"
+svgFontStyle = attribute "font-style"
 
 svgFontVariant :: Txt -> Feature e
-svgFontVariant = attr "font-variant"
+svgFontVariant = attribute "font-variant"
 
 svgFontWeight :: Txt -> Feature e
-svgFontWeight = attr "font-weight"
+svgFontWeight = attribute "font-weight"
 
 svgFormat :: Txt -> Feature e
-svgFormat = attr "format"
+svgFormat = attribute "format"
 
 svgFrom :: Txt -> Feature e
-svgFrom = attr "from"
+svgFrom = attribute "from"
 
 svgFx :: Txt -> Feature e
-svgFx = attr "fx"
+svgFx = attribute "fx"
 
 svgFy :: Txt -> Feature e
-svgFy = attr "fy"
+svgFy = attribute "fy"
 
 svgG1 :: Txt -> Feature e
-svgG1 = attr "g1"
+svgG1 = attribute "g1"
 
 svgG2 :: Txt -> Feature e
-svgG2 = attr "g2"
+svgG2 = attribute "g2"
 
 svgGlyphName :: Txt -> Feature e
-svgGlyphName = attr "glyph-name"
+svgGlyphName = attribute "glyph-name"
 
 svgGlyphOrientationHorizontal :: Txt -> Feature e
-svgGlyphOrientationHorizontal = attr "glyph-orientation-horizontal"
+svgGlyphOrientationHorizontal = attribute "glyph-orientation-horizontal"
 
 svgGlyphOrientationVertical :: Txt -> Feature e
-svgGlyphOrientationVertical = attr "glyph-orientation-vertical"
+svgGlyphOrientationVertical = attribute "glyph-orientation-vertical"
 
 svgGlyphRefA :: Txt -> Feature e
-svgGlyphRefA = attr "glyphRef"
+svgGlyphRefA = attribute "glyphRef"
 
 svgGradientTransform :: Txt -> Feature e
-svgGradientTransform = attr "gradientTransform"
+svgGradientTransform = attribute "gradientTransform"
 
 svgGradientUnits :: Txt -> Feature e
-svgGradientUnits = attr "gradientUnits"
+svgGradientUnits = attribute "gradientUnits"
 
 svgHanging :: Txt -> Feature e
-svgHanging = attr "hanging"
+svgHanging = attribute "hanging"
 
 svgHeight :: Txt -> Feature e
-svgHeight = attr "height"
+svgHeight = attribute "height"
 
 -- prefer svgLink for inter-organism links
 svgHref :: Txt -> Feature e
-svgHref = attr "href"
+svgHref = attribute "href"
 
 svgHorizAdvX :: Txt -> Feature e
-svgHorizAdvX = attr "horiz-adv-x"
+svgHorizAdvX = attribute "horiz-adv-x"
 
 svgHorizOriginX :: Txt -> Feature e
-svgHorizOriginX = attr "horiz-origin-x"
+svgHorizOriginX = attribute "horiz-origin-x"
 
 svgId :: Txt -> Feature e
-svgId = attr "id"
+svgId = attribute "id"
 
 svgIdeographic :: Txt -> Feature e
-svgIdeographic = attr "ideographic"
+svgIdeographic = attribute "ideographic"
 
 svgImageRendering :: Txt -> Feature e
-svgImageRendering = attr "image-rendering"
+svgImageRendering = attribute "image-rendering"
 
 svgIn :: Txt -> Feature e
-svgIn = attr "in"
+svgIn = attribute "in"
 
 svgIn2 :: Txt -> Feature e
-svgIn2 = attr "in2"
+svgIn2 = attribute "in2"
 
 svgIntercept :: Txt -> Feature e
-svgIntercept = attr "intercept"
+svgIntercept = attribute "intercept"
 
 svgK :: Txt -> Feature e
-svgK = attr "k"
+svgK = attribute "k"
 
 svgK1 :: Txt -> Feature e
-svgK1 = attr "k1"
+svgK1 = attribute "k1"
 
 svgK2 :: Txt -> Feature e
-svgK2 = attr "k2"
+svgK2 = attribute "k2"
 
 svgK3 :: Txt -> Feature e
-svgK3 = attr "k3"
+svgK3 = attribute "k3"
 
 svgK4 :: Txt -> Feature e
-svgK4 = attr "k4"
+svgK4 = attribute "k4"
 
 svgKernelMatrix :: Txt -> Feature e
-svgKernelMatrix = attr "kernelMatrix"
+svgKernelMatrix = attribute "kernelMatrix"
 
 svgKernelUnitLength :: Txt -> Feature e
-svgKernelUnitLength = attr "kernelUnitLength"
+svgKernelUnitLength = attribute "kernelUnitLength"
 
 svgKerning :: Txt -> Feature e
-svgKerning = attr "kerning"
+svgKerning = attribute "kerning"
 
 svgKeyPoints :: Txt -> Feature e
-svgKeyPoints = attr "keyPoints"
+svgKeyPoints = attribute "keyPoints"
 
 svgKeySplines :: Txt -> Feature e
-svgKeySplines = attr "keySplines"
+svgKeySplines = attribute "keySplines"
 
 svgKeyTimes :: Txt -> Feature e
-svgKeyTimes = attr "keyTimes"
+svgKeyTimes = attribute "keyTimes"
 
 svgLang :: Txt -> Feature e
-svgLang = attr "lang"
+svgLang = attribute "lang"
 
 svgLengthAdjust :: Txt -> Feature e
-svgLengthAdjust = attr "lengthAdjust"
+svgLengthAdjust = attribute "lengthAdjust"
 
 svgLetterSpacing :: Txt -> Feature e
-svgLetterSpacing = attr "letter-spacing"
+svgLetterSpacing = attribute "letter-spacing"
 
 svgLightingColor :: Txt -> Feature e
-svgLightingColor = attr "lighting-color"
+svgLightingColor = attribute "lighting-color"
 
 svgLimitingConeAngle :: Txt -> Feature e
-svgLimitingConeAngle = attr "limitingConeAngle"
+svgLimitingConeAngle = attribute "limitingConeAngle"
 
 svgLocal :: Txt -> Feature e
-svgLocal = attr "local"
+svgLocal = attribute "local"
 
 svgMarkerEnd :: Txt -> Feature e
-svgMarkerEnd = attr "marker-end"
+svgMarkerEnd = attribute "marker-end"
 
 svgMarkerMid :: Txt -> Feature e
-svgMarkerMid = attr "marker-mid"
+svgMarkerMid = attribute "marker-mid"
 
 svgMarkerStart :: Txt -> Feature e
-svgMarkerStart = attr "marker-start"
+svgMarkerStart = attribute "marker-start"
 
 svgMarkerHeight :: Txt -> Feature e
-svgMarkerHeight = attr "markerHeight"
+svgMarkerHeight = attribute "markerHeight"
 
 svgMarkerUnits :: Txt -> Feature e
-svgMarkerUnits = attr "markerUnits"
+svgMarkerUnits = attribute "markerUnits"
 
 svgMarkerWidth :: Txt -> Feature e
-svgMarkerWidth = attr "markerWidth"
+svgMarkerWidth = attribute "markerWidth"
 
 svgMaskA :: Txt -> Feature e
-svgMaskA = attr "maskA"
+svgMaskA = attribute "maskA"
 
 svgMaskContentUnits :: Txt -> Feature e
-svgMaskContentUnits = attr "maskContentUnits"
+svgMaskContentUnits = attribute "maskContentUnits"
 
 svgMaskUnits :: Txt -> Feature e
-svgMaskUnits = attr "maskUnits"
+svgMaskUnits = attribute "maskUnits"
 
 svgMathematical :: Txt -> Feature e
-svgMathematical = attr "mathematical"
+svgMathematical = attribute "mathematical"
 
 svgMax :: Txt -> Feature e
-svgMax = attr "max"
+svgMax = attribute "max"
 
 svgMedia :: Txt -> Feature e
-svgMedia = attr "media"
+svgMedia = attribute "media"
 
 svgMethod :: Txt -> Feature e
-svgMethod = attr "method"
+svgMethod = attribute "method"
 
 svgMin :: Txt -> Feature e
-svgMin = attr "min"
+svgMin = attribute "min"
 
 svgMode :: Txt -> Feature e
-svgMode = attr "mode"
+svgMode = attribute "mode"
 
 svgName :: Txt -> Feature e
-svgName = attr "name"
+svgName = attribute "name"
 
 svgNumOctaves :: Txt -> Feature e
-svgNumOctaves = attr "numOctaves"
+svgNumOctaves = attribute "numOctaves"
 
 svgOffset :: Txt -> Feature e
-svgOffset = attr "offset"
+svgOffset = attribute "offset"
 
 svgOnabort :: Txt -> Feature e
-svgOnabort = attr "onabort"
+svgOnabort = attribute "onabort"
 
 svgOnactivate :: Txt -> Feature e
-svgOnactivate = attr "onactivate"
+svgOnactivate = attribute "onactivate"
 
 svgOnbegin :: Txt -> Feature e
-svgOnbegin = attr "onbegin"
+svgOnbegin = attribute "onbegin"
 
 svgOnclick :: Txt -> Feature e
-svgOnclick = attr "onclick"
+svgOnclick = attribute "onclick"
 
 svgOnend :: Txt -> Feature e
-svgOnend = attr "onend"
+svgOnend = attribute "onend"
 
 svgOnerror :: Txt -> Feature e
-svgOnerror = attr "onerror"
+svgOnerror = attribute "onerror"
 
 svgOnfocusin :: Txt -> Feature e
-svgOnfocusin = attr "onfocusin"
+svgOnfocusin = attribute "onfocusin"
 
 svgOnfocusout :: Txt -> Feature e
-svgOnfocusout = attr "onfocusout"
+svgOnfocusout = attribute "onfocusout"
 
 svgOnload :: Txt -> Feature e
-svgOnload = attr "onload"
+svgOnload = attribute "onload"
 
 svgOnmousedown :: Txt -> Feature e
-svgOnmousedown = attr "onmousedown"
+svgOnmousedown = attribute "onmousedown"
 
 svgOnmousemove :: Txt -> Feature e
-svgOnmousemove = attr "onmousemove"
+svgOnmousemove = attribute "onmousemove"
 
 svgOnmouseout :: Txt -> Feature e
-svgOnmouseout = attr "onmouseout"
+svgOnmouseout = attribute "onmouseout"
 
 svgOnmouseover :: Txt -> Feature e
-svgOnmouseover = attr "onmouseover"
+svgOnmouseover = attribute "onmouseover"
 
 svgOnmouseup :: Txt -> Feature e
-svgOnmouseup = attr "onmouseup"
+svgOnmouseup = attribute "onmouseup"
 
 svgOnrepeat :: Txt -> Feature e
-svgOnrepeat = attr "onrepeat"
+svgOnrepeat = attribute "onrepeat"
 
 svgOnresize :: Txt -> Feature e
-svgOnresize = attr "onresize"
+svgOnresize = attribute "onresize"
 
 svgOnscroll :: Txt -> Feature e
-svgOnscroll = attr "onscroll"
+svgOnscroll = attribute "onscroll"
 
 svgOnunload :: Txt -> Feature e
-svgOnunload = attr "onunload"
+svgOnunload = attribute "onunload"
 
 svgOnzoom :: Txt -> Feature e
-svgOnzoom = attr "onzoom"
+svgOnzoom = attribute "onzoom"
 
 svgOpacity :: Txt -> Feature e
-svgOpacity = attr "opacity"
+svgOpacity = attribute "opacity"
 
 svgOperator :: Txt -> Feature e
-svgOperator = attr "operator"
+svgOperator = attribute "operator"
 
 svgOrder :: Txt -> Feature e
-svgOrder = attr "order"
+svgOrder = attribute "order"
 
 svgOrient :: Txt -> Feature e
-svgOrient = attr "orient"
+svgOrient = attribute "orient"
 
 svgOrientation :: Txt -> Feature e
-svgOrientation = attr "orientation"
+svgOrientation = attribute "orientation"
 
 svgOrigin :: Txt -> Feature e
-svgOrigin = attr "origin"
+svgOrigin = attribute "origin"
 
 svgOverflow :: Txt -> Feature e
-svgOverflow = attr "overflow"
+svgOverflow = attribute "overflow"
 
 svgOverlinePosition :: Txt -> Feature e
-svgOverlinePosition = attr "overline-position"
+svgOverlinePosition = attribute "overline-position"
 
 svgOverlineThickness :: Txt -> Feature e
-svgOverlineThickness = attr "overline-thickness"
+svgOverlineThickness = attribute "overline-thickness"
 
 svgPanose1 :: Txt -> Feature e
-svgPanose1 = attr "panose-1"
+svgPanose1 = attribute "panose-1"
 
 svgPaintOrder :: Txt -> Feature e
-svgPaintOrder = attr "paint-order"
+svgPaintOrder = attribute "paint-order"
 
 svgPathLength :: Txt -> Feature e
-svgPathLength = attr "pathLength"
+svgPathLength = attribute "pathLength"
 
 svgPatternContentUnits :: Txt -> Feature e
-svgPatternContentUnits = attr "patternContentUnits"
+svgPatternContentUnits = attribute "patternContentUnits"
 
 svgPatternTransform :: Txt -> Feature e
-svgPatternTransform = attr "patternTransform"
+svgPatternTransform = attribute "patternTransform"
 
 svgPatternUnits :: Txt -> Feature e
-svgPatternUnits = attr "patternUnits"
+svgPatternUnits = attribute "patternUnits"
 
 svgPointerEvents :: Txt -> Feature e
-svgPointerEvents = attr "pointer-events"
+svgPointerEvents = attribute "pointer-events"
 
 svgPoints :: Txt -> Feature e
-svgPoints = attr "points"
+svgPoints = attribute "points"
 
 svgPointsAtX :: Txt -> Feature e
-svgPointsAtX = attr "pointsAtX"
+svgPointsAtX = attribute "pointsAtX"
 
 svgPointsAtY :: Txt -> Feature e
-svgPointsAtY = attr "pointsAtY"
+svgPointsAtY = attribute "pointsAtY"
 
 svgPointsAtZ :: Txt -> Feature e
-svgPointsAtZ = attr "pointsAtZ"
+svgPointsAtZ = attribute "pointsAtZ"
 
 svgPreserveAlpha :: Txt -> Feature e
-svgPreserveAlpha = attr "preserveAlpha"
+svgPreserveAlpha = attribute "preserveAlpha"
 
 svgPreserveAspectRatio :: Txt -> Feature e
-svgPreserveAspectRatio = attr "preserveAspectRatio"
+svgPreserveAspectRatio = attribute "preserveAspectRatio"
 
 svgPrimitiveUnits :: Txt -> Feature e
-svgPrimitiveUnits = attr "primitiveUnits"
+svgPrimitiveUnits = attribute "primitiveUnits"
 
 svgR :: Txt -> Feature e
-svgR = attr "r"
+svgR = attribute "r"
 
 svgRadius :: Txt -> Feature e
-svgRadius = attr "radius"
+svgRadius = attribute "radius"
 
 svgRefX :: Txt -> Feature e
-svgRefX = attr "refX"
+svgRefX = attribute "refX"
 
 svgRefY :: Txt -> Feature e
-svgRefY = attr "refY"
+svgRefY = attribute "refY"
 
 svgRenderingIntent :: Txt -> Feature e
-svgRenderingIntent = attr "rendering-intent"
+svgRenderingIntent = attribute "rendering-intent"
 
 svgRepeatCount :: Txt -> Feature e
-svgRepeatCount = attr "repeatCount"
+svgRepeatCount = attribute "repeatCount"
 
 svgRepeatDur :: Txt -> Feature e
-svgRepeatDur = attr "repeatDur"
+svgRepeatDur = attribute "repeatDur"
 
 svgRequiredExtensions :: Txt -> Feature e
-svgRequiredExtensions = attr "requiredExtensions"
+svgRequiredExtensions = attribute "requiredExtensions"
 
 svgRequiredFeatures :: Txt -> Feature e
-svgRequiredFeatures = attr "requiredFeatures"
+svgRequiredFeatures = attribute "requiredFeatures"
 
 svgRestart :: Txt -> Feature e
-svgRestart = attr "restart"
+svgRestart = attribute "restart"
 
 svgResult :: Txt -> Feature e
-svgResult = attr "result"
+svgResult = attribute "result"
 
 svgRotate :: Txt -> Feature e
-svgRotate = attr "rotate"
+svgRotate = attribute "rotate"
 
 svgRx :: Txt -> Feature e
-svgRx = attr "rx"
+svgRx = attribute "rx"
 
 svgRy :: Txt -> Feature e
-svgRy = attr "ry"
+svgRy = attribute "ry"
 
 svgScale :: Txt -> Feature e
-svgScale = attr "scale"
+svgScale = attribute "scale"
 
 svgSeed :: Txt -> Feature e
-svgSeed = attr "seed"
+svgSeed = attribute "seed"
 
 svgShapeRendering :: Txt -> Feature e
-svgShapeRendering = attr "shape-rendering"
+svgShapeRendering = attribute "shape-rendering"
 
 svgSlope :: Txt -> Feature e
-svgSlope = attr "slope"
+svgSlope = attribute "slope"
 
 svgSpacing :: Txt -> Feature e
-svgSpacing = attr "spacing"
+svgSpacing = attribute "spacing"
 
 svgSpecularConstant :: Txt -> Feature e
-svgSpecularConstant = attr "specularConstant"
+svgSpecularConstant = attribute "specularConstant"
 
 svgSpecularExponent :: Txt -> Feature e
-svgSpecularExponent = attr "specularExponent"
+svgSpecularExponent = attribute "specularExponent"
 
 svgSpeed :: Txt -> Feature e
-svgSpeed = attr "speed"
+svgSpeed = attribute "speed"
 
 svgSpreadMethod :: Txt -> Feature e
-svgSpreadMethod = attr "spreadMethod"
+svgSpreadMethod = attribute "spreadMethod"
 
 svgStartOffset :: Txt -> Feature e
-svgStartOffset = attr "startOffset"
+svgStartOffset = attribute "startOffset"
 
 svgStdDeviationA :: Txt -> Feature e
-svgStdDeviationA = attr "stdDeviationA"
+svgStdDeviationA = attribute "stdDeviationA"
 
 svgStemh :: Txt -> Feature e
-svgStemh = attr "stemh"
+svgStemh = attribute "stemh"
 
 svgStemv :: Txt -> Feature e
-svgStemv = attr "stemv"
+svgStemv = attribute "stemv"
 
 svgStitchTiles :: Txt -> Feature e
-svgStitchTiles = attr "stitchTiles"
+svgStitchTiles = attribute "stitchTiles"
 
 svgStopColor :: Txt -> Feature e
-svgStopColor = attr "stop-color"
+svgStopColor = attribute "stop-color"
 
 svgStopOpacity :: Txt -> Feature e
-svgStopOpacity = attr "stop-opacity"
+svgStopOpacity = attribute "stop-opacity"
 
 svgStrikethroughPosition :: Txt -> Feature e
-svgStrikethroughPosition = attr "strikethrough-position"
+svgStrikethroughPosition = attribute "strikethrough-position"
 
 svgStrikethroughThickness :: Txt -> Feature e
-svgStrikethroughThickness = attr "strikethrough-thickness"
+svgStrikethroughThickness = attribute "strikethrough-thickness"
 
 svgString :: Txt -> Feature e
-svgString = attr "string"
+svgString = attribute "string"
 
 svgStroke :: Txt -> Feature e
-svgStroke = attr "stroke"
+svgStroke = attribute "stroke"
 
 svgStrokeDasharray :: Txt -> Feature e
-svgStrokeDasharray = attr "stroke-dasharray"
+svgStrokeDasharray = attribute "stroke-dasharray"
 
 svgStrokeDashoffset :: Txt -> Feature e
-svgStrokeDashoffset = attr "stroke-dashoffset"
+svgStrokeDashoffset = attribute "stroke-dashoffset"
 
 svgStrokeLinecap :: Txt -> Feature e
-svgStrokeLinecap = attr "stroke-linecap"
+svgStrokeLinecap = attribute "stroke-linecap"
 
 svgStrokeLinejoin :: Txt -> Feature e
-svgStrokeLinejoin = attr "stroke-linejoin"
+svgStrokeLinejoin = attribute "stroke-linejoin"
 
 svgStrokeMiterlimit :: Txt -> Feature e
-svgStrokeMiterlimit = attr "stroke-miterlimit"
+svgStrokeMiterlimit = attribute "stroke-miterlimit"
 
 svgStrokeOpacity :: Txt -> Feature e
-svgStrokeOpacity = attr "stroke-opacity"
+svgStrokeOpacity = attribute "stroke-opacity"
 
 svgStrokeWidth :: Txt -> Feature e
-svgStrokeWidth = attr "stroke-width"
+svgStrokeWidth = attribute "stroke-width"
 
 svgStyleA :: Txt -> Feature e
-svgStyleA = attr "style"
+svgStyleA = attribute "style"
 
 svgSurfaceScale :: Txt -> Feature e
-svgSurfaceScale = attr "surfaceScale"
+svgSurfaceScale = attribute "surfaceScale"
 
 svgSystemLanguage :: Txt -> Feature e
-svgSystemLanguage = attr "systemLanguage"
+svgSystemLanguage = attribute "systemLanguage"
 
 svgTabindex :: Txt -> Feature e
-svgTabindex = attr "tabindex"
+svgTabindex = attribute "tabindex"
 
 svgTableValues :: Txt -> Feature e
-svgTableValues = attr "tableValues"
+svgTableValues = attribute "tableValues"
 
 svgTarget :: Txt -> Feature e
-svgTarget = attr "target"
+svgTarget = attribute "target"
 
 svgTargetX :: Txt -> Feature e
-svgTargetX = attr "targetX"
+svgTargetX = attribute "targetX"
 
 svgTargetY :: Txt -> Feature e
-svgTargetY = attr "targetY"
+svgTargetY = attribute "targetY"
 
 svgTextAnchor :: Txt -> Feature e
-svgTextAnchor = attr "text-anchor"
+svgTextAnchor = attribute "text-anchor"
 
 svgTextDecoration :: Txt -> Feature e
-svgTextDecoration = attr "text-decoration"
+svgTextDecoration = attribute "text-decoration"
 
 svgTextRendering :: Txt -> Feature e
-svgTextRendering = attr "text-rendering"
+svgTextRendering = attribute "text-rendering"
 
 svgTextLength :: Txt -> Feature e
-svgTextLength = attr "textLength"
+svgTextLength = attribute "textLength"
 
 svgTo :: Txt -> Feature e
-svgTo = attr "to"
+svgTo = attribute "to"
 
 svgTransform :: Txt -> Feature e
-svgTransform = attr "transform"
+svgTransform = attribute "transform"
 
 svgType :: Txt -> Feature e
-svgType = attr "type"
+svgType = attribute "type"
 
 svgU1 :: Txt -> Feature e
-svgU1 = attr "u1"
+svgU1 = attribute "u1"
 
 svgU2 :: Txt -> Feature e
-svgU2 = attr "u2"
+svgU2 = attribute "u2"
 
 svgUnerlinePosition :: Txt -> Feature e
-svgUnerlinePosition = attr "unerline-position"
+svgUnerlinePosition = attribute "unerline-position"
 
 svgUnderlineThickness :: Txt -> Feature e
-svgUnderlineThickness = attr "underline-thickness"
+svgUnderlineThickness = attribute "underline-thickness"
 
 svgUnicode :: Txt -> Feature e
-svgUnicode = attr "unicode"
+svgUnicode = attribute "unicode"
 
 svgUnicodeBidi :: Txt -> Feature e
-svgUnicodeBidi = attr "unicode-bidi"
+svgUnicodeBidi = attribute "unicode-bidi"
 
 svgUnicodeRange :: Txt -> Feature e
-svgUnicodeRange = attr "unicode-range"
+svgUnicodeRange = attribute "unicode-range"
 
 svgUnitsPerEm :: Txt -> Feature e
-svgUnitsPerEm = attr "units-per-em"
+svgUnitsPerEm = attribute "units-per-em"
 
 svgVAlphabetic :: Txt -> Feature e
-svgVAlphabetic = attr "v-alphabetic"
+svgVAlphabetic = attribute "v-alphabetic"
 
 svgVHanging :: Txt -> Feature e
-svgVHanging = attr "v-hanging"
+svgVHanging = attribute "v-hanging"
 
 svgVIdeographic :: Txt -> Feature e
-svgVIdeographic = attr "v-ideographic"
+svgVIdeographic = attribute "v-ideographic"
 
 svgVMathematical :: Txt -> Feature e
-svgVMathematical = attr "v-mathematical"
+svgVMathematical = attribute "v-mathematical"
 
 svgValues :: Txt -> Feature e
-svgValues = attr "values"
+svgValues = attribute "values"
 
 svgVersion :: Txt -> Feature e
-svgVersion = attr "version"
+svgVersion = attribute "version"
 
 svgVertAdvY :: Txt -> Feature e
-svgVertAdvY = attr "vert-adv-y"
+svgVertAdvY = attribute "vert-adv-y"
 
 svgVertOriginX :: Txt -> Feature e
-svgVertOriginX = attr "vert-origin-x"
+svgVertOriginX = attribute "vert-origin-x"
 
 svgVerOriginY :: Txt -> Feature e
-svgVerOriginY = attr "ver-origin-y"
+svgVerOriginY = attribute "ver-origin-y"
 
 svgViewBox :: Txt -> Feature e
-svgViewBox = attr "viewBox"
+svgViewBox = attribute "viewBox"
 
 svgViewTarget :: Txt -> Feature e
-svgViewTarget = attr "viewTarget"
+svgViewTarget = attribute "viewTarget"
 
 svgVisibility :: Txt -> Feature e
-svgVisibility = attr "visibility"
+svgVisibility = attribute "visibility"
 
 svgWidth :: Txt -> Feature e
-svgWidth = attr "width"
+svgWidth = attribute "width"
 
 svgWidths :: Txt -> Feature e
-svgWidths = attr "widths"
+svgWidths = attribute "widths"
 
 svgWordSpacing :: Txt -> Feature e
-svgWordSpacing = attr "word-spacing"
+svgWordSpacing = attribute "word-spacing"
 
 svgWritingMode :: Txt -> Feature e
-svgWritingMode = attr "writing-mode"
+svgWritingMode = attribute "writing-mode"
 
 svgX :: Txt -> Feature e
-svgX = attr "x"
+svgX = attribute "x"
 
 svgXHeight :: Txt -> Feature e
-svgXHeight = attr "xHeight"
+svgXHeight = attribute "xHeight"
 
 svgX1 :: Txt -> Feature e
-svgX1 = attr "x1"
+svgX1 = attribute "x1"
 
 svgX2 :: Txt -> Feature e
-svgX2 = attr "x2"
+svgX2 = attribute "x2"
 
 svgXChannelSelector :: Txt -> Feature e
-svgXChannelSelector = attr "xChannelSelector"
+svgXChannelSelector = attribute "xChannelSelector"
 
 svgXlinkactuate :: Txt -> Feature e
 svgXlinkactuate = xlink "xlink:actuate"
@@ -1225,34 +1272,34 @@ svgXlinktype :: Txt -> Feature e
 svgXlinktype = xlink "xlink:type"
 
 svgXmlbase :: Txt -> Feature e
-svgXmlbase = attr "xml:base"
+svgXmlbase = attribute "xml:base"
 
 svgXmllang :: Txt -> Feature e
-svgXmllang = attr "xml:lang"
+svgXmllang = attribute "xml:lang"
 
 svgXmlspace :: Txt -> Feature e
-svgXmlspace = attr "xml:space"
+svgXmlspace = attribute "xml:space"
 
 svgY :: Txt -> Feature e
-svgY = attr "y"
+svgY = attribute "y"
 
 svgY1 :: Txt -> Feature e
-svgY1 = attr "y1"
+svgY1 = attribute "y1"
 
 svgY2 :: Txt -> Feature e
-svgY2 = attr "y2"
+svgY2 = attribute "y2"
 
 svgYChannelSelector :: Txt -> Feature e
-svgYChannelSelector = attr "yChannelSelector"
+svgYChannelSelector = attribute "yChannelSelector"
 
 svgZ :: Txt -> Feature e
-svgZ = attr "z"
+svgZ = attribute "z"
 
 svgZoomAndPan :: Txt -> Feature e
-svgZoomAndPan = attr "zoomAndPan"
+svgZoomAndPan = attribute "zoomAndPan"
 
 clipPathUrl :: Txt -> Feature e
-clipPathUrl = attr "clip-path" . (\x -> "url(#" <> x <> ")")
+clipPathUrl = attribute "clip-path" . (\x -> "url(#" <> x <> ")")
 
 --------------------------------------------------------------------------------
 -- Event listener 'Attribute's

@@ -29,23 +29,23 @@ type family (fs :: [k -> k']) |&| (x :: k) :: [k'] where
   (f ': fs) |&| x = (f x) ':  fs |&| x
 
 -- Apply a 
-infixr 2 |>
+infixr 2 >:
 class Ap (f :: k -> k') (ys :: [k]) where
-  (|>) :: ((f |$| ys) ~ ys') => Proxy f -> PList ys -> PList ys'
+  (>:) :: ((f |$| ys) ~ ys') => Proxy f -> PList ys -> PList ys'
 instance Ap f '[] where
-  (|>) _ _ = PNull
+  (>:) _ _ = PNull
 instance (Ap f ys) => Ap f (y ': ys) where
-  (|>) pf (PCons ph hs') =
-      PCons (pf <@> ph) (pf |> hs')
+  (>:) pf (PCons ph hs') =
+      PCons (pf <@> ph) (pf >: hs')
 
-infixl 4 <|
+infixl 4 <:
 class On (fs :: [k -> k']) (x :: k) where
-  (<|) :: ((fs |&| x) ~ fs') => PList fs -> Proxy x -> PList fs'
+  (<:) :: ((fs |&| x) ~ fs') => PList fs -> Proxy x -> PList fs'
 instance On '[] x where
-  (<|) _ _ = PNull
+  (<:) _ _ = PNull
 instance On xs k => On (x ': xs) k where
-  (<|) (PCons pf hs) pk =
-    PCons (pf <@> pk) (hs <| pk)
+  (<:) (PCons pf hs) pk =
+    PCons (pf <@> pk) (hs <: pk)
 
 -- higher-kinded proxy application
 infixl 6 <@>
@@ -57,8 +57,6 @@ class EmptyDefault (f :: [k] -> *) where
 
 instance EmptyDefault PList where
   none = PNull
-
-only x = x <:> none
 
 infixr 5 <:>
 class Build (f :: k -> *) (g :: [k] -> *) | g -> f where

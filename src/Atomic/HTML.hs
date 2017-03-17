@@ -8,638 +8,640 @@ import Data.Txt (Txt)
 import Atomic.Attribute
 import Atomic.Construct
 
+import Control.Lens
+
 abbr :: [Feature e] -> [Atom e] -> Atom e
-abbr = html "abbr"
+abbr = mkAtom "abbr"
 
 address :: [Feature e] -> [Atom e] -> Atom e
-address = html "address"
+address = mkAtom "address"
 
 area :: [Feature e] -> Atom e
-area fs = html "area" fs []
+area fs = mkAtom "area" fs []
 
 a :: [Feature e] -> [Atom e] -> Atom e
-a = html "a"
+a = mkAtom "a"
 
 article :: [Feature e] -> [Atom e] -> Atom e
-article = html "article"
+article = mkAtom "article"
 
-aside :: [Feature e] -> [Atom e] -> Atom e
-aside = html "aside"
+aside_ :: [Feature e] -> [Atom e] -> Atom e
+aside_ = mkAtom "aside"
 
 audio :: [Feature e] -> [Atom e] -> Atom e
-audio = html "audio"
+audio = mkAtom "audio"
 
 base :: [Feature e] -> Atom e
-base fs = html "base" fs []
+base fs = mkAtom "base" fs []
 
 bdi :: [Feature e] -> [Atom e] -> Atom e
-bdi = html "bdi"
+bdi = mkAtom "bdi"
 
 bdo :: [Feature e] -> [Atom e] -> Atom e
-bdo = html "bdo"
+bdo = mkAtom "bdo"
 
 big :: [Feature e] -> [Atom e] -> Atom e
-big = html "big"
+big = mkAtom "big"
 
 blockquote :: [Feature e] -> [Atom e] -> Atom e
-blockquote = html "blockquote"
+blockquote = mkAtom "blockquote"
 
 body :: [Feature e] -> [Atom e] -> Atom e
-body = html "body"
+body = mkAtom "body"
 
 b :: [Feature e] -> [Atom e] -> Atom e
-b = html "b"
+b = mkAtom "b"
 
 br :: Atom e
-br = html "br" [] []
+br = mkAtom "br" [] []
 
 button :: [Feature e] -> [Atom e] -> Atom e
-button = html "button"
+button = mkAtom "button"
 
 canvas :: [Feature e] -> [Atom e] -> Atom e
-canvas = html "canvas"
+canvas = mkAtom "canvas"
 
 caption :: [Feature e] -> [Atom e] -> Atom e
-caption = html "caption"
+caption = mkAtom "caption"
 
 cite :: [Feature e] -> [Atom e] -> Atom e
-cite = html "cite"
+cite = mkAtom "cite"
 
 code :: [Feature e] -> [Atom e] -> Atom e
-code = html "code"
+code = mkAtom "code"
 
 col :: [Feature e] -> Atom e
-col fs = html "col" fs []
+col fs = mkAtom "col" fs []
 
 colgroup :: [Feature e] -> [Atom e] -> Atom e
-colgroup = html "colgroup"
+colgroup = mkAtom "colgroup"
 
 data_ :: [Feature e] -> [Atom e] -> Atom e
-data_ = html "data"
+data_ = mkAtom "data"
 
 datalist :: [Feature e] -> [Atom e] -> Atom e
-datalist = html "datalist"
+datalist = mkAtom "datalist"
 
 dd :: [Feature e] -> [Atom e] -> Atom e
-dd = html "dd"
+dd = mkAtom "dd"
 
 description :: Txt -> Atom e
-description d = meta [ name "description", content d ]
+description d = meta [ name "description", contentA d ]
 
 dl :: [Feature e] -> [Atom e] -> Atom e
-dl = html "dl"
+dl = mkAtom "dl"
 
 dt :: [Feature e] -> [Atom e] -> Atom e
-dt = html "dt"
+dt = mkAtom "dt"
 
 del :: [Feature e] -> [Atom e] -> Atom e
-del = html "del"
+del = mkAtom "del"
 
 details :: [Feature e] -> [Atom e] -> Atom e
-details = html "details"
+details = mkAtom "details"
 
 dfn :: [Feature e] -> [Atom e] -> Atom e
-dfn = html "dfn"
+dfn = mkAtom "dfn"
 
 dialog :: [Feature e] -> [Atom e] -> Atom e
-dialog = html "dialog"
+dialog = mkAtom "dialog"
 
 div :: [Feature e] -> [Atom e] -> Atom e
-div = html "div"
+div = mkAtom "div"
 
 em :: [Feature e] -> [Atom e] -> Atom e
-em = html "em"
+em = mkAtom "em"
 
 embed :: [Feature e] -> [Atom e] -> Atom e
-embed = html "embed"
+embed = mkAtom "embed"
 
 fieldset :: [Feature e] -> [Atom e] -> Atom e
-fieldset = html "fieldset"
+fieldset = mkAtom "fieldset"
 
 figcaption :: [Feature e] -> [Atom e] -> Atom e
-figcaption = html "figcaption"
+figcaption = mkAtom "figcaption"
 
 figure :: [Feature e] -> [Atom e] -> Atom e
-figure = html "figure"
+figure = mkAtom "figure"
 
 footer :: [Feature e] -> [Atom e] -> Atom e
-footer = html "footer"
+footer = mkAtom "footer"
 
 form :: [Feature e] -> [Atom e] -> Atom e
-form = html "form"
+form = mkAtom "form"
 
 frame :: [Feature e] ->Atom e
-frame fs = html "frame" fs []
+frame fs = mkAtom "frame" fs []
 
 head :: [Atom e] -> Atom e
-head = html "head" []
+head = mkAtom "head" []
 
 header :: [Feature e] -> [Atom e] -> Atom e
-header = html "header"
+header = mkAtom "header"
 
 h1 :: [Feature e] -> [Atom e] -> Atom e
-h1 = html "h1"
+h1 = mkAtom "h1"
 
 h2 :: [Feature e] -> [Atom e] -> Atom e
-h2 = html "h2"
+h2 = mkAtom "h2"
 
 h3 :: [Feature e] -> [Atom e] -> Atom e
-h3 = html "h3"
+h3 = mkAtom "h3"
 
 h4 :: [Feature e] -> [Atom e] -> Atom e
-h4 = html "h4"
+h4 = mkAtom "h4"
 
 h5 :: [Feature e] -> [Atom e] -> Atom e
-h5 = html "h5"
+h5 = mkAtom "h5"
 
 h6 :: [Feature e] -> [Atom e] -> Atom e
-h6 = html "h6"
+h6 = mkAtom "h6"
 
 hgroup :: [Feature e] -> [Atom e] -> Atom e
-hgroup = html "hgroup"
+hgroup = mkAtom "hgroup"
 
 hr :: [Feature e] -> Atom e
-hr fs = html "hr" fs []
+hr fs = mkAtom "hr" fs []
 
 html_ :: [Feature e] -> [Atom e] -> Atom e
-html_ = html "html"
+html_ = mkAtom "html"
 
 iframe :: [Feature e] -> [Atom e] -> Atom e
-iframe = html "iframe"
+iframe = mkAtom "iframe"
 
 img :: [Feature e] -> Atom e
-img fs = html "img" fs []
+img fs = mkAtom "img" fs []
 
 input :: [Feature e] -> Atom e
-input fs = html "input" fs []
+input fs = mkAtom "input" fs []
 
 textInput :: [Feature e] -> [Atom e] -> Atom e
-textInput fs = html "input" (typeA "text":fs)
+textInput fs = mkAtom "input" (typeA "text":fs)
 
 ins :: [Feature e] -> [Atom e] -> Atom e
-ins = html "ins"
+ins = mkAtom "ins"
 
 i_ :: [Feature e] -> [Atom e] -> Atom e
-i_ = html "i"
+i_ = mkAtom "i"
 
 kbd :: [Feature e] -> [Atom e] -> Atom e
-kbd = html "kbd"
+kbd = mkAtom "kbd"
 
 keygen :: [Feature e] -> [Atom e] -> Atom e
-keygen = html "keygen"
+keygen = mkAtom "keygen"
 
 label :: [Feature e] -> [Atom e] -> Atom e
-label = html "label"
+label = mkAtom "label"
 
 legend :: [Feature e] -> [Atom e] -> Atom e
-legend = html "legend"
+legend = mkAtom "legend"
 
 li :: [Feature e] -> [Atom e] -> Atom e
-li = html "li"
+li = mkAtom "li"
 
 link_ :: [Feature e] -> Atom e
-link_ fs = html "link" fs []
+link_ fs = mkAtom "link" fs []
 
 main_ :: [Feature e] -> [Atom e] -> Atom e
-main_ = html "main"
+main_ = mkAtom "main"
 
 map_ :: [Feature e] -> [Atom e] -> Atom e
-map_ = html "map"
+map_ = mkAtom "map"
 
 mark :: [Feature e] -> [Atom e] -> Atom e
-mark = html "mark"
+mark = mkAtom "mark"
 
 menu :: [Feature e] -> [Atom e] -> Atom e
-menu = html "menu"
+menu = mkAtom "menu"
 
 menuitem :: [Feature e] -> [Atom e] -> Atom e
-menuitem = html "menuitem"
+menuitem = mkAtom "menuitem"
 
 meta :: [Feature e] -> Atom e
-meta fs = html "meta" fs []
+meta fs = mkAtom "meta" fs []
 
 meter :: [Feature e] -> [Atom e] -> Atom e
-meter = html "meter"
+meter = mkAtom "meter"
 
 nav :: [Feature e] -> [Atom e] -> Atom e
-nav = html "nav"
+nav = mkAtom "nav"
 
 noscript :: [Feature e] -> [Atom e] -> Atom e
-noscript = html "noscript"
+noscript = mkAtom "noscript"
 
 object_ :: [Feature e] -> [Atom e] -> Atom e
-object_ = html "object"
+object_ = mkAtom "object"
 
 optgroup :: [Feature e] -> [Atom e] -> Atom e
-optgroup = html "optgroup"
+optgroup = mkAtom "optgroup"
 
 option :: [Feature e] -> [Atom e] -> Atom e
-option = html "option"
+option = mkAtom "option"
 
 ol :: [Feature e] -> [Atom e] -> Atom e
-ol = html "ol"
+ol = mkAtom "ol"
 
 output :: [Feature e] -> [Atom e] -> Atom e
-output = html "output"
+output = mkAtom "output"
 
 p :: [Feature e] -> [Atom e] -> Atom e
-p = html "p"
+p = mkAtom "p"
 
 param :: [Feature e] -> Atom e
-param fs = html "param" fs []
+param fs = mkAtom "param" fs []
 
 picture :: [Feature e] -> [Atom e] -> Atom e
-picture = html "picture"
+picture = mkAtom "picture"
 
-pre :: [Feature e] -> [Atom e] -> Atom e
-pre = html "pre"
+pre_ :: [Feature e] -> [Atom e] -> Atom e
+pre_ = mkAtom "pre"
 
 progress :: [Feature e] -> [Atom e] -> Atom e
-progress = html "progress"
+progress = mkAtom "progress"
 
 q :: [Feature e] -> [Atom e] -> Atom e
-q = html "q"
+q = mkAtom "q"
 
 rp :: [Feature e] -> [Atom e] -> Atom e
-rp = html "rp"
+rp = mkAtom "rp"
 
 rt :: [Feature e] -> [Atom e] -> Atom e
-rt = html "rt"
+rt = mkAtom "rt"
 
 ruby :: [Feature e] -> [Atom e] -> Atom e
-ruby = html "ruby"
+ruby = mkAtom "ruby"
 
 samp :: [Feature e] -> [Atom e] -> Atom e
-samp = html "samp"
+samp = mkAtom "samp"
 
 script :: [Feature e] -> [Atom e] -> Atom e
-script = html "script"
+script = mkAtom "script"
 
 s :: [Feature e] -> [Atom e] -> Atom e
-s = html "s"
+s = mkAtom "s"
 
 section :: [Feature e] -> [Atom e] -> Atom e
-section = html "section"
+section = mkAtom "section"
 
 select_ :: [Feature e] -> [Atom e] -> Atom e
-select_ = html "select"
+select_ = mkAtom "select"
 
 small :: [Feature e] -> [Atom e] -> Atom e
-small = html "small"
+small = mkAtom "small"
 
 source :: [Feature e] -> [Atom e] -> Atom e
-source = html "source"
+source = mkAtom "source"
 
 span :: [Feature e] -> [Atom e] -> Atom e
-span = html "span"
+span = mkAtom "span"
 
 strong :: [Feature e] -> [Atom e] -> Atom e
-strong = html "strong"
+strong = mkAtom "strong"
 
 style :: [Feature e] -> [Atom e] -> Atom e
-style = html "style"
+style = mkAtom "style"
 
 sub :: [Feature e] -> [Atom e] -> Atom e
-sub = html "sub"
+sub = mkAtom "sub"
 
 summary :: [Feature e] -> [Atom e] -> Atom e
-summary = html "summary"
+summary = mkAtom "summary"
 
 sup :: [Feature e] -> [Atom e] -> Atom e
-sup = html "sup"
+sup = mkAtom "sup"
 
 table :: [Feature e] -> [Atom e] -> Atom e
-table = html "table"
+table = mkAtom "table"
 
 tbody :: [Feature e] -> [Atom e] -> Atom e
-tbody = html "tbody"
+tbody = mkAtom "tbody"
 
 td :: [Feature e] -> [Atom e] -> Atom e
-td = html "td"
+td = mkAtom "td"
 
 textarea :: [Feature e] -> [Atom e] -> Atom e
-textarea = html "textarea"
+textarea = mkAtom "textarea"
 
 tfoot :: [Feature e] -> [Atom e] -> Atom e
-tfoot = html "tfoot"
+tfoot = mkAtom "tfoot"
 
 th :: [Feature e] -> [Atom e] -> Atom e
-th = html "th"
+th = mkAtom "th"
 
 thead :: [Feature e] -> [Atom e] -> Atom e
-thead = html "thead"
+thead = mkAtom "thead"
 
 time :: [Feature e] -> [Atom e] -> Atom e
-time = html "time"
+time = mkAtom "time"
 
 title :: Txt -> Atom e
-title jst = html "title" [] [ jss jst ]
+title jst = mkAtom "title" [] [ text jst ]
 
 tr :: [Feature e] -> [Atom e] -> Atom e
-tr = html "tr"
+tr = mkAtom "tr"
 
 track :: [Feature e] -> [Atom e] -> Atom e
-track = html "track"
+track = mkAtom "track"
 
 u :: [Feature e] -> [Atom e] -> Atom e
-u = html "u"
+u = mkAtom "u"
 
 ul :: [Feature e] -> [Atom e] -> Atom e
-ul = html "ul"
+ul = mkAtom "ul"
 
 var_ :: [Feature e] -> [Atom e] -> Atom e
-var_ = html "var"
+var_ = mkAtom "var"
 
 video :: [Feature e] -> [Atom e] -> Atom e
-video = html "video"
+video = mkAtom "video"
 
 viewport :: Txt -> Atom e
-viewport jst = html "meta" [ name "viewport", content jst ] []
+viewport jst = mkAtom "meta" [ name "viewport", contentA jst ] []
 
 wbr :: [Feature e] -> [Atom e] -> Atom e
-wbr = html "wbr"
+wbr = mkAtom "wbr"
 
 --------------------------------------------------------------------------------
 -- SVG
 
 svgA :: [Feature e] -> [Atom e] -> Atom e
-svgA = svgHTML "a"
+svgA = mkSVGAtom "a"
 
 svgAudio :: [Feature e] -> [Atom e] -> Atom e
-svgAudio = svgHTML "audio"
+svgAudio = mkSVGAtom "audio"
 
 svgAltGlyph :: [Feature e] -> [Atom e] -> Atom e
-svgAltGlyph = svgHTML "altGlyph"
+svgAltGlyph = mkSVGAtom "altGlyph"
 
 svgAltGlyphDef :: [Feature e] -> [Atom e] -> Atom e
-svgAltGlyphDef = svgHTML "altGlyphDef"
+svgAltGlyphDef = mkSVGAtom "altGlyphDef"
 
 svgAltGlyphItem :: [Feature e] -> [Atom e] -> Atom e
-svgAltGlyphItem = svgHTML "altGlyphItem"
+svgAltGlyphItem = mkSVGAtom "altGlyphItem"
 
 svgAnimate :: [Feature e] -> [Atom e] -> Atom e
-svgAnimate = svgHTML "animate"
+svgAnimate = mkSVGAtom "animate"
 
 svgAnimateColor :: [Feature e] -> [Atom e] -> Atom e
-svgAnimateColor = svgHTML "animateColor"
+svgAnimateColor = mkSVGAtom "animateColor"
 
 svgAnimateMotion :: [Feature e] -> [Atom e] -> Atom e
-svgAnimateMotion = svgHTML "animateMotion"
+svgAnimateMotion = mkSVGAtom "animateMotion"
 
 svgAnimateTransform :: [Feature e] -> [Atom e] -> Atom e
-svgAnimateTransform = svgHTML "animateTransform"
+svgAnimateTransform = mkSVGAtom "animateTransform"
 
 svgCanvas :: [Feature e] -> [Atom e] -> Atom e
-svgCanvas = svgHTML "canvas"
+svgCanvas = mkSVGAtom "canvas"
 
 svgCircle :: [Feature e] -> [Atom e] -> Atom e
-svgCircle = svgHTML "circle"
+svgCircle = mkSVGAtom "circle"
 
 svgClipPath :: [Feature e] -> [Atom e] -> Atom e
-svgClipPath = svgHTML "clipPath"
+svgClipPath = mkSVGAtom "clipPath"
 
 svgColorProfile :: [Feature e] -> [Atom e] -> Atom e
-svgColorProfile = svgHTML "color-profile"
+svgColorProfile = mkSVGAtom "color-profile"
 
 svgCursor :: [Feature e] -> [Atom e] -> Atom e
-svgCursor = svgHTML "cursor"
+svgCursor = mkSVGAtom "cursor"
 
 svgDefs :: [Feature e] -> [Atom e] -> Atom e
-svgDefs = svgHTML "defs"
+svgDefs = mkSVGAtom "defs"
 
 svgDesc :: [Feature e] -> [Atom e] -> Atom e
-svgDesc = svgHTML "desc"
+svgDesc = mkSVGAtom "desc"
 
 svgDiscard :: [Feature e] -> [Atom e] -> Atom e
-svgDiscard = svgHTML "discard"
+svgDiscard = mkSVGAtom "discard"
 
 svgEllipse :: [Feature e] -> [Atom e] -> Atom e
-svgEllipse = svgHTML "ellipse"
+svgEllipse = mkSVGAtom "ellipse"
 
 svgFeBlend :: [Feature e] -> [Atom e] -> Atom e
-svgFeBlend = svgHTML "feBlend"
+svgFeBlend = mkSVGAtom "feBlend"
 
 svgFeColorMatrix :: [Feature e] -> [Atom e] -> Atom e
-svgFeColorMatrix = svgHTML "feColorMatrix"
+svgFeColorMatrix = mkSVGAtom "feColorMatrix"
 
 svgFeComponentTransfer :: [Feature e] -> [Atom e] -> Atom e
-svgFeComponentTransfer = svgHTML "feComponentTransfer"
+svgFeComponentTransfer = mkSVGAtom "feComponentTransfer"
 
 svgFeComposite :: [Feature e] -> [Atom e] -> Atom e
-svgFeComposite = svgHTML "feComposite"
+svgFeComposite = mkSVGAtom "feComposite"
 
 svgFeConvolveMatrix :: [Feature e] -> [Atom e] -> Atom e
-svgFeConvolveMatrix = svgHTML "feConvolveMatrix"
+svgFeConvolveMatrix = mkSVGAtom "feConvolveMatrix"
 
 svgFeDiffuseLighting :: [Feature e] -> [Atom e] -> Atom e
-svgFeDiffuseLighting = svgHTML "feDiffuseLighting"
+svgFeDiffuseLighting = mkSVGAtom "feDiffuseLighting"
 
 svgFeDisplacementMap :: [Feature e] -> [Atom e] -> Atom e
-svgFeDisplacementMap = svgHTML "feDisplacementMap"
+svgFeDisplacementMap = mkSVGAtom "feDisplacementMap"
 
 svgFeDistantLight :: [Feature e] -> [Atom e] -> Atom e
-svgFeDistantLight = svgHTML "feDistantLight"
+svgFeDistantLight = mkSVGAtom "feDistantLight"
 
 svgFeDropShadow :: [Feature e] -> [Atom e] -> Atom e
-svgFeDropShadow = svgHTML "feDropShadow"
+svgFeDropShadow = mkSVGAtom "feDropShadow"
 
 svgFeFlood :: [Feature e] -> [Atom e] -> Atom e
-svgFeFlood = svgHTML "feFlood"
+svgFeFlood = mkSVGAtom "feFlood"
 
 svgFeFuncA :: [Feature e] -> [Atom e] -> Atom e
-svgFeFuncA = svgHTML "feFuncA"
+svgFeFuncA = mkSVGAtom "feFuncA"
 
 svgFeFuncB :: [Feature e] -> [Atom e] -> Atom e
-svgFeFuncB = svgHTML "feFuncB"
+svgFeFuncB = mkSVGAtom "feFuncB"
 
 svgFeFuncG :: [Feature e] -> [Atom e] -> Atom e
-svgFeFuncG = svgHTML "feFuncG"
+svgFeFuncG = mkSVGAtom "feFuncG"
 
 svgFeFuncR :: [Feature e] -> [Atom e] -> Atom e
-svgFeFuncR = svgHTML "feFuncR"
+svgFeFuncR = mkSVGAtom "feFuncR"
 
 svgFeGaussianBlur :: [Feature e] -> [Atom e] -> Atom e
-svgFeGaussianBlur = svgHTML "feGaussianBlur"
+svgFeGaussianBlur = mkSVGAtom "feGaussianBlur"
 
 svgFeImage :: [Feature e] -> [Atom e] -> Atom e
-svgFeImage = svgHTML "feImage"
+svgFeImage = mkSVGAtom "feImage"
 
 svgFeMerge :: [Feature e] -> [Atom e] -> Atom e
-svgFeMerge = svgHTML "feMerge"
+svgFeMerge = mkSVGAtom "feMerge"
 
 svgFeMergeNode :: [Feature e] -> [Atom e] -> Atom e
-svgFeMergeNode = svgHTML "feMergeNode"
+svgFeMergeNode = mkSVGAtom "feMergeNode"
 
 svgFeMorphology :: [Feature e] -> [Atom e] -> Atom e
-svgFeMorphology = svgHTML "feMorphology"
+svgFeMorphology = mkSVGAtom "feMorphology"
 
 svgFeOffset :: [Feature e] -> [Atom e] -> Atom e
-svgFeOffset = svgHTML "feOffset"
+svgFeOffset = mkSVGAtom "feOffset"
 
 svgFePointLight :: [Feature e] -> [Atom e] -> Atom e
-svgFePointLight = svgHTML "fePointLight"
+svgFePointLight = mkSVGAtom "fePointLight"
 
 svgFeSpecularLighting :: [Feature e] -> [Atom e] -> Atom e
-svgFeSpecularLighting = svgHTML "feSpecularLighting"
+svgFeSpecularLighting = mkSVGAtom "feSpecularLighting"
 
 svgFeSpotLight :: [Feature e] -> [Atom e] -> Atom e
-svgFeSpotLight = svgHTML "feSpotLight"
+svgFeSpotLight = mkSVGAtom "feSpotLight"
 
 svgFeTile :: [Feature e] -> [Atom e] -> Atom e
-svgFeTile = svgHTML "feTile"
+svgFeTile = mkSVGAtom "feTile"
 
 svgFeTurbulence :: [Feature e] -> [Atom e] -> Atom e
-svgFeTurbulence = svgHTML "feTurbulence"
+svgFeTurbulence = mkSVGAtom "feTurbulence"
 
 svgFilter :: [Feature e] -> [Atom e] -> Atom e
-svgFilter = svgHTML "filter"
+svgFilter = mkSVGAtom "filter"
 
 svgFont :: [Feature e] -> [Atom e] -> Atom e
-svgFont = svgHTML "font"
+svgFont = mkSVGAtom "font"
 
 svgFontFace :: [Feature e] -> [Atom e] -> Atom e
-svgFontFace = svgHTML "font-face"
+svgFontFace = mkSVGAtom "font-face"
 
 svgFontFaceFormat :: [Feature e] -> [Atom e] -> Atom e
-svgFontFaceFormat = svgHTML "font-face-format"
+svgFontFaceFormat = mkSVGAtom "font-face-format"
 
 svgFontFaceName :: [Feature e] -> [Atom e] -> Atom e
-svgFontFaceName = svgHTML "font-face-name"
+svgFontFaceName = mkSVGAtom "font-face-name"
 
 svgFontFaceSrc :: [Feature e] -> [Atom e] -> Atom e
-svgFontFaceSrc = svgHTML "font-face-src"
+svgFontFaceSrc = mkSVGAtom "font-face-src"
 
 svgFontFaceUri :: [Feature e] -> [Atom e] -> Atom e
-svgFontFaceUri = svgHTML "font-face-uri"
+svgFontFaceUri = mkSVGAtom "font-face-uri"
 
 svgForeignObject :: [Feature e] -> [Atom e] -> Atom e
-svgForeignObject = svgHTML "foreignObject"
+svgForeignObject = mkSVGAtom "foreignObject"
 
 svgG :: [Feature e] -> [Atom e] -> Atom e
-svgG = svgHTML "g"
+svgG = mkSVGAtom "g"
 
 svgGlyph :: [Feature e] -> [Atom e] -> Atom e
-svgGlyph = svgHTML "glyph"
+svgGlyph = mkSVGAtom "glyph"
 
 svgGlyphRef :: [Feature e] -> [Atom e] -> Atom e
-svgGlyphRef = svgHTML "glyphRef"
+svgGlyphRef = mkSVGAtom "glyphRef"
 
 svgHatch :: [Feature e] -> [Atom e] -> Atom e
-svgHatch = svgHTML "hatch"
+svgHatch = mkSVGAtom "hatch"
 
 svgHatchpath :: [Feature e] -> [Atom e] -> Atom e
-svgHatchpath = svgHTML "hatchpath"
+svgHatchpath = mkSVGAtom "hatchpath"
 
 svgHkern :: [Feature e] -> [Atom e] -> Atom e
-svgHkern = svgHTML "hkern"
+svgHkern = mkSVGAtom "hkern"
 
 svgIframe :: [Feature e] -> [Atom e] -> Atom e
-svgIframe = svgHTML "iframe"
+svgIframe = mkSVGAtom "iframe"
 
 svgImage :: [Feature e] -> [Atom e] -> Atom e
-svgImage = svgHTML "image"
+svgImage = mkSVGAtom "image"
 
 svgLine :: [Feature e] -> [Atom e] -> Atom e
-svgLine = svgHTML "line"
+svgLine = mkSVGAtom "line"
 
 svgLinearGradient :: [Feature e] -> [Atom e] -> Atom e
-svgLinearGradient = svgHTML "linearGradient"
+svgLinearGradient = mkSVGAtom "linearGradient"
 
 svgMarker :: [Feature e] -> [Atom e] -> Atom e
-svgMarker = svgHTML "marker"
+svgMarker = mkSVGAtom "marker"
 
 svgMask :: [Feature e] -> [Atom e] -> Atom e
-svgMask = svgHTML "mask"
+svgMask = mkSVGAtom "mask"
 
 svgMesh :: [Feature e] -> [Atom e] -> Atom e
-svgMesh = svgHTML "mesh"
+svgMesh = mkSVGAtom "mesh"
 
 svgMeshgradient :: [Feature e] -> [Atom e] -> Atom e
-svgMeshgradient = svgHTML "meshgradient"
+svgMeshgradient = mkSVGAtom "meshgradient"
 
 svgMeshpatch :: [Feature e] -> [Atom e] -> Atom e
-svgMeshpatch = svgHTML "meshpatch"
+svgMeshpatch = mkSVGAtom "meshpatch"
 
 svgMeshrow :: [Feature e] -> [Atom e] -> Atom e
-svgMeshrow = svgHTML "meshrow"
+svgMeshrow = mkSVGAtom "meshrow"
 
 svgMetadata :: [Feature e] -> [Atom e] -> Atom e
-svgMetadata = svgHTML "metadata"
+svgMetadata = mkSVGAtom "metadata"
 
 svgMissingGlyph :: [Feature e] -> [Atom e] -> Atom e
-svgMissingGlyph = svgHTML "missing-glyph"
+svgMissingGlyph = mkSVGAtom "missing-glyph"
 
 svgMpath :: [Feature e] -> [Atom e] -> Atom e
-svgMpath = svgHTML "mpath"
+svgMpath = mkSVGAtom "mpath"
 
 svgPath :: [Feature e] -> [Atom e] -> Atom e
-svgPath = svgHTML "path"
+svgPath = mkSVGAtom "path"
 
 svgPattern :: [Feature e] -> [Atom e] -> Atom e
-svgPattern = svgHTML "pattern"
+svgPattern = mkSVGAtom "pattern"
 
 svgPolygon :: [Feature e] -> [Atom e] -> Atom e
-svgPolygon = svgHTML "polygon"
+svgPolygon = mkSVGAtom "polygon"
 
 svgPolyline :: [Feature e] -> [Atom e] -> Atom e
-svgPolyline = svgHTML "polyline"
+svgPolyline = mkSVGAtom "polyline"
 
 svgRadialGradient :: [Feature e] -> [Atom e] -> Atom e
-svgRadialGradient = svgHTML "radialGradient"
+svgRadialGradient = mkSVGAtom "radialGradient"
 
 svgRect :: [Feature e] -> [Atom e] -> Atom e
-svgRect = svgHTML "rect"
+svgRect = mkSVGAtom "rect"
 
 svgScript :: [Feature e] -> [Atom e] -> Atom e
-svgScript = svgHTML "script"
+svgScript = mkSVGAtom "script"
 
 svgSet :: [Feature e] -> [Atom e] -> Atom e
-svgSet = svgHTML "set"
+svgSet = mkSVGAtom "set"
 
 svgSolidcolor :: [Feature e] -> [Atom e] -> Atom e
-svgSolidcolor = svgHTML "solidcolor"
+svgSolidcolor = mkSVGAtom "solidcolor"
 
 svgStop :: [Feature e] -> [Atom e] -> Atom e
-svgStop = svgHTML "stop"
+svgStop = mkSVGAtom "stop"
 
 svgStyle :: [Feature e] -> [Atom e] -> Atom e
-svgStyle = svgHTML "style"
+svgStyle = mkSVGAtom "style"
 
 svgSvg :: [Feature e] -> [Atom e] -> Atom e
-svgSvg = svgHTML "svg"
+svgSvg = mkSVGAtom "svg"
 
 svgSwitch :: [Feature e] -> [Atom e] -> Atom e
-svgSwitch = svgHTML "switch"
+svgSwitch = mkSVGAtom "switch"
 
 svgSymbol :: [Feature e] -> [Atom e] -> Atom e
-svgSymbol = svgHTML "symbol"
+svgSymbol = mkSVGAtom "symbol"
 
 svgText :: [Feature e] -> [Atom e] -> Atom e
-svgText = svgHTML "text"
+svgText = mkSVGAtom "text"
 
 svgTextPath :: [Feature e] -> [Atom e] -> Atom e
-svgTextPath = svgHTML "textPath"
+svgTextPath = mkSVGAtom "textPath"
 
 svgTitle :: [Feature e] -> [Atom e] -> Atom e
-svgTitle = svgHTML "title"
+svgTitle = mkSVGAtom "title"
 
 svgTref :: [Feature e] -> [Atom e] -> Atom e
-svgTref = svgHTML "tref"
+svgTref = mkSVGAtom "tref"
 
 svgTspan :: [Feature e] -> [Atom e] -> Atom e
-svgTspan = svgHTML "tspan"
+svgTspan = mkSVGAtom "tspan"
 
 svgUnknown :: [Feature e] -> [Atom e] -> Atom e
-svgUnknown = svgHTML "unknown"
+svgUnknown = mkSVGAtom "unknown"
 
 svgUse :: [Feature e] -> [Atom e] -> Atom e
-svgUse = svgHTML "use"
+svgUse = mkSVGAtom "use"
 
 svgVideo :: [Feature e] -> [Atom e] -> Atom e
-svgVideo = svgHTML "video"
+svgVideo = mkSVGAtom "video"
 
 svgView :: [Feature e] -> [Atom e] -> Atom e
-svgView = svgHTML "view"
+svgView = mkSVGAtom "view"
 
 svgVkern :: [Feature e] -> [Atom e] -> Atom e
-svgVkern = svgHTML "vkern"
+svgVkern = mkSVGAtom "vkern"

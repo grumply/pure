@@ -4,7 +4,7 @@
 {-# language CPP #-}
 module Organism (module Organism,module Export) where
 
-import Ef.Base as Export hiding (transform,watch,construct)
+import Ef.Base as Export hiding (As,Index,transform,watch,construct,uncons,distribute,embed,observe)
 import qualified Ef.Base
 import Ef.Reflect as Export
 import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
@@ -87,7 +87,7 @@ type OrganismBase r =
    , State () Shutdown
    ]
 
-type OrganismKey' ms c = Key (As (Code ms c) c)
+type OrganismKey' ms c = Key (Ef.Base.As (Code ms c) c)
 type OrganismKey ms r = OrganismKey' (Appended ms (OrganismBase r)) IO
 type OrganismBuilder' ts c r = Modules (OrganismBase r) (Action ts c) -> c (Modules ts (Action ts c))
 type OrganismBuilder ts r = OrganismBuilder' (Appended ts (OrganismBase r)) IO r

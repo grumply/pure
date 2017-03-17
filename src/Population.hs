@@ -4,7 +4,7 @@
 {-# language CPP #-}
 module Population (module Population, module Export) where
 
-import Ef.Base as Export hiding (watch,transform,construct)
+import Ef.Base as Export hiding (As,Index,watch,transform,construct,uncons,distribute,embed,observe)
 import qualified Ef.Event
 import qualified Ef.Base
 import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
@@ -86,7 +86,7 @@ type PopulationBase =
    ,State () Shutdown
    ]
 
-type PopulationKey' ms c = Key (As (Code ms c) IO)
+type PopulationKey' ms c = Key (Ef.Base.As (Code ms c) IO)
 type PopulationKey ms = PopulationKey' (Appended ms PopulationBase) IO
 type PopulationIP = String
 type PopulationPort = Int
@@ -99,7 +99,7 @@ type PopulationBuilder' ts c = Modules PopulationBase (Action ts c) -> c (Module
 type PopulationBuilder ts = PopulationBuilder' (Appended ts PopulationBase) IO
 type PopulationPrimer' ms c = Code ms c ()
 type PopulationPrimer ms = PopulationPrimer' (Appended ms PopulationBase) IO
-type PopulationPresence' pts pms ms c = As (Code ms c) IO -> Presence' pts pms
+type PopulationPresence' pts pms ms c = Ef.Base.As (Code ms c) IO -> Presence' pts pms
 type PopulationPresence pms ms = PopulationPresence' (Appended pms PresenceBase) (Appended pms PresenceBase) (Appended ms PopulationBase) IO
 
 type Population ms pms = Population' (Appended ms PopulationBase) (Appended ms PopulationBase) IO (Appended pms PresenceBase) (Appended pms PresenceBase)
@@ -249,7 +249,6 @@ run Population {..} = void $ do
       where
         go = do
           (conn,sockAddr) <- accept sock
-          liftIO $ print $ "Got connection from " ++ show sockAddr
           buf <- newSignalBuffer
           forkIO $ void $
             E.handle (\(e :: E.SomeException) -> sClose conn) $ do

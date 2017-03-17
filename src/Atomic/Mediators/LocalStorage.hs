@@ -15,7 +15,6 @@ import Atomic.Signals
 import Atomic.ToTxt
 import Atomic.FromTxt
 import Atomic.FromBS
-import Atomic.Strict
 import Atomic.With
 import Atomic.Message
 import Atomic.TypeRep
@@ -42,6 +41,8 @@ import qualified Data.HashMap.Strict as Map
 
 import Data.Typeable
 import Data.Maybe
+
+import Control.Lens as L
 
 #ifdef __GHCJS__
 -- multi-line strings and CPP = pain
@@ -188,12 +189,12 @@ proxyLocalMessage s mty_proxy = do
                 win <- getWindow
                 Just ls <- W.getLocalStorage win
                 S.removeItem ls key
-                case fromBS (lazify (fromTxt nv :: ByteString)) of
+                case fromBS (view L.lazy (fromTxt nv :: ByteString)) of
                   Left _ -> liftIO $ Prelude.putStrLn "Bad message from storage event."
                   Right (m :: message) ->
                     void $ lift $ sendSelfMessage s mty_proxy m
 #else
-                case fromBS (lazify (fromTxt nv :: ByteString)) of
+                case fromBS (view L.lazy (fromTxt nv :: ByteString)) of
                   Left _ -> liftIO $ Prelude.putStrLn "Bad message from storage event."
                   Right (m :: message) -> return ()
 #endif
@@ -228,7 +229,7 @@ onLocalMessage mty_proxy f = do
               Just ls <- W.getLocalStorage win
               S.removeItem ls key
 #endif
-              case fromBS (lazify (fromTxt nv :: ByteString)) of
+              case fromBS (view L.lazy (fromTxt nv :: ByteString)) of
                 Left _ -> liftIO $ Prelude.putStrLn $ "Bad message from storage event: " ++ show (key,nv)
                 Right (m :: message) -> void $ runAs slf (f m)
           else

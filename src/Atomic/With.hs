@@ -18,9 +18,6 @@ using a = fmap (fmap liftIO) $ liftIO $ using_ a
 with :: (With a m IO, MonadIO n) => a -> m b -> n (Promise b)
 with a m = liftIO $ with_ a m
 
-(#) :: (With a m IO, MonadIO n) => a -> m b -> n (Promise b)
-(#) = with
-
 shutdown :: (With a m IO, MonadIO n) => a -> n ()
 shutdown a = liftIO $ shutdown_ a
 

@@ -372,11 +372,11 @@ listStyleImage = "list-style-image"
 listStylePosition :: Txt
 listStylePosition = "list-style-position"
 
-inside :: Txt
-inside = "inside"
+insideS :: Txt
+insideS = "inside"
 
-outside :: Txt
-outside = "outside"
+outsideS :: Txt
+outsideS = "outside"
 
 disc :: Txt
 disc = "disc"
@@ -492,8 +492,8 @@ tableRow = "table-row"
 tableRowGroup :: Txt
 tableRowGroup = "table-row-group"
 
-both :: Txt
-both = "both"
+bothS :: Txt
+bothS = "both"
 
 float :: Txt
 float = "float"
@@ -726,11 +726,11 @@ wordSpacing = "word-spacing"
 breakWord :: Txt
 breakWord = "break-word"
 
-to :: Txt -> Txt
-to dir = "to " <> dir
+toS :: Txt -> Txt
+toS dir = "to " <> dir
 
-from :: Txt -> Txt
-from dir = "from " <> dir
+fromS :: Txt -> Txt
+fromS dir = "from " <> dir
 
 closestSide :: Txt
 closestSide = "closest-side"
@@ -1016,8 +1016,8 @@ linear = "linear"
 linearGradientS :: Txt -> Txt
 linearGradientS lg = "linear-gradient(" <> lg <> ")"
 
-transform :: Txt
-transform = "transform"
+transformS :: Txt
+transformS = "transform"
 
 transformStyle :: Txt
 transformStyle = "transform-style"

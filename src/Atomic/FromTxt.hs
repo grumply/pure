@@ -76,4 +76,3 @@ instance FromTxt BSL.ByteString where
 #else
   fromTxt = BSL.fromStrict . T.encodeUtf8
 #endif
-

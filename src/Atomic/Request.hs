@@ -3,12 +3,12 @@ module Atomic.Request where
 
 import Atomic.TypeRep
 
-import Data.Txt hiding (index)
+import Data.Txt hiding (identity)
 import Data.Monoid
 import Data.Typeable
 
 import Atomic.ToTxt
-import Atomic.Indexed
+import Atomic.Identify
 
 class (Typeable (requestType :: *)) => Request requestType where
   type Req requestType :: *
@@ -22,9 +22,9 @@ class (Typeable (requestType :: *)) => Request requestType where
   responseHeader :: (Req requestType ~ request) => Proxy requestType -> request -> Txt
   {-# INLINE responseHeader #-}
   default responseHeader :: ( Req requestType ~ request
-                            , Indexed request
-                            , I request ~ requestIndex
-                            , ToTxt requestIndex
+                            , Identify request
+                            , I request ~ requestIdentity
+                            , ToTxt requestIdentity
                             )
                         => Proxy requestType -> request -> Txt
   responseHeader = qualRspHdr
@@ -41,30 +41,30 @@ fullReqHdr = fullRep
 simpleRspHdr :: ( Typeable requestType
                 , Request requestType
                 , Req requestType ~ request
-                , Indexed request
-                , I request ~ requestIndex
-                , ToTxt requestIndex
+                , Identify request
+                , I request ~ requestIdentity
+                , ToTxt requestIdentity
                 )
              => Proxy requestType -> request -> Txt
-simpleRspHdr rqty_proxy req = rep rqty_proxy <> " " <> toTxt (index req)
+simpleRspHdr rqty_proxy req = rep rqty_proxy <> " " <> toTxt (identity req)
 
 qualRspHdr :: ( Typeable requestType
               , Request requestType
               , Req requestType ~ request
-              , Indexed request
-              , I request ~ requestIndex
-              , ToTxt requestIndex
+              , Identify request
+              , I request ~ requestIdentity
+              , ToTxt requestIdentity
               )
            => Proxy requestType -> request -> Txt
-qualRspHdr rqty_proxy req = qualRep rqty_proxy <> " " <> toTxt (index req)
+qualRspHdr rqty_proxy req = qualRep rqty_proxy <> " " <> toTxt (identity req)
 
 fullRspHdr :: ( Typeable requestType
               , Request requestType
               , Req requestType ~ request
-              , Indexed request
-              , I request ~ requestIndex
-              , ToTxt requestIndex
+              , Identify request
+              , I request ~ requestIdentity
+              , ToTxt requestIdentity
               )
            => Proxy requestType -> request -> Txt
-fullRspHdr rqty_proxy req = fullRep rqty_proxy <> " " <> toTxt (index req)
+fullRspHdr rqty_proxy req = fullRep rqty_proxy <> " " <> toTxt (identity req)
 

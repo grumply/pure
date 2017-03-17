@@ -19,7 +19,7 @@ import Data.Micros
 import Atomic.API
 import Atomic.Dispatch
 import Atomic.Endpoint
-import Atomic.Indexed
+import Atomic.Identify
 import Atomic.Message
 import Atomic.TypeRep
 import Atomic.Request
@@ -29,7 +29,6 @@ import Atomic.ToBS
 import Atomic.ToTxt
 import Atomic.FromBS
 import Atomic.FromTxt
-import Atomic.Strict
 
 import Data.Queue
 
@@ -79,6 +78,8 @@ import System.IO.Unsafe
 import Unsafe.Coerce
 
 import Data.ByteString.Lazy as BSL hiding (putStrLn)
+
+import Control.Lens as L
 
 type LazyByteString = BSL.ByteString
 
@@ -157,10 +158,9 @@ data RequestHandler ms c rqTy
          , Request rqTy
 
          , Req rqTy ~ request
-         , Indexed request
+         , Identify request
          , I request ~ rqI
          , FromJSON request
-         , ToTxt rqI
 
          , Rsp rqTy ~ response
          , ToJSON response
@@ -178,10 +178,9 @@ responds :: ( MonadIO c
             , Request rqTy
 
             , Req rqTy ~ request
-            , Indexed request
+            , Identify request
             , I request ~ rqI
             , FromJSON request
-            , ToTxt rqI
 
             , Rsp rqTy ~ response
             , ToJSON response
@@ -654,8 +653,8 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
   where
     go sec minu mps mpm buf = do
       eem <- receiveIO c
-#ifdef DEBUGWS
-      putStrLn $ "Received websocket message: " ++ show eem
+#ifdef DEBUGWS || DEVEL
+      Prelude.putStrLn $ "Received websocket message: " ++ show eem
 #endif
       now <- timeInMicros
       let mps' = pred mps
@@ -692,13 +691,13 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
             mhs <- liftIO $ readIORef mhs_
             case Map.lookup h mhs of
               Nothing -> do
-#ifdef DEBUGWS
-                putStrLn $ "Unhandled message: " ++ show (toTxt m)
+#ifdef DEBUGWS || DEVEL
+                Prelude.putStrLn $ "Unhandled message: " ++ show (encode m)
 #endif
                 return ()
               Just mnw -> do
-#ifdef DEBUGWS
-                putStrLn $ "Dispatching message: " ++ show h
+#ifdef DEBUGWS || DEVEL
+                Prelude.putStrLn $ "Dispatching message: " ++ show (encode m)
 #endif
                 syndicate mnw m
             simpleCheckThroughput
@@ -741,14 +740,14 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
               buffer q rnr (wsClose (BadMessageReceived $ toTxt str))
 
         Left Closed -> do
-#ifdef DEBUGWS
-          putStrLn "Websocket is closed; receiveloop failed."
+#ifdef DEBUGWS || DEVEL
+          Prelude.putStrLn "Websocket is closed; receiveloop failed."
 #endif
           buffer q rnr (wsClose ClientClosedConnection)
 
         x -> do
-#ifdef DEBUGWS
-          putStrLn $ "receiveloop websocket exception: " ++ show x
+#ifdef DEBUGWS || DEVEL
+          Prelude.putStrLn $ "receiveloop websocket exception: " ++ show x
 #endif
           writeIORef buf mempty -- just in case
           continue
@@ -836,7 +835,7 @@ sslConnect conn = liftIO $ do
   return ssl
 #endif
 
-newClientSocket host port = E.handle (\(_ :: SomeException) -> return Nothing) $ do
+newClientSocket host port = E.handle (\(_ :: IOException) -> return Nothing) $ do
   let hints = S.defaultHints
                   { S.addrFlags = [S.AI_ADDRCONFIG, S.AI_NUMERICSERV]
                   , S.addrFamily = S.AF_INET
@@ -904,7 +903,10 @@ sendRaw b = do
   WebSocket {..} <- get
   case wsSocket of
     Just (_,_,c,_) -> do
-      ewssu <- liftIO $ E.handle (\(e :: SomeException) -> do
+#ifdef DEBUGWS || DEVEL
+      liftIO $ Prelude.putStrLn $ "sending: " ++ show b
+#endif
+      ewssu <- liftIO $ E.handle (\(e :: IOException) -> do
                                     -- liftIO $ putStrLn "Got an exception in sendRaw"
                                     return $ Left (WSClosed ClientClosedConnection)
                                  )
@@ -935,7 +937,10 @@ sendRawStream h bl = do
   WebSocket {..} <- get
   case wsSocket of
     Just (_,_,c,_) -> do
-      ewssu <- liftIO $ E.handle (\(e :: SomeException) -> do
+#ifdef DEBUGWS || DEVEL
+      liftIO $ Prelude.putStrLn $ "sending: " ++ show bl
+#endif
+      ewssu <- liftIO $ E.handle (\(e :: IOException) -> do
                                      -- liftIO $ putStrLn "Got an exception in sendRawStream"
                                      return (Left $ WSClosed ClientClosedConnection)
                                  )
@@ -1032,9 +1037,8 @@ requestWith :: ( MonadIO c
 
                , Req rqTy ~ request
                , ToJSON request
-               , Indexed request
+               , Identify request
                , I request ~ rqI
-               , ToTxt rqI
 
                , Rsp rqTy ~ response
                , FromJSON response
@@ -1092,9 +1096,8 @@ apiRequestWith :: ( MonadIO c
 
                   , Req rqTy ~ request
                   , ToJSON request
-                  , Indexed request
+                  , Identify request
                   , I request ~ rqI
-                  , ToTxt rqI
 
                   , Rsp rqTy ~ response
                   , FromJSON response
@@ -1149,9 +1152,8 @@ request :: ( MonadIO c
 
            , Req rqTy ~ request
            , ToJSON request
-           , Indexed request
+           , Identify request
            , I request ~ rqI
-           , ToTxt rqI
 
            , Rsp rqTy ~ response
            , FromJSON response
@@ -1199,9 +1201,8 @@ apiRequest :: forall c ms rqTy request rqI response rqs msgs.
 
               , Req rqTy ~ request
               , ToJSON request
-              , Indexed request
+              , Identify request
               , I request ~ rqI
-              , ToTxt rqI
 
               , Rsp rqTy ~ response
               , FromJSON response
@@ -1256,10 +1257,9 @@ respondWith :: ( MonadIO c
                , Request rqTy
 
                , Req rqTy ~ request
-               , Indexed request
+               , Identify request
                , I request ~ rqI
                , FromJSON request
-               , ToTxt rqI
 
                , Rsp rqTy ~ response
                , ToJSON response
@@ -1315,10 +1315,9 @@ respond :: ( MonadIO c
            , Request rqTy
 
            , Req rqTy ~ request
-           , Indexed request
+           , Identify request
            , I request ~ rqI
            , FromJSON request
-           , ToTxt rqI
 
            , Rsp rqTy ~ response
            , ToJSON response
@@ -1524,7 +1523,7 @@ import Data.JSON as AE
 import Atomic.API
 import Atomic.Dispatch
 import Atomic.Endpoint
-import Atomic.Indexed
+import Atomic.Identify
 import Atomic.Message
 import Atomic.TypeRep
 import Atomic.Request
@@ -1534,7 +1533,6 @@ import Atomic.ToBS
 import Atomic.ToTxt
 import Atomic.FromBS
 import Atomic.FromTxt
-import Atomic.Strict
 
 import qualified GHCJS.Buffer as GB
 import qualified GHCJS.DOM as DOM
@@ -1566,6 +1564,8 @@ import Text.Read hiding (lift,get)
 import GHC.Prim
 
 import Data.ByteString.Lazy as BSL hiding (putStrLn)
+
+import Control.Lens as L
 
 type LazyByteString = BSL.ByteString
 
@@ -1657,10 +1657,9 @@ data RequestHandler ms c rqTy
          , Request rqTy
 
          , Req rqTy ~ request
-         , Indexed request
+         , Identify request
          , I request ~ rqI
          , FromJSON request
-         , ToTxt rqI
 
          , Rsp rqTy ~ rsp
          , ToJSON rsp
@@ -1675,10 +1674,9 @@ responds :: ( MonadIO c
             , Request rqTy
 
             , Req rqTy ~ request
-            , Indexed request
+            , Identify request
             , I request ~ rqI
             , FromJSON request
-            , ToTxt rqI
 
             , Rsp rqTy ~ rsp
             , ToJSON rsp
@@ -1895,11 +1893,10 @@ ws_ hn p secure = WebSocket
                       Ev.on sock WS.error $ lift $ syndicate statesNetwork $ WSClosed ServerClosedConnection
                       Ev.on sock WS.message $ do
                         ev <- Ev.event
-                        -- printAny ev
                         case WME.getData $ unsafeCoerce ev of
                           WME.StringData sd -> liftIO $ do
-                          --  printAny sd
-#ifdef DEBUGWS
+                            -- printAny sd
+#ifdef DEBUGWS || DEVEL
                             putStrLn $ "Received message: " ++ show sd
 #endif
                             case JS.uncons sd of
@@ -1920,7 +1917,7 @@ ws_ hn p secure = WebSocket
                                     case Map.lookup (ep m) mhs of
                                       Nothing -> putStrLn $ "(multi-part):No handler found: " ++ show (ep m)
                                       Just h  -> do
-#ifdef DEBUGWS
+#ifdef DEBUGWS || DEVEL
                                         putStrLn $ "Handled message at endpoint: " ++ show (ep m)
 #endif
                                         buffer gb rnr $ syndicate h m
@@ -1934,7 +1931,7 @@ ws_ hn p secure = WebSocket
                                     case Map.lookup (ep m) mhs of
                                       Nothing -> putStrLn $ "No handler found: " ++ show (ep m)
                                       Just h  -> do
-#ifdef DEBUGWS
+#ifdef DEBUGWS || DEVEL
                                         putStrLn $ "Handled message at endpoint: " ++ show (ep m)
 #endif
                                         buffer gb rnr $ syndicate h m
@@ -1959,17 +1956,6 @@ tryNewWebSocket url protocols = do
   ps <- M.toJSVal protocols
   mws <- js_tryNewWebSocket (DT.toJSString url) ps
   return $ DT.nullableToMaybe mws
-
-initializeWS :: forall ms c.
-                (Monad c, '[WebSocket] <: ms)
-             => Code ms c ()
-initializeWS = Send (InitializeWebSocket (Return ()))
-
-initializeWSMsgHandlers :: (MonadIO c, '[WebSocket] <: ms)
-                        => Code ms c ()
-initializeWSMsgHandlers = do
-  mhs <- liftIO $ newIORef Map.empty
-  putWSMsgHandlers mhs
 
 isWSReconnecting :: forall ms c.
                     (Monad c, '[WebSocket] <: ms)
@@ -2068,9 +2054,9 @@ send' m = go True
             Nothing -> return (Left InvalidSocketState)
             Just ws -> do
               let bs = either id toBS m
-                  (sbi,_,_) = GB.fromByteString $ strictify bs
+                  (sbi,_,_) = GB.fromByteString $ view L.strict bs
                   sabi = GB.getArrayBuffer sbi
-#ifdef DEBUGWS
+#ifdef DEBUGWS || DEVEL
               liftIO $ putStrLn $ "send' sending: " ++ show bs
 #endif
               liftIO $ WS.send ws $ Just (M.pFromJSVal (T.jsval sabi) :: DT.ArrayBuffer)
@@ -2086,9 +2072,9 @@ send' m = go True
                   Nothing -> return () -- huh?
                   Just ws -> do
                     let bs = either id toBS m
-                        (sbi,_,_) = GB.fromByteString $ strictify bs
+                        (sbi,_,_) = GB.fromByteString $ view L.strict bs
                         sabi = GB.getArrayBuffer sbi
-#ifdef DEBUGWS
+#ifdef DEBUGWS || DEVEL
                     liftIO $ putStrLn $ "send' sending after websocket state changed: " ++ show bs
 #endif
                     liftIO $ WS.send ws $ Just (M.pFromJSVal (T.jsval sabi) :: DT.ArrayBuffer)
@@ -2112,15 +2098,15 @@ trySend' m = do
       case mws of
         Nothing -> return (Left WSUninitialized) -- not correct....
         Just ws -> do
-          let (sbi,_,_) = GB.fromByteString $ strictify $ either id toBS m
+          let (sbi,_,_) = GB.fromByteString $ view L.strict $ either id toBS m
               sabi = GB.getArrayBuffer sbi
-#ifdef DEBUGWS
-          liftIO $ putStrLn $ "trySend' sending: " ++ show (toTxt m)
+#ifdef DEBUGWS || DEVEL
+          liftIO $ putStrLn $ "trySend' sending: " ++ show (fmap (encode . toJSON) m)
 #endif
           liftIO (Right <$> WS.send ws (Just (M.pFromJSVal (T.jsval sabi) :: DT.ArrayBuffer)))
     _ -> do
-#ifdef DEBUGWS
-      liftIO $ putStrLn $ "trySend' couldn't send: " ++ show (toTxt m)
+#ifdef DEBUGWS || DEVEL
+      liftIO $ putStrLn $ "trySend' couldn't send: " ++ show (fmap (encode . toJSON) m)
 #endif
       return $ Left wss
 
@@ -2237,9 +2223,8 @@ request :: ( MonadIO c
 
             , Req rqTy ~ request
             , ToJSON request
-            , Indexed request
+            , Identify request
             , I request ~ rqI
-            , ToTxt rqI
 
             , Rsp rqTy ~ rsp
             , FromJSON rsp
@@ -2283,9 +2268,8 @@ apiRequest :: ( MonadIO c
 
               , Req rqTy ~ request
               , ToJSON request
-              , Indexed request
+              , Identify request
               , I request ~ rqI
-              , ToTxt rqI
 
               , Rsp rqTy ~ rsp
               , FromJSON rsp
@@ -2337,9 +2321,8 @@ requestWith :: ( MonadIO c
 
                , Req rqTy ~ request
                , ToJSON request
-               , Indexed request
+               , Identify request
                , I request ~ rqI
-               , ToTxt rqI
 
                , Rsp rqTy ~ rsp
                , FromJSON rsp
@@ -2393,9 +2376,8 @@ apiRequestWith :: ( MonadIO c
 
                   , Req rqTy ~ request
                   , ToJSON request
-                  , Indexed request
+                  , Identify request
                   , I request ~ rqI
-                  , ToTxt rqI
 
                   , Rsp rqTy ~ rsp
                   , FromJSON rsp
@@ -2451,10 +2433,9 @@ respondWith :: ( MonadIO c
                , Request rqTy
 
                , Req rqTy ~ request
-               , Indexed request
+               , Identify request
                , I request ~ rqI
                , FromJSON request
-               , ToTxt rqI
 
                , Rsp rqTy ~ rsp
                , ToJSON rsp
@@ -2500,10 +2481,9 @@ respond :: ( MonadIO c
            , Request rqTy
 
            , Req rqTy ~ request
-           , Indexed request
+           , Identify request
            , I request ~ rqI
            , FromJSON request
-           , ToTxt rqI
  
            , Rsp rqTy ~ rsp
            , ToJSON rsp

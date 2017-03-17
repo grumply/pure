@@ -15,6 +15,7 @@ import Data.Time.Clock.POSIX
 #endif
 
 import Atomic.ToTxt
+import Atomic.Identify
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
@@ -24,6 +25,7 @@ foreign import javascript unsafe
 -- milliseconds since beginning of 1970
 newtype Millis = Millis { getMillis :: Integer }
   deriving (Show,Eq,Ord,Generic,ToJSON,FromJSON)
+instance Identify Millis
 instance ToTxt Millis where
   toTxt (Millis ms) = toTxt ms
 instance Num Millis where

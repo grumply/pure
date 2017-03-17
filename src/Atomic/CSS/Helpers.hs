@@ -18,19 +18,6 @@ import Data.JSString as Txt
 import Data.Text as Txt
 #endif
 
-instance Cond Txt where
-  nil = ""
-
-instance IsString (Txt,Bool) where
-  fromString [] = (pack [],True)
-  fromString str = (pack str,True)
-
-#if __GLASGOW_HASKELL__ < 800
-instance Monoid (Txt,Bool) where
-  mempty = fromString []
-  mappend (s1,b1) (s2,b2) = (s1 <> s2,b1 && b2)
-#endif
-
 infixr 6 <&>>
 (<&>>) :: Txt -> Txt -> Txt
 (<&>>) x y = x <> ", " <> y
@@ -42,6 +29,10 @@ infixr 6 <+>
 infixr 6 <<+>>
 (<<+>>) :: Txt -> Txt -> Txt
 (<<+>>) x y = x <> " + " <> y
+
+infixr 6 <<->>
+(<<->>) :: Txt -> Txt -> Txt
+(<<->>) x y = x <> " - " <> y
 
 infixr 6 <<>>
 (<<>>) :: Txt -> Txt -> Txt
