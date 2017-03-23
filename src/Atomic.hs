@@ -4,6 +4,7 @@
 {-# language ImplicitParams #-}
 {-# language ViewPatterns #-}
 {-# language PatternSynonyms #-}
+{-# language UndecidableInstances #-}
 module Atomic
   ( module Atomic
   , module Export
@@ -110,7 +111,7 @@ instance FromMicros Millis where
   -- truncate rather than round
   fromMicros mt = Millis $ (getMicros mt) `Prelude.div` 1000
 
-#if !MIN_VERSION_aeson(0,11,3)
+#if !MIN_VERSION_aeson(0,9,0)
 instance {-# OVERLAPS #-} (ToJSON v,ToTxt k) => ToJSON (HashMap k v) where
   {-# INLINE toJSON #-}
   toJSON =
@@ -134,6 +135,10 @@ instance (FromJSON v) => FromJSON (Tree v) where
   parseJSON j = uncurry Node <$> parseJSON j
 
 #endif
+
+instance {-# OVERLAPPABLE #-} (FromTxt a, ToTxt a) => Monoid a where
+  mempty = (mempty :: Txt) ^. from txt
+  mappend a b = ((a ^. txt) <> (b ^. txt)) ^. from txt
 
 ghc :: Monad m => m () -> m ()
 ghc =
