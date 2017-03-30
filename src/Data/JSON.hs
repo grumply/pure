@@ -1,10 +1,15 @@
 {-# language CPP #-}
+{-# language ConstraintKinds #-}
 module Data.JSON (module Data.JSON, module Export) where
 #ifdef __GHCJS__
+import Ef (Constrain)
+
 import JavaScript.JSON.Types.Instances as Export
 import JavaScript.JSON.Types as Export hiding (Object)
 import JavaScript.JSON.Types.Internal as Export hiding (Object)
 import JavaScript.JSON.Types.Generic as Export
+
+import Data.Typeable
 
 import GHCJS.Types (JSVal)
 import GHCJS.Marshal
@@ -57,9 +62,13 @@ instance Monoid Obj where
   mempty = emptyObject
   mappend = merge_objects_js
 #else
+import Ef (Constrain)
+
 import Data.Aeson as Export hiding (Object)
 import Data.Aeson.Types as Export hiding (Object)
 import Data.Monoid as Export
+
+import Data.Typeable
 
 import qualified Data.Aeson.Types as O (Object)
 

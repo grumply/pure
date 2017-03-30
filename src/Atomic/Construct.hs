@@ -755,7 +755,7 @@ constructVault__ = Vault (unsafePerformIO (newMVar Map.empty))
 lookupConstruct :: (MonadIO c) => Key phantom -> c (Maybe phantom)
 lookupConstruct = vaultLookup constructVault__
 
-getConstructName :: IsConstruct' t ms m => Construct' ts ms m -> Txt
+getConstructName :: IsConstruct' ts ms m => Construct' ts ms m -> Txt
 getConstructName = toTxt . key
 
 addConstruct :: (MonadIO c) => Key phantom -> phantom -> c ()

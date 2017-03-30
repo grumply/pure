@@ -653,7 +653,7 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
   where
     go sec minu mps mpm buf = do
       eem <- receiveIO c
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
       Prelude.putStrLn $ "Received websocket message: " ++ show eem
 #endif
       now <- timeInMicros
@@ -691,12 +691,12 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
             mhs <- liftIO $ readIORef mhs_
             case Map.lookup h mhs of
               Nothing -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
                 Prelude.putStrLn $ "Unhandled message: " ++ show (encode m)
 #endif
                 return ()
               Just mnw -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
                 Prelude.putStrLn $ "Dispatching message: " ++ show (encode m)
 #endif
                 syndicate mnw m
@@ -740,13 +740,13 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
               buffer q rnr (wsClose (BadMessageReceived $ toTxt str))
 
         Left Closed -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
           Prelude.putStrLn "Websocket is closed; receiveloop failed."
 #endif
           buffer q rnr (wsClose ClientClosedConnection)
 
         x -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
           Prelude.putStrLn $ "receiveloop websocket exception: " ++ show x
 #endif
           writeIORef buf mempty -- just in case
@@ -903,7 +903,7 @@ sendRaw b = do
   WebSocket {..} <- get
   case wsSocket of
     Just (_,_,c,_) -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
       liftIO $ Prelude.putStrLn $ "sending: " ++ show b
 #endif
       ewssu <- liftIO $ E.handle (\(e :: IOException) -> do
@@ -937,7 +937,7 @@ sendRawStream h bl = do
   WebSocket {..} <- get
   case wsSocket of
     Just (_,_,c,_) -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
       liftIO $ Prelude.putStrLn $ "sending: " ++ show bl
 #endif
       ewssu <- liftIO $ E.handle (\(e :: IOException) -> do
@@ -1896,7 +1896,7 @@ ws_ hn p secure = WebSocket
                         case WME.getData $ unsafeCoerce ev of
                           WME.StringData sd -> liftIO $ do
                             -- printAny sd
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
                             putStrLn $ "Received message: " ++ show sd
 #endif
                             case JS.uncons sd of
@@ -1917,7 +1917,7 @@ ws_ hn p secure = WebSocket
                                     case Map.lookup (ep m) mhs of
                                       Nothing -> putStrLn $ "(multi-part):No handler found: " ++ show (ep m)
                                       Just h  -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
                                         putStrLn $ "Handled message at endpoint: " ++ show (ep m)
 #endif
                                         buffer gb rnr $ syndicate h m
@@ -1931,7 +1931,7 @@ ws_ hn p secure = WebSocket
                                     case Map.lookup (ep m) mhs of
                                       Nothing -> putStrLn $ "No handler found: " ++ show (ep m)
                                       Just h  -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
                                         putStrLn $ "Handled message at endpoint: " ++ show (ep m)
 #endif
                                         buffer gb rnr $ syndicate h m
@@ -2056,7 +2056,7 @@ send' m = go True
               let bs = either id toBS m
                   (sbi,_,_) = GB.fromByteString $ view L.strict bs
                   sabi = GB.getArrayBuffer sbi
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
               liftIO $ putStrLn $ "send' sending: " ++ show bs
 #endif
               liftIO $ WS.send ws $ Just (M.pFromJSVal (T.jsval sabi) :: DT.ArrayBuffer)
@@ -2074,7 +2074,7 @@ send' m = go True
                     let bs = either id toBS m
                         (sbi,_,_) = GB.fromByteString $ view L.strict bs
                         sabi = GB.getArrayBuffer sbi
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
                     liftIO $ putStrLn $ "send' sending after websocket state changed: " ++ show bs
 #endif
                     liftIO $ WS.send ws $ Just (M.pFromJSVal (T.jsval sabi) :: DT.ArrayBuffer)
@@ -2100,12 +2100,12 @@ trySend' m = do
         Just ws -> do
           let (sbi,_,_) = GB.fromByteString $ view L.strict $ either id toBS m
               sabi = GB.getArrayBuffer sbi
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
           liftIO $ putStrLn $ "trySend' sending: " ++ show (fmap (encode . toJSON) m)
 #endif
           liftIO (Right <$> WS.send ws (Just (M.pFromJSVal (T.jsval sabi) :: DT.ArrayBuffer)))
     _ -> do
-#ifdef DEBUGWS || DEVEL
+#if defined(DEBUGWS) || defined(DEVEL)
       liftIO $ putStrLn $ "trySend' couldn't send: " ++ show (fmap (encode . toJSON) m)
 #endif
       return $ Left wss

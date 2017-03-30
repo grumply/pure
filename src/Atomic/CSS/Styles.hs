@@ -924,8 +924,8 @@ scale3d opts1 opts2 = "scale3d(" <> dec opts1 <> "," <> dec opts2 <> ")"
 rotate :: Double -> Txt
 rotate opts = "rotate(" <> deg opts <> ")"
 
-translate :: Double -> Double -> Txt
-translate opts1 opts2 = "translate(" <> per opts1 <> "," <> per opts2 <> ")"
+translateS :: Double -> Double -> Txt
+translateS opts1 opts2 = "translate(" <> per opts1 <> "," <> per opts2 <> ")"
 
 translateX :: Double -> Txt
 translateX opts1 = "translateX(" <> per opts1 <> ")"
