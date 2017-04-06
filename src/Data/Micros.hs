@@ -8,6 +8,7 @@ import GHC.Generics
 
 import Data.Ratio
 
+import Data.Hashable
 import Data.Txt
 import Data.JSON
 
@@ -31,6 +32,8 @@ instance Num Micros where
   abs = Micros . abs . getMicros
   signum = Micros . signum . getMicros
   fromInteger = Micros
+instance Hashable Micros where
+  hashWithSalt salt (Micros us) = hashWithSalt salt us
 
 micros :: MonadIO c => c Micros
 micros = timeInMicros

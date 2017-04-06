@@ -95,6 +95,23 @@ data FullAPI messages requests
         , requestAPI :: RequestAPI requests
         }
 
+class DeriveMessageAPI msgs where
+  deriveMessageAPI :: PList msgs
+instance DeriveMessageAPI '[] where
+  deriveMessageAPI = PNull
+instance (Message x, DeriveMessageAPI xs) => DeriveMessageAPI (x ': xs) where
+  deriveMessageAPI = PCons (Proxy :: Proxy x) deriveMessageAPI
+
+class DeriveRequestAPI reqs where
+  deriveRequestAPI :: PList reqs
+instance DeriveRequestAPI '[] where
+  deriveRequestAPI = PNull
+instance (Request x, DeriveRequestAPI xs) => DeriveRequestAPI (x ': xs) where
+  deriveRequestAPI = PCons (Proxy :: Proxy x) deriveRequestAPI
+
+deriveAPI :: (ToAPI Message msgs, ToAPI Request reqs, DeriveMessageAPI msgs, DeriveRequestAPI reqs) => FullAPI msgs reqs
+deriveAPI = api deriveMessageAPI deriveRequestAPI
+
 api :: (ToAPI Message ms, ToAPI Request rs) => PList ms -> PList rs -> FullAPI ms rs
 api msgs reqs = API (toAPI msgs) (toAPI reqs)
 
@@ -126,7 +143,7 @@ put :: Proxy Put_
 put = Proxy
 
 data Get_ a
-get :: Proxy Get_
+get :: Proxy 
 get = Proxy
 
 data Post_ a

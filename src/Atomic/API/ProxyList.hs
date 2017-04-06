@@ -1,4 +1,5 @@
 {-# language FunctionalDependencies #-}
+{-# language UndecidableInstances #-}
 module Atomic.API.ProxyList where
 
 import Data.Proxy
@@ -28,7 +29,6 @@ type family (fs :: [k -> k']) |&| (x :: k) :: [k'] where
   '[] |&| x = '[]
   (f ': fs) |&| x = (f x) ':  fs |&| x
 
--- Apply a 
 infixr 2 >:
 class Ap (f :: k -> k') (ys :: [k]) where
   (>:) :: ((f |$| ys) ~ ys') => Proxy f -> PList ys -> PList ys'

@@ -7,6 +7,7 @@ import GHC.Generics
 
 import Data.Ratio
 
+import Data.Hashable
 import Data.Txt
 import Data.JSON
 
@@ -35,6 +36,8 @@ instance Num Millis where
   abs = Millis . abs . getMillis
   signum = Millis . signum . getMillis
   fromInteger = Millis
+instance Hashable Millis where
+  hashWithSalt salt (Millis ms) = hashWithSalt salt ms
 
 millis :: MonadIO c => c Millis
 millis = timeInMillis

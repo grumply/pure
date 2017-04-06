@@ -183,6 +183,9 @@ translated :: (Functor f, Profunctor p, FromTxt a, ToTxt s, Contravariant f)
            => Optic' p f s a
 translated = via txt
 
+identified :: (Functor f, Identify a, Profunctor p, Contravariant f) => Optic' p f a (I a)
+identified = to identity
+
 named :: (Functor f, Identify a, Profunctor p, Contravariant f) => Optic' p f a (I a)
 named = to identity
 
@@ -277,8 +280,23 @@ staticHTML = fromTxt . toTxt
 shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
 shtml _tag _attributes = raw (mkAtom _tag) _attributes . toTxt
 
+{-
+Try this in 8.0
+
+type family HTML ms m = h | h -> ms, h -> m where
+  HTML ms m = Atom (C ms m ())
+
+type family Attribute ms m = a | a -> ms, a -> m where
+  Attribute ms m = Feature (C ms m ())
+
+type family C ms m a = c | c -> ms, c -> m, c -> a where
+  C ms m a = Code (Appended ms (ConstructBase m)) IO a
+-}
+
+-- These will have to suffice for now with 7.10
 type HTML ms m = Atom (Code (Appended ms (ConstructBase m)) IO ())
-type Attribute ms m = Atom (Code (Appended ms (ConstructBase m)) IO ())
+type Attribute ms m = Feature (Code (Appended ms (ConstructBase m)) IO ())
+type C ms m a = Code (Appended ms (ConstructBase m)) IO a
 
 selfClosing tag =
   case tag of

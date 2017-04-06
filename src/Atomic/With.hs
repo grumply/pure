@@ -25,14 +25,31 @@ initialize :: (With a m IO, Monad m, MonadIO n)
            => a -> n ()
 initialize a = void $ with a (return ())
 
+connectWith :: (With w c' IO, MonadIO c', MonadIO c, '[Revent] <: ms)
+            => w
+            -> c' (Network e)
+            -> (e -> Code '[Event e] (Code ms c) ())
+            -> Code ms c (Promise (IO ()))
 connectWith w networkGetter f = do
   buf <- getReventBuffer
   p <- periodical
   Just s <- subscribe p f
+  pr <- promise
   with w $ do
     nw <- networkGetter
     joinNetwork nw p buf
-  return (s,p)
+    fulfill pr (stop s >> leaveNetwork nw p)
+  return pr
+
+syndicateWith :: (With w c' IO, MonadIO c', MonadIO c, '[Revent] <: ms)
+              => w
+              -> c' (Network e)
+              -> e
+              -> Code ms c (Promise ())
+syndicateWith w networkGetter e = do
+  with w $ do
+    nw <- networkGetter
+    syndicate nw e
 
 -- Do not use this for a self shutdown network; it will block!
 onShutdown :: ( With a (Code ms IO) IO

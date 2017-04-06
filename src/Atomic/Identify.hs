@@ -43,6 +43,3 @@ instance {-# OVERLAPPABLE #-} Identify (a,b,c,d,e,f,g) where
 instance {-# OVERLAPPABLE #-} Identify (a,b,c,d,e,f,g,h) where
   type I (a,b,c,d,e,f,g,h) = a
   identity (a,_,_,_,_,_,_,_) = a
-
-instance {-# OVERLAPPABLE #-} (Identify a, Eq (I a)) => Eq a where
-  (==) a b = identity a == identity b
