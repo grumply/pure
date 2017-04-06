@@ -53,6 +53,12 @@ timeInMillis =
 class FromMillis a where
   fromMillis :: Millis -> a
 
+instance FromMillis Integer where
+  fromMillis = getMillis
+
+instance FromMillis Double where
+  fromMillis = fromInteger . getMillis
+
 #ifndef __GHCJS__
 instance FromMillis POSIXTime where
   fromMillis (Millis jst) = posixFromMillis jst

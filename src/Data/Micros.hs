@@ -49,6 +49,12 @@ timeInMicros =
 class FromMicros a where
   fromMicros :: Micros -> a
 
+instance FromMicros Double where
+  fromMicros = fromInteger . getMicros
+
+instance FromMicros Integer where
+  fromMicros = getMicros
+
 #ifndef __GHCJS__
 instance FromMicros POSIXTime where
   fromMicros (Micros mt) = posixFromMicros mt

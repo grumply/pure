@@ -3,7 +3,7 @@ module Atomic.Request where
 
 import Atomic.TypeRep
 
-import Data.Txt hiding (identity)
+import Data.Txt
 import Data.Monoid
 import Data.Typeable
 
@@ -46,7 +46,7 @@ simpleRspHdr :: ( Typeable requestType
                 , ToTxt requestIdentity
                 )
              => Proxy requestType -> request -> Txt
-simpleRspHdr rqty_proxy req = rep rqty_proxy <> " " <> toTxt (identity req)
+simpleRspHdr rqty_proxy req = rep rqty_proxy <> " " <> toTxt (identify req)
 
 qualRspHdr :: ( Typeable requestType
               , Request requestType
@@ -56,7 +56,7 @@ qualRspHdr :: ( Typeable requestType
               , ToTxt requestIdentity
               )
            => Proxy requestType -> request -> Txt
-qualRspHdr rqty_proxy req = qualRep rqty_proxy <> " " <> toTxt (identity req)
+qualRspHdr rqty_proxy req = qualRep rqty_proxy <> " " <> toTxt (identify req)
 
 fullRspHdr :: ( Typeable requestType
               , Request requestType
@@ -66,5 +66,5 @@ fullRspHdr :: ( Typeable requestType
               , ToTxt requestIdentity
               )
            => Proxy requestType -> request -> Txt
-fullRspHdr rqty_proxy req = fullRep rqty_proxy <> " " <> toTxt (identity req)
+fullRspHdr rqty_proxy req = fullRep rqty_proxy <> " " <> toTxt (identify req)
 

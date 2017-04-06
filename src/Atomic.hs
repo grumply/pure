@@ -140,6 +140,10 @@ instance {-# OVERLAPPABLE #-} (FromTxt a, ToTxt a) => Monoid a where
   mempty = (mempty :: Txt) ^. from txt
   mappend a b = ((a ^. txt) <> (b ^. txt)) ^. from txt
 
+instance Identify Txt where
+  type I Txt = Int
+  identify = hash
+
 ghc :: Monad m => m () -> m ()
 ghc =
 #ifndef __GHCJS__
@@ -184,10 +188,10 @@ translated :: (Functor f, Profunctor p, FromTxt a, ToTxt s, Contravariant f)
 translated = via txt
 
 identified :: (Functor f, Identify a, Profunctor p, Contravariant f) => Optic' p f a (I a)
-identified = to identity
+identified = to identify
 
 named :: (Functor f, Identify a, Profunctor p, Contravariant f) => Optic' p f a (I a)
-named = to identity
+named = to identify
 
 renamed :: (Functor f, Identify a, FromTxt x, Profunctor p, ToTxt (I a), Contravariant f)
         => p x (f x) -> p a (f a)
