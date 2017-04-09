@@ -9,6 +9,8 @@ import Data.Txt
 
 class Cond a where
   nil :: a
+  default nil :: (Monoid a, Eq a) => a
+  nil = mempty
 
 infix 9 ?
 (?) :: (Cond x, Eq x) => x -> a -> a -> a
