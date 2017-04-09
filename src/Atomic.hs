@@ -136,13 +136,9 @@ instance (FromJSON v) => FromJSON (Tree v) where
 
 #endif
 
-instance {-# OVERLAPPABLE #-} (FromTxt a, ToTxt a) => Monoid a where
-  mempty = (mempty :: Txt) ^. from txt
-  mappend a b = ((a ^. txt) <> (b ^. txt)) ^. from txt
-
 instance Identify Txt where
-  type I Txt = Int
-  identify = hash
+  type I Txt = Txt
+  identify = id
 
 ghc :: Monad m => m () -> m ()
 ghc =
