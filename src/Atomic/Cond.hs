@@ -41,6 +41,3 @@ instance Cond (Maybe a) where
 
 instance Cond Bool where
   nil = False
-
-instance {-# OVERLAPPABLE #-} (Monoid a, Eq a) => Cond a where
-  nil = mempty
