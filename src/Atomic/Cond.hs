@@ -43,3 +43,5 @@ instance Cond (Maybe a) where
 
 instance Cond Bool where
   nil = False
+
+instance Cond Txt
