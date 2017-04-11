@@ -5,6 +5,8 @@ module Atomic.Route where
 
 import Data.Txt
 
+import Atomic.FromTxt
+
 import Ef.Base
 
 import Data.Bifunctor
@@ -62,7 +64,7 @@ instance Functor Route where
 
 instance Delta Route Route
 
-instance Monad c => IsString (Code '[Route] c Txt) where
+instance (Monad c,FromTxt a) => IsString (Code '[Route] c a) where
   fromString = getParamOrKeep . fromString
 
 getRawUrl :: (Monad c) => Code '[Route] c Txt
@@ -83,12 +85,12 @@ setParam p v = Send (SetParam p v (Return ()))
 getParam :: (Monad c) => Txt -> Code '[Route] c (Maybe Txt)
 getParam p = Send (GetParam p Return)
 
-getParamOrKeep :: (Monad c) => Txt -> Code '[Route] c Txt
+getParamOrKeep :: (FromTxt a, Monad c) => Txt -> Code '[Route] c a
 getParamOrKeep p = do
   mp <- getParam p
   case mp of
     Nothing -> keep
-    Just p -> return p
+    Just p -> return (fromTxt p)
 
 subpath :: (Monad c)
         => Txt

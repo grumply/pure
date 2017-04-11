@@ -3,7 +3,6 @@ module Data.Micros where
 
 import Ef.Base
 
-import Data.Millis
 import GHC.Generics
 
 import Data.Ratio
@@ -19,7 +18,11 @@ import Data.Time.Clock.POSIX
 import Atomic.ToTxt
 import Atomic.Identify
 
--- microseconds since beginning of 1970 to an accuracy of 1 millisecond in GHCJS and 1 microsecond in GHC
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "if (performance.now !== 'undefined') { $r = performance.now() + performance.timing.navigationStart } else { $r = new Date().getTime() }" getTime_micros_js :: IO Double
+#endif
+
 newtype Micros = Micros { getMicros :: Integer }
   deriving (Show,Eq,Ord,Generic,ToJSON,FromJSON)
 instance Identify Micros
@@ -41,7 +44,7 @@ micros = timeInMicros
 timeInMicros :: MonadIO c => c Micros
 timeInMicros =
 #ifdef __GHCJS__
-  (Micros . (*1000) . fromIntegral) <$> liftIO getTime_millis_js
+  (Micros . round . (*1000)) <$> liftIO getTime_micros_js
 #else
   (Micros . posixToMicros) <$> (liftIO getPOSIXTime)
 #endif

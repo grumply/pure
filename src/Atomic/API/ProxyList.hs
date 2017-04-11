@@ -71,9 +71,6 @@ class (Appended elems elems' ~ elems'')
   where
     (<++>) :: f elems -> f elems' -> f elems''
 
-instance (Appended es '[] ~ es) => TListAppend f es '[] es where
-  (<++>) l _ = l
-
 instance (Appended '[] es ~ es) => TListAppend f '[] es es where
   (<++>) _ r = r
 

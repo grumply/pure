@@ -111,7 +111,7 @@ instance FromMicros Millis where
   -- truncate rather than round
   fromMicros mt = Millis $ (getMicros mt) `Prelude.div` 1000
 
-#if !MIN_VERSION_aeson(0,9,0)
+#if !MIN_VERSION_aeson(0,9,1)
 instance {-# OVERLAPS #-} (ToJSON v,ToTxt k) => ToJSON (HashMap k v) where
   {-# INLINE toJSON #-}
   toJSON =
@@ -241,6 +241,14 @@ observatory key initial = Mediator {..}
       o <- observable initial
       return (o *:* base)
     prime = return ()
+
+look :: MonadIO c => Observatory m -> c m
+look o = do
+  Right r <- demand =<< with o getO
+  return r
+
+change :: MonadIO c => Observatory m -> m -> c ()
+change o m = void $ with o (setO m)
 
 type Observer m = Construct '[] (Maybe m)
 -- observer :: Observatory m -> ConstructKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m

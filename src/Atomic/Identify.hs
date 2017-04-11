@@ -43,3 +43,12 @@ instance {-# OVERLAPPABLE #-} Identify (a,b,c,d,e,f,g) where
 instance {-# OVERLAPPABLE #-} Identify (a,b,c,d,e,f,g,h) where
   type I (a,b,c,d,e,f,g,h) = a
   identify (a,_,_,_,_,_,_,_) = a
+
+finds :: (Identify a, Eq i, I a ~ i, Applicative g, Monoid (g a), Foldable f) => i -> f a -> g a
+finds i = foldMap go
+  where
+    go a =
+      if identify a == i then
+        pure a
+      else
+        mempty
