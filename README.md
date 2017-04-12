@@ -1,4 +1,6 @@
 # atomic
 A unified full-stack web application framework in Haskell.
 
-A tutorial [GitBook](https://grumply.gitbooks.io/atomic-tutorial/content/) exists.
+Documentation is under construction [here](https://grumply.gitbooks.io/atomic).
+
+A simple real-time chat application with a GitBook tutorial exists [here](https://github.com/grumply/atomic-chat) as a demonstration of the `atomic` fundamentals.
