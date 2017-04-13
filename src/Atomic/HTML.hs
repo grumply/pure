@@ -25,8 +25,8 @@ a = mkAtom "a"
 article :: [Feature e] -> [Atom e] -> Atom e
 article = mkAtom "article"
 
-aside_ :: [Feature e] -> [Atom e] -> Atom e
-aside_ = mkAtom "aside"
+asideE :: [Feature e] -> [Atom e] -> Atom e
+asideE = mkAtom "aside"
 
 audio :: [Feature e] -> [Atom e] -> Atom e
 audio = mkAtom "audio"
@@ -76,8 +76,8 @@ col fs = mkAtom "col" fs []
 colgroup :: [Feature e] -> [Atom e] -> Atom e
 colgroup = mkAtom "colgroup"
 
-data_ :: [Feature e] -> [Atom e] -> Atom e
-data_ = mkAtom "data"
+dataE :: [Feature e] -> [Atom e] -> Atom e
+dataE = mkAtom "data"
 
 datalist :: [Feature e] -> [Atom e] -> Atom e
 datalist = mkAtom "datalist"
@@ -163,8 +163,8 @@ hgroup = mkAtom "hgroup"
 hr :: [Feature e] -> Atom e
 hr fs = mkAtom "hr" fs []
 
-html_ :: [Feature e] -> [Atom e] -> Atom e
-html_ = mkAtom "html"
+htmlE :: [Feature e] -> [Atom e] -> Atom e
+htmlE = mkAtom "html"
 
 iframe :: [Feature e] -> [Atom e] -> Atom e
 iframe = mkAtom "iframe"
@@ -181,8 +181,8 @@ textInput fs = mkAtom "input" (typeA "text":fs)
 ins :: [Feature e] -> [Atom e] -> Atom e
 ins = mkAtom "ins"
 
-i_ :: [Feature e] -> [Atom e] -> Atom e
-i_ = mkAtom "i"
+iE :: [Feature e] -> [Atom e] -> Atom e
+iE = mkAtom "i"
 
 kbd :: [Feature e] -> [Atom e] -> Atom e
 kbd = mkAtom "kbd"
@@ -199,14 +199,14 @@ legend = mkAtom "legend"
 li :: [Feature e] -> [Atom e] -> Atom e
 li = mkAtom "li"
 
-link_ :: [Feature e] -> Atom e
-link_ fs = mkAtom "link" fs []
+linkE :: [Feature e] -> Atom e
+linkE fs = mkAtom "link" fs []
 
-main_ :: [Feature e] -> [Atom e] -> Atom e
-main_ = mkAtom "main"
+mainE :: [Feature e] -> [Atom e] -> Atom e
+mainE = mkAtom "main"
 
-map_ :: [Feature e] -> [Atom e] -> Atom e
-map_ = mkAtom "map"
+mapE :: [Feature e] -> [Atom e] -> Atom e
+mapE = mkAtom "map"
 
 mark :: [Feature e] -> [Atom e] -> Atom e
 mark = mkAtom "mark"
@@ -229,8 +229,8 @@ nav = mkAtom "nav"
 noscript :: [Feature e] -> [Atom e] -> Atom e
 noscript = mkAtom "noscript"
 
-object_ :: [Feature e] -> [Atom e] -> Atom e
-object_ = mkAtom "object"
+objectE :: [Feature e] -> [Atom e] -> Atom e
+objectE = mkAtom "object"
 
 optgroup :: [Feature e] -> [Atom e] -> Atom e
 optgroup = mkAtom "optgroup"
@@ -253,8 +253,8 @@ param fs = mkAtom "param" fs []
 picture :: [Feature e] -> [Atom e] -> Atom e
 picture = mkAtom "picture"
 
-pre_ :: [Feature e] -> [Atom e] -> Atom e
-pre_ = mkAtom "pre"
+preE :: [Feature e] -> [Atom e] -> Atom e
+preE = mkAtom "pre"
 
 progress :: [Feature e] -> [Atom e] -> Atom e
 progress = mkAtom "progress"
@@ -283,8 +283,8 @@ s = mkAtom "s"
 section :: [Feature e] -> [Atom e] -> Atom e
 section = mkAtom "section"
 
-select_ :: [Feature e] -> [Atom e] -> Atom e
-select_ = mkAtom "select"
+selectE :: [Feature e] -> [Atom e] -> Atom e
+selectE = mkAtom "select"
 
 small :: [Feature e] -> [Atom e] -> Atom e
 small = mkAtom "small"
@@ -349,8 +349,8 @@ u = mkAtom "u"
 ul :: [Feature e] -> [Atom e] -> Atom e
 ul = mkAtom "ul"
 
-var_ :: [Feature e] -> [Atom e] -> Atom e
-var_ = mkAtom "var"
+varE :: [Feature e] -> [Atom e] -> Atom e
+varE = mkAtom "var"
 
 video :: [Feature e] -> [Atom e] -> Atom e
 video = mkAtom "video"

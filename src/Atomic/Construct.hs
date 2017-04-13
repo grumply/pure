@@ -807,8 +807,7 @@ mkConstruct mkConstructAction c@Construct {..} = do
             return i
   doc <- getDocument
 
-  -- Initially, I thought I could put this in an animation frame, but that has strange effects on iOS;
-  -- a dynamically added margin-top was causing the page to load pre-scrolled by the height of the margin.
+  -- Initially, I thought I could put this in an animation frame, but that has odd effects
   i <- initialize
 
   cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
@@ -1885,8 +1884,8 @@ setAttribute_ c element attr =
           element
           (Ev.unsafeEventName ev :: Ev.EventName E.Element T.CustomEvent) -- for the type checking; actually just an object
             $ do ce <- Ev.event
-                 when (_preventDefault os) Ev.preventDefault
-                 when (_stopPropagation os) Ev.stopPropagation
+                 when (_preventDef os) Ev.preventDefault
+                 when (_stopProp os) Ev.stopPropagation
                  liftIO $ f (unsafeCoerce ce) >>= mapM_ c
                  return ()
       return (On' ev os f (Just stopListener))

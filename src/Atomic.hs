@@ -24,6 +24,11 @@ import Data.Hashable as Export hiding (hashed)
 #else
 import Data.Hashable as Export
 #endif
+
+#if MIN_VERSION_aeson(1,0,0)
+import qualified Data.Aeson.Encoding as AE
+#endif
+
 import Data.Typeable as Export
 import GHC.Generics as Export (Generic)
 
@@ -111,7 +116,7 @@ instance FromMicros Millis where
   -- truncate rather than round
   fromMicros mt = Millis $ (getMicros mt) `Prelude.div` 1000
 
-#if !MIN_VERSION_aeson(0,9,1)
+#if !MIN_VERSION_aeson(1,0,0)
 instance {-# OVERLAPS #-} (ToJSON v,ToTxt k) => ToJSON (HashMap k v) where
   {-# INLINE toJSON #-}
   toJSON =
@@ -127,13 +132,22 @@ instance {-# OVERLAPS #-} (FromJSON v,Hashable k,Eq k,FromTxt k) => FromJSON (Ha
       v' <- parseJSON v
       pure (fromTxt k,v')
     pure $ Map.fromList kvs
+#else
 
+instance (ToTxt k,ToJSON k) => ToJSONKey k where
+  toJSONKey = toJSONKeyText toTxt
+
+instance (FromTxt k,FromJSON k) => FromJSONKey k where
+  fromJSONKey = FromJSONKeyText fromTxt
+
+#endif
+
+#ifdef __GHCJS__
 instance (ToJSON v) => ToJSON (Tree v) where
   toJSON (Node root branches) = toJSON (root,branches)
 
 instance (FromJSON v) => FromJSON (Tree v) where
   parseJSON j = uncurry Node <$> parseJSON j
-
 #endif
 
 instance Identify Txt where
@@ -389,7 +403,7 @@ renderSystem (System h c) =
     case h of
       Construct' Construct {..} ->
         toTxt $
-          html_ []
+          htmlE []
             [ render model
             , body []
                 [ case c of
@@ -399,7 +413,7 @@ renderSystem (System h c) =
 renderSystem (Subsystem c) =
   ("<!DOCTYPE html>" <>) $
     toTxt $
-      html_ []
+      htmlE []
         [ head []
         , body []
             [ case c of
@@ -413,7 +427,7 @@ renderSystemBootstrap (System h c) mainScript =
     case h of
       Construct' Construct {..} ->
         toTxt $
-          html_ []
+          htmlE []
             [ head []
             , body []
                 [ case c of
@@ -426,7 +440,7 @@ renderSystemBootstrap (Subsystem c) mainScript =
     case c of
       Construct' a@Construct {} ->
         toTxt $
-          html_ []
+          htmlE []
             [ head []
             , body []
                 [ construct div [ idA "atomic" ] a

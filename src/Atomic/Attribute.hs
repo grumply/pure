@@ -35,8 +35,8 @@ import Data.Aeson (Value(..))
 #endif
 
 data Options = Options
-  { _preventDefault :: Bool
-  , _stopPropagation :: Bool
+  { _preventDef :: Bool
+  , _stopProp   :: Bool
   } deriving (Eq)
 
 defaultOptions :: Options
@@ -195,6 +195,16 @@ on' ev os f = On' ev os f Nothing
 on :: Txt -> e -> Feature e
 on ev e = On ev e Nothing
 
+preventDefault :: Feature e -> Feature e
+preventDefault (On ev e m) = On' ev (Options True False) (\_ -> return (Just e)) Nothing
+preventDefault (On' ev os f m) = On' ev (os { _preventDef = True }) f m
+preventDefault f = f
+
+stopPropagation :: Feature e -> Feature e
+stopPropagation (On ev e m) = On' ev (Options False True) (\_ -> return (Just e)) Nothing
+stopPropagation (On' ev os f m) = On' ev (os { _stopProp = True }) f m
+stopPropagation f = f
+
 onPreventDefault :: Txt -> e -> Feature e
 onPreventDefault ev e = on' ev noDefaultOptions (\_ -> return (Just e))
 
@@ -210,11 +220,11 @@ onIntercept' ev f = on' ev interceptOptions f
 styleList :: [(Txt,Txt)] -> Feature e
 styleList = Style
 
-hrefLocal :: Txt -> Feature e
-hrefLocal = flip Link Nothing
+linkA :: Txt -> Feature e
+linkA = flip Link Nothing
 
-hrefRemote :: Txt -> Feature e
-hrefRemote = attribute "href"
+href :: Txt -> Feature e
+href = attribute "href"
 
 val :: Txt -> Feature e
 val jst = CurrentValue jst
@@ -244,8 +254,8 @@ idA = attribute "id"
 titleA :: Txt -> Feature e
 titleA = attribute "title"
 
-hidden :: Feature e
-hidden = boolAttribute "hidden"
+hiddenA :: Feature e
+hiddenA = boolAttribute "hidden"
 
 typeA :: Txt -> Feature e
 typeA = attribute "type"
@@ -433,8 +443,8 @@ headers = attribute "headers" . JSS.intercalate " "
 scope :: Txt -> Feature e
 scope = attribute "scope"
 
-async :: Txt -> Feature e
-async = attribute "async"
+asyncA :: Txt -> Feature e
+asyncA = attribute "async"
 
 charset :: Txt -> Feature e
 charset = attribute "charset"
