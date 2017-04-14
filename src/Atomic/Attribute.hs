@@ -54,10 +54,12 @@ data Feature e
     { _attr :: Txt
     , _value :: Txt
     }
+  | Property
+    { _prop :: Txt
+    , _value :: Txt
+    }
   | Style
     { _stylePairs :: [(Txt,Txt)] }
-  | CurrentValue
-    { _value :: Txt }
   | On
     { _eventName :: Txt
     , _event :: e
@@ -91,9 +93,9 @@ instance ToJSON (Feature e) where
       go f
     where
       go NullFeature = object [ "type" .= ("null" :: Txt)]
+      go (Property k v) = object [ "type" .= ("prop" :: Txt), "prop" .= k, "val" .= v]
       go (Attribute k v) = object [ "type" .= ("attr" :: Txt), "attr" .= k, "val" .= v]
       go (Style ss) = object [ "type" .= ("style" :: Txt), "styles" .= ss ]
-      go (CurrentValue cv) = object [ "type" .= ("value" :: Txt), "val" .= cv ]
       go (Link e _) = object [ "type" .= ("link" :: Txt), "link" .= e]
       go (SVGLink e _) = object [ "type" .= ("svglink" :: Txt), "link" .= e ]
       go (XLink k v) = object [ "type" .= ("xlink" :: Txt), "key" .= k, "val" .= v]
@@ -113,12 +115,13 @@ instance FromJSON (Feature e) where
           k <- o .: "attr"
           v <- o .: "val"
           pure $ Attribute k v
+        "prop" -> do
+          k <- o .: "prop"
+          v <- o .: "val"
+          pure $ Property k v
         "style" -> do
           ss <- o .: "styles"
           pure $ Style ss
-        "value" -> do
-          v <- o .: "val"
-          pure $ CurrentValue v
         "link" -> do
           l <- o .: "link"
           pure $ Link l Nothing
@@ -133,12 +136,12 @@ instance FromJSON (Feature e) where
 
 instance Eq (Feature e) where
   (==) NullFeature NullFeature = True
+  (==) (Property p v) (Property p' v') =
+    prettyUnsafeEq p p' && prettyUnsafeEq v v'
   (==) (Attribute a v) (Attribute a' v') =
     prettyUnsafeEq a a' && prettyUnsafeEq v v'
   (==) (Style ss) (Style ss') =
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
-  (==) (CurrentValue v) (CurrentValue v') =
-    prettyUnsafeEq v v'
   (==) (On e ev _) (On e' ev' _) =
     prettyUnsafeEq e e' && reallyUnsafeEq ev ev'
   (==) (On' e os ev _) (On' e' os' ev' _) =
@@ -184,10 +187,13 @@ nullA :: Feature e
 nullA = NullFeature
 
 attribute :: Txt -> Txt -> Feature e
-attribute nm = Attribute nm
+attribute = Attribute
 
 boolAttribute :: Txt -> Feature e
 boolAttribute nm = Attribute nm ""
+
+property :: Txt -> Txt -> Feature e
+property = Property
 
 on' :: Txt -> Options -> (Obj -> IO (Maybe e)) -> Feature e
 on' ev os f = On' ev os f Nothing
@@ -227,7 +233,7 @@ href :: Txt -> Feature e
 href = attribute "href"
 
 val :: Txt -> Feature e
-val jst = CurrentValue jst
+val jst = property "value" jst
 
 xlink :: Txt -> Txt -> Feature e
 xlink xl v = XLink xl v
@@ -266,14 +272,14 @@ initialValue = attribute "value"
 defaultValue :: Txt -> Feature e
 defaultValue = attribute "default-value"
 
-checked :: Feature e
-checked = boolAttribute "checked"
+checked :: Bool -> Feature e
+checked b = property "checked" (if b then "checked" else "")
 
 placeholder :: Txt -> Feature e
 placeholder = attribute "placeholder"
 
-selected :: Feature e
-selected = boolAttribute "selected"
+selected :: Bool -> Feature e
+selected b = property "selected" (if b then "selected" else "")
 
 accept :: Txt -> Feature e
 accept = attribute "accept"
@@ -1383,17 +1389,18 @@ onFocus = on "focus"
 
 onKeyUp :: (Int -> e) -> Feature e
 onKeyUp f = on' "keyup" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
-  key <- o .: "key"
+  key <- o .: "keyCode"
   pure $ f key
+
 
 onKeyDown :: (Int -> e) -> Feature e
 onKeyDown f = on' "keydown" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
-  key <- o .: "key"
+  key <- o .: "keyCode"
   pure $ f key
 
 onKeyPress :: (Int -> e) -> Feature e
 onKeyPress f = on' "keypress" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
-  key <- o .: "key"
+  key <- o .: "keyCode"
   pure $ f key
 
 ignoreClick :: Feature e

@@ -20,14 +20,14 @@ infix 9 ?&
 (?&) :: (Cond x, Eq x) => x -> a -> a -> a
 (?&) x t e = x ? e $ t
 
-cond :: Cond a => Bool -> a -> a
+cond :: (Cond x, Eq x, Cond a) => x -> a -> a
 cond b t = b ? t $ nil
 
 may :: Cond a => (b -> a) -> Maybe b -> a
 may = maybe nil
 
-ncond :: Cond a => Bool -> a -> a
-ncond b = cond (not b)
+ncond :: (Cond x, Eq x, Cond a) => x -> a -> a
+ncond b = cond (notNil b)
 
 isNil :: (Cond a, Eq a) => a -> Bool
 isNil = (== nil)
@@ -45,3 +45,15 @@ instance Cond Bool where
   nil = False
 
 instance Cond Txt
+
+instance Cond Int where
+  nil = 0
+
+instance Cond Integer where
+  nil = 0
+
+instance Cond Double where
+  nil = 0
+
+instance Cond Float where
+  nil = 0

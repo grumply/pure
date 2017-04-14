@@ -113,7 +113,11 @@ foreign import javascript unsafe
 
 foreign import javascript unsafe
   "$1[$2] = null;"
-  setPropertyNull :: O.Object -> Txt -> IO ()
+  set_property_null_js :: O.Object -> Txt -> IO ()
+
+foreign import javascript unsafe
+  "$1[$2] = null;"
+  set_element_property_null_js :: E.Element -> Txt -> IO ()
 
 foreign import javascript unsafe
   "for (var property in $2) { $1.style[property] = null; }"
@@ -137,6 +141,9 @@ foreign import javascript unsafe
 
 foreign import javascript unsafe
   "$1.innerHTML = '';" clear_node_js :: N.Node -> IO ()
+
+foreign import javascript unsafe
+  "$1[$2] = $3" set_property_js :: E.Element -> Txt -> Txt -> IO ()
 #endif
 
 type ENode =
@@ -664,14 +671,15 @@ instance ToTxt (Feature e) where
     else
       attr <> "=\"" <> val <> "\""
 
+  toTxt (Property prop val) =
+    prop <> "=\"" <> val <> "\""
+
   toTxt (Style pairs) =
     "style=\""
       <> Txt.intercalate
            (Txt.singleton ';')
            (renderStyles False (mapM_ (uncurry (=:)) pairs))
       <> "\""
-
-  toTxt (CurrentValue _) = mempty
 
   toTxt (On _ _ _)       = mempty
 
@@ -1640,12 +1648,12 @@ applyStyleDiffs el olds0 news0 = do
           mapM (\new@(nm,val) -> O.setProp nm (M.pToJSVal val) obj >> return new) news
 
         go' olds [] =
-          mapM (\old@(nm,_) -> setPropertyNull obj nm >> return old) olds
+          mapM (\old@(nm,_) -> set_property_null_js obj nm >> return old) olds
 
         go' (old@(oname,oval):olds) (new@(nname,nval):news) =
           let
             remove =
-              setPropertyNull obj oname
+              set_property_null_js obj oname
 
             set =
               O.setProp nname (M.pToJSVal nval) obj
@@ -1731,11 +1739,14 @@ runElementDiff f el os0 ms0 ns0 =
             (NullFeature,_) ->
               update
 
-            (CurrentValue oldV,CurrentValue newV) ->
-              if prettyUnsafeEq oldV newV then
-                continue old
+            (Property nm oldV,Property nm' newV) ->
+              if prettyUnsafeEq nm nm' then
+                if prettyUnsafeEq oldV newV then
+                  continue old
+                else
+                  update
               else
-                update
+                replace
 
             (Style oldS,Style newS) -> do
               -- we know /something/ changed
@@ -1804,8 +1815,8 @@ removeAttribute_ element attr =
     NullFeature ->
       return ()
 
-    CurrentValue _ ->
-      set_value_js element ""
+    Property nm _ ->
+      set_element_property_null_js element nm
 
     Attribute nm _ ->
       E.removeAttribute element nm
@@ -1843,8 +1854,8 @@ setAttribute_ c element attr =
     NullFeature ->
       return NullFeature
 
-    CurrentValue v -> do
-      set_value_js element v
+    Property nm v -> do
+      set_property_js element nm v
       return attr
 
     -- optimize this; we're doing a little more work than necessary!
