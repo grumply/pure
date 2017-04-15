@@ -432,7 +432,7 @@ renderSystemBootstrap (System h c) mainScript =
             , body []
                 [ case c of
                     Construct' a@Construct {} -> construct div [ idA "atomic" ] a
-                , script [ src mainScript, defer "defer" ] []
+                , script [ src mainScript, defer True ] []
                 ]
             ]
 renderSystemBootstrap (Subsystem c) mainScript =
@@ -444,7 +444,7 @@ renderSystemBootstrap (Subsystem c) mainScript =
             [ head []
             , body []
                 [ construct div [ idA "atomic" ] a
-                , script [ src mainScript, defer "defer" ] []
+                , script [ src mainScript, defer True ] []
                 ]
             ]
 
@@ -466,11 +466,11 @@ renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript =
   let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentView h
   head_html <- renderDynamicHTML h_
-  body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c, script [ src mainScript, defer "defer" ] [] ])
+  body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c, script [ src mainScript, defer True ] [] ])
   return $ dt <> head_html <> body_html <> "</html>"
 renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
   let dt = "<!DOCTYPE html><html><head></head>"
-  body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c, script [ src mainScript, defer "defer" ] [] ])
+  body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c, script [ src mainScript, defer True ] [] ])
   return $ dt <> body_html <> "</html>"
 
 renderDynamicHTML :: Atom e -> IO Txt

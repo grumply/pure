@@ -195,6 +195,9 @@ boolAttribute nm = Attribute nm ""
 property :: Txt -> Txt -> Feature e
 property = Property
 
+boolProperty :: Txt -> Bool -> Feature e
+boolProperty nm b = property nm (if b then "true" else "") -- exploit the truthy/falsey nature of non-empty and empty strings, respectively
+
 on' :: Txt -> Options -> (Obj -> IO (Maybe e)) -> Feature e
 on' ev os f = On' ev os f Nothing
 
@@ -230,7 +233,7 @@ linkA :: Txt -> Feature e
 linkA = flip Link Nothing
 
 href :: Txt -> Feature e
-href = attribute "href"
+href = property "href"
 
 val :: Txt -> Feature e
 val jst = property "value" jst
@@ -255,49 +258,49 @@ classes = classA
   . mapMaybe (\(s,b) -> if b then Just s else Nothing)
 
 idA :: Txt -> Feature e
-idA = attribute "id"
+idA = property "id"
 
 titleA :: Txt -> Feature e
-titleA = attribute "title"
+titleA = property "title"
 
-hiddenA :: Feature e
-hiddenA = boolAttribute "hidden"
+hiddenA :: Bool -> Feature e
+hiddenA = boolProperty "hidden"
 
 typeA :: Txt -> Feature e
-typeA = attribute "type"
-
-initialValue :: Txt -> Feature e
-initialValue = attribute "value"
+typeA = property "type"
 
 defaultValue :: Txt -> Feature e
 defaultValue = attribute "default-value"
 
 checked :: Bool -> Feature e
-checked b = property "checked" (if b then "checked" else "")
+checked = boolProperty "checked"
+
+defaultChecked :: Feature e
+defaultChecked = boolAttribute "checked"
 
 placeholder :: Txt -> Feature e
-placeholder = attribute "placeholder"
+placeholder = property "placeholder"
 
 selected :: Bool -> Feature e
-selected b = property "selected" (if b then "selected" else "")
+selected = boolProperty "selected"
 
 accept :: Txt -> Feature e
-accept = attribute "accept"
+accept = property "accept"
 
 acceptCharset :: Txt -> Feature e
-acceptCharset = attribute "accept-charset"
+acceptCharset = property "accept-charset"
 
 autocomplete :: Bool -> Feature e
-autocomplete b = attribute "autocomplete" (if b then "on" else "off")
+autocomplete = boolProperty "autocomplete"
 
-autofocus :: Feature e
-autofocus = boolAttribute "autofocus"
+autofocus :: Bool -> Feature e
+autofocus = boolProperty "autofocus"
 
-disabled :: Feature e
-disabled = boolAttribute "disabled"
+disabled :: Bool -> Feature e
+disabled = boolProperty "disabled"
 
 enctype :: Txt -> Feature e
-enctype = attribute "enctyp"
+enctype = property "enctyp"
 
 formaction :: Txt -> Feature e
 formaction = attribute "formaction"
@@ -312,43 +315,46 @@ minlength :: Int -> Feature e
 minlength = attribute "minlength" . toTxt
 
 methodA :: Txt -> Feature e
-methodA = attribute "method"
+methodA = property "method"
 
-multiple :: Feature e
-multiple = boolAttribute "multiple"
+multiple :: Bool -> Feature e
+multiple b = property "multiple" (if b then "multiple" else "")
+
+muted :: Bool -> Feature e
+muted b = property "muted" (if b then "muted" else "")
 
 name :: Txt -> Feature e
-name = attribute "name"
+name = property "name"
 
-novalidate :: Feature e
-novalidate = boolAttribute "novalidate"
+novalidate :: Bool -> Feature e
+novalidate = boolProperty "novalidate"
 
 patternA :: Txt -> Feature e
-patternA = attribute "pattern"
+patternA = property "pattern"
 
-readonly :: Feature e
-readonly = boolAttribute "readonly"
+readonly :: Bool -> Feature e
+readonly = boolProperty "readonly"
 
-required :: Feature e
-required = boolAttribute "required"
+required :: Bool -> Feature e
+required = boolProperty "required"
 
 size :: Int -> Feature e
 size = attribute "size" . toTxt
 
 forA :: Txt -> Feature e
-forA = attribute "for"
+forA = property "htmlFor"
 
 formA :: Txt -> Feature e
 formA = attribute "form"
 
 maxA :: Txt -> Feature e
-maxA = attribute "max"
+maxA = property "max"
 
 minA :: Txt -> Feature e
-minA = attribute "min"
+minA = property "min"
 
 step :: Txt -> Feature e
-step = attribute "step"
+step = property "step"
 
 cols :: Int -> Feature e
 cols = attribute "cols" . toTxt
@@ -357,16 +363,22 @@ rows :: Int -> Feature e
 rows = attribute "rows" . toTxt
 
 wrapA :: Txt -> Feature e
-wrapA = attribute "wrap"
+wrapA = property "wrap"
 
 -- href :: Txt -> Feature e
 -- href = attribute "href"
 
 target :: Txt -> Feature e
-target = attribute "target"
+target = property "target"
+
+download :: Bool -> Feature e
+download = boolProperty "download"
+
+downloadAs :: Txt -> Feature e
+downloadAs = property "download"
 
 hreflang :: Txt -> Feature e
-hreflang = attribute "hreflang"
+hreflang = property "hreflang"
 
 media :: Txt -> Feature e
 media = attribute "media"
@@ -374,17 +386,23 @@ media = attribute "media"
 rel :: Txt -> Feature e
 rel = attribute "rel"
 
-ismap :: Feature e
-ismap = boolAttribute "ismap"
+ismap :: Bool -> Feature e
+ismap = boolProperty "ismap"
 
 usemap :: Txt -> Feature e
-usemap = attribute "usemap"
+usemap = property "usemap"
 
 shape :: Txt -> Feature e
-shape = attribute "shape"
+shape = property "shape"
+
+coords :: Txt -> Feature e
+coords = property "coords"
+
+keytype :: Txt -> Feature e
+keytype = property "keytype"
 
 src :: Txt -> Feature e
-src = attribute "src"
+src = property "src"
 
 heightA :: ToTxt a => a -> Feature e
 heightA = attribute "height" . toTxt
@@ -393,49 +411,49 @@ widthA :: ToTxt a => a -> Feature e
 widthA = attribute "width" . toTxt
 
 alt :: Txt -> Feature e
-alt = attribute "alt"
+alt = property "alt"
 
-autoplay :: Feature e
-autoplay = boolAttribute "autoplay"
+autoplay :: Bool -> Feature e
+autoplay = boolProperty "autoplay"
 
-controls :: Feature e
-controls = boolAttribute "controls"
+controls :: Bool -> Feature e
+controls = boolProperty "controls"
 
-loop :: Feature e
-loop = boolAttribute "loop"
+loop :: Bool -> Feature e
+loop = boolProperty "loop"
 
 preload :: Txt -> Feature e
-preload = attribute "preload"
+preload = property "preload"
 
 poster :: Txt -> Feature e
-poster = attribute "poster"
+poster = property "poster"
 
-defaultA :: Feature e
-defaultA = boolAttribute "default"
+defaultA :: Bool -> Feature e
+defaultA = boolProperty "default"
 
 kind :: Txt -> Feature e
-kind = attribute "kind"
+kind = property "kind"
 
 srclang :: Txt -> Feature e
-srclang = attribute "srclang"
+srclang = property "srclang"
 
 sandbox :: Txt -> Feature e
-sandbox = attribute "sandbox"
+sandbox = property "sandbox"
 
-seamless :: Feature e
-seamless = boolAttribute "seamless"
+seamless :: Bool -> Feature e
+seamless = boolProperty "seamless"
 
 srcdoc :: Txt -> Feature e
-srcdoc = attribute "srcdoc"
+srcdoc = property "srcdoc"
 
-reversedA :: Feature e
-reversedA = boolAttribute "reversed"
+reversedA :: Bool -> Feature e
+reversedA = boolProperty "reversed"
 
 start :: Int -> Feature e
-start = attribute "start" . toTxt
+start = property "start" . toTxt
 
 align :: Txt -> Feature e
-align = attribute "align"
+align = property "align"
 
 colspan :: Int -> Feature e
 colspan = attribute "colspan" . toTxt
@@ -444,61 +462,64 @@ rowspan :: Int -> Feature e
 rowspan = attribute "rowspan" . toTxt
 
 headers :: [Txt] -> Feature e
-headers = attribute "headers" . JSS.intercalate " "
+headers = property "headers" . JSS.intercalate " "
 
 scope :: Txt -> Feature e
-scope = attribute "scope"
+scope = property "scope"
 
-asyncA :: Txt -> Feature e
-asyncA = attribute "async"
+asyncA :: Bool -> Feature e
+asyncA = boolProperty "async"
 
 charset :: Txt -> Feature e
 charset = attribute "charset"
 
 contentA :: Txt -> Feature e
-contentA = attribute "content"
+contentA = property "content"
 
-defer :: Txt -> Feature e
-defer = attribute "defer"
+defer :: Bool -> Feature e
+defer = boolProperty "defer"
 
 httpEquiv :: Txt -> Feature e
-httpEquiv = attribute "http-equiv"
+httpEquiv = property "http-equiv"
 
 languageA :: Txt -> Feature e
-languageA = attribute "language"
+languageA = property "language"
 
-scopedA :: Feature e
-scopedA = boolAttribute "scoped"
+scopedA :: Bool -> Feature e
+scopedA = boolProperty "scoped"
 
 accesskey :: Char -> Feature e
-accesskey = attribute "accesskey" . JSS.singleton
+accesskey = property "accesskey" . JSS.singleton
 
-contenteditable :: Feature e
-contenteditable = boolAttribute "contenteditable"
+contenteditable :: Bool -> Feature e
+contenteditable = boolProperty "contenteditable"
 
 contextmenu :: Txt -> Feature e
 contextmenu = attribute "contextmenu"
 
 dir :: Txt -> Feature e
-dir = attribute "dir"
+dir = property "dir"
 
 draggable :: Bool -> Feature e
 draggable b = attribute "draggable" (if b then "true" else "false")
+
+dropzone :: Txt -> Feature e
+dropzone = property "dropzone"
 
 itemprop :: Txt -> Feature e
 itemprop = attribute "itemprop"
 
 lang :: Txt -> Feature e
-lang = attribute "lang"
+lang = property "lang"
 
-spellcheck :: Feature e
-spellcheck = boolAttribute "spellcheck"
+spellcheck :: Bool -> Feature e
+spellcheck = boolProperty "spellcheck"
 
 tabindex :: Int -> Feature e
 tabindex = attribute "tabindex" . toTxt
 
 citeA :: Txt -> Feature e
-citeA = attribute "cite"
+citeA = property "cite"
 
 datetime :: Txt -> Feature e
 datetime = attribute "datetime"

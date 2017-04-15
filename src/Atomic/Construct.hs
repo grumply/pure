@@ -503,7 +503,7 @@ css :: CSS -> Atom e
 css = css' False
 
 css' :: Bool -> CSS -> Atom e
-css' b = mkAtom "style" [ typeA "text/css", cond b scopedA ] . ((text "\n"):) . go False
+css' b = mkAtom "style" [ typeA "text/css", scopedA b ] . ((text "\n"):) . go False
   where
     go :: Bool -> CSS -> [Atom e]
     go b (Return _) = []
@@ -536,7 +536,7 @@ scss :: StaticCSS -> Atom e
 scss = scss' False
 
 scss' :: Bool -> StaticCSS -> Atom e
-scss' b = raw (mkAtom "style") [typeA "text/css", cond b scopedA] . cssText
+scss' b = raw (mkAtom "style") [typeA "text/css", scopedA b ] . cssText
 
 styles :: CSS -> Atom e
 styles = css' True . classify
