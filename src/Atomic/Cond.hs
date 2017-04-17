@@ -59,4 +59,4 @@ instance Cond Float where
   nil = 0
 
 instance Cond (a -> a) where
-+  nil = id
+  nil = id
