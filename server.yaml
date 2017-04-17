@@ -6,7 +6,7 @@ extra-deps:
 packages:
   - location:
       git: https://github.com/grumply/ef.git
-      commit: 4ca7cc8c6a682d305c81b9d76a85542078837613
+      commit: c3dbe69c1e61461fe94905136b7e8c6fad0a4a26
     subdirs:
       - ef-core
       - ef-base
