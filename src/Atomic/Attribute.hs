@@ -9,6 +9,7 @@ import Ef.Base hiding (Object,object)
 import Data.Txt as T
 import Data.JSON hiding (Options)
 
+import Atomic.Default
 import Atomic.FromTxt
 import Atomic.ToTxt
 import Atomic.Cond
@@ -27,11 +28,35 @@ import Data.List (sortBy)
 
 import Control.Lens (makePrisms,makeLenses)
 
+import Prelude
+
 #ifdef __GHCJS__
 import qualified Data.JSString as JSS
+import qualified GHCJS.DOM.Types as T
 #else
 import qualified Data.Text as JSS
 import Data.Aeson (Value(..))
+#endif
+
+type ENode =
+#ifdef __GHCJS__
+  T.Element
+#else
+  ()
+#endif
+
+type TNode =
+#ifdef __GHCJS__
+  T.Text
+#else
+  ()
+#endif
+
+type NNode =
+#ifdef __GHCJS__
+  T.Node
+#else
+  ()
 #endif
 
 data Options = Options
@@ -39,14 +64,8 @@ data Options = Options
   , _stopProp   :: Bool
   } deriving (Eq)
 
-defaultOptions :: Options
-defaultOptions = Options False False
-
-noDefaultOptions :: Options
-noDefaultOptions = Options True False
-
-interceptOptions :: Options
-interceptOptions = Options True True
+instance Default Options where
+  def = Options False False
 
 data Feature e
   = NullFeature
@@ -62,13 +81,8 @@ data Feature e
     { _stylePairs :: [(Txt,Txt)] }
   | On
     { _eventName :: Txt
-    , _event :: e
-    , _eventListener :: Maybe (IO ())
-    }
-  | On'
-    { _eventName :: Txt
     , _eventOptions :: Options
-    , _eventCreate :: Obj -> IO (Maybe e)
+    , _eventCreate :: ENode -> Obj -> IO (Maybe e)
     , _eventListener :: Maybe (IO ())
     }
   | Link
@@ -142,9 +156,7 @@ instance Eq (Feature e) where
     prettyUnsafeEq a a' && prettyUnsafeEq v v'
   (==) (Style ss) (Style ss') =
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
-  (==) (On e ev _) (On e' ev' _) =
-    prettyUnsafeEq e e' && reallyUnsafeEq ev ev'
-  (==) (On' e os ev _) (On' e' os' ev' _) =
+  (==) (On e os ev _) (On e' os' ev' _) =
     prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
   (==) (Link t _) (Link t' _) =
     prettyUnsafeEq t t'
@@ -198,33 +210,23 @@ property = Property
 boolProperty :: Txt -> Bool -> Feature e
 boolProperty nm b = property nm (if b then "true" else "") -- exploit the truthy/falsey nature of non-empty and empty strings, respectively
 
-on' :: Txt -> Options -> (Obj -> IO (Maybe e)) -> Feature e
-on' ev os f = On' ev os f Nothing
+on :: Txt -> (ENode -> Obj -> IO (Maybe e)) -> Feature e
+on ev f = On ev def f Nothing
 
-on :: Txt -> e -> Feature e
-on ev e = On ev e Nothing
+on' :: Txt -> e -> Feature e
+on' ev e = On ev def (\_ _ -> return (Just e)) Nothing
 
 preventDefault :: Feature e -> Feature e
-preventDefault (On ev e m) = On' ev (Options True False) (\_ -> return (Just e)) Nothing
-preventDefault (On' ev os f m) = On' ev (os { _preventDef = True }) f m
+preventDefault (On ev os f m) = On ev (os { _preventDef = True }) f m
 preventDefault f = f
 
 stopPropagation :: Feature e -> Feature e
-stopPropagation (On ev e m) = On' ev (Options False True) (\_ -> return (Just e)) Nothing
-stopPropagation (On' ev os f m) = On' ev (os { _stopProp = True }) f m
+stopPropagation (On ev os f m) = On ev (os { _stopProp = True }) f m
 stopPropagation f = f
 
-onPreventDefault :: Txt -> e -> Feature e
-onPreventDefault ev e = on' ev noDefaultOptions (\_ -> return (Just e))
-
-onPreventDefault' :: Txt -> (Obj -> IO (Maybe e)) -> Feature e
-onPreventDefault' ev f = on' ev noDefaultOptions f
-
-onIntercept :: Txt -> e -> Feature e
-onIntercept ev e = on' ev interceptOptions (\_ -> return (Just e))
-
-onIntercept' :: Txt -> (Obj -> IO (Maybe e)) -> Feature e
-onIntercept' ev f = on' ev interceptOptions f
+intercept :: Feature e -> Feature e
+intercept (On ev os f m) = On ev (os { _preventDef = True, _stopProp = True }) f m
+intercept f = f
 
 styleList :: [(Txt,Txt)] -> Feature e
 styleList = Style
@@ -257,6 +259,15 @@ classes = classA
   . JSS.intercalate " "
   . mapMaybe (\(s,b) -> if b then Just s else Nothing)
 
+-- not a fan of the inefficiency
+-- addClass :: Txt -> [Feature e] -> [Feature e]
+-- addClass c = go False
+--   where
+--     go False [] = [Attribute "class" c]
+--     go True [] = []
+--     go _ ((Attribute "class" cs):fs) = (Attribute "class" (c <> " " <> cs)) : go True fs
+--     go b (f:fs) = f:go b fs
+
 idA :: Txt -> Feature e
 idA = property "id"
 
@@ -276,7 +287,7 @@ checked :: Bool -> Feature e
 checked = boolProperty "checked"
 
 defaultChecked :: Feature e
-defaultChecked = boolAttribute "checked"
+defaultChecked = attribute "checked" "checked"
 
 placeholder :: Txt -> Feature e
 placeholder = property "placeholder"
@@ -1342,87 +1353,86 @@ clipPathUrl = attribute "clip-path" . (\x -> "url(#" <> x <> ")")
 -- Event listener 'Attribute's
 
 onClick :: e -> Feature e
-onClick = on "click"
+onClick = on' "click"
 
 onDoubleClick :: e -> Feature e
-onDoubleClick = on "dblclick"
+onDoubleClick = on' "dblclick"
 
 onMouseDown :: e -> Feature e
-onMouseDown = on "mousedown"
+onMouseDown = on' "mousedown"
 
 onMouseUp :: e -> Feature e
-onMouseUp = on "mouseup"
+onMouseUp = on' "mouseup"
 
 onTouchStart :: e -> Feature e
-onTouchStart = on "touchstart"
+onTouchStart = on' "touchstart"
 
 onTouchEnd :: e -> Feature e
-onTouchEnd = on "touchend"
+onTouchEnd = on' "touchend"
 
 onMouseEnter :: e -> Feature e
-onMouseEnter = on "mouseenter"
+onMouseEnter = on' "mouseenter"
 
 onMouseLeave :: e -> Feature e
-onMouseLeave = on "mouseleave"
+onMouseLeave = on' "mouseleave"
 
 onMouseOver :: e -> Feature e
-onMouseOver = on "mouseover"
+onMouseOver = on' "mouseover"
 
 onMouseOut :: e -> Feature e
-onMouseOut = on "mouseout"
+onMouseOut = on' "mouseout"
 
 onMouseMove :: e -> Feature e
-onMouseMove = on "mousemove"
+onMouseMove = on' "mousemove"
 
 onTouchMove :: e -> Feature e
-onTouchMove = on "touchmove"
+onTouchMove = on' "touchmove"
 
 onTouchCancel :: e -> Feature e
-onTouchCancel = on "touchcancel"
+onTouchCancel = on' "touchcancel"
 
 onInput :: (Txt -> e) -> Feature e
-onInput f = on' "input" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
+onInput f = on "input" $ \_ -> fmap return $ parseMaybe $ \o -> do
   target <- o .: "target"
   value <- target .: "value"
   pure $ f value
 
 onInputChange :: (Txt -> e) -> Feature e
-onInputChange f = on' "change" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
+onInputChange f = on "change" $ \_ -> fmap return $ parseMaybe $ \o -> do
   target <- o .: "target"
   value <- target .: "value"
   pure $ f value
 
 onCheck :: (Bool -> e) -> Feature e
-onCheck f = on' "change" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
+onCheck f = on "change" $ \_ -> fmap return $ parseMaybe $ \o -> do
   target <- o .: "target"
   checked <- target .: "checked"
   pure $ f checked
 
 onSubmit :: e -> Feature e
-onSubmit e = on' "submit" interceptOptions $ \_ ->
-  return $ Just e
+onSubmit e = intercept $ on "submit" $ \_ _ -> return $ Just e
 
 onBlur :: e -> Feature e
-onBlur = on "blur"
+onBlur = on' "blur"
 
 onFocus :: e -> Feature e
-onFocus = on "focus"
+onFocus = on' "focus"
 
 onKeyUp :: (Int -> e) -> Feature e
-onKeyUp f = on' "keyup" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
+onKeyUp f = on "keyup" $ \_ -> fmap return $ parseMaybe $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 
 
 onKeyDown :: (Int -> e) -> Feature e
-onKeyDown f = on' "keydown" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
+onKeyDown f = on "keydown" $ \_ -> fmap return $ parseMaybe $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 
 onKeyPress :: (Int -> e) -> Feature e
-onKeyPress f = on' "keypress" Atomic.Attribute.defaultOptions $ fmap return $ parseMaybe $ \o -> do
+onKeyPress f = on "keypress" $ \_ -> fmap return $ parseMaybe $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 
 ignoreClick :: Feature e
-ignoreClick = on' "click" interceptOptions $ const $ return Nothing
+ignoreClick = intercept $ on "click" $ \_ _ -> return Nothing

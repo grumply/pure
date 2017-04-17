@@ -11,6 +11,8 @@ import Data.List as List
 import Data.String
 import Data.Monoid
 
+import Prelude
+
 import Data.Txt
 #ifdef __GHCJS__
 import Data.JSString as Txt
@@ -29,6 +31,14 @@ infixr 6 <+>
 infixr 6 <<+>>
 (<<+>>) :: Txt -> Txt -> Txt
 (<<+>>) x y = x <> " + " <> y
+
+infixr 6 <<*>>
+(<<*>>) :: Txt -> Txt -> Txt
+(<<*>>) x y = x <> " * " <> y
+
+infixr 6 <</>>
+(<</>>) :: Txt -> Txt -> Txt
+(<</>>) x y = x <> " / " <> y
 
 infixr 6 <<->>
 (<<->>) :: Txt -> Txt -> Txt

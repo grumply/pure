@@ -57,3 +57,6 @@ instance Cond Double where
 
 instance Cond Float where
   nil = 0
+
+instance Cond (a -> a) where
++  nil = id

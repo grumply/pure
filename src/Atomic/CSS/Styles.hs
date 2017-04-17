@@ -2,12 +2,15 @@
 {-# language CPP #-}
 module Atomic.CSS.Styles where
 
+import Atomic.IsString
 import Data.Txt as Txt (Txt,intercalate)
 
 import Atomic.ToTxt
 import Atomic.CSS.Helpers
 
 import Data.Monoid
+
+import Prelude (($),id,map,Int,Double,Num(..))
 
 screenMinWidth :: Txt -> Txt
 screenMinWidth w = "only screen and (min-width:" <> w <> ")"
@@ -624,6 +627,9 @@ italic = "italic"
 regular :: Txt
 regular = "regular"
 
+antialiased :: Txt
+antialiased = "antialiased"
+
 weight :: Int -> Txt
 weight = toTxt
 
@@ -1055,6 +1061,9 @@ rtl = "rtl"
 
 ltr :: Txt
 ltr = "ltr"
+
+currentColor :: Txt
+currentColor = "currentColor"
 
 alpha :: Txt -> Txt
 alpha alph = "alpha(" <> alph <> ")"
@@ -1519,6 +1528,9 @@ yellowgree = "yellowgree"
 alignSelf :: Txt
 alignSelf = "align-self"
 
+alignContent :: Txt
+alignContent = "align-content"
+
 justifyContent :: Txt
 justifyContent = "justify-content"
 
@@ -1766,6 +1778,12 @@ fontStyle = "font-style"
 fontVariant :: Txt
 fontVariant = "font-variant"
 
+fontSmoothing :: Txt
+fontSmoothing = "font-smoothing"
+
+textSizeAdjust :: Txt
+textSizeAdjust = "text-size-adjust"
+
 format :: Txt -> Txt
 format f = "format('" <> f <> "')"
 
@@ -1817,8 +1835,8 @@ inS = "in"
 in2 :: Txt
 in2 = "in2"
 
-intercept :: Txt
-intercept = "intercept"
+interceptS :: Txt
+interceptS = "intercept"
 
 k :: Txt
 k = "k"
@@ -2241,11 +2259,11 @@ xS = "x"
 xHeight :: Txt
 xHeight = "x-height"
 
-x1 :: Txt
-x1 = "x1"
+x1S :: Txt
+x1S = "x1"
 
-x2 :: Txt
-x2 = "x2"
+x2S :: Txt
+x2S = "x2"
 
 xChannelSelector :: Txt
 xChannelSelector = "xChannelSelector"
@@ -2253,11 +2271,11 @@ xChannelSelector = "xChannelSelector"
 yS :: Txt
 yS = "y"
 
-y1 :: Txt
-y1 = "y1"
+y1S :: Txt
+y1S = "y1"
 
-y2 :: Txt
-y2 = "y2"
+y2S :: Txt
+y2S = "y2"
 
 yChannelSelector :: Txt
 yChannelSelector = "yChannelSelector"
@@ -2355,6 +2373,9 @@ webkitFlex = "-webkit-flex"
 webkitFlexDirection :: Txt
 webkitFlexDirection = "-webkit-flex-direction"
 
+webkitFontSmoothing :: Txt
+webkitFontSmoothing = "-webkit-font-smoothing"
+
 webkitBoxOrient :: Txt
 webkitBoxOrient = "-webkit-box-orient"
 
@@ -2387,3 +2408,6 @@ mozAppearance = "-moz-appearance"
 
 mozUserSelect :: Txt
 mozUserSelect = "-moz-user-select"
+
+mozFocusInner :: Txt
+mozFocusInner = "::-moz-focus-inner"

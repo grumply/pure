@@ -5,7 +5,7 @@
 {-# language DeriveFunctor #-}
 {-# language MagicHash #-}
 {-# language CPP #-}
-module Atomic.Construct (module Atomic.Construct) where
+module Atomic.Construct (module Atomic.Construct, ENode, TNode, NNode) where
 
 import Ef.Base hiding (Object,Client,After,Before,current,Lazy,Eager,construct,Index,observe,uncons,distribute,embed)
 import qualified Ef.Base
@@ -144,27 +144,6 @@ foreign import javascript unsafe
 
 foreign import javascript unsafe
   "$1[$2] = $3" set_property_js :: E.Element -> Txt -> Txt -> IO ()
-#endif
-
-type ENode =
-#ifdef __GHCJS__
-  T.Element
-#else
-  ()
-#endif
-
-type TNode =
-#ifdef __GHCJS__
-  T.Text
-#else
-  ()
-#endif
-
-type NNode =
-#ifdef __GHCJS__
-  T.Node
-#else
-  ()
 #endif
 
 data Atom e where
@@ -681,9 +660,7 @@ instance ToTxt (Feature e) where
            (renderStyles False (mapM_ (uncurry (=:)) pairs))
       <> "\""
 
-  toTxt (On _ _ _)       = mempty
-
-  toTxt (On' _ _ _ _)    = mempty
+  toTxt (On _ _ _ _)    = mempty
 
   toTxt (Link href _)    = "href=\"" <> href <> "\""
 
@@ -1764,15 +1741,7 @@ runElementDiff f el os0 ms0 ns0 =
               else
                 replace
 
-            (On e m _,On e' m' _) ->
-              if prettyUnsafeEq e e' && reallyUnsafeEq m m' then do
-                -- liftIO $ putStrLn $ "On: Event types same, IO actons really unsafe eq: " ++ show (e,e')
-                continue old
-              else do
-                -- liftIO $ putStrLn $ "On: Event type not eq or IO actions not eq: " ++ show (e,e')
-                replace
-
-            (On' e os g _,On' e' os' g' _) ->
+            (On e os g _,On e' os' g' _) ->
               if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then do
                 -- liftIO $ putStrLn $ "On': Event types same, IO actons really unsafe eq: " ++ show (e,e')
                 continue old
@@ -1825,10 +1794,7 @@ removeAttribute_ element attr =
       forM_ unreg id
       E.removeAttribute element ("href" :: Txt)
 
-    On _ _ unreg ->
-      forM_ unreg id
-
-    On' ev _ _ unreg ->
+    On ev _ _ unreg ->
       forM_ unreg id
 
     Style styles -> do
@@ -1879,17 +1845,7 @@ setAttribute_ c element attr =
                    scrollToTop
       return (Link href (Just stopListener))
 
-    On ev e _ -> do
-      stopListener <-
-        Ev.on
-          element
-          (Ev.unsafeEventName ev :: Ev.EventName E.Element T.MouseEvent) -- faked
-            $ do Ev.preventDefault
-                 Ev.stopPropagation
-                 liftIO $ void $ c e
-      return (On ev e (Just stopListener))
-
-    On' ev os f _ -> do
+    On ev os f _ -> do
       stopListener <-
         Ev.on
           element
@@ -1897,9 +1853,9 @@ setAttribute_ c element attr =
             $ do ce <- Ev.event
                  when (_preventDef os) Ev.preventDefault
                  when (_stopProp os) Ev.stopPropagation
-                 liftIO $ f (unsafeCoerce ce) >>= mapM_ c
+                 liftIO $ f element (unsafeCoerce ce) >>= mapM_ c
                  return ()
-      return (On' ev os f (Just stopListener))
+      return (On ev os f (Just stopListener))
 
     Style styles -> do
       obj <- O.create
@@ -1936,8 +1892,7 @@ cleanupAttr attr =
   case attr of
     SVGLink _ unreg -> forM_ unreg id
     Link _ unreg -> forM_ unreg id
-    On _ _ unreg -> forM_ unreg id
-    On' _ _ _ unreg -> forM_ unreg id
+    On _ _ _ unreg -> forM_ unreg id
     _ -> return ()
 #endif
 
