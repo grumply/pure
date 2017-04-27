@@ -2,7 +2,6 @@
 {-# language CPP #-}
 module Atomic.CSS.Styles where
 
-import Atomic.IsString
 import Data.Txt as Txt (Txt,intercalate)
 
 import Atomic.ToTxt

@@ -1,18 +1,18 @@
 {-# language QuasiQuotes #-}
 {-# language CPP #-}
-module Atomic.Mediators.Tween (scrollTo, easeScroll) where
+module Atomic.Services.Tween (scrollTo, easeScroll) where
 
 import Ef.Base
 
 import Data.Txt
 
-import Atomic.Construct
+import Atomic.Component
 import Atomic.Ease
 import Atomic.Revent
-import Atomic.Mediator
+import Atomic.Service
 import Atomic.With
 
-import Atomic.Mediators.Frame
+import Atomic.Services.Frame
 
 #ifdef __GHCJS__
 import qualified GHCJS.DOM.Window as W hiding (getWindow)

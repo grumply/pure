@@ -3,7 +3,7 @@
 {-# language UndecidableInstances #-}
 {-# language MagicHash #-}
 {-# language CPP #-}
-module Atomic.Mediator (module Atomic.Mediator) where
+module Atomic.Service (module Atomic.Service) where
 
 import Ef.Base hiding (Client,Server)
 
@@ -22,9 +22,9 @@ import Data.HashMap.Strict as Map hiding ((!))
 import System.IO.Unsafe
 import Unsafe.Coerce
 
-instance (IsMediator' ts ms, MonadIO c) =>
+instance (IsService' ts ms, MonadIO c) =>
           With
-          (Mediator' ts ms)
+          (Service' ts ms)
           (Code ms IO)
           c
   where
@@ -40,11 +40,11 @@ instance (IsMediator' ts ms, MonadIO c) =>
               Nothing -> do
                 rb <- newSignalBuffer
                 sig :: Signal ms IO (Code ms IO ()) <- runner
-                startMediator rb s
-                let asMediator :: Code ms IO `As` IO
-                    asMediator = constructAs rb sig
-                    new_v = Map.insert i (unsafeCoerce asMediator) v
-                return (new_v,liftIO . runAs asMediator)
+                startService rb s
+                let asService :: Code ms IO `As` IO
+                    asService = constructAs rb sig
+                    new_v = Map.insert i (unsafeCoerce asService) v
+                return (new_v,liftIO . runAs asService)
               Just as ->
                 return (v,liftIO . runAs as)
         Just as ->
@@ -60,53 +60,42 @@ instance (IsMediator' ts ms, MonadIO c) =>
         liftIO $ do
           killBuffer buf
           myThreadId >>= killThread
-      deleteMediator (key s)
+      deleteService (key s)
 
 
-type IsMediator' ts ms =
-  ( MediatorBase <: ms
-  , MediatorBase <. ts
-  , Delta (Modules ts) (Messages ms)
-  )
-type IsMediator ms = IsMediator' (Appended MediatorBase ms) (Appended MediatorBase ms)
+type IsService' ts ms = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms))
+type IsService ms = IsService' (Appended Base ms) (Appended Base ms)
 
-type MediatorBase =
-  '[Revent
-   ,State () Vault
-   ,State () Shutdown
-   ]
+type Base = '[Revent,State () Vault,State () Shutdown]
 
-type MediatorKey' ms = Key (Code ms IO `As` IO)
-type MediatorKey ms = MediatorKey' (Appended ms MediatorBase)
-type MediatorBuilder' ts = Modules MediatorBase (Action ts IO) -> IO (Modules ts (Action ts IO))
-type MediatorBuilder ts = MediatorBuilder' (Appended ts MediatorBase)
-type MediatorPrimer' ms = Code ms IO ()
-type MediatorPrimer ms = MediatorPrimer' (Appended ms MediatorBase)
-type Mediator ms = Mediator' (Appended ms MediatorBase) (Appended ms MediatorBase)
+type ServiceKey ms = Key (Code (Appended ms Base) IO `As` IO)
+type ServiceBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
+type ServicePrimer ms = Code (Appended ms Base) IO ()
 
-data Mediator' ts ms
-  = Mediator
-      { key      :: !(MediatorKey' ms)
-      , build    :: !(MediatorBuilder' ts)
-      , prime    :: !(MediatorPrimer' ms)
+data Service' ts ms
+  = Service
+      { key      :: !(Key (Code ms IO `As` IO))
+      , build    :: !(Modules Base (Action ts IO) -> IO (Modules ts (Action ts IO)))
+      , prime    :: !(Code ms IO ())
       }
+type Service ms = Service' (Appended ms Base) (Appended ms Base)
 
-instance Eq (Mediator' ts ms) where
-  (==) (Mediator i _ _) (Mediator i' _ _) =
+instance Eq (Service' ts ms) where
+  (==) (Service i _ _) (Service i' _ _) =
     let Key k1 = i
         Key k2 = i'
     in case reallyUnsafePtrEquality# i i' of
          1# -> True
          _  -> k1 == k2
 
-startMediator :: forall ms ts c.
+startService :: forall ms ts c.
                 ( MonadIO c
-                , IsMediator' ts ms
+                , IsService' ts ms
                 )
               => Signaled
-              -> Mediator' ts ms
+              -> Service' ts ms
               -> c ()
-startMediator rb Mediator {..} = do
+startService rb Service {..} = do
   sdn :: Network () <- network
   lv <- createVault
   built <- liftIO $ build $ revent rb
@@ -119,7 +108,7 @@ startMediator rb Mediator {..} = do
       prime
 #ifdef __GHCJS__
     driverPrintExceptions
-      ("Mediator "
+      ("Service "
           ++ show key
           ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
       )
@@ -135,10 +124,10 @@ mediatorShutdownNetwork = unsafePerformIO network
 {-# NOINLINE mediatorVault__ #-}
 mediatorVault__ = Vault (unsafePerformIO (newMVar Map.empty))
 
-lookupMediator :: (Monad c, MonadIO c)
+lookupService :: (Monad c, MonadIO c)
               => Key phantom -> c (Maybe phantom)
-lookupMediator = vaultLookup mediatorVault__
+lookupService = vaultLookup mediatorVault__
 
-deleteMediator :: (Monad c, MonadIO c)
+deleteService :: (Monad c, MonadIO c)
               => Key phantom -> c ()
-deleteMediator = vaultDelete mediatorVault__
+deleteService = vaultDelete mediatorVault__

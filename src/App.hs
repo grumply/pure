@@ -2,7 +2,7 @@
 {-# language OverloadedStrings #-}
 {-# language MagicHash #-}
 {-# language CPP #-}
-module Organism (module Organism,module Export) where
+module App (module App,module Export) where
 
 import Ef.Base as Export hiding (As,Index,transform,watch,construct,uncons,distribute,embed,observe)
 import qualified Ef.Base
@@ -42,8 +42,9 @@ import GHC.Prim
 import Data.Ratio
 import qualified Data.HashMap.Strict as Map
 
-import Atomic.Construct
-import Atomic.Mediator hiding (key)
+import Atomic.Component hiding (Base,key)
+import qualified Atomic.Component as Component
+import Atomic.Service hiding (Base,key)
 import Atomic          as Export hiding (stop,accept)
 import qualified Atomic
 import Atomic.WebSocket as Export hiding (LazyByteString)
@@ -72,61 +73,45 @@ __startTime__ = unsafePerformIO __timeInMicros
 hashWithStartTime :: Hashable a => a -> Int
 hashWithStartTime x = hash (__startTime__,x)
 
-type IsOrganism' ts ms c r =
-  ( OrganismBase r <: ms
-  , OrganismBase r <. ts
-  , Delta (Modules ts) (Messages ms)
-  , Eq r
-  , MonadIO c
-  )
-type IsOrganism ms r = IsOrganism' ms ms IO r
+type IsApp' ts ms c r = (Base r <: ms, Base r <. ts, Delta (Modules ts) (Messages ms), Eq r, MonadIO c)
+type IsApp ms r = IsApp' ms ms IO r
 
-type OrganismBase r =
-  '[ State () (Router r)
-   , Revent
-   , State () Shutdown
-   ]
+type Base r = '[ State () (Router r), Revent, State () Shutdown ]
 
-type OrganismKey' ms c = Key (Ef.Base.As (Code ms c) c)
-type OrganismKey ms r = OrganismKey' (Appended ms (OrganismBase r)) IO
-type OrganismBuilder' ts c r = Modules (OrganismBase r) (Action ts c) -> c (Modules ts (Action ts c))
-type OrganismBuilder ts r = OrganismBuilder' (Appended ts (OrganismBase r)) IO r
-type OrganismPrimer' ms c = Code ms c ()
-type OrganismPrimer ms r = OrganismPrimer' (Appended ms (OrganismBase r)) IO
-type OrganismRouter' ms c r = Code '[Route] (Code ms c) r
-type OrganismRouter ms r = OrganismRouter' (Appended ms (OrganismBase r)) IO r
-type OrganismPages' ms c r = r -> Code ms c System
-type OrganismPages ms r = OrganismPages' (Appended ms (OrganismBase r)) IO r
-type OrganismRoot = Maybe Txt
-type Organism ms r = Organism' (Appended ms (OrganismBase r)) (Appended ms (OrganismBase r)) IO r
+type AppKey ms r = Key (Ef.Base.As (Code (Appended ms (Base r)) IO) IO)
+type AppBuilder ts r = Modules (Base r) (Action (Appended ts (Base r)) IO) -> IO (Modules (Appended ts (Base r)) (Action (Appended ts (Base r)) IO))
+type AppPrimer ms r = Code (Appended ms (Base r)) IO ()
+type AppRouter ms r = Code '[Route] (Code (Appended ms (Base r)) IO) r
+type AppPages ms r = r -> Code (Appended ms (Base r)) IO System
 
-data Organism' ts ms c r
-  = Organism
-    { site    :: !(OrganismKey' ms c)
-    , root    :: !(OrganismRoot)
-    , build   :: !(OrganismBuilder' ts c r)
-    , prime   :: !(OrganismPrimer' ms c)
-    , routes  :: !(OrganismRouter' ms c r)
-    , pages   :: !(OrganismPages' ms c r)
+data App' ts ms c r
+  = App
+    { key     :: !(Key (Ef.Base.As (Code ms c) c))
+    , build   :: !(Modules (Base r) (Action ts c) -> c (Modules ts (Action ts c)))
+    , prime   :: !(Code ms c ())
+    , root    :: !(Maybe Txt)
+    , routes  :: !(Code '[Route] (Code ms c) r)
+    , pages   :: !(r -> Code ms c System)
     }
+type App ms r = App' (Appended ms (Base r)) (Appended ms (Base r)) IO r
 
-instance Eq (Organism' ts ms c r) where
-  (==) (Organism s _ _ _ _ _) (Organism s' _ _ _ _ _) =
+instance Eq (App' ts ms c r) where
+  (==) (App s _ _ _ _ _) (App s' _ _ _ _ _) =
     let Key k1 = s
         Key k2 = s'
     in case reallyUnsafePtrEquality# k1 k2 of
          1# -> True
          _  -> k1 == k2
 
-simpleOrganism :: Code '[Route] (Code (OrganismBase r) IO) r -> (r -> Code (OrganismBase r) IO System) -> Organism '[] r
-simpleOrganism = Organism "main" Nothing return (return ())
+simpleApp :: Code '[Route] (Code (Base r) IO) r -> (r -> Code (Base r) IO System) -> App '[] r
+simpleApp = App "main" return (return ()) Nothing
 
-onRoute :: ( IsOrganism' ts ms IO r
+onRoute :: ( IsApp' ts ms IO r
            , Monad c',  MonadIO c'
-           , With (Organism' ts ms IO r) (Code ms IO) IO
+           , With (App' ts ms IO r) (Code ms IO) IO
            , '[Revent] <: ms'
            )
-         => Organism' ts ms IO r
+         => App' ts ms IO r
          -> (r -> Code '[Event r] (Code ms' c') ())
          -> Code ms' c' (IO ())
 onRoute fus rf = do
@@ -144,13 +129,13 @@ data Carrier where
           -> Carrier
 
 run :: forall ts ms c r.
-       IsOrganism' ts ms c r
-    => Organism' ts ms c r
+       IsApp' ts ms c r
+    => App' ts ms c r
     -> c ()
-run Organism {..} = do
+run App {..} = do
   doc     <- getDocument
   q       <- newSignalBuffer
-  ort     <- getOrganismRoot root
+  ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
   rt'     <- liftIO $ newIORef (NullAtom $ Just ph,NullAtom $ Just ph,())
@@ -161,7 +146,7 @@ run Organism {..} = do
                      *:* state (Shutdown sdn)
                      *:* Empty
   sig :: Signal ms c (Code ms c ()) <- runner
-  addOrganism site (constructAs q sig)
+  addApp key (constructAs q sig)
   (obj,_) <- Ef.Base.Object built ! do
     p' <- periodical
     subscribe p' $ \r -> do
@@ -176,8 +161,8 @@ run Organism {..} = do
     setupRouter (Proxy :: Proxy r)
 #ifdef __GHCJS__
   driverPrintExceptions
-    ("Organism "
-     ++ show site
+    ("App "
+     ++ show key
      ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
     )
 #else
@@ -188,16 +173,16 @@ run Organism {..} = do
     go first ort doc (Carrier rt) p = do
       go' p
       where
-        go' (Subsystem b'@(Construct' b)) = do
+        go' (Subsystem b'@(Component' b)) = do
           b <- liftIO $ do
-            mb_ <- lookupConstruct (key b)
+            mb_ <- lookupComponent (Component.key b)
             case mb_ of
               Nothing -> do
                 (old,_,_) <- readIORef rt
                 iob <- if first then
-                         mkConstruct (ClearAndAppend ort) b
+                         mkComponent (ClearAndAppend ort) b
                        else
-                         mkConstruct (Replace old) b
+                         mkComponent (Replace old) b
                 return (Carrier iob)
               Just (_,x_) -> do
                 (old,_,_) <- readIORef rt
@@ -213,9 +198,9 @@ run Organism {..} = do
             pg <- lift $ pages r
             go False ort doc b pg
 
-        go' (System hc'@(Construct' hc) b'@(Construct' b)) = do
+        go' (System hc'@(Component' hc) b'@(Component' b)) = do
           b <- liftIO $ do
-            mh_ <- lookupConstruct (key hc)
+            mh_ <- lookupComponent (Component.key hc)
             case mh_ of
               Nothing -> void $ do
 #ifdef __GHCJS__
@@ -224,7 +209,7 @@ run Organism {..} = do
 #else
                 let h = ()
 #endif
-                mkConstruct (Replace (NullAtom (Just h))) hc
+                mkComponent (Replace (NullAtom (Just h))) hc
               Just (_,x_) -> do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
@@ -235,14 +220,14 @@ run Organism {..} = do
                 (new,_,_) <- readIORef x_
                 rebuild new
                 replace (NullAtom $ Just h) new
-            mb_ <- lookupConstruct (key b)
+            mb_ <- lookupComponent (Component.key b)
             case mb_ of
               Nothing -> do
                 (old,_,_) <- readIORef rt
                 iob <- if first then
-                         mkConstruct (ClearAndAppend ort) b
+                         mkComponent (ClearAndAppend ort) b
                        else do
-                         mkConstruct (Replace old) b
+                         mkComponent (Replace old) b
                 return (Carrier iob)
               Just (_,x_) -> do
                 (old,_,_) <- readIORef rt
@@ -258,8 +243,8 @@ run Organism {..} = do
             pg <- lift $ pages r
             go False ort doc b pg
 
-getOrganismRoot :: (MonadIO c) => Maybe Txt -> c ENode
-getOrganismRoot mt = do
+getAppRoot :: (MonadIO c) => Maybe Txt -> c ENode
+getAppRoot mt = do
   doc <- getDocument
 #ifdef __GHCJS__
   me <-
@@ -273,18 +258,18 @@ getOrganismRoot mt = do
   return ()
 #endif
 
-data OrganismNotStarted = OrganismNotStarted deriving Show
-instance Exception OrganismNotStarted
+data AppNotStarted = AppNotStarted deriving Show
+instance Exception AppNotStarted
 
-instance ( IsOrganism' ts ms c r
+instance ( IsApp' ts ms c r
          , MonadIO c
          )
-  => With (Organism' ts ms c r)
+  => With (App' ts ms c r)
           (Code ms c)
           c
   where
     using_ f = do
-      mi_ <- lookupOrganism (site f)
+      mi_ <- lookupApp (key f)
       case mi_ of
         Just as -> return (runAs as)
         -- Nothing -> what to do here?
@@ -299,22 +284,22 @@ instance ( IsOrganism' ts ms c r
         liftIO $ do
           killBuffer buf
           myThreadId >>= killThread
-      deleteOrganism (site f)
+      deleteApp (key f)
 
 {-# NOINLINE organismVault__ #-}
 organismVault__ = Vault (unsafePerformIO (newMVar Map.empty))
 
-lookupOrganism :: (MonadIO c)
+lookupApp :: (MonadIO c)
          => Key phantom -> c (Maybe phantom)
-lookupOrganism = vaultLookup organismVault__
+lookupApp = vaultLookup organismVault__
 
-addOrganism :: (MonadIO c)
+addApp :: (MonadIO c)
       => Key phantom -> phantom -> c ()
-addOrganism = vaultAdd organismVault__
+addApp = vaultAdd organismVault__
 
-deleteOrganism :: (MonadIO c)
+deleteApp :: (MonadIO c)
              => Key phantom -> c ()
-deleteOrganism = vaultDelete organismVault__
+deleteApp = vaultDelete organismVault__
 
 setupRouter :: forall ms c routeType.
                (Eq routeType, MonadIO c, '[Revent,State () (Router routeType)] <: ms)
@@ -348,14 +333,14 @@ setupRouter _ = do
                 lift $ do
                   setRoute mncr
                   syndicate crn ncr
-            become (go' p' mncr)
+           
 
 goto :: ( MonadIO c
-        , With (Organism' ts ms IO r) (Code ms IO) IO
+        , With (App' ts ms IO r) (Code ms IO) IO
         , '[State () (Router r)] <: ms
         , '[Revent] <: ms'
         )
-     => Organism' ts ms IO r -> Txt -> r -> Code ms' c (Promise ())
+     => App' ts ms IO r -> Txt -> r -> Code ms' c (Promise ())
 goto f rts rt = do
   pushPath rts
   with f $ do

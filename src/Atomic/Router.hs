@@ -4,7 +4,6 @@ module Atomic.Router where
 
 import Atomic.Route hiding (route)
 import Atomic.Signals
-import Atomic.Construct
 
 import Data.IORef
 
@@ -20,6 +19,8 @@ import qualified GHCJS.DOM.Location as L
 import qualified GHCJS.DOM.EventM as Ev
 import qualified GHCJS.DOM.EventTargetClosures as Ev
 #endif
+
+import Atomic.Component
 
 import Ef.Base
 

@@ -1,6 +1,6 @@
 {-# language OverloadedStrings #-}
 {-# language CPP #-}
-module Atomic.Mediators.Frame where
+module Atomic.Services.Frame where
 
 import Ef.Base
 
@@ -10,10 +10,10 @@ import Control.Concurrent
 
 import Data.Micros
 
-import Atomic.Construct (Win,getWindow)
+import Atomic.Component (Win,getWindow)
 import Atomic.Ease
 import Atomic.Revent
-import Atomic.Mediator
+import Atomic.Service
 import Atomic.With
 
 #ifdef __GHCJS__
@@ -28,8 +28,8 @@ data FrameState = FrameState
   , isRunning :: Bool
   }
 
-frameS :: Mediator '[State () FrameState]
-frameS = Mediator {..}
+frameS :: Service '[State () FrameState]
+frameS = Service {..}
   where
     key = "atomic.frame"
 

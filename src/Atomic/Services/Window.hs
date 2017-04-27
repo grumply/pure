@@ -1,6 +1,6 @@
 {-# language OverloadedStrings #-}
 {-# language CPP #-}
-module Atomic.Mediators.Window where
+module Atomic.Services.Window where
 
 import Ef.Base hiding (Obj)
 
@@ -9,9 +9,9 @@ import Data.IORef
 import Data.Txt
 import Data.JSON
 
-import Atomic.Construct (Win,getWindow)
+import Atomic.Component (Win,getWindow)
 import Atomic.Revent
-import Atomic.Mediator
+import Atomic.Service
 import Atomic.Signals
 import Atomic.With
 
@@ -117,8 +117,8 @@ getInnerHeight = do
 #endif
   return ih
 
-windowS :: Mediator '[State () WindowState]
-windowS = Mediator {..}
+windowS :: Service '[State () WindowState]
+windowS = Service {..}
   where
     key = "atomic.window"
 

@@ -32,8 +32,8 @@ import qualified Data.Aeson.Encoding as AE
 import Data.Typeable as Export
 import GHC.Generics as Export (Generic)
 
-import Atomic.Construct
-import Atomic.Mediator
+import Atomic.Component
+import Atomic.Service hiding (Base)
 
 import Control.Lens as Export hiding
   (lazy,Empty,none,(<~),(.=),(<.>))
@@ -74,7 +74,7 @@ import Atomic.Request    as Export
 import Atomic.Revent     as Export
 import Atomic.Route      as Export hiding (route)
 import Atomic.Router     as Export
-import Atomic.Mediators  as Export
+import Atomic.Services   as Export
 import Atomic.Signals    as Export
 import Atomic.Throttle   as Export
 import Atomic.ToBS       as Export
@@ -225,10 +225,10 @@ this = do
 dash :: Txt -> Txt
 dash = Txt.map (\x -> if x == '.' then '-' else x)
 
-type Controller m = Construct '[] m
--- controller :: ConstructKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
-controller :: ConstructKey '[] m -> m -> (m -> Atom (Code (ConstructBase m) IO ())) -> Controller m
-controller key0 model0 render0 = Construct {..}
+type Controller m = Component '[] m
+-- controller :: ComponentKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
+controller :: ComponentKey '[] m -> m -> (m -> Atom (Code (Base m) IO ())) -> Controller m
+controller key0 model0 render0 = Component {..}
   where
     key = key0
     build = return
@@ -236,10 +236,10 @@ controller key0 model0 render0 = Construct {..}
     model = model0
     render = render0
 
-type Static = Construct '[] ()
--- static :: ConstructKey '[] () -> HTML [] () -> Static
-static :: ConstructKey '[] () -> Atom (Code (ConstructBase ()) IO ()) -> Static
-static key0 render0 = Construct {..}
+type Static = Component '[] ()
+-- static :: ComponentKey '[] () -> HTML [] () -> Static
+static :: ComponentKey '[] () -> Atom (Code (Base ()) IO ()) -> Static
+static key0 render0 = Component {..}
   where
     key = key0
     build = return
@@ -247,9 +247,9 @@ static key0 render0 = Construct {..}
     model = ()
     render _ = render0
 
-type Observatory m = Mediator '[Observable m]
-observatory :: MediatorKey '[Observable m] -> m -> Observatory m
-observatory key initial = Mediator {..}
+type Observatory m = Service '[Observable m]
+observatory :: ServiceKey '[Observable m] -> m -> Observatory m
+observatory key initial = Service {..}
   where
     build base = do
       o <- observable initial
@@ -264,11 +264,11 @@ look o = do
 change :: MonadIO c => Observatory m -> m -> c ()
 change o m = void $ with o (setO m)
 
-type Observer m = Construct '[] (Maybe m)
--- observer :: Observatory m -> ConstructKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
-observer :: forall m ms w. (Eq m, With w (Code ms IO) (Code (ConstructBase (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
-         => w -> ConstructKey '[] (Maybe m) -> (m -> Atom (Code (ConstructBase (Maybe m)) IO ())) -> Observer m
-observer s key0 render0 = Construct {..}
+type Observer m = Component '[] (Maybe m)
+-- observer :: Observatory m -> ComponentKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
+observer :: forall m ms w. (Eq m, With w (Code ms IO) (Code (Base (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
+         => w -> ComponentKey '[] (Maybe m) -> (m -> Atom (Code (Base (Maybe m)) IO ())) -> Observer m
+observer s key0 render0 = Component {..}
   where
     key = key0
     build = return
@@ -312,13 +312,12 @@ type family Attribute ms m = a | a -> ms, a -> m where
   Attribute ms m = Feature (C ms m ())
 
 type family C ms m a = c | c -> ms, c -> m, c -> a where
-  C ms m a = Code (Appended ms (ConstructBase m)) IO a
+  C ms m a = Code (Appended ms (Base m)) IO a
 -}
 
 -- These will have to suffice for now with 7.10
-type HTML ms m = Atom (Code (Appended ms (ConstructBase m)) IO ())
-type Attribute ms m = Feature (Code (Appended ms (ConstructBase m)) IO ())
-type C ms m a = Code (Appended ms (ConstructBase m)) IO a
+type HTML ms m = Atom (Code (Appended ms (Base m)) IO ())
+type Attribute ms m = Feature (Code (Appended ms (Base m)) IO ())
 
 selfClosing tag =
   case tag of
@@ -367,7 +366,7 @@ instance ToTxt (Atom e) where
         ">" <> Txt.concat (map toTxt _atoms) <> "</" <> _tag <> ">"
   toTxt Managed {..} =
     case _constr of
-      Construct' Construct {..} ->
+      Component' Component {..} ->
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
           ">"  <> toTxt (render model) <> "</" <> _tag <> ">"
 
@@ -384,30 +383,30 @@ data System
     }
   deriving Eq
 
-page :: ( IsConstruct' ts ms m
-        , IsConstruct' ts' ms' m'
+page :: ( IsComponent' ts ms m
+        , IsComponent' ts' ms' m'
         )
-     => Construct' ts ms m
-     -> Construct' ts' ms' m'
+     => Component' ts ms m
+     -> Component' ts' ms' m'
      -> System
-page h b = System (Construct' h) (Construct' b)
+page h b = System (Component' h) (Component' b)
 
-partial :: IsConstruct' ts ms m
-        => Construct' ts ms m
+partial :: IsComponent' ts ms m
+        => Component' ts ms m
         -> System
-partial = Subsystem . Construct'
+partial = Subsystem . Component'
 
 renderSystem :: System -> Txt
 renderSystem (System h c) =
   "<!DOCTYPE html>" <>
     case h of
-      Construct' Construct {..} ->
+      Component' Component {..} ->
         toTxt $
           htmlE []
             [ render model
             , body []
                 [ case c of
-                    Construct' a@Construct {} -> construct div [ idA "atomic" ] a
+                    Component' a@Component {} -> construct div [ idA "atomic" ] a
                 ]
             ]
 renderSystem (Subsystem c) =
@@ -417,7 +416,7 @@ renderSystem (Subsystem c) =
         [ head []
         , body []
             [ case c of
-                Construct' a@Construct {} -> construct div [ idA "atomic" ] a
+                Component' a@Component {} -> construct div [ idA "atomic" ] a
             ]
         ]
 
@@ -425,20 +424,20 @@ renderSystemBootstrap :: System -> Txt -> Txt
 renderSystemBootstrap (System h c) mainScript =
   "<!DOCTYPE html>" <>
     case h of
-      Construct' Construct {..} ->
+      Component' Component {..} ->
         toTxt $
           htmlE []
             [ head []
             , body []
                 [ case c of
-                    Construct' a@Construct {} -> construct div [ idA "atomic" ] a
+                    Component' a@Component {} -> construct div [ idA "atomic" ] a
                 , script [ src mainScript, defer True ] []
                 ]
             ]
 renderSystemBootstrap (Subsystem c) mainScript =
   "<!DOCTYPE html>" <>
     case c of
-      Construct' a@Construct {} ->
+      Component' a@Component {} ->
         toTxt $
           htmlE []
             [ head []
@@ -449,26 +448,26 @@ renderSystemBootstrap (Subsystem c) mainScript =
             ]
 
 renderDynamicSystem :: System -> IO Txt
-renderDynamicSystem (System (Construct' h) (Construct' c)) = do
+renderDynamicSystem (System (Component' h) (Component' c)) = do
   let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentView h
   head_html <- renderDynamicHTML h_
   body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c])
   return $ dt <> head_html <> body_html <> "</html>"
-renderDynamicSystem (Subsystem (Construct' c)) = do
+renderDynamicSystem (Subsystem (Component' c)) = do
   let dt = "<!DOCTYPE html><head></head>"
   Just c_ <- demandMaybe =<< currentView c
   body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c ])
   return $ dt <> body_html <> "</html>"
 
 renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
-renderDynamicSystemBootstrap (System (Construct' h) (Construct' c)) mainScript = do
+renderDynamicSystemBootstrap (System (Component' h) (Component' c)) mainScript = do
   let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentView h
   head_html <- renderDynamicHTML h_
   body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c, script [ src mainScript, defer True ] [] ])
   return $ dt <> head_html <> body_html <> "</html>"
-renderDynamicSystemBootstrap (Subsystem (Construct' c)) mainScript = do
+renderDynamicSystemBootstrap (Subsystem (Component' c)) mainScript = do
   let dt = "<!DOCTYPE html><html><head></head>"
   body_html <- renderDynamicHTML (body [] [ construct div [ idA "atomic" ] c, script [ src mainScript, defer True ] [] ])
   return $ dt <> body_html <> "</html>"
@@ -514,7 +513,7 @@ renderDynamicHTML h =
 
     Managed {..} ->
       case _constr of
-        Construct' a@Construct {..} -> do
+        Component' a@Component {..} -> do
           Just v <- demandMaybe =<< currentView a
           inner <- renderDynamicHTML v
           return $

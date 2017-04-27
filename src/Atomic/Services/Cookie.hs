@@ -1,13 +1,13 @@
 {-# language OverloadedStrings #-}
 {-# language CPP #-}
-module Atomic.Mediators.Cookie where
+module Atomic.Services.Cookie where
 
 import Ef.Base
 
 import Data.Txt
 
-import Atomic.Construct (Doc,getDocument)
-import Atomic.Mediator
+import Atomic.Component (Doc,getDocument)
+import Atomic.Service
 import Atomic.With
 
 import Data.Maybe
@@ -39,8 +39,8 @@ setCookie_internal d mc =
   return ()
 #endif
 
-cookieS :: Mediator '[State () (Map.HashMap Txt [Txt])]
-cookieS = Mediator {..}
+cookieS :: Service '[State () (Map.HashMap Txt [Txt])]
+cookieS = Service {..}
   where
 
     key = "atomic.cookie"

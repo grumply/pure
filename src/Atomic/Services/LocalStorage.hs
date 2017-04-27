@@ -1,6 +1,6 @@
 {-# language CPP #-}
 {-# language OverloadedStrings #-}
-module Atomic.Mediators.LocalStorage where
+module Atomic.Services.LocalStorage where
 
 import Ef.Base
 
@@ -8,9 +8,9 @@ import Data.Txt
 import Data.JSON
 import Data.ByteString
 
-import Atomic.Construct (Win,getWindow)
+import Atomic.Component (Win,getWindow)
 import Atomic.Revent
-import Atomic.Mediator
+import Atomic.Service
 import Atomic.Signals
 import Atomic.ToTxt
 import Atomic.FromTxt
@@ -51,8 +51,8 @@ foreign import javascript unsafe
   readLocalStorage :: IO JSA.JSArray
 #endif
 
-localStorageS :: Mediator '[State () (Map.HashMap Txt Value)]
-localStorageS = Mediator {..}
+localStorageS :: Service '[State () (Map.HashMap Txt Value)]
+localStorageS = Service {..}
   where
     key = "atomic.localStorage"
 
@@ -165,7 +165,7 @@ proxyLocalMessage :: forall traits ms c msg message messageType.
 #else
                       , '[State () WebSocket] <: ms
 #endif
-                      , IsMediator' traits ms
+                      , IsService' traits ms
                       , Typeable messageType
                       , Message messageType
                       , M messageType ~ message
@@ -173,7 +173,7 @@ proxyLocalMessage :: forall traits ms c msg message messageType.
                       , FromBS message
                       , FromJSON message
                       )
-                  => Mediator' traits ms
+                  => Service' traits ms
                   -> Proxy messageType
                   -> c (IO ())
 proxyLocalMessage s mty_proxy = do

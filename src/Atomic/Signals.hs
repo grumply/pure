@@ -5,7 +5,7 @@ module Atomic.Signals where
 import Ef.Base
 
 import Atomic.Revent
-import Atomic.Construct (Win,Doc,getDocument,getWindow)
+import Atomic.Component (Win,Doc,getDocument,getWindow)
 
 #ifdef __GHCJS__
 import qualified GHCJS.DOM.EventM as Ev

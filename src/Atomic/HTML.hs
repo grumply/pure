@@ -6,7 +6,7 @@ import Ef.Base
 import Data.Txt (Txt)
 
 import Atomic.Attribute
-import Atomic.Construct
+import Atomic.Component
 
 import Control.Lens
 

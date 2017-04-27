@@ -1,15 +1,15 @@
 {-# language OverloadedStrings #-}
 {-# language CPP #-}
-module Atomic.Mediators.Mouse where
+module Atomic.Services.Mouse where
 
 import Ef.Base hiding (Object)
 
 import Data.Txt
 import Data.JSON
 
-import Atomic.Construct (Win,getWindow)
+import Atomic.Component (Win,getWindow)
 import Atomic.Revent
-import Atomic.Mediator
+import Atomic.Service
 import Atomic.Signals
 import Atomic.With
 
@@ -29,7 +29,7 @@ data MousePosition = MousePosition
 
 -- note we don't add a scroll listener here because it can cause jank on scroll
 -- due to a default check for preventDefault in the browser. Instead, scrolling
--- can be inferred by changes on Fusion.Mediators.Window onScrollX/onScrollY.
+-- can be inferred by changes on Fusion.Services.Window onScrollX/onScrollY.
 data MouseState = MouseState
   { mouseXRef      :: IORef (Maybe Int)
   , mouseYRef      :: IORef (Maybe Int)
@@ -46,8 +46,8 @@ mouseMove =
    "mousemove"
 #endif
 
-mouseS :: Mediator '[State () MouseState]
-mouseS = Mediator {..}
+mouseS :: Service '[State () MouseState]
+mouseS = Service {..}
   where
     key = "atomic.mouse"
 

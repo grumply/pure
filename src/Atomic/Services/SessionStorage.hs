@@ -1,14 +1,14 @@
 {-# language CPP #-}
 {-# language OverloadedStrings #-}
-module Atomic.Mediators.SessionStorage where
+module Atomic.Services.SessionStorage where
 
 import Ef.Base
 
 import Data.Txt
 import Data.JSON
 
-import Atomic.Construct (Win,getWindow)
-import Atomic.Mediator
+import Atomic.Component (Win,getWindow)
+import Atomic.Service
 import Atomic.With
 import Atomic.FromTxt
 import Atomic.ToTxt
@@ -44,8 +44,8 @@ foreign import javascript unsafe
   readSessionStorage :: IO JSA.JSArray
 #endif
 
-sessionStorageS :: Mediator '[State () (Map.HashMap Txt Value)]
-sessionStorageS = Mediator {..}
+sessionStorageS :: Service '[State () (Map.HashMap Txt Value)]
+sessionStorageS = Service {..}
   where
     key = "atomic.sessionStorage"
 

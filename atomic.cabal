@@ -34,10 +34,10 @@ library
 
   if (impl(ghcjs))
     exposed-modules:    Atomic
+                      , Module
                       , Component
-                      , Construct
-                      , Mediator
-                      , Organism
+                      , Service
+                      , App
                       , Data.JSON
                       , Data.Txt
                       , Data.Millis
@@ -46,13 +46,13 @@ library
                       , Atomic.API.Implementation
                       , Atomic.API.Interface
                       , Atomic.API.ProxyList
-                      , Atomic.Construct
+                      , Atomic.Component
                       , Atomic.Attribute
                       , Atomic.CSS
                       , Atomic.CSS.Helpers
                       , Atomic.CSS.Render
                       , Atomic.CSS.Styles
-                      , Atomic.Component
+                      , Atomic.Module
                       , Atomic.Cond
                       , Atomic.Debounce
                       , Atomic.Default
@@ -71,20 +71,19 @@ library
                       , Atomic.Normalize
                       , Atomic.Dispatch
                       , Atomic.Observable
-                      , Atomic.Parser
                       , Atomic.Request
                       , Atomic.Revent
                       , Atomic.Route
                       , Atomic.Router
-                      , Atomic.Mediator
-                      , Atomic.Mediators
-                      , Atomic.Mediators.Cookie
-                      , Atomic.Mediators.Frame
-                      , Atomic.Mediators.LocalStorage
-                      , Atomic.Mediators.Mouse
-                      , Atomic.Mediators.SessionStorage
-                      , Atomic.Mediators.Tween
-                      , Atomic.Mediators.Window
+                      , Atomic.Service
+                      , Atomic.Services
+                      , Atomic.Services.Cookie
+                      , Atomic.Services.Frame
+                      , Atomic.Services.LocalStorage
+                      , Atomic.Services.Mouse
+                      , Atomic.Services.SessionStorage
+                      , Atomic.Services.Tween
+                      , Atomic.Services.Window
                       , Atomic.Signals
                       , Atomic.Throttle
                       , Atomic.ToBS
@@ -113,12 +112,12 @@ library
 
   else
     exposed-modules:    Atomic
+                      , Module
                       , Component
-                      , Construct
-                      , Mediator
-                      , Organism
-                      , Population
-                      , Presence
+                      , Service
+                      , App
+                      , Server
+                      , Connection
                       , Data.JSON
                       , Data.Txt
                       , Data.Millis
@@ -127,13 +126,13 @@ library
                       , Atomic.API.Implementation
                       , Atomic.API.Interface
                       , Atomic.API.ProxyList
-                      , Atomic.Construct
+                      , Atomic.Component
                       , Atomic.Attribute
                       , Atomic.CSS
                       , Atomic.CSS.Helpers
                       , Atomic.CSS.Render
                       , Atomic.CSS.Styles
-                      , Atomic.Component
+                      , Atomic.Module
                       , Atomic.Cond
                       , Atomic.Debounce
                       , Atomic.Default
@@ -152,20 +151,19 @@ library
                       , Atomic.Normalize
                       , Atomic.Dispatch
                       , Atomic.Observable
-                      , Atomic.Parser
                       , Atomic.Request
                       , Atomic.Revent
                       , Atomic.Route
                       , Atomic.Router
-                      , Atomic.Mediator
-                      , Atomic.Mediators
-                      , Atomic.Mediators.Cookie
-                      , Atomic.Mediators.Frame
-                      , Atomic.Mediators.LocalStorage
-                      , Atomic.Mediators.Mouse
-                      , Atomic.Mediators.SessionStorage
-                      , Atomic.Mediators.Tween
-                      , Atomic.Mediators.Window
+                      , Atomic.Service
+                      , Atomic.Services
+                      , Atomic.Services.Cookie
+                      , Atomic.Services.Frame
+                      , Atomic.Services.LocalStorage
+                      , Atomic.Services.Mouse
+                      , Atomic.Services.SessionStorage
+                      , Atomic.Services.Tween
+                      , Atomic.Services.Window
                       , Atomic.Signals
                       , Atomic.Throttle
                       , Atomic.ToBS

@@ -2,7 +2,7 @@
 {-# language FlexibleInstances #-}
 {-# language UndecidableInstances #-}
 {-# language CPP #-}
-module Population (module Population, module Export) where
+module Server (module Server, module Export) where
 
 import Ef.Base as Export hiding (As,Index,watch,transform,construct,uncons,distribute,embed,observe)
 import qualified Ef.Event
@@ -12,9 +12,10 @@ import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
 import Atomic as Export hiding (accept)
 
 import Atomic.WebSocket as Export hiding (LazyByteString)
-import Presence hiding (accept)
+import Connection hiding (Base,accept)
+import qualified Connection
 
-import qualified Atomic.Mediator as Mediator
+import qualified Atomic.Service as Service
 
 import Data.Promise
 import Data.Queue
@@ -39,20 +40,20 @@ import qualified System.IO.Streams as Streams
 import Unsafe.Coerce
 import System.IO.Unsafe
 
-data PopulationNotStarted = PopulationNotStarted deriving Show
-instance Exception PopulationNotStarted
+data ServerNotStarted = ServerNotStarted deriving Show
+instance Exception ServerNotStarted
 
-instance ( IsPopulation' ts ms c
-         , IsPresence' uTs uMs
+instance ( IsServer' ts ms c
+         , IsConnection' uTs uMs
          , MonadIO c
          , MonadIO c'
          )
-  => With (Population' ts ms c uTs uMs)
+  => With (Server' ts ms c uTs uMs)
           (Code ms c)
           c'
   where
     using_ s = do
-      mi_ <- lookupPopulation (key s)
+      mi_ <- lookupServer (key s)
       case mi_ of
         Just as -> return (liftIO . runAs as)
         -- Nothing -> hmm?
@@ -67,95 +68,73 @@ instance ( IsPopulation' ts ms c
         liftIO $ do
           killBuffer buf
           myThreadId >>= killThread
-      deletePopulation (key s)
+      deleteServer (key s)
 
-type IsPopulation' ts ms c =
-  ( PopulationBase <: ms
-  , PopulationBase <. ts
-  , Delta (Modules ts) (Messages ms)
-  , MonadIO c
-  )
-type IsPopulation ms = IsPopulation' ms ms IO
+type IsServer' ts ms c = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms), MonadIO c)
+type IsServer ms = IsServer' ms ms IO
+
+type ServerKey ms = Key (Ef.Base.As (Code (Appended ms Base) IO) IO)
+type ServerBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
+type ServerPrimer ms = Code (Appended ms Base) IO ()
+type ServerConnection pms ms = Ef.Base.As (Code (Appended ms Base) IO) IO -> Connection' (Appended pms Connection.Base) (Appended pms Connection.Base)
 
 newtype Connections = Connections (Network (SockAddr,Socket,Signaled))
 
-type PopulationBase =
-  '[Revent
-   ,State () Connections
-   ,State () Vault
-   ,State () Shutdown
-   ]
+type Base = '[Revent,State () Connections,State () Vault,State () Shutdown]
 
-type PopulationKey' ms c = Key (Ef.Base.As (Code ms c) IO)
-type PopulationKey ms = PopulationKey' (Appended ms PopulationBase) IO
-type PopulationIP = String
-type PopulationPort = Int
-#ifdef SECURE
-type PopulationSSLKey = FilePath
-type PopulationSSLCert = FilePath
-type PopulationSSLChain = Maybe FilePath
-#endif
-type PopulationBuilder' ts c = Modules PopulationBase (Action ts c) -> c (Modules ts (Action ts c))
-type PopulationBuilder ts = PopulationBuilder' (Appended ts PopulationBase) IO
-type PopulationPrimer' ms c = Code ms c ()
-type PopulationPrimer ms = PopulationPrimer' (Appended ms PopulationBase) IO
-type PopulationPresence' pts pms ms c = Ef.Base.As (Code ms c) IO -> Presence' pts pms
-type PopulationPresence pms ms = PopulationPresence' (Appended pms PresenceBase) (Appended pms PresenceBase) (Appended ms PopulationBase) IO
-
-type Population ms pms = Population' (Appended ms PopulationBase) (Appended ms PopulationBase) IO (Appended pms PresenceBase) (Appended pms PresenceBase)
-
-data Population' ts ms c pts pms
+data Server' ts ms c pts pms
   =
 #ifdef SECURE
-    SecurePopulation
-    { key      :: !(PopulationKey' ms c)
-    , ip       :: !(PopulationIP)
-    , port     :: !(PopulationPort)
-    , sslKey   :: !(PopulationSSLKey)
-    , sslCert  :: !(PopulationSSLCert)
-    , sslChain :: !(PopulationSSLChain)
-    , build    :: !(PopulationBuilder' ts c)
-    , prime    :: !(PopulationPrimer' ms c)
-    , presence :: !(PopulationPresence' pts pms ms c)
+    SecureServer
+    { key      :: !(Key (Ef.Base.As (Code ms c) IO))
+    , ip       :: !(String)
+    , port     :: !(Int)
+    , sslKey   :: !(FilePath)
+    , sslCert  :: !(FilePath)
+    , sslChain :: !(Maybe FilePath)
+    , build    :: !(Modules Base (Action ts c) -> c (Modules ts (Action ts c)))
+    , prime    :: !(Code ms c ())
+    , presence :: !(Ef.Base.As (Code ms c) IO -> Connection' pts pms)
     }
   |
 #endif
-    Population
-    { key      :: !(PopulationKey' ms c)
-    , ip       :: !(PopulationIP)
-    , port     :: !(PopulationPort)
-    , build    :: !(PopulationBuilder' ts c)
-    , prime    :: !(PopulationPrimer' ms c)
-    , presence :: !(PopulationPresence' pts pms ms c)
+    Server
+    { key      :: !(Key (Ef.Base.As (Code ms c) IO))
+    , ip       :: !(String)
+    , port     :: !(Int)
+    , build    :: !(Modules Base (Action ts c) -> c (Modules ts (Action ts c)))
+    , prime    :: !(Code ms c ())
+    , presence :: !(Ef.Base.As (Code ms c) IO -> Connection' pts pms)
     }
+type Server ms pms = Server' (Appended ms Base) (Appended ms Base) IO (Appended pms Connection.Base) (Appended pms Connection.Base)
 
 forkRun :: ( MonadIO c
-           , IsPresence' uTs uMs
-           , IsPopulation' ts ms IO
+           , IsConnection' uTs uMs
+           , IsServer' ts ms IO
            , Functor (Messages uMs) 
            )
-        => Population' ts ms IO uTs uMs
+        => Server' ts ms IO uTs uMs
         -> c ThreadId
 forkRun = liftIO . forkIO . run
 
 {-# INLINE run #-}
 run :: forall ts ms c uTs uMs.
-       ( IsPresence' uTs uMs
-       , IsPopulation' ts ms c
+       ( IsConnection' uTs uMs
+       , IsServer' ts ms c
        , Functor (Messages uMs) -- why? ghc-8.0.1 bug; if I remove State () Connection, it works fine;
-                                -- something about the number of traits/messages since IsPresence contains
-                                -- `Presence_ m <: uMs` which terminates in Functor (Messages uMs)
+                                -- something about the number of traits/messages since IsConnection contains
+                                -- `Connection_ m <: uMs` which terminates in Functor (Messages uMs)
        )
-    => Population' ts ms c uTs uMs
+    => Server' ts ms c uTs uMs
     -> c ()
 #ifdef SECURE
-run SecurePopulation {..} = void $ do
+run SecureServer {..} = void $ do
 
   nw :: Network (SockAddr,Socket,Signaled) <- network
 
   q <- newSignalBuffer
 
-  ctx <- liftIO $ sslSetupPopulation sslKey sslCert sslChain
+  ctx <- liftIO $ sslSetupServer sslKey sslCert sslChain
   sock <- newListenSocket ip port
 
   gs <- createVault
@@ -172,12 +151,12 @@ run SecurePopulation {..} = void $ do
     :: Signal ms c (Code ms c ())
     <- runner
 
-  let asPopulation = constructAs q populationSig
-      cli = presence asPopulation
+  let asServer = constructAs q populationSig
+      cli = presence asServer
 
-  addPopulation key asPopulation
+  addServer key asServer
 
-  liftIO $ forkIO $ void $ handleSecurePresences (ctx,sock) nw q connSignal
+  liftIO $ forkIO $ void $ handleSecureConnections (ctx,sock) nw q connSignal
 
   sdn <- network
 
@@ -190,7 +169,7 @@ run SecurePopulation {..} = void $ do
 
   eventloop prime cli connSignal q (Object populationObj)
   where
-    handleSecurePresences (ctx,sock) nw gb connSignal = go
+    handleSecureConnections (ctx,sock) nw gb connSignal = go
       where
         go = do
           (conn,sockAddr) <- accept sock
@@ -205,7 +184,7 @@ run SecurePopulation {..} = void $ do
               buffer gb connSignal (ws,sockAddr,buf)
           go
 #endif
-run Population {..} = void $ do
+run Server {..} = void $ do
 
   nw :: Network (SockAddr,Socket,Signaled) <- network
 
@@ -227,12 +206,12 @@ run Population {..} = void $ do
     :: Signal ms c (Code ms c ())
     <- runner
 
-  let asPopulation = constructAs q populationSig
-      cli = presence asPopulation
+  let asServer = constructAs q populationSig
+      cli = presence asServer
 
-  addPopulation key asPopulation
+  addServer key asServer
 
-  tid <- liftIO $ forkIO $ void $ handlePresences sock q connSignal
+  tid <- liftIO $ forkIO $ void $ handleConnections sock q connSignal
 
   sdn <- network
 
@@ -245,7 +224,7 @@ run Population {..} = void $ do
 
   eventloop prime cli connSignal q (Ef.Base.Object populationObj)
   where
-    handlePresences sock gb connSignal = go
+    handleConnections sock gb connSignal = go
       where
         go = do
           (conn,sockAddr) <- accept sock
@@ -257,12 +236,12 @@ run Population {..} = void $ do
           go
 
 eventloop :: forall ts ms c uTs uMs.
-             ( IsPopulation' ts ms c
-             , IsPresence' uTs uMs
+             ( IsServer' ts ms c
+             , IsConnection' uTs uMs
              , Functor (Messages uMs)
              )
           => Code ms c ()
-          -> Presence' uTs uMs
+          -> Connection' uTs uMs
           -> Signal ms c (State () WebSocket (Action uTs IO),SockAddr,Signaled)
           -> Signaled
           -> Ef.Base.Object ts c
@@ -271,26 +250,26 @@ eventloop primeS pres connSignal q populationObj = do
   (obj,_) <- populationObj ! do
     primeS
     void $ behavior connSignal $ \(websock,sockAddr,buf) -> do
-      Mediator.startMediator buf Mediator.Mediator
+      Service.startService buf Service.Service
         { key = fromTxt (toTxt (show sockAddr))
         , build = \base -> do
-            Presence.build pres (websock *:* state (Origin sockAddr) *:* base)
-        , prime = Presence.prime pres
+            Connection.build pres (websock *:* state (Origin sockAddr) *:* base)
+        , prime = Connection.prime pres
         }
   driver q obj
 
 {-# NOINLINE populationVault__ #-}
 populationVault__ = Vault (unsafePerformIO (newMVar Map.empty))
 
-lookupPopulation :: (MonadIO c)
+lookupServer :: (MonadIO c)
               => Key phantom -> c (Maybe phantom)
-lookupPopulation = vaultLookup populationVault__
+lookupServer = vaultLookup populationVault__
 
-addPopulation :: (MonadIO c)
+addServer :: (MonadIO c)
            => Key phantom -> phantom -> c ()
-addPopulation = vaultAdd populationVault__
+addServer = vaultAdd populationVault__
 
-deletePopulation :: (MonadIO c)
+deleteServer :: (MonadIO c)
               => Key phantom -> c ()
-deletePopulation = vaultDelete populationVault__
+deleteServer = vaultDelete populationVault__
 
