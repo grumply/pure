@@ -2400,6 +2400,9 @@ webkitTextDecorationSkip = "-webkit-text-decoration-skip"
 webkitAppearance :: Txt
 webkitAppearance = "-webkit-appearance"
 
+webkitTransition :: Txt
+webkitTransition = "-webkit-transition"
+
 ----------------------------------------
 -- Mozilla
 

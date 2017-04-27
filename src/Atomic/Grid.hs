@@ -1,5 +1,6 @@
 {-# language OverloadedStrings #-}
 {-# language TemplateHaskell #-}
+{-# language NoOverloadedLists #-}
 module Atomic.Grid where
 
 import Atomic.CSS
