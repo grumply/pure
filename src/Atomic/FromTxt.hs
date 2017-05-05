@@ -6,7 +6,12 @@ module Atomic.FromTxt where
 
 #ifdef __GHCJS__
 import Data.JSString
+import Data.JSString.Read as T
+#else
+import Data.Text.Read as T
 #endif
+
+import Data.Maybe
 
 import Data.Txt
 
@@ -76,3 +81,33 @@ instance FromTxt BSL.ByteString where
 #else
   fromTxt = BSL.fromStrict . T.encodeUtf8
 #endif
+
+readError :: String -> Txt -> a
+readError ty t = error ("Atomic.FromTxt: FromTxt failed to read an " ++ ty ++ " when given: " ++ show t)
+
+instance FromTxt Int where
+  {-# INLINE fromTxt #-}
+#ifdef __GHCJS__
+  fromTxt t = fromMaybe (readError "Int" t) (T.readIntMaybe t)
+#else
+  fromTxt t = either (readError "Int" t) fst (T.signed t)
+#endif
+
+instance FromTxt Double where
+  {-# INLINE fromTxt #-}
+#ifdef __GHCJS__
+  fromTxt t = fromMaybe (readError "Double" t) (T.readDoubleMaybe t)
+#else
+  fromTxt t = either (readError "Double" t) fst (T.double t)
+#endif
+
+instance FromTxt Integer where
+  {-# INLINE fromTxt #-}
+#ifdef __GHCJS__
+  fromTxt t = fromMaybe (readError "Integer" t) (T.readIntegerMaybe t)
+#else
+  fromTxt t = either (readError "Integer" t) fst (T.signed t)
+#endif
+
+instance FromTxt a => FromTxt (Maybe a) where
+  fromTxt x = if x == mempty then Nothing else Just (fromTxt x)

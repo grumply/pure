@@ -84,10 +84,8 @@ normalize =
             overflow =: hiddenS
 
           select ("buton" <&>> "input" <&>> "optgroup" <&>> "select" <&>> "textarea") $ do
-            fontFamily =: "sans-serif"
-            fontSize   =: per 100
-            lineHeight =: dec 1.15
-            margin     =: int 0
+            font   =: inherit
+            margin =: int 0
 
           select ("button" <&>> "input") $ do
             overflow =: visible
@@ -157,7 +155,7 @@ normalize =
           select "summary" $ do
             display =: listItem
 
-          select "[hidden]" $ do
+          select "[hidden], template" $ do
             display =: noneS
 
      in [| nrmlz |]

@@ -33,9 +33,26 @@ import Prelude
 #ifdef __GHCJS__
 import qualified Data.JSString as JSS
 import qualified GHCJS.DOM.Types as T
+import qualified GHCJS.DOM.Window as W
+import qualified GHCJS.DOM.Document as D
+import qualified GHCJS.DOM.Location as L
 #else
 import qualified Data.Text as JSS
 import Data.Aeson (Value(..))
+#endif
+
+type Win =
+#ifdef __GHCJS__
+  W.Window
+#else
+  ()
+#endif
+
+type Doc =
+#ifdef __GHCJS__
+  D.Document
+#else
+  ()
 #endif
 
 type ENode =
@@ -55,6 +72,13 @@ type TNode =
 type NNode =
 #ifdef __GHCJS__
   T.Node
+#else
+  ()
+#endif
+
+type Loc =
+#ifdef __GHCJS__
+  L.Location
 #else
   ()
 #endif
@@ -85,6 +109,18 @@ data Feature e
     , _eventCreate :: ENode -> Obj -> IO (Maybe e)
     , _eventListener :: Maybe (IO ())
     }
+  | OnWin
+    { _eventName :: Txt
+    , _eventOptions :: Options
+    , _eventWinCreate :: ENode -> Win -> Obj -> IO (Maybe e)
+    , _eventListener :: Maybe (IO ())
+    }
+  | OnDoc
+    { _eventName :: Txt
+    , _eventOptions :: Options
+    , _eventDocCreate :: ENode -> Doc -> Obj -> IO (Maybe e)
+    , _eventListener :: Maybe (IO ())
+    }
   | Link
     { _link :: Txt
     , _eventListener :: Maybe (IO ())
@@ -113,6 +149,7 @@ instance ToJSON (Feature e) where
       go (Link e _) = object [ "type" .= ("link" :: Txt), "link" .= e]
       go (SVGLink e _) = object [ "type" .= ("svglink" :: Txt), "link" .= e ]
       go (XLink k v) = object [ "type" .= ("xlink" :: Txt), "key" .= k, "val" .= v]
+      go _ = object []
 
 instance FromJSON (Feature e) where
   parseJSON o0 = do
@@ -157,6 +194,10 @@ instance Eq (Feature e) where
   (==) (Style ss) (Style ss') =
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
   (==) (On e os ev _) (On e' os' ev' _) =
+    prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
+  (==) (OnWin e os ev _) (OnWin e' os' ev' _) =
+    prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
+  (==) (OnDoc e os ev _) (OnDoc e' os' ev' _) =
     prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
   (==) (Link t _) (Link t' _) =
     prettyUnsafeEq t t'
@@ -213,19 +254,37 @@ boolProperty nm b = property nm (if b then "true" else "") -- exploit the truthy
 on :: Txt -> (ENode -> Obj -> IO (Maybe e)) -> Feature e
 on ev f = On ev def f Nothing
 
+onDoc :: Txt -> (ENode -> Doc -> Obj -> IO (Maybe e)) -> Feature e
+onDoc ev f = OnDoc ev def f Nothing
+
+onWin :: Txt -> (ENode -> Win -> Obj -> IO (Maybe e)) -> Feature e
+onWin ev f = OnWin ev def f Nothing
+
 on' :: Txt -> e -> Feature e
 on' ev e = On ev def (\_ _ -> return (Just e)) Nothing
 
+onDoc' :: Txt -> e -> Feature e
+onDoc' ev e = OnDoc ev def (\_ _ _ -> return (Just e)) Nothing
+
+onWin' :: Txt -> e -> Feature e
+onWin' ev e = OnWin ev def (\_ _ _ -> return (Just e)) Nothing
+
 preventDefault :: Feature e -> Feature e
 preventDefault (On ev os f m) = On ev (os { _preventDef = True }) f m
+preventDefault (OnDoc ev os f m) = OnDoc ev (os { _preventDef = True }) f m
+preventDefault (OnWin ev os f m) = OnWin ev (os { _preventDef = True }) f m
 preventDefault f = f
 
 stopPropagation :: Feature e -> Feature e
 stopPropagation (On ev os f m) = On ev (os { _stopProp = True }) f m
+stopPropagation (OnDoc ev os f m) = OnDoc ev (os { _stopProp = True }) f m
+stopPropagation (OnWin ev os f m) = OnWin ev (os { _stopProp = True }) f m
 stopPropagation f = f
 
 intercept :: Feature e -> Feature e
 intercept (On ev os f m) = On ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnDoc ev os f m) = OnDoc ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnWin ev os f m) = OnWin ev (os { _preventDef = True, _stopProp = True }) f m
 intercept f = f
 
 styleList :: [(Txt,Txt)] -> Feature e
@@ -279,6 +338,9 @@ hiddenA = boolProperty "hidden"
 
 typeA :: Txt -> Feature e
 typeA = property "type"
+
+roleA :: Txt -> Feature e
+roleA = attribute "role"
 
 defaultValue :: Txt -> Feature e
 defaultValue = attribute "default-value"
@@ -1392,19 +1454,19 @@ onTouchCancel :: e -> Feature e
 onTouchCancel = on' "touchcancel"
 
 onInput :: (Txt -> e) -> Feature e
-onInput f = on "input" $ \_ -> fmap return $ parseMaybe $ \o -> do
+onInput f = on "input" $ \_ -> fmap return $ flip parse $ \o -> do
   target <- o .: "target"
   value <- target .: "value"
   pure $ f value
 
 onInputChange :: (Txt -> e) -> Feature e
-onInputChange f = on "change" $ \_ -> fmap return $ parseMaybe $ \o -> do
+onInputChange f = on "change" $ \_ -> fmap return $ flip parse $ \o -> do
   target <- o .: "target"
   value <- target .: "value"
   pure $ f value
 
 onCheck :: (Bool -> e) -> Feature e
-onCheck f = on "change" $ \_ -> fmap return $ parseMaybe $ \o -> do
+onCheck f = on "change" $ \_ -> fmap return $ flip parse $ \o -> do
   target <- o .: "target"
   checked <- target .: "checked"
   pure $ f checked
@@ -1419,18 +1481,18 @@ onFocus :: e -> Feature e
 onFocus = on' "focus"
 
 onKeyUp :: (Int -> e) -> Feature e
-onKeyUp f = on "keyup" $ \_ -> fmap return $ parseMaybe $ \o -> do
+onKeyUp f = on "keyup" $ \_ -> fmap return $ flip parse $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 
 
 onKeyDown :: (Int -> e) -> Feature e
-onKeyDown f = on "keydown" $ \_ -> fmap return $ parseMaybe $ \o -> do
+onKeyDown f = on "keydown" $ \_ -> fmap return $ flip parse $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 
 onKeyPress :: (Int -> e) -> Feature e
-onKeyPress f = on "keypress" $ \_ -> fmap return $ parseMaybe $ \o -> do
+onKeyPress f = on "keypress" $ \_ -> fmap return $ flip parse $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 

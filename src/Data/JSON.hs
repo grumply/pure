@@ -5,8 +5,8 @@ module Data.JSON (module Data.JSON, module Export) where
 import Ef (Constrain)
 
 import JavaScript.JSON.Types.Instances as Export
-import JavaScript.JSON.Types as Export hiding (Object)
-import JavaScript.JSON.Types.Internal as Export hiding (Object)
+import JavaScript.JSON.Types as Export hiding (Object,parse)
+import JavaScript.JSON.Types.Internal as Export hiding (Object,parse)
 import JavaScript.JSON.Types.Generic as Export
 
 import Data.Typeable
@@ -61,16 +61,58 @@ foreign import javascript unsafe
 instance Monoid Obj where
   mempty = emptyObject
   mappend = merge_objects_js
+
 #else
 import Ef (Constrain)
 
 import Data.Aeson as Export hiding (Object)
-import Data.Aeson.Types as Export hiding (Object)
+import Data.Aeson.Types as Export hiding (Object,parse)
 import Data.Monoid as Export
 
+import Control.Exception
+import Data.Maybe
 import Data.Typeable
+
+import qualified Data.HashMap.Strict as Map
+import qualified Data.Vector as V
 
 import qualified Data.Aeson.Types as O (Object)
 
+import Data.Txt
+
 type Obj = O.Object
+
+-- copied from GHCJS JSON for compatability
+data JSONException = UnknownKey
+  deriving (Show, Typeable)
+
+instance Exception JSONException
+
+class Lookup k a where
+  (!)       :: k -> a -> Value             -- ^ throws when result is not a JSON value
+  lookup    :: k -> a -> Maybe Value       -- ^ returns Nothing when result is not a JSON value
+
+instance Lookup Txt Object where
+  k ! v  = fromMaybe (throw UnknownKey) (lookup k v)
+  lookup = Map.lookup
+
+instance Lookup Txt Value where
+  k ! v      = fromMaybe (throw UnknownKey) (lookup p d)
+  lookup k v =
+    case v of
+      Object o -> lookup k o
+      _ -> Nothing
+
+instance Lookup Int V.Vector where
+  i ! a  = fromMaybe (throw UnknownKey) (lookup i a)
+  lookup = flip (V.!?)
+
+instance Lookup Int Value where
+  i ! a      = fromMaybe (throw UnknownKey) (lookup i a)
+  lookup i v =
+    case v of
+      Array arr -> lookup i arr
+      _ -> Nothing
 #endif
+
+parse = flip parseMaybe

@@ -143,3 +143,6 @@ instance ToTxt Bool where
 shortText :: Builder.Builder -> T.Text
 shortText = TL.toStrict . Builder.toLazyTextWith 32
 
+instance ToTxt a => ToTxt (Maybe a) where
+  toTxt (Just a) = toTxt a
+  toTxt Nothing = mempty

@@ -46,7 +46,7 @@ import Data.Maybe as Export
 import Data.Void as Export
 
 import qualified Data.Txt as Export (Txt(..))
-import Data.JSON         as Export hiding (defaultOptions,Options,(!),Parser,parse)
+import Data.JSON         as Export hiding (defaultOptions,Options,(!))
 import Data.Millis       as Export
 import Data.Micros       as Export
 import Atomic.API        as Export hiding (Index)
@@ -106,6 +106,27 @@ import Data.JSON as JSON
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
+
+import Data.IORef
+
+-- for printAny/traceAny and STAtom
+import System.IO.Unsafe
+import Unsafe.Coerce
+import qualified GHCJS.Types as T
+
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "console.log($1);console.log($2);"
+  printAny_js :: Txt -> T.JSVal -> IO ()
+
+printAny :: (MonadIO c) => Txt -> a -> c ()
+printAny label a = liftIO $ printAny_js label (unsafeCoerce a)
+
+traceAny :: Txt -> a -> b -> b
+traceAny label a b =
+  let prnt = unsafePerformIO (printAny_js label (unsafeCoerce a))
+  in prnt `seq` b
+#endif
 
 instance FromMillis Micros where
  --  fromMillis :: Millis -> Micros
@@ -227,12 +248,13 @@ dash = Txt.map (\x -> if x == '.' then '-' else x)
 
 type Controller m = Component '[] m
 -- controller :: ComponentKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
-controller :: ComponentKey '[] m -> m -> (m -> Atom (Code (Base m) IO ())) -> Controller m
+controller :: ComponentKey '[] m -> m -> (Store -> m -> Atom (Code (Base m) IO ())) -> Controller m
 controller key0 model0 render0 = Component {..}
   where
     key = key0
     build = return
     prime = return ()
+    store = def
     model = model0
     render = render0
 
@@ -244,8 +266,9 @@ static key0 render0 = Component {..}
     key = key0
     build = return
     prime = return ()
+    store = def
     model = ()
-    render _ = render0
+    render _ _ = render0
 
 type Observatory m = Service '[Observable m]
 observatory :: ServiceKey '[Observable m] -> m -> Observatory m
@@ -256,8 +279,8 @@ observatory key initial = Service {..}
       return (o *:* base)
     prime = return ()
 
-look :: MonadIO c => Observatory m -> c m
-look o = do
+looks :: MonadIO c => Observatory m -> c m
+looks o = do
   Right r <- demand =<< with o getO
   return r
 
@@ -267,15 +290,16 @@ change o m = void $ with o (setO m)
 type Observer m = Component '[] (Maybe m)
 -- observer :: Observatory m -> ComponentKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
 observer :: forall m ms w. (Eq m, With w (Code ms IO) (Code (Base (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
-         => w -> ComponentKey '[] (Maybe m) -> (m -> Atom (Code (Base (Maybe m)) IO ())) -> Observer m
+         => w -> ComponentKey '[] (Maybe m) -> (Store -> m -> Atom (Code (Base (Maybe m)) IO ())) -> Observer m
 observer s key0 render0 = Component {..}
   where
     key = key0
     build = return
     prime = void $ observe' s $ \(m :: m) -> puts (Just m)
+    store = def
     model = Nothing
-    render Nothing = nil
-    render (Just m) = render0 m
+    render _ Nothing = nil
+    render st (Just m) = render0 st m
 
 -- specialized to Observatory to avoid inline type signatures
 observes :: (MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (IO ())
@@ -318,6 +342,7 @@ type family C ms m a = c | c -> ms, c -> m, c -> a where
 -- These will have to suffice for now with 7.10
 type HTML ms m = Atom (Code (Appended ms (Base m)) IO ())
 type Attribute ms m = Feature (Code (Appended ms (Base m)) IO ())
+type C ms m a = Code (Appended ms (Base m)) IO a
 
 selfClosing tag =
   case tag of
@@ -358,17 +383,19 @@ instance ToTxt (Atom e) where
         "/>"
       else
         ">" <> Txt.concat (map toTxt _atoms) <> "</" <> _tag <> ">"
+
   toTxt SVGAtom {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
         ">" <> Txt.concat (map toTxt _atoms) <> "</" <> _tag <> ">"
+
   toTxt Managed {..} =
     case _constr of
       Component' Component {..} ->
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
-          ">"  <> toTxt (render model) <> "</" <> _tag <> ">"
+          ">"  <> toTxt (render store model) <> "</" <> _tag <> ">"
 
 instance ToTxt [Atom e] where
   toTxt = mconcat . map toTxt
@@ -403,7 +430,7 @@ renderSystem (System h c) =
       Component' Component {..} ->
         toTxt $
           htmlE []
-            [ render model
+            [ render store model
             , body []
                 [ case c of
                     Component' a@Component {} -> construct div [ idA "atomic" ] a

@@ -53,15 +53,6 @@ import qualified Atomic.Route as Route
 import System.IO.Unsafe
 import Unsafe.Coerce
 
-#ifdef __GHCJS__
-foreign import javascript unsafe
-  "console.log($1);console.log($2);"
-  printAny_js :: Txt -> T.JSVal -> IO ()
-
-debug :: (MonadIO c) => Txt -> a -> c ()
-debug label a = liftIO $ printAny_js label $ unsafeCoerce (unsafeCoerce a :: GHC.Prim.Any)
-#endif
-
 __timeInMicros :: (MonadIO c)
                => c Integer
 __timeInMicros = getMicros <$> micros
@@ -125,7 +116,7 @@ onRoute fus rf = do
   return (stop s >> leaveNW)
 
 data Carrier where
-  Carrier :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)
+  Carrier :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),Store,m)
           -> Carrier
 
 run :: forall ts ms c r.
@@ -138,7 +129,7 @@ run App {..} = do
   ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
-  rt'     <- liftIO $ newIORef (NullAtom $ Just ph,NullAtom $ Just ph,())
+  rt'     <- liftIO $ newIORef (NullAtom $ Just ph,NullAtom $ Just ph,def,())
   nw :: Network r   <- network
   sdn :: Network () <- network
   built      <- build $ mkRouter nw routes
@@ -178,15 +169,15 @@ run App {..} = do
             mb_ <- lookupComponent (Component.key b)
             case mb_ of
               Nothing -> do
-                (old,_,_) <- readIORef rt
+                (old,_,_,_) <- readIORef rt
                 iob <- if first then
                          mkComponent (ClearAndAppend ort) b
                        else
                          mkComponent (Replace old) b
                 return (Carrier iob)
               Just (_,x_) -> do
-                (old,_,_) <- readIORef rt
-                (new,_,_) <- readIORef x_
+                (old,_,_,_) <- readIORef rt
+                (new,_,_,_) <- readIORef x_
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))
@@ -217,21 +208,21 @@ run App {..} = do
 #else
                 let h = ()
 #endif
-                (new,_,_) <- readIORef x_
+                (new,_,_,_) <- readIORef x_
                 rebuild new
                 replace (NullAtom $ Just h) new
             mb_ <- lookupComponent (Component.key b)
             case mb_ of
               Nothing -> do
-                (old,_,_) <- readIORef rt
+                (old,_,_,_) <- readIORef rt
                 iob <- if first then
                          mkComponent (ClearAndAppend ort) b
                        else do
                          mkComponent (Replace old) b
                 return (Carrier iob)
               Just (_,x_) -> do
-                (old,_,_) <- readIORef rt
-                (new,_,_) <- readIORef x_
+                (old,_,_,_) <- readIORef rt
+                (new,_,_,_) <- readIORef x_
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))

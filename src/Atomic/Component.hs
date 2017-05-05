@@ -1,11 +1,12 @@
 {-# language UndecidableInstances #-}
+{-# language ImpredicativeTypes #-}
 {-# language DeriveDataTypeable #-}
 {-# language OverloadedStrings #-}
 {-# language TemplateHaskell #-}
 {-# language DeriveFunctor #-}
 {-# language MagicHash #-}
 {-# language CPP #-}
-module Atomic.Component (module Atomic.Component, ENode, TNode, NNode) where
+module Atomic.Component (module Atomic.Component, ENode, TNode, NNode, Win, Doc, Loc) where
 
 import Ef.Base hiding (Object,Client,After,Before,current,Lazy,Eager,construct,Index,observe,uncons,distribute,embed)
 import qualified Ef.Base
@@ -16,6 +17,7 @@ import Data.JSON
 import Atomic.Attribute
 import Atomic.Cond
 import Atomic.CSS
+import Atomic.Default
 import Atomic.Key
 import Atomic.Revent
 import Atomic.Vault
@@ -82,6 +84,8 @@ import Control.Lens.Plated (Plated(..))
 import Control.Lens.At
 import Control.Lens.Prism
 
+import qualified GHC.Exts
+
 #ifdef __GHCJS__
 foreign import javascript unsafe
   "$r = $2.parentNode == $1;"
@@ -146,6 +150,36 @@ foreign import javascript unsafe
   "$1[$2] = $3" set_property_js :: E.Element -> Txt -> Txt -> IO ()
 #endif
 
+data Item = forall a. Typeable a => Item a
+instance IsString Item where -- convenience, be careful
+  fromString str = Item (fromString str :: Txt)
+instance ToTxt Item where
+  toTxt (Item v) =
+    case cast v of
+      Nothing -> mempty
+      Jut x   -> x
+instance FromTxt Item where
+  fromTxt = Item
+item :: (Typeable a) => Iso a (Maybe a) Item Item
+item = iso Val (\(Val v) -> cast v)
+
+data Store = Store
+  { store_map :: Map.HashMap Txt Val
+  , store_upd :: (Maybe (forall ms. Store -> Code ms IO ()))
+  }
+instance Eq Store where
+  (==) (Store s _) (Store s' _) = reallyUnsafeEq s s'
+instance Default Store where
+  def = Store Map.empty Nothing
+instance Monoid Store where
+  mempty = def
+  mappend (Store l (Just lu)) (Store r _) = Store (l <> r) (Just $ unsafeCoerce lu)
+  mappend (Store l _) (Store r (Just ru)) = Store (l <> r) (Just $ unsafeCoerce ru)
+instance GHC.Exts.IsList Store where
+  type GHC.Exts.Item Store = (Txt,Val)
+  fromList xs = def { store_map = Map.fromList xs } 
+  toList st = Map.toList (store_map st)
+
 data Atom e where
   -- NullAtom must have a presence on the page for proper diffing
   NullAtom
@@ -179,6 +213,7 @@ data Atom e where
         } -> Atom e
 
   -- TODO: SVG keyed node
+
   SVGAtom
     ::  { _node       :: !(Maybe ENode)
         , _tag        :: !Txt
@@ -200,6 +235,9 @@ data Atom e where
         , _constr      :: !Constr
         } -> Atom e
   deriving (Functor)
+
+instance Default (Atom a) where
+  def = nil
 
 instance Plated (Atom e) where
   plate f (KAtom n t as ks) = KAtom n t as <$> traverse (\(i,k) -> fmap (\k' -> (i,k')) (f k)) ks
@@ -557,7 +595,7 @@ rebuild h =
         Component' c -> do
           mi_ <- lookupComponent (key c)
           forM_ mi_ $ \(_,x_) -> do
-            (h,_,_) <- readIORef x_
+            (h,_,_,_) <- readIORef x_
             rebuild h
             forM_ _node $ \node ->
               embed_ node h
@@ -574,21 +612,23 @@ reflect :: forall ts ms m c.
 reflect c =
   with c $ do
     ComponentState {..} :: ComponentState m <- get
-    (l,_,_) <- liftIO $ readIORef asLive
+    (l,_,_,_) <- liftIO $ readIORef asLive
     return (unsafeCoerce l)
 
 data DiffStrategy = Unequal | Eager | Manual deriving (Eq)
 
 type Differ ms m =
-       (m -> Atom (Code ms IO ()))
-    -> ((m,Atom (Code ms IO ())) -> IO ())
+       (Store -> m -> Atom (Code ms IO ()))
+    -> ((Store,m,Atom (Code ms IO ())) -> IO ())
     -> (Code ms IO () -> IO ())
+    -> Store
     -> ComponentState m
     -> Code ms IO ()
 
 data AState m = AState
-  { as_live :: forall ms. IORef (Atom (Code ms IO ()), Atom (Code ms IO ()), m)
+  { as_live :: forall ms. IORef (Atom (Code ms IO ()), Atom (Code ms IO ()),Store,m)
   , as_model :: m
+  , as_store :: Store
   }
 
 data ComponentPatch m where
@@ -596,8 +636,8 @@ data ComponentPatch m where
       -- only modify ap_AState with atomicModifyIORef
     { ap_send         :: Code ms IO () -> IO ()
     , ap_AState       :: IORef (Maybe (AState m),Bool) -- an AState record for manipulation; nullable by component to stop a patch.
-    , ap_patchView    :: (m -> Atom (Code ms IO ()))
-    , ap_viewTrigger  :: (m,Atom (Code ms IO ())) -> IO ()
+    , ap_patchView    :: (Store -> m -> Atom (Code ms IO ()))
+    , ap_viewTrigger  :: (Store,m,Atom (Code ms IO ())) -> IO ()
     } -> ComponentPatch m
 
 type IsComponent' ts ms m = (Base m <: ms, Base m <. ts, Delta (Modules ts) (Messages ms), Eq m)
@@ -606,16 +646,17 @@ type IsComponent ms m = IsComponent' ms ms m
 data ComponentState m where
   ComponentState ::
     { asPatch        :: Maybe (ComponentPatch m)
-    , asDiffer       :: ComponentState m -> Code ms IO ()
+    , asDiffer       :: Store -> ComponentState m -> Code ms IO ()
     , asDiffStrategy :: DiffStrategy
-    , asViews        :: Network (m,Atom (Code ms IO ()))
-    , asUpdates      :: Network m
+    , asViews        :: Network (Store,m,Atom (Code ms IO ()))
+    , asUpdates      :: Network (Store,m)
     , asModel        :: m
-    , asLive         :: IORef (Atom (Code ms IO ()), Atom (Code ms IO ()), m)
+    , asLive         :: IORef (Atom (Code ms IO ()), Atom (Code ms IO ()), Store, m)
     } -> ComponentState m
 
 type Base m
   = '[ State () (ComponentState m)
+     , State () Store
      , State () Shutdown
      , Revent
      ]
@@ -649,6 +690,9 @@ instance ToTxt (Feature e) where
 
   toTxt (On _ _ _ _)    = mempty
 
+  toTxt (OnDoc _ _ _ _) = mempty
+  toTxt (OnWin _ _ _ _) = mempty
+
   toTxt (Link href _)    = "href=\"" <> href <> "\""
 
   toTxt (SVGLink href _) = "xlink:href=\"" <> href <> "\""
@@ -661,17 +705,18 @@ instance ToTxt [Feature e] where
      (Txt.singleton ' ')
      (Prelude.filter (not . Txt.null) $ Prelude.map toTxt fs)
 
-type ComponentKey ms m = Key (Code (Appended ms (Base m)) IO `As` IO, IORef (Atom (Code (Appended ms (Base m)) IO ()),Atom (Code (Appended ms (Base m)) IO ()),m))
+type ComponentKey ms m = Key (Code (Appended ms (Base m)) IO `As` IO, IORef (Atom (Code (Appended ms (Base m)) IO ()),Atom (Code (Appended ms (Base m)) IO ()),Store,m))
 type ComponentBuilder ts m = Modules (Base m) (Action (Appended ts (Base m)) IO) -> IO (Modules (Appended ts (Base m)) (Action (Appended ts (Base m)) IO))
 type ComponentPrimer ms m = Code (Appended ms (Base m)) IO ()
 
 data Component' ts ms m
   = Component
-      { key       :: !(Key (Code ms IO `As` IO, IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)))
+      { key       :: !(Key (Code ms IO `As` IO, IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),Store,m)))
       , build     :: !(Modules (Base m) (Action ts IO) -> IO (Modules ts (Action ts IO)))
       , prime     :: !(Code ms IO ())
       , model     :: !(m)
-      , render    :: !(m -> Atom (Code ms IO ()))
+      , store     :: !Store
+      , render    :: !(Store -> m -> Atom (Code ms IO ()))
       }
 type Component ms m = Component' (Appended ms (Base m)) (Appended ms (Base m)) m
 
@@ -679,13 +724,13 @@ instance ToTxt (Component' ts ms m) where
   toTxt = toTxt . key
 
 instance Eq (Component' ts ms m) where
-  (==) (Component k _ _ _ _) (Component k' _ _ _ _) =
+  (==) (Component k _ _ _ _ _) (Component k' _ _ _ _ _) =
     let Key k1 = k
         Key k2 = k'
     in prettyUnsafeEq k1 k2
 
 instance Ord (Component' ts ms m) where
-  compare (Component (Key k) _ _ _ _) (Component (Key k') _ _ _ _) = compare k k'
+  compare (Component (Key k) _ _ _ _ _) (Component (Key k') _ _ _ _ _) = compare k k'
 
 instance IsComponent' ts ms m
   => With (Component' ts ms m)
@@ -715,7 +760,7 @@ instance IsComponent' ts ms m
       miohhm <- lookupComponent (key c)
       case miohhm of
         Just (_,iohhm) -> do
-          (h,_,_) <- liftIO $ readIORef iohhm
+          (h,_,_,_) <- liftIO $ readIORef iohhm
           cleanup [h]
           delete h
         _ -> return ()
@@ -753,15 +798,15 @@ mkComponent :: forall ms ts m.
           )
        => MkComponentAction
        -> Component' ts ms m
-       -> IO (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m))
+       -> IO (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),Store,m))
 mkComponent mkComponentAction c@Component {..} = do
   let !m = model
-      !raw = render m
+      !raw = render store m
   doc <- getDocument
   sig :: Signal ms IO (Code ms IO ()) <- runner
   sigBuf <- newSignalBuffer
-  us :: Network m <- network
-  views :: Network (m,Atom (Code ms IO ())) <- network
+  us :: Network (Store,m) <- network
+  views :: Network (Store,m,Atom (Code ms IO ())) <- network
   let asComp = constructAs sigBuf sig
       sendEv :: Code ms IO () -> IO ()
       sendEv = void . runAs asComp
@@ -787,7 +832,7 @@ mkComponent mkComponentAction c@Component {..} = do
   -- Initially, I thought I could put this in an animation frame, but that has odd effects
   i <- initialize
 
-  cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
+  cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),Store,m) <- newIORef (i,raw,store,m)
 
   -- keep out of forkIO to prevent double-initialization
   addComponent key (asComp,cs_live_)
@@ -805,6 +850,7 @@ mkComponent mkComponentAction c@Component {..} = do
                                 model
                                 cs_live_
                             )
+                    *:* state store { store_upd = Just $ unsafeCoerce (\st -> storeUpdate (Proxy :: Proxy m) st :: Code ms IO ()) }
                     *:* state (Shutdown sdn)
                     *:* revent sigBuf
                     *:* Empty
@@ -820,11 +866,11 @@ mkComponent mkComponentAction c@Component {..} = do
         sigBuf obj'
   return cs_live_
 
-diff :: forall m ms. ('[State () (ComponentState m)] <: ms)
-     => Proxy m -> Code ms IO ()
+diff :: forall m ms. (Base m <: ms) => Proxy m -> Code ms IO ()
 diff _ = do
+  st <- get
   as@ComponentState {..} :: ComponentState m <- get
-  unsafeCoerce (asDiffer as)
+  unsafeCoerce (asDiffer st as)
 
 setUnequalDiff :: forall m ms. ('[State () (ComponentState m)] <: ms)
             => Proxy m -> Code ms IO ()
@@ -860,7 +906,7 @@ ownView :: forall ts ms c m.
         -> Code ms c (Atom (Code ms IO ()))
 ownView _ = do
   ComponentState {..} :: ComponentState m <- get
-  (h,_,_) <- liftIO $ readIORef asLive
+  (h,_,_,_) <- liftIO $ readIORef asLive
   return (unsafeCoerce h)
 
 onViewChange :: forall ts ms ms' m c.
@@ -898,13 +944,27 @@ onOwnViewChange _ f = do
   joinNetwork av p buf
   return (stop s >> leaveNetwork av p)
 
+onOwnViewChangeByProxy :: forall ms m c.
+                ( Base m <: ms, MonadIO c )
+            => Proxy m
+            -> ((m,Atom (Code ms IO ())) -> Code '[Event (m,Atom (Code ms IO ()))] (Code ms c) ())
+            -> Code ms c (IO ())
+onOwnViewChangeByProxy _ f = do
+  p <- periodical
+  Just s <- subscribe p f
+  buf <- getReventBuffer
+  ComponentState {..} :: ComponentState m <- get
+  let av = unsafeCoerce asViews :: Network (m,Atom (Code ms IO ()))
+  joinNetwork av p buf
+  return (stop s >> leaveNetwork av p)
+
 onModelChange :: forall ts ms ms' m c.
                 ( IsComponent' ts ms m
                 , MonadIO c
                 , '[Revent] <: ms'
                 )
               => Component' ts ms m
-              -> (m -> Code '[Event m] (Code ms' c) ())
+              -> ((Store,m) -> Code '[Event (Store,m)] (Code ms' c) ())
               -> Code ms' c (IO ())
 onModelChange c f = do
   p <- periodical
@@ -924,63 +984,120 @@ gets = do
 
 {-# INLINE puts #-}
 puts :: forall ms m.
-        ( '[State () (ComponentState m)] <: ms
+        ( Base m <: ms
         , Eq m
         )
      => m -> Code ms IO ()
 puts !new = do
+  st <- get
   (ComponentState {..},(old,cmp')) <- modify $ \(ComponentState {..} :: ComponentState m) ->
     let !old = asModel
         cmp' = ComponentState { asModel = new, .. }
     in (cmp',(old,cmp'))
-  syndicate asUpdates new
-  let d :: ComponentState m -> Code ms IO ()
+  syndicate asUpdates (st,new)
+  let d :: Store -> ComponentState m -> Code ms IO ()
       d = unsafeCoerce asDiffer
 #ifdef __GHCJS__
   case reallyUnsafePtrEquality# old new of
     1# -> return ()
     _  ->
       case asDiffStrategy of
-        Unequal   -> unless (old == new) (d cmp')
-        Eager  -> d cmp'
+        Unequal   -> unless (old == new) (d st cmp')
+        Eager  -> d st cmp'
         Manual -> return ()
 #else
-  d cmp'
+  d st cmp'
 #endif
 
 {-# INLINE updates #-}
 updates :: forall ms m.
-           ( '[State () (ComponentState m)] <: ms
+           ( Base m <: ms
            , Eq m
            )
         => (m -> m)
         -> Code ms IO ()
 updates f = do
+  st <- get
   (ComponentState {..},(old,!new,cmp')) <- modify $ \ComponentState {..} ->
     let !old = asModel
         !new = f old
         cmp' = ComponentState { asModel = new, ..  }
     in (cmp',(old,new,cmp'))
-  syndicate asUpdates new
-  let d :: ComponentState m -> Code ms IO ()
+  syndicate asUpdates (st,new)
+  let d :: Store -> ComponentState m -> Code ms IO ()
       d = unsafeCoerce asDiffer
 #ifdef __GHCJS__
   case reallyUnsafePtrEquality# old new of
     1# -> return ()
     _  ->
       case asDiffStrategy of
-        Unequal   -> unless (old == new) (d cmp')
-        Eager  -> d cmp'
+        Unequal   -> unless (old == new) (d st cmp')
+        Eager  -> d st cmp'
         Manual -> return ()
 #else
   d cmp'
 #endif
 
+storeUpdate :: forall ms m.
+           ( Base m <: ms
+           , Eq m
+           )
+        => Proxy m
+        -> Store
+        -> Code ms IO ()
+storeUpdate _ st = do
+  old_st <- get
+  put st
+  cmp@ComponentState {..} :: ComponentState m <- get
+  syndicate asUpdates (st,asModel)
+  let d :: Store -> ComponentState m -> Code ms IO ()
+      d = unsafeCoerce asDiffer
+#ifdef __GHCJS__
+  case reallyUnsafePtrEquality# old_st st of
+    1# -> return ()
+    _  -> d st cmp
+#else
+  d st cmp
+#endif
+
+newStore :: forall m ms. (Base m <: ms, Eq m) => Proxy m -> Code ms IO Store
+newStore p = return $ Store Map.empty (Just $ unsafeCoerce (\st -> storeUpdate (Proxy :: Proxy m) st :: Code ms IO ()))
+
+setStore :: ('[State () Store] <: ms, Monad c) => Store -> Code ms c ()
+setStore st = do
+  st' <- get
+  case store_upd st' of
+    Nothing  -> return ()
+    Just upd -> (unsafeCoerce upd) st { store_upd = store_upd st' }
+
+(?|) :: Typeable a => Store -> Txt -> Maybe a
+(?|) (Store st _) k =
+  case Map.lookup k st of
+    Just (Val s) -> cast s
+    Nothing -> Nothing
+
+(?:) :: FromTxt a => Store -> Txt -> a
+(?:) st k = fromTxt $ fromMaybe "" $ (?|) st k
+
+(?^) :: Typeable a => Store -> Txt -> Atom a
+(?^) st k = fromMaybe ((?:) st k) ((?|) st k)
+
+infix 5 =|
+(=|) :: Txt -> Val -> Store -> Store
+(=|) k v (Store st upd) = Store (Map.insert k v st) upd
+
+infixr 4 &|
+(&|) :: ('[State () Store] <: ms, Monad c) => Store -> (Store -> Store) -> Code ms c ()
+(&|) st upd = setStore (upd st)
+
+remove :: Txt -> Store -> Store
+remove k (Store st upd) = Store (Map.delete k st) upd
+
 differ :: (Base m <: ms) => Differ ms m
-differ render trig sendEv ComponentState {..} = do
+differ render trig sendEv st ComponentState {..} = do
 #ifdef __GHCJS__
   let setupDiff = do
-        let !new_as = AState (unsafeCoerce asLive) asModel
+        let !new_as = AState (unsafeCoerce asLive) asModel st
         new_ap_AState <- liftIO $ newIORef (Just new_as,False)
         let !aPatch = APatch sendEv new_ap_AState render trig
         put ComponentState { asPatch = Just aPatch, .. }
@@ -1171,12 +1288,12 @@ buildAndEmbedMaybe f doc = go
                 Nothing -> do
                   -- never built before; make and embed
                   x_ <- mkComponent BuildOnly a
-                  (h,_,_) <- liftIO $ readIORef x_
+                  (h,_,_,_) <- liftIO $ readIORef x_
                   forM_ mparent (`embed_` Managed {..})
                   embed_ el h
                   return Managed {..}
                 Just (_,x_) -> do
-                  (h,_,_) <- liftIO $ readIORef x_
+                  (h,_,_,_) <- liftIO $ readIORef x_
                   rebuild Managed {..}
                   embed_ el h
                   forM_ mparent (`embed_` Managed {..})
@@ -1188,12 +1305,12 @@ buildAndEmbedMaybe f doc = go
                 Nothing -> do
                   -- shut down?
                   x_ <- mkComponent BuildOnly a
-                  (h,_,_) <- liftIO $ readIORef x_
+                  (h,_,_,_) <- liftIO $ readIORef x_
                   forM_ mparent (`embed_` Managed {..})
                   embed_ e h
                   return Managed {..}
                 Just (_,x_) -> do
-                  (h,_,_) <- liftIO $ readIORef x_
+                  (h,_,_,_) <- liftIO $ readIORef x_
                   rebuild m
                   embed_ e h
                   return m
@@ -1220,13 +1337,13 @@ diff_ APatch {..} = do
     (mcs,b) <- atomicModifyIORef' ap_AState $ \(mcs,b) -> ((Nothing,True),(mcs,b))
     case mcs of
       Nothing -> return ()
-      Just (AState as_live !as_model) -> do
+      Just (AState as_live !as_model !as_store) -> do
         doc <- getDocument
-        (live_html,!raw_html,!live_m) <- readIORef as_live
-        let !new_html = ap_patchView as_model
+        (live_html,!raw_html,_,!live_m) <- readIORef as_live
+        let !new_html = ap_patchView as_store as_model
         new_live_html <- either id id <$> diffHelper ap_send doc live_html raw_html new_html
-        writeIORef as_live (new_live_html,new_html,as_model)
-        ap_viewTrigger (as_model,new_html)
+        writeIORef as_live (new_live_html,new_html,as_store,as_model)
+        ap_viewTrigger (as_store,as_model,new_html)
         putMVar mv ()
   win <- getWindow
   requestAnimationFrame win (Just rafCallback)
@@ -1236,13 +1353,13 @@ diff_ APatch {..} = do
   (mcs,b) <- atomicModifyIORef' ap_AState $ \(mcs,b) -> ((Nothing,True),(mcs,b))
   case mcs of
     Nothing -> return ()
-    Just (AState as_live !as_model) -> do
+    Just (AState as_live !as_model !as_store) -> do
       doc <- getDocument
-      (live_html,!raw_html,!live_m) <- readIORef as_live
-      let !new_html = ap_patchView as_model
+      (live_html,!raw_html,_,!live_m) <- readIORef as_live
+      let !new_html = ap_patchView as_store as_model
       new_live_html <- either id id <$> diffHelper ap_send doc live_html raw_html new_html
-      writeIORef as_live (new_live_html,new_html,as_model)
-      ap_viewTrigger (as_model,new_html)
+      writeIORef as_live (new_live_html,new_html,as_store,as_model)
+      ap_viewTrigger (as_store,as_model,new_html)
 #endif
 
 {-# NOINLINE replace #-}
@@ -1741,6 +1858,23 @@ runElementDiff f el os0 ms0 ns0 =
                 -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
                 replace
 
+            (OnDoc e os g _,OnDoc e' os' g' _) ->
+              if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then do
+                -- liftIO $ putStrLn $ "On': Event types same, IO actons really unsafe eq: " ++ show (e,e')
+                continue old
+              else do
+                -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
+                replace
+
+            (OnWin e os g _,OnWin e' os' g' _) ->
+              if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then do
+                -- liftIO $ putStrLn $ "On': Event types same, IO actons really unsafe eq: " ++ show (e,e')
+                continue old
+              else do
+                -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
+                replace
+
+
             (Link olda oldv, Link newa newv) ->
               if prettyUnsafeEq olda newa && reallyUnsafeEq oldv newv then
                 continue old
@@ -1787,6 +1921,12 @@ removeAttribute_ element attr =
       E.removeAttribute element ("href" :: Txt)
 
     On ev _ _ unreg ->
+      forM_ unreg id
+
+    OnDoc ev _ _ unreg ->
+      forM_ unreg id
+
+    OnWin ev _ _ unreg ->
       forM_ unreg id
 
     Style styles -> do
@@ -1849,6 +1989,33 @@ setAttribute_ c element attr =
                  return ()
       return (On ev os f (Just stopListener))
 
+
+    OnDoc ev os f _ -> do
+      doc <- getDocument
+      stopListener <-
+        Ev.on
+          doc
+          (Ev.unsafeEventName ev :: Ev.EventName Doc T.CustomEvent) -- for the type checking; actually just an object
+            $ do ce <- Ev.event
+                 when (_preventDef os) Ev.preventDefault
+                 when (_stopProp os) Ev.stopPropagation
+                 liftIO $ f element doc (unsafeCoerce ce) >>= mapM_ c
+                 return ()
+      return (OnDoc ev os f (Just stopListener))
+
+    OnWin ev os f _ -> do
+      win <- getWindow
+      stopListener <-
+        Ev.on
+          win
+          (Ev.unsafeEventName ev :: Ev.EventName Win T.CustomEvent) -- for the type checking; actually just an object
+            $ do ce <- Ev.event
+                 when (_preventDef os) Ev.preventDefault
+                 when (_stopProp os) Ev.stopPropagation
+                 liftIO $ f element win (unsafeCoerce ce) >>= mapM_ c
+                 return ()
+      return (OnWin ev os f (Just stopListener))
+
     Style styles -> do
       obj <- O.create
       forM_ styles $ \(nm,val) -> O.unsafeSetProp nm (M.pToJSVal val) obj
@@ -1885,14 +2052,9 @@ cleanupAttr attr =
     SVGLink _ unreg -> forM_ unreg id
     Link _ unreg -> forM_ unreg id
     On _ _ _ unreg -> forM_ unreg id
+    OnDoc _ _ _ unreg -> forM_ unreg id
+    OnWin _ _ _ unreg -> forM_ unreg id
     _ -> return ()
-#endif
-
-type Win =
-#ifdef __GHCJS__
-  W.Window
-#else
-  ()
 #endif
 
 getWindow :: MonadIO c => c Win
@@ -1912,13 +2074,6 @@ scrollToTop = do
   return win
 #endif
 
-type Doc =
-#ifdef __GHCJS__
-  D.Document
-#else
-  ()
-#endif
-
 getDocument :: (MonadIO c) => c Doc
 getDocument = do
 #ifdef __GHCJS__
@@ -1928,13 +2083,6 @@ getDocument = do
     let doc = ()
 #endif
     return doc
-
-type Loc =
-#ifdef __GHCJS__
-  L.Location
-#else
-  ()
-#endif
 
 getFirstElementByTagName :: MonadIO c => Txt -> c ENode
 getFirstElementByTagName nm = do
