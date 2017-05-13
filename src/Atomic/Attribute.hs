@@ -131,10 +131,21 @@ data Feature e
     { _mountEvent :: IO ()
     }
   | OnDidMount
-    { _mountEvent :: IO ()
+    { _mountEvent :: ENode -> IO ()
     }
+  | forall model. OnWillUpdate 
+    { _updateModel :: model
+    , _updateEvent :: model -> ENode -> IO ()
+    }
+  | forall model. OnModel
+    { _watchModel :: model
+    , _modelEvent :: model -> ENode -> e
+    }
+  | forall model. OnDidUpdate
+    { _updateModel :: model
+    , _updateEvent :: model -> ENode -> IO ()
   | OnWillUnmount
-    { _mountEvent :: IO ()
+    { _mountEvent :: ENode -> IO ()
     }
   | OnDidUnmount
     { _mountEvent :: IO ()
@@ -225,6 +236,12 @@ instance Eq (Feature e) where
     reallyUnsafeEq e e'
   (==) (OnDidMount e) (OnDidMount e') =
     reallyUnsafeEq e e'
+  (==) (OnWillUpdate m f) (OnWillUpdate m' f') =
+    reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
+  (==) (OnDidUpdate m f) (OnDidUpdate m' f') =
+    reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
+  (==) (OnModel m f) (OnModel m' f') =
+    reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
   (==) (OnWillUnmount e) (OnWillUnmount e') =
     reallyUnsafeEq e e'
   (==) (OnDidUnmount e) (OnDidUnmount e') =
@@ -235,6 +252,7 @@ instance Eq (Feature e) where
     prettyUnsafeEq t t'
   (==) (XLink t _) (XLink t' _) =
     prettyUnsafeEq t t'
+  (==) _ _ = False
 
 instance Cond (Feature e) where
   nil = NullFeature
@@ -299,23 +317,39 @@ onDoc' ev e = OnDoc ev def (\_ _ _ -> return (Just e)) Nothing
 onWin' :: Txt -> e -> Feature e
 onWin' ev e = OnWin ev def (\_ _ _ -> return (Just e)) Nothing
 
+-- runs when the feature is created; top-down
+-- onBuild is guaranteed to run before onDestroy, but ordering w.r.t. mount/update/unmount is undetermined
 onBuild :: e -> Feature e
 onBuild = OnBuild
 
+-- runs when the feature is destroyed; top-down
+-- onDestroy is guaranteed to run after onBuild, but ordering w.r.t. mount/update/unmount is undetermined
+onDestroy :: e -> Feature e
+onDestroy = OnDestroy
+
+-- runs when the attribute is being set; top-down
 onWillMount :: IO () -> Feature e
 onWillMount = OnWillMount
 
-onDidMount :: IO () -> Feature e
+-- runs when the element is inserted into its parent, not after it is inserted into the DOM; bottom-up
+onDidMount :: (ENode -> IO ()) -> Feature e
 onDidMount = OnDidMount
 
-onWillUnmount :: IO () -> Feature e
+-- watches a model, as supplied, and calls the callback during feature diffing; top-down
+onWillUpdate :: model -> (model -> ENode -> IO ()) -> Feature e
+onWillUpdate = OnWillUpdate
+
+-- watches a model, as supplied, and calls the callback after feature diffing; bottom-up
+onDidUpdate :: model -> (model -> ENode -> IO ()) -> Feature e
+onDidUpdate = OnDidUpdate
+
+-- runs when the attribute is being cleaned up; top-down
+onWillUnmount :: (ENode -> IO ()) -> Feature e
 onWillUnmount = OnWillUnmount
 
+-- runs when the element is removed from its parent, not when it is removed from the DOM; bottom-up
 onDidUnmount :: IO () -> Feature e
 onDidUnmount = OnDidUnmount
-
-onDestroy :: e -> Feature e
-onDestroy = OnDestroy
 
 preventDefault :: Feature e -> Feature e
 preventDefault (On ev os f m) = On ev (os { _preventDef = True }) f m

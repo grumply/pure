@@ -189,9 +189,9 @@ data Atom e where
         } -> Atom e
 
   STAtom
-    :: { _stmodel  :: !(model) -- existential for dirty checking on arbitrary subset of model or () for no external updating
+    :: { _stmodel  :: !(model)
        , _ststate  :: !st
-       , _strecord :: !(IORef (st,SomeAtom -> IO (),SomeAtom))
+       , _strecord :: !(Maybe (IORef (st,SomeAtom -> IO (),SomeAtom)))
        , _stview   :: !(st -> (st -> IO ()) -> Atom e)
        } -> Atom e
 
@@ -223,7 +223,10 @@ instance Default (Atom a) where
   def = nil
 
 instance Plated (Atom e) where
-  plate f (STAtom _ _ iorec v) = plate f $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef iorec)) (\_ -> return ())
+  plate f (STAtom _ st iorec v) =
+    case iorec of
+      Nothing -> plate f $ v st (\_ -> return ())
+      Just ref -> plate f $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ -> return ())
   plate f (KAtom n t as ks) = KAtom n t as <$> traverse (\(i,k) -> fmap (\k' -> (i,k')) (f k)) ks
   plate f (Atom n t as cs) = Atom n t as <$> traverse f cs
   plate f (SVGAtom n t as cs) = SVGAtom n t as <$> traverse f cs
@@ -234,7 +237,10 @@ type instance Index (Atom e) = Int
 type instance IxValue (Atom e) = Atom e
 
 instance Ixed (Atom e) where
-  ix k f (STAtom _ _ iorec v) = ix k f $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef iorec)) (\_ -> return ())
+  ix k f (STAtom _ st iorec v) =
+    case iorec of
+      Nothing -> ix k f $ v st (\_ -> return ())
+      Just ref -> ix k f $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ -> return ())
   ix k f (Atom n t as cs) = Atom n t as <$> ix k f cs
   ix k f (KAtom n t as ks) = KAtom n t as <$> go ks k
     where
@@ -256,7 +262,10 @@ instance ToJSON (Atom e) where
 #endif
       go a
     where
-      go (STAtom _ _ iorec v) = go $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef iorec)) (\_ -> return ())
+      go (STAtom _ st iorec v) =
+        case iorec of
+          Nothing -> go $ v st (\_ -> return ())
+          Just ref -> go $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ -> return ())
       go (Text _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
       go (Raw _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
       go (KAtom _ t as ks) = object [ "type" .= ("keyed" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON ks ]
@@ -495,22 +504,27 @@ list x _attributes _keyed0 =
       in
         KSVGAtom {..}
 
--- entry :: (Typeable st, '[State () Dict] <: ms, e ~ Code ms IO ()) => Dict -> Txt -> st -> (st -> (st -> e) -> Atom e) -> Atom e
--- entry dict nm initial_st view =
---   let s = fromMaybe initial_st (dict ?| nm)
---       a = view s (\s' -> dict &| (nm =| s'))
---   in case a of
---        NullAtom {} -> a
---        Text {} -> a
---        _ -> a { _attributes = (onBuild ((nm %| initial_st) dict)) : _attributes a }
-
--- Avoid using this! If Atoms are added to a list before an ST element (instead of using NullAtom to maintain
--- a constant list length), the STAtom will get reset!
-{-# NOINLINE st #-}
+-- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
+-- for changes; if any of the variables within the model are updated or moved, a diff will be
+-- performed. This is how changes external to an `st` are injected into an `st`; if an `st` uses
+-- state from a `Component`s model and they aren't tracked via the `st` model, those changes will
+-- not be updated when the `Component`s model updates. The same rules apply to nested/inheriting
+-- `st` atoms.
+--
+-- The major purposes for this atome type are:
+--   1. The implementation of extensible and highly configurable UI frameworks with the
+--      aim of reducing configuration burdens by avoiding carrying framework state within
+--      user-created components.
+--   2. Stateful subviews a la form inputs, local animations, etc....
+--
+-- Major caveat: If the list of elements holding a st atom changes such that the diff algorithm
+--               must recreate the st element, it will be reset to its original state. This would
+--               happen if the position of the st element within the list changes. If a variable
+--               length list of children is required, either careful placement for the st element,
+--               or the use of NullAtoms as placeholders, or some uses of keyed atoms can overcome
+--               this problem.
 st :: forall model st e. model -> st -> (st -> (st -> IO ()) -> Atom e) -> Atom e
-st watch_model initial_st view =
-  let iorec = unsafePerformIO (newIORef (initial_st,const (return ()),SomeAtom $ unsafeCoerce (nil :: Atom e)))
-  in STAtom watch_model initial_st iorec view
+st watch_model initial_st view = STAtom watch_model initial_st Nothing view
 
 construct :: ([Feature e] -> [Atom e] -> Atom e)
           -> (forall ts' ms' m. IsComponent' ts' ms' m => [Feature e] -> Component' ts' ms' m -> Atom e)
@@ -593,9 +607,10 @@ rebuild h =
 #else
     go h
   where
-    go STAtom {..}  = do
-      (_,_,SomeAtom e) <- readIORef _strecord
-      rebuild e
+    go STAtom {..}  =
+      forM_ _strecord $ \ref -> do
+        (_,_,SomeAtom e) <- readIORef ref
+        rebuild e
     go Atom {..}    = mapM_ go _atoms
     go SVGAtom {..} = mapM_ go _atoms
     go KAtom {..}   = mapM_ (go . snd) _keyed
@@ -1041,31 +1056,6 @@ updates f = do
   d cmp'
 #endif
 
--- dictUpdate :: forall ms m.
---            ( Base m <: ms
---            , Eq m
---            )
---         => Proxy m
---         -> Dict
---         -> Code ms IO ()
--- dictUpdate _ st@(Dict d _) = do
---   old_st <- get
---   put st
---   cmp@ComponentState {..} :: ComponentState m <- get
---   syndicate asUpdates (st,asModel)
---   let d :: Dict -> ComponentState m -> Code ms IO ()
---       d = unsafeCoerce asDiffer
--- #ifdef __GHCJS__
---   case reallyUnsafePtrEquality# old_st st of
---     1# -> return ()
---     _  -> d st cmp
--- #else
---   d st cmp
--- #endif
-
--- newDict :: forall m ms. (Base m <: ms, Eq m) => Proxy m -> Code ms IO Dict
--- newDict p = return $ Dict Map.empty (Just $ unsafeCoerce (\st -> dictUpdate (Proxy :: Proxy m) st :: Code ms IO ()))
-
 differ :: (Base m <: ms) => Differ ms m
 differ render trig sendEv ComponentState {..} = do
 #ifdef __GHCJS__
@@ -1191,8 +1181,9 @@ swapContent t e =
 {-# NOINLINE embed_ #-}
 embed_ :: ENode -> Atom e -> IO ()
 embed_ parent STAtom {..} = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  embed_ parent a
+  forM_ _strecord $ \ref -> do
+    (_,_,SomeAtom a) <- readIORef ref
+    embed_ parent a
 embed_ parent Text {..} =
   forM_ _tnode $ \node -> do
     ae <- isAlreadyEmbeddedText node parent
@@ -1222,6 +1213,7 @@ buildAndEmbedMaybe f doc = go
     go mparent Raw {..} = do
       _node@(Just el) <- createElement doc _tag
       _attributes <- setAttributes _attributes f el
+      willMount
       setInnerHTML el _content
       forM_ mparent (flip appendChild el)
       return $ Raw _node _tag _attributes _content
@@ -1234,23 +1226,23 @@ buildAndEmbedMaybe f doc = go
       return $ Atom _node _tag _attributes _atoms
 
     go mparent STAtom {..} = do
+      strec <- newIORef undefined
       cur_ <- newIORef (nil,nil)
       let upd_st st = do
-            modifyIORef _strecord $ \(_,upd,sa) -> (st,upd,sa)
+            modifyIORef strec $ \(_,upd,sa) -> (st,upd,sa)
             upd (SomeAtom $ unsafeCoerce $ _stview st upd_st)
           upd (SomeAtom a) = do
             (old,mid) <- readIORef cur_
             new <- either id id <$> diffHelper f doc old mid a
-            modifyIORef _strecord $ \(st,upd,_) -> (st,upd,SomeAtom (unsafeCoerce new))
+            modifyIORef strec $ \(st,upd,_) -> (st,upd,SomeAtom (unsafeCoerce new))
             writeIORef cur_ (new,a)
 
-      (st,_,_) <- readIORef _strecord
-      let mid = _stview st upd_st
+      let mid = _stview _ststate upd_st
       new <- go mparent mid
       writeIORef cur_ (new,mid)
-      writeIORef _strecord (_ststate,upd,SomeAtom (unsafeCoerce new))
+      writeIORef strec (_ststate,upd,SomeAtom (unsafeCoerce new))
 
-      return $ STAtom _stmodel _ststate _strecord _stview
+      return $ STAtom _stmodel _ststate (Just strec) _stview
 
     go mparent SVGAtom {..} = do
       _node@(Just el) <- createElementNS doc ("http://www.w3.org/2000/svg") _tag
@@ -1315,15 +1307,21 @@ buildHTML :: Doc -> (e -> IO ()) -> Atom e -> IO (Atom e)
 buildHTML doc f = buildAndEmbedMaybe f doc Nothing
 
 getElement Text {} = return Nothing
-getElement STAtom {..} = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  getElement a
+getElement STAtom {..} =
+  case _strecord of
+    Nothing -> return Nothing
+    Just ref -> do
+      (_,_,SomeAtom a) <- readIORef ref
+      getElement a
 getElement n = return $ _node n
 
 getNode Text {..} = return $ fmap toNode _tnode
-getNode STAtom {..} = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  getNode a
+getNode STAtom {..} =
+  case _strecord of
+    Nothing -> return Nothing
+    Just ref -> do
+      (_,_,SomeAtom a) <- readIORef ref
+      getNode a
 getNode n = return $ fmap toNode $ _node n
 
 
@@ -1370,18 +1368,25 @@ replace _ _ = return ()
 #else
 replace old@STAtom {} new@STAtom {} =
   case (old,new) of
-    (STAtom _ _ r _,STAtom _ _ r' _) -> do
+    (STAtom _ _ (Just r) _,STAtom _ _ (Just r') _) -> do
       (_,_,SomeAtom a) <- readIORef r
       (_,_,SomeAtom b) <- readIORef r'
       replace a b
+    _ -> return ()
 
 replace STAtom {..} new = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  replace a new
+  case _strecord of
+    Nothing -> return ()
+    Just ref -> do
+      (_,_,SomeAtom a) <- readIORef ref
+      replace a new
 
 replace old STAtom {..} = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  replace old a
+  case _strecord of
+    Nothing -> return ()
+    Just ref -> do
+      (_,_,SomeAtom a) <- readIORef ref
+      replace old a
 
 replace old@Text {} new@Text {} = do
   forM_ (_tnode old) $ \o ->
@@ -1410,8 +1415,11 @@ delete :: Atom e -> IO ()
 delete _ = return ()
 #else
 delete STAtom {..} = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  delete a
+  case _strecord of
+    Nothing -> return ()
+    Just ref -> do
+      (_,_,SomeAtom a) <- readIORef ref
+      delete a
 delete Text {..} = forM_ _tnode (delete_js . toNode)
 delete n = forM_ (_node n) (delete_js . toNode)
 #endif
@@ -1422,8 +1430,9 @@ cleanup :: (e -> IO ()) -> [Atom e] -> IO ()
 cleanup _ _ = return ()
 #else
 cleanup f (STAtom{..}:rest) = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  cleanup f (unsafeCoerce a)
+  forM_ _strecord $ \ref -> do
+    (_,_,SomeAtom a) <- readIORef ref
+    cleanup f [a]
   cleanup f rest
 cleanup f (NullAtom{}:rest) = cleanup f rest
 cleanup f (Raw {..}:rest) = do
@@ -1453,8 +1462,9 @@ insertAt :: ENode -> Int -> Atom e -> IO ()
 insertAt _ _ _ = return ()
 #else
 insertAt parent ind STAtom {..} = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  insertAt parent ind a
+  forM_ _strecord $ \ref -> do
+    (_,_,SomeAtom a) <- readIORef ref
+    insertAt parent ind a
 insertAt parent ind Text {..} = forM_ _tnode $ insert_at_js parent ind . toNode
 insertAt parent ind n = forM_ (_node n) $ insert_at_js parent ind . toNode
 #endif
@@ -1466,16 +1476,19 @@ insertBefore_ _ _ _ = return ()
 #else
 insertBefore_ parent child@(STAtom{}) new@(STAtom{}) = do
   case (child,new) of
-    (STAtom _ _ r _, STAtom _ _ r' _) -> do
+    (STAtom _ _ (Just r) _, STAtom _ _ (Just r') _) -> do
       (_,_,SomeAtom a) <- readIORef r
       (_,_,SomeAtom b) <- readIORef r'
       insertBefore_ parent a b
+    _ -> return ()
 insertBefore_ parent STAtom {..} new = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  insertBefore_ parent a new
+  forM_ _strecord $ \ref -> do
+    (_,_,SomeAtom a) <- readIORef ref
+    insertBefore_ parent a new
 insertBefore_ parent child STAtom {..} = do
-  (_,_,SomeAtom a) <- readIORef _strecord
-  insertBefore_ parent child a
+  forM_ _strecord $ \ref -> do
+    (_,_,SomeAtom a) <- readIORef ref
+    insertBefore_ parent child a
 insertBefore_ parent child@(Text {}) new@(Text{}) = void $ N.insertBefore parent (_tnode new) (_tnode child)
 insertBefore_ parent child new@(Text{}) = void $ N.insertBefore parent (_tnode new) (_node child)
 insertBefore_ parent child@(Text {}) new = void $ N.insertBefore parent (_node new) (_tnode child)
@@ -1537,22 +1550,18 @@ diffHelper f doc =
 
         go' old@STAtom {} _ new@STAtom {} = do
           case (old,new) of
-            (STAtom m s r v,STAtom m' s' r' v') -> do
-              print (reallyVeryUnsafeEq m m',reallyVeryUnsafeEq s s', reallyVeryUnsafeEq r r',reallyVeryUnsafeEq v v')
+            (STAtom m s ~(Just r) v,STAtom m' s' _ v') -> do
               if reallyVeryUnsafeEq s s' then
                 if reallyVeryUnsafeEq m m' then do
-                  putStrLn "True True"
                   return $ Right old
                 else do
-                  putStrLn "True False"
                   (st,upd,_) <- readIORef (unsafeCoerce r)
                   let upd_st st' = do
                         modifyIORef (unsafeCoerce r) $ \(_,upd,sa) -> (st',upd,sa)
                         upd (SomeAtom $ unsafeCoerce $ v' st' upd_st)
                   unsafeCoerce upd (SomeAtom $ unsafeCoerce $ v' st upd_st)
-                  return $ Right $ STAtom m' s' (unsafeCoerce r) v'
+                  return $ Right $ STAtom m' s' (Just $ unsafeCoerce r) v'
               else do
-                putStrLn "False"
                 (_,_,SomeAtom a) <- readIORef r
                 new' <- buildHTML doc f new
                 replace a new'
@@ -2005,24 +2014,24 @@ removeAttribute_ element attr =
 #endif
 
 {-# NOINLINE setAttribute_ #-}
-setAttribute_ :: (e -> IO ()) -> ENode -> Feature e -> IO (Feature e)
-setAttribute_ c element attr =
+setAttribute_ :: (e -> IO ()) -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())
+setAttribute_ c element attr didMount =
 #ifndef __GHCJS__
-  return attr
+  return (attr,Nothing)
 #else
   case attr of
     NullFeature ->
-      return NullFeature
+      return (NullFeature,didMount)
 
     Property nm v -> do
       set_property_js element nm v
-      return attr
+      return (attr,didMount)
 
     -- optimize this; we're doing a little more work than necessary!
     Attribute nm val -> do
       -- liftIO $ putStrLn $ "Setting attribute: " ++ show (nm,eval)
       E.setAttribute element nm val
-      return attr
+      return (attr,didMount)
 
     Link href _ -> do
       E.setAttribute element ("href" :: Txt) href
@@ -2037,7 +2046,7 @@ setAttribute_ c element attr =
                    H.pushState hist (M.pToJSVal (0 :: Int)) ("" :: Txt) href
                    triggerPopstate_js
                    scrollToTop
-      return (Link href (Just stopListener))
+      return (Link href (Just stopListener),didMount)
 
     On ev os f _ -> do
       stopListener <-
@@ -2049,8 +2058,7 @@ setAttribute_ c element attr =
                  when (_stopProp os) Ev.stopPropagation
                  liftIO $ f element (unsafeCoerce ce) >>= mapM_ c
                  return ()
-      return (On ev os f (Just stopListener))
-
+      return (On ev os f (Just stopListener),didMount)
 
     OnDoc ev os f _ -> do
       doc <- getDocument
@@ -2063,7 +2071,7 @@ setAttribute_ c element attr =
                  when (_stopProp os) Ev.stopPropagation
                  liftIO $ f element doc (unsafeCoerce ce) >>= mapM_ c
                  return ()
-      return (OnDoc ev os f (Just stopListener))
+      return (OnDoc ev os f (Just stopListener),didMount)
 
     OnWin ev os f _ -> do
       win <- getWindow
@@ -2076,14 +2084,21 @@ setAttribute_ c element attr =
                  when (_stopProp os) Ev.stopPropagation
                  liftIO $ f element win (unsafeCoerce ce) >>= mapM_ c
                  return ()
-      return (OnWin ev os f (Just stopListener))
+      return (OnWin ev os f (Just stopListener),didMount)
 
     OnBuild e -> do
       c e
-      return attr
+      return (attr,didMount)
 
     OnDestroy _ ->
-      return attr
+      return (attr,didMount)
+
+    OnWillMount f -> do
+       f element
+       return (attr,didMount)
+
+    OnDidMount f -> do
+       return (attr,f element >> didMount)
 
     Style styles -> do
       obj <- O.create
