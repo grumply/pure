@@ -1026,7 +1026,7 @@ puts !new = do
         Eager  -> d cmp'
         Manual -> return ()
 #else
-  d st cmp'
+  d cmp'
 #endif
 
 {-# INLINE updates #-}
@@ -1210,7 +1210,7 @@ setAttributes as f el = do
       res <- go didMount_ as
       return (a':res)
 #else
-  return as
+  return (as,return ())
 #endif
 
 {-# NOINLINE buildAndEmbedMaybe #-}
@@ -1258,7 +1258,7 @@ buildAndEmbedMaybe f doc = go
       return $ STAtom _stmodel _ststate (Just strec) _stview
 
     go mparent SVGAtom {..} = do
-      _node@(Just el) <- createElementNS doc ("http://www.w3.org/2000/svg") _tag
+      _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
       (_attributes,didMount) <- setAttributes _attributes f el
       _atoms <- mapM (go (Just el)) _atoms
       didMount
@@ -1272,6 +1272,14 @@ buildAndEmbedMaybe f doc = go
       didMount
       forM_ mparent $ \parent -> appendChild parent el
       return $ KAtom _node _tag _attributes _keyed
+
+    go mparent KSVGAtom {..} = do
+      _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
+      (_attributes,didMount) <- setAttributes _attributes f el
+      _keyed <- mapM (\(k,x) -> go (Just el) x >>= \y -> return (k,y)) _keyed
+      didMount
+      forM_ mparent $ \parent -> appendChild parent el
+      return $ KSVGAtom _node _tag _attributes _keyed
 
     go mparent Text {..} = do
       _tnode@(Just el) <- createTextNode doc _content
@@ -1483,6 +1491,13 @@ cleanup f = go (return ())
               Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
       unmounts' <- cleanup f (map snd _keyed)
       go (unmounts' >> du >> didUnmount) rest
+    go didUnmount (a@KSVGAtom {..}:rest) = do
+      en <- getElement a
+      du <- case en of
+              Nothing -> return (return ())
+              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
+      unmounts' <- cleanup f (map snd _keyed)
+      go (unmounts' >> du >> didUnmount) rest
     go didUnmount (a@Managed {..}:rest) = do
       en <- getElement a
       du <- case en of
@@ -1654,6 +1669,30 @@ diffHelper f doc =
                   delete old
                   didUnmount
                   return $ Left new'
+
+        go' old@(KSVGAtom old_node old_tag old_attributes old_keyed)
+          mid@(KSVGAtom midAnode _ midAattributes midAkeyed)
+          new@(KSVGAtom _ new_tag new_attributes new_keyed) =
+          if prettyUnsafeEq old_tag new_tag
+          then do
+            let Just n = old_node
+            (a',didMount) <-
+                  if reallyUnsafeEq midAattributes new_attributes then
+                    return (old_attributes,return ())
+                  else
+                    runElementDiff f n old_attributes midAattributes new_attributes
+            c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
+                    diffKeyedChildren n old_keyed midAkeyed new_keyed
+            didMount
+            return $ Right $ KSVGAtom old_node old_tag a' c'
+          else do new' <- buildHTML doc f new
+                  replace old new'
+                  didUnmount <- cleanup f [old]
+                  delete old
+                  didUnmount
+                  return $ Left new'
+
+
 
         go' txt@(Text (Just t) cnt) mid@(Text _ mcnt) new@(Text _ cnt') =
           if reallyUnsafeEq mcnt cnt' then do
@@ -1907,7 +1946,7 @@ applyStyleDiffs el olds0 news0 = do
 runElementDiff :: (e -> IO ()) -> ENode -> [Feature e] -> [Feature e] -> [Feature e] -> IO ([Feature e],IO ())
 runElementDiff f el os0 ms0 ns0 = do
 #ifndef __GHCJS__
-    return ns0
+    return (ns0,return ())
 #else
     dm_ <- newIORef (return ())
     fs <- go dm_ os0 ms0 ns0
@@ -2151,7 +2190,7 @@ removeAttribute_ element attr =
 setAttribute_ :: (e -> IO ()) -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())
 setAttribute_ c element attr didMount =
 #ifndef __GHCJS__
-  return (attr,Nothing)
+  return (attr,return ())
 #else
   case attr of
     NullFeature ->

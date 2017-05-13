@@ -65,6 +65,7 @@ instance Monoid Obj where
 #else
 import Ef (Constrain)
 
+import qualified Data.Aeson as Aeson
 import Data.Aeson as Export hiding (Object)
 import Data.Aeson.Types as Export hiding (Object,parse)
 import Data.Monoid as Export
@@ -80,6 +81,8 @@ import qualified Data.Aeson.Types as O (Object)
 
 import Data.Txt
 
+import Prelude hiding (lookup)
+
 type Obj = O.Object
 
 -- copied from GHCJS JSON for compatability
@@ -88,27 +91,28 @@ data JSONException = UnknownKey
 
 instance Exception JSONException
 
+-- from GHCJS.JSON
 class Lookup k a where
-  (!)       :: k -> a -> Value             -- ^ throws when result is not a JSON value
-  lookup    :: k -> a -> Maybe Value       -- ^ returns Nothing when result is not a JSON value
+  (!)       :: k -> a -> Value
+  lookup    :: k -> a -> Maybe Value
 
-instance Lookup Txt Object where
-  k ! v  = fromMaybe (throw UnknownKey) (lookup k v)
+instance Lookup Txt O.Object where
+  (!) k v  = fromMaybe (throw UnknownKey) (lookup k v)
   lookup = Map.lookup
 
 instance Lookup Txt Value where
-  k ! v      = fromMaybe (throw UnknownKey) (lookup p d)
+  (!) k v = fromMaybe (throw UnknownKey) (lookup k v)
   lookup k v =
     case v of
-      Object o -> lookup k o
+      Aeson.Object o -> lookup k o
       _ -> Nothing
 
-instance Lookup Int V.Vector where
-  i ! a  = fromMaybe (throw UnknownKey) (lookup i a)
+instance Lookup Int Aeson.Array where
+  (!) i a = fromMaybe (throw UnknownKey) (lookup i a)
   lookup = flip (V.!?)
 
 instance Lookup Int Value where
-  i ! a      = fromMaybe (throw UnknownKey) (lookup i a)
+  (!) i a      = fromMaybe (throw UnknownKey) (lookup i a)
   lookup i v =
     case v of
       Array arr -> lookup i arr

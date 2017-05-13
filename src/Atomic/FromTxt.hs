@@ -90,7 +90,7 @@ instance FromTxt Int where
 #ifdef __GHCJS__
   fromTxt t = fromMaybe (readError "Int" t) (T.readIntMaybe t)
 #else
-  fromTxt t = either (readError "Int" t) fst (T.signed t)
+  fromTxt t = either (readError "Int" t) fst (T.signed T.decimal t)
 #endif
 
 instance FromTxt Double where
@@ -106,7 +106,7 @@ instance FromTxt Integer where
 #ifdef __GHCJS__
   fromTxt t = fromMaybe (readError "Integer" t) (T.readIntegerMaybe t)
 #else
-  fromTxt t = either (readError "Integer" t) fst (T.signed t)
+  fromTxt t = either (readError "Integer" t) fst (T.signed T.decimal t)
 #endif
 
 instance FromTxt a => FromTxt (Maybe a) where

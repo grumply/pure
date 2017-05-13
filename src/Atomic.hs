@@ -113,7 +113,9 @@ import Data.IORef
 -- for printAny/traceAny and STAtom
 import System.IO.Unsafe
 import Unsafe.Coerce
+#ifdef __GHCJS__
 import qualified GHCJS.Types as T
+#endif
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
@@ -156,11 +158,11 @@ instance {-# OVERLAPS #-} (FromJSON v,Hashable k,Eq k,FromTxt k) => FromJSON (Ha
     pure $ Map.fromList kvs
 #else
 
-instance (ToTxt k,ToJSON k) => ToJSONKey k where
-  toJSONKey = toJSONKeyText toTxt
+-- instance (ToTxt k,ToJSON k) => ToJSONKey k where
+--   toJSONKey = toJSONKeyText toTxt
 
-instance (FromTxt k,FromJSON k) => FromJSONKey k where
-  fromJSONKey = FromJSONKeyText fromTxt
+-- instance (FromTxt k,FromJSON k) => FromJSONKey k where
+--   fromJSONKey = FromJSONKeyText fromTxt
 
 #endif
 
