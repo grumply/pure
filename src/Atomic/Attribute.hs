@@ -1,6 +1,7 @@
 {-# language DeriveDataTypeable #-}
 {-# language OverloadedStrings #-}
 {-# language TemplateHaskell #-}
+{-# language StandaloneDeriving #-}
 {-# language CPP #-}
 module Atomic.Attribute where
 
@@ -128,12 +129,12 @@ data Feature e
     { _destroyEvent :: e
     }
   | OnWillMount
-    { _mountEvent :: IO ()
+    { _willMountEvent :: ENode -> IO ()
     }
   | OnDidMount
-    { _mountEvent :: ENode -> IO ()
+    { _didMountEvent :: ENode -> IO ()
     }
-  | forall model. OnWillUpdate 
+  | forall model. OnUpdate
     { _updateModel :: model
     , _updateEvent :: model -> ENode -> IO ()
     }
@@ -141,14 +142,11 @@ data Feature e
     { _watchModel :: model
     , _modelEvent :: model -> ENode -> e
     }
-  | forall model. OnDidUpdate
-    { _updateModel :: model
-    , _updateEvent :: model -> ENode -> IO ()
   | OnWillUnmount
-    { _mountEvent :: ENode -> IO ()
+    { _willUnmountEvent :: ENode -> IO ()
     }
   | OnDidUnmount
-    { _mountEvent :: IO ()
+    { _didUnmountEvent :: ENode -> IO ()
     }
   | Link
     { _link :: Txt
@@ -162,7 +160,8 @@ data Feature e
     { _attr :: Txt
     , _value :: Txt
     }
-  deriving (Functor)
+
+deriving instance Functor Feature
 
 instance ToJSON (Feature e) where
   toJSON f =
@@ -236,9 +235,7 @@ instance Eq (Feature e) where
     reallyUnsafeEq e e'
   (==) (OnDidMount e) (OnDidMount e') =
     reallyUnsafeEq e e'
-  (==) (OnWillUpdate m f) (OnWillUpdate m' f') =
-    reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
-  (==) (OnDidUpdate m f) (OnDidUpdate m' f') =
+  (==) (OnUpdate m f) (OnUpdate m' f') =
     reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
   (==) (OnModel m f) (OnModel m' f') =
     reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
@@ -328,27 +325,30 @@ onDestroy :: e -> Feature e
 onDestroy = OnDestroy
 
 -- runs when the attribute is being set; top-down
-onWillMount :: IO () -> Feature e
+onWillMount :: (ENode -> IO ()) -> Feature e
 onWillMount = OnWillMount
 
 -- runs when the element is inserted into its parent, not after it is inserted into the DOM; bottom-up
+-- not guaranteed to run
 onDidMount :: (ENode -> IO ()) -> Feature e
 onDidMount = OnDidMount
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
-onWillUpdate :: model -> (model -> ENode -> IO ()) -> Feature e
-onWillUpdate = OnWillUpdate
+-- make sure the body of the function will not change; must be totally static modulo the model/enode!
+onModel :: model -> (model -> ENode -> e) -> Feature e
+onModel = OnModel
 
--- watches a model, as supplied, and calls the callback after feature diffing; bottom-up
-onDidUpdate :: model -> (model -> ENode -> IO ()) -> Feature e
-onDidUpdate = OnDidUpdate
+-- watches a model, as supplied, and calls the callback during feature diffing; top-down
+-- make sure the body of the function will not change; must be totally static modulo the model/enode!
+onModelIO :: model -> (model -> ENode -> IO ()) -> Feature e
+onModelIO = OnUpdate
 
 -- runs when the attribute is being cleaned up; top-down
 onWillUnmount :: (ENode -> IO ()) -> Feature e
 onWillUnmount = OnWillUnmount
 
--- runs when the element is removed from its parent, not when it is removed from the DOM; bottom-up
-onDidUnmount :: IO () -> Feature e
+-- runs when the element is remove()'d, not when it is removed from the DOM; bottom-up
+onDidUnmount :: (ENode -> IO ()) -> Feature e
 onDidUnmount = OnDidUnmount
 
 preventDefault :: Feature e -> Feature e

@@ -60,6 +60,7 @@ import Control.Concurrent
 import Data.Bifunctor
 import Data.Char
 import Data.Data hiding (Constr)
+import Data.Either
 import Data.Foldable
 import Data.Functor.Identity
 import Data.Hashable
@@ -1193,10 +1194,21 @@ embed_ parent n =
     ae <- isAlreadyEmbedded node parent
     unless ae (void $ appendChild parent node)
 
-setAttributes :: [Feature e] -> (e -> IO ()) -> ENode -> IO [Feature e]
-setAttributes as f el =
+setAttributes :: [Feature e] -> (e -> IO ()) -> ENode -> IO ([Feature e],IO ())
+setAttributes as f el = do
 #ifdef __GHCJS__
-  forM as (setAttribute_ f el)
+  didMount_ <- newIORef (return ())
+  attrs <- go didMount_ as
+  dm <- readIORef didMount_
+  return (attrs,dm)
+  where
+    go _ [] = return []
+    go didMount_ (a:as) = do
+      dm <- readIORef didMount_
+      (a',dm') <- setAttribute_ f el a dm
+      writeIORef didMount_ dm'
+      res <- go didMount_ as
+      return (a':res)
 #else
   return as
 #endif
@@ -1212,17 +1224,18 @@ buildAndEmbedMaybe f doc = go
 
     go mparent Raw {..} = do
       _node@(Just el) <- createElement doc _tag
-      _attributes <- setAttributes _attributes f el
-      willMount
+      (_attributes,didMount) <- setAttributes _attributes f el
       setInnerHTML el _content
-      forM_ mparent (flip appendChild el)
+      didMount
+      forM_ mparent $ \parent -> appendChild parent el
       return $ Raw _node _tag _attributes _content
 
     go mparent Atom {..} = do
       _node@(Just el) <- createElement doc _tag
-      _attributes <- setAttributes _attributes f el
-      forM_ mparent (flip appendChild el)
+      (_attributes,didMount) <- setAttributes _attributes f el
       _atoms <- mapM (go (Just el)) _atoms
+      didMount
+      forM_ mparent $ \parent -> appendChild parent el
       return $ Atom _node _tag _attributes _atoms
 
     go mparent STAtom {..} = do
@@ -1246,16 +1259,18 @@ buildAndEmbedMaybe f doc = go
 
     go mparent SVGAtom {..} = do
       _node@(Just el) <- createElementNS doc ("http://www.w3.org/2000/svg") _tag
-      _attributes <- setAttributes _attributes f el
-      forM_ mparent (flip appendChild el)
+      (_attributes,didMount) <- setAttributes _attributes f el
       _atoms <- mapM (go (Just el)) _atoms
+      didMount
+      forM_ mparent $ \parent -> appendChild parent el
       return $ SVGAtom _node _tag _attributes _atoms
 
     go mparent KAtom {..} = do
       _node@(Just el) <- createElement doc _tag
-      _attributes <- setAttributes _attributes f el
-      forM_ mparent (flip appendChild el)
+      (_attributes,didMount) <- setAttributes _attributes f el
       _keyed <- mapM (\(k,x) -> go (Just el) x >>= \y -> return (k,y)) _keyed
+      didMount
+      forM_ mparent $ \parent -> appendChild parent el
       return $ KAtom _node _tag _attributes _keyed
 
     go mparent Text {..} = do
@@ -1269,21 +1284,22 @@ buildAndEmbedMaybe f doc = go
           case _node of
             Nothing -> do
               _node@(Just el) <- createElement doc _tag
-              _attributes <- setAttributes _attributes f el
+              (_attributes,didMount) <- setAttributes _attributes f el
+              didMount
               mi_ <- lookupComponent (key a)
               case mi_ of
                 Nothing -> do
                   -- never built before; make and embed
                   x_ <- mkComponent BuildOnly a
                   (h,_,_) <- liftIO $ readIORef x_
-                  forM_ mparent (`embed_` Managed {..})
+                  forM_ mparent $ \parent -> embed_ parent Managed {..}
                   embed_ el h
                   return Managed {..}
                 Just (_,x_) -> do
                   (h,_,_) <- liftIO $ readIORef x_
                   rebuild Managed {..}
                   embed_ el h
-                  forM_ mparent (`embed_` Managed {..})
+                  forM_ mparent $ \parent -> embed_ parent Managed {..}
                   return Managed {..}
 
             Just e -> do
@@ -1424,36 +1440,56 @@ delete Text {..} = forM_ _tnode (delete_js . toNode)
 delete n = forM_ (_node n) (delete_js . toNode)
 #endif
 
+-- f node feature io -> io
 {-# NOINLINE cleanup #-}
-cleanup :: (e -> IO ()) -> [Atom e] -> IO ()
+cleanup :: (e -> IO ()) -> [Atom e] -> IO (IO ())
 #ifndef __GHCJS__
-cleanup _ _ = return ()
+cleanup _ _ = return (return ())
 #else
-cleanup f (STAtom{..}:rest) = do
-  forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a) <- readIORef ref
-    cleanup f [a]
-  cleanup f rest
-cleanup f (NullAtom{}:rest) = cleanup f rest
-cleanup f (Raw {..}:rest) = do
-  forM_ _attributes (cleanupAttr f)
-  cleanup f rest
-cleanup f (Atom {..}:rest) = do
-  forM_ _attributes (cleanupAttr f)
-  cleanup f _atoms
-  cleanup f rest
-cleanup f (SVGAtom {..}:rest) = do
-  forM_ _attributes (cleanupAttr f)
-  cleanup f _atoms
-  cleanup f rest
-cleanup f (KAtom {..}:rest) = do
-  forM_ _attributes (cleanupAttr f)
-  cleanup f (map snd _keyed)
-  cleanup f rest
-cleanup f (Managed {..}:rest) = do
-  forM_ _attributes (cleanupAttr f)
-  cleanup f rest
-cleanup _ _ = return ()
+cleanup f = go (return ())
+  where
+    go didUnmount (STAtom{..}:rest) = do
+      didUnmount' <- case _strecord of
+                       Nothing -> return (return ())
+                       Just ref -> do
+                         (_,_,SomeAtom a) <- readIORef ref
+                         cleanup f [a]
+      go (didUnmount' >> didUnmount) rest
+    go didUnmount (NullAtom{}:rest) = go didUnmount rest
+    go didUnmount (r@Raw {..}:rest) = do
+      en <- getElement r
+      du <- case en of
+              Nothing -> return (return ())
+              Just n  -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
+      go (du >> didUnmount) rest
+    go didUnmount (a@Atom {..}:rest) = do
+      en <- getElement a
+      du <- case en of
+              Nothing -> return (return ())
+              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
+      unmounts' <- cleanup f _atoms
+      go (unmounts' >> du >> didUnmount) rest
+    go didUnmount (a@SVGAtom {..}:rest) = do
+      en <- getElement a
+      du <- case en of
+              Nothing -> return (return ())
+              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
+      unmounts' <- cleanup f _atoms
+      go (unmounts' >> du >> didUnmount) rest
+    go didUnmount (a@KAtom {..}:rest) = do
+      en <- getElement a
+      du <- case en of
+              Nothing -> return (return ())
+              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
+      unmounts' <- cleanup f (map snd _keyed)
+      go (unmounts' >> du >> didUnmount) rest
+    go didUnmount (a@Managed {..}:rest) = do
+      en <- getElement a
+      du <- case en of
+              Nothing -> return (return ())
+              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
+      go (du >> didUnmount) rest
+    go didUnmount _ = return didUnmount
 #endif
 
 {-# NOINLINE insertAt #-}
@@ -1518,34 +1554,39 @@ diffHelper f doc =
             _          -> do
               new' <- buildHTML doc f new
               replace old new'
-              cleanup f [old]
+              didUnmount <- cleanup f [old]
               delete old
+              didUnmount
               return $ Left new'
 
         go' old _ new@NullAtom{} = do
           new' <- buildHTML doc f new
           replace old new'
-          cleanup f [old]
+          didUnmount <- cleanup f [old]
           delete old
+          didUnmount
           return $ Left new'
 
         go' old@Atom {} mid@Atom {} new@Atom {} =
           if prettyUnsafeEq (_tag old) (_tag new)
           then do
             let Just n = _node old
-            a' <- if reallyUnsafeEq (_attributes mid) (_attributes new) then do
-                    return (_attributes old)
+            (a',didMount) <-
+                  if reallyUnsafeEq (_attributes mid) (_attributes new) then do
+                    return (_attributes old,return ())
                   else
                     runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
             c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
                     return (_atoms old)
                   else
                     diffChildren n (_atoms old) (_atoms mid) (_atoms new)
+            didMount
             return $ Right $ Atom (_node old) (_tag old) a' c'
           else do new' <- buildHTML doc f new
                   replace old new'
-                  cleanup f [old]
+                  didUnmount <- cleanup f [old]
                   delete old
+                  didUnmount
                   return $ Left new'
 
         go' old@STAtom {} _ new@STAtom {} = do
@@ -1565,27 +1606,31 @@ diffHelper f doc =
                 (_,_,SomeAtom a) <- readIORef r
                 new' <- buildHTML doc f new
                 replace a new'
-                cleanup f [a]
+                didUnmount <- cleanup f [a]
                 delete a
+                didUnmount
                 return $ Left new'
 
         go' old@SVGAtom {} mid@SVGAtom {} new@SVGAtom {} =
           if prettyUnsafeEq (_tag old) (_tag new)
           then do
             let Just n = _node old
-            a' <- if reallyUnsafeEq (_attributes mid) (_attributes new) then do
-                    return (_attributes old)
+            (a',didMount) <-
+                  if reallyUnsafeEq (_attributes mid) (_attributes new) then do
+                    return (_attributes old,return ())
                   else do
                     runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
             c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
                     return (_atoms old)
                   else do
                     diffChildren n (_atoms old) (_atoms mid) (_atoms new)
+            didMount
             return $ Right $ SVGAtom (_node old) (_tag old) a' c'
           else do new' <- buildHTML doc f new
                   replace old new'
-                  cleanup f [old]
+                  didUnmount <- cleanup f [old]
                   delete old
+                  didUnmount
                   return $ Left new'
 
         go' old@(KAtom old_node old_tag old_attributes old_keyed)
@@ -1594,15 +1639,20 @@ diffHelper f doc =
           if prettyUnsafeEq old_tag new_tag
           then do
             let Just n = old_node
-            a' <- if reallyUnsafeEq midAattributes new_attributes then return old_attributes else
+            (a',didMount) <-
+                  if reallyUnsafeEq midAattributes new_attributes then
+                    return (old_attributes,return ())
+                  else
                     runElementDiff f n old_attributes midAattributes new_attributes
             c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
                     diffKeyedChildren n old_keyed midAkeyed new_keyed
+            didMount
             return $ Right $ KAtom old_node old_tag a' c'
           else do new' <- buildHTML doc f new
                   replace old new'
-                  cleanup f [old]
+                  didUnmount <- cleanup f [old]
                   delete old
+                  didUnmount
                   return $ Left new'
 
         go' txt@(Text (Just t) cnt) mid@(Text _ mcnt) new@(Text _ cnt') =
@@ -1618,17 +1668,23 @@ diffHelper f doc =
         go' old@(Raw {}) mid@(Raw {}) new@(Raw {}) =
           if prettyUnsafeEq (_tag old) (_tag new) then do
             let Just n = _node old
-            a' <- if reallyUnsafeEq (_attributes mid) (_attributes new) then return (_attributes old) else
-                    runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
-            if prettyUnsafeEq (_content mid) (_content new) then
+            (a',didMount) <-
+                    if reallyUnsafeEq (_attributes mid) (_attributes new) then
+                      return (_attributes old,return ())
+                    else
+                      runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
+            if prettyUnsafeEq (_content mid) (_content new) then do
+              didMount
               return $ Right $ Raw (_node old) (_tag old) a' (_content old)
             else do
               setInnerHTML n (_content new)
+              didMount
               return $ Right $ Raw (_node old) (_tag old) a' (_content new)
           else do new' <- buildHTML doc f new
                   replace old new'
-                  cleanup f [old]
+                  didUnmount <- cleanup f [old]
                   delete old
+                  didUnmount
                   return $ Left new'
 
         go' old@(Managed {}) mid new@(Managed {}) =
@@ -1636,14 +1692,19 @@ diffHelper f doc =
             && prettyUnsafeEq (_tag old) (_tag new)
           then do
             let Just n = _node old
-            a' <- if reallyUnsafeEq (_attributes mid) (_attributes new) then return (_attributes old) else
-                    runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
+            (a',didMount) <-
+                    if reallyUnsafeEq (_attributes mid) (_attributes new) then
+                      return (_attributes old,return ())
+                    else
+                      runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
+            didMount
             return $ Right $ Managed (_node old) (_tag old) a' (_constr old)
           else do
             new' <- buildAndEmbedMaybe f doc Nothing new
             replace old new'
-            cleanup f [old]
+            didUnmount <- cleanup f [old]
             delete old
+            didUnmount
             return $ Left new'
 
         go' old _ n = do
@@ -1653,8 +1714,9 @@ diffHelper f doc =
               forM_ (_node n') (swapContent o)
             _ -> do
               replace old n'
-              cleanup f [old]
+              didUnmount <- cleanup f [old]
               delete old
+              didUnmount
           return $ Left n'
 
     diffChildren n olds mids news = do
@@ -1668,15 +1730,17 @@ diffHelper f doc =
               mapM (buildAndEmbedMaybe f doc (Just n)) news
 
             go_ olds _ [] = do
-              cleanup f olds
+              didUnmount <- cleanup f olds
               mapM_ delete olds
+              didUnmount
               return []
 
             go_ (old:olds) (mid:mids) (new:news) =
               let
                 remove = do
-                  cleanup f [old]
+                  didUnmount <- cleanup f [old]
                   delete old
+                  didUnmount
 
                 continue up = do
                   upds <-
@@ -1693,15 +1757,17 @@ diffHelper f doc =
                     (_,NullAtom {}) -> do
                       new' <- buildHTML doc f new
                       replace old new'
-                      cleanup f [old]
+                      didUnmount <- cleanup f [old]
                       delete old
+                      didUnmount
                       continue new'
 
                     (NullAtom{},_) -> do
                       new' <- buildHTML doc f new
                       replace old new'
-                      cleanup f [old]
+                      didUnmount <- cleanup f [old]
                       delete old
+                      didUnmount
                       continue new'
 
                     (m,n) -> do
@@ -1719,8 +1785,9 @@ diffHelper f doc =
 
         go_ _ olds _ [] = do
           forM_ olds $ \(_,a) -> do
-            cleanup f [a]
+            didUnmount <- cleanup f [a]
             delete a
+            didUnmount
           return []
 
         go_ i a_@((akey,a):(akey',a'):as) m_@((mkey,m):(mkey',m'):ms) b_@((bkey,b):(bkey',b'):bs)
@@ -1758,8 +1825,9 @@ diffHelper f doc =
 
           -- delete
           | otherwise = do
-            cleanup f [a]
+            didUnmount <- cleanup f [a]
             delete a
+            didUnmount
             if prettyUnsafeEq bkey akey' then
               go_ i ((akey',a'):as) ((mkey',m'):ms) b_
             else do
@@ -1778,8 +1846,9 @@ diffHelper f doc =
             return $ (akey,new):rest
 
           | otherwise = do
-            cleanup f [a]
+            didUnmount <- cleanup f [a]
             delete a
+            didUnmount
             go_ i as ms ((bkey,b):bs)
 
 {-# NOINLINE applyStyleDiffs #-}
@@ -1835,30 +1904,45 @@ applyStyleDiffs el olds0 news0 = do
 #endif
 
 {-# NOINLINE runElementDiff #-}
-runElementDiff :: (e -> IO ()) -> ENode -> [Feature e] -> [Feature e] -> [Feature e] -> IO [Feature e]
-runElementDiff f el os0 ms0 ns0 =
+runElementDiff :: (e -> IO ()) -> ENode -> [Feature e] -> [Feature e] -> [Feature e] -> IO ([Feature e],IO ())
+runElementDiff f el os0 ms0 ns0 = do
 #ifndef __GHCJS__
     return ns0
 #else
-    go os0 ms0 ns0
+    dm_ <- newIORef (return ())
+    fs <- go dm_ os0 ms0 ns0
+    dm <- readIORef dm_
+    return (fs,dm)
   where
 
-    go [] [] news =
-      mapM (setAttribute_ f el) news
+    go dm_ [] [] news = do
+      dm <- readIORef dm_
+      go' news
+      where
+        go' [] = return []
+        go' (n:ns) = do
+          dm <- readIORef dm_
+          (f,dm') <- setAttribute_ f el n dm
+          writeIORef dm_ dm'
+          fs <- go' ns
+          return (f:fs)
 
-    go olds _ [] =
+    go dm_ olds _ [] =
       mapM (\old -> removeAttribute_ el old >> return NullFeature) olds
 
-    go (old:olds) (mid:mids) (new:news) =
+    go dm_ (old:olds) (mid:mids) (new:news) =
       let
         remove =
           removeAttribute_ el old
 
-        set =
-          setAttribute_ f el new
+        set = do
+          dm <- readIORef dm_
+          (f,dm') <- setAttribute_ f el new dm
+          writeIORef dm_ dm'
+          return f
 
         goRest =
-          go olds mids news
+          go dm_ olds mids news
 
         continue up = do
           upds <- if reallyUnsafeEq mids news then do
@@ -1939,6 +2023,63 @@ runElementDiff f el os0 ms0 ns0 =
                 -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
                 replace
 
+            (OnBuild e,OnBuild e') ->
+              if reallyUnsafeEq e e' then
+                continue old
+              else do
+                f e'
+                replace
+
+            (OnDestroy e,OnDestroy e') ->
+              if reallyUnsafeEq e e' then
+                continue old
+              else do
+                f e
+                replace
+
+            (OnWillMount g,OnWillMount g') ->
+              if reallyUnsafeEq g g' then
+                continue old
+              else
+                replace
+
+            (OnDidMount g,OnDidMount g') ->
+              if reallyUnsafeEq g g' then
+                continue old
+              else
+                replace
+
+            (OnUpdate m g,OnUpdate m' g') ->
+              if reallyVeryUnsafeEq g g' then
+                if reallyVeryUnsafeEq m m' then
+                  continue old
+                else do
+                  g' m' el
+                  replace
+              else
+                replace
+
+            (OnModel m g,OnModel m' g') ->
+              if reallyVeryUnsafeEq g g' then
+                if reallyVeryUnsafeEq m m' then
+                  continue old
+                else do
+                  f (g' m' el)
+                  replace
+              else
+                replace
+
+            (OnWillUnmount g,OnWillUnmount g') ->
+              if reallyUnsafeEq g g' then
+                continue old
+              else
+                replace
+
+            (OnDidUnmount g,OnDidUnmount g') ->
+              if reallyUnsafeEq g g' then
+                continue old
+              else
+                replace
 
             (Link olda oldv, Link newa newv) ->
               if prettyUnsafeEq olda newa && reallyUnsafeEq oldv newv then
@@ -1972,9 +2113,6 @@ removeAttribute_ element attr =
   return ()
 #else
   case attr of
-    NullFeature ->
-      return ()
-
     Property nm _ ->
       set_element_property_null_js element nm
 
@@ -1994,12 +2132,6 @@ removeAttribute_ element attr =
     OnWin ev _ _ unreg ->
       forM_ unreg id
 
-    OnBuild _ ->
-      return ()
-
-    OnDestroy e ->
-      return ()
-
     Style styles -> do
       obj <- O.create
       forM_ styles $ \(nm,val) -> O.unsafeSetProp nm (M.pToJSVal val) obj
@@ -2011,6 +2143,8 @@ removeAttribute_ element attr =
 
     XLink nm _ ->
       E.removeAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) nm
+
+    _ -> return ()
 #endif
 
 {-# NOINLINE setAttribute_ #-}
@@ -2090,21 +2224,18 @@ setAttribute_ c element attr didMount =
       c e
       return (attr,didMount)
 
-    OnDestroy _ ->
+    OnWillMount f -> do
+      f element
       return (attr,didMount)
 
-    OnWillMount f -> do
-       f element
-       return (attr,didMount)
-
     OnDidMount f -> do
-       return (attr,f element >> didMount)
+      return (attr,f element >> didMount)
 
     Style styles -> do
       obj <- O.create
       forM_ styles $ \(nm,val) -> O.unsafeSetProp nm (M.pToJSVal val) obj
       setStyle_js element obj
-      return attr
+      return (attr,didMount)
 
     SVGLink href _ -> do
       E.setAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) ("xlink:href" :: Txt) href
@@ -2119,27 +2250,45 @@ setAttribute_ c element attr didMount =
                    H.pushState hist (M.pToJSVal (0 :: Int)) ("" :: Txt) href
                    triggerPopstate_js
                    scrollToTop
-      return (SVGLink href (Just stopListener))
+      return (SVGLink href (Just stopListener),didMount)
 
     XLink nm val -> do
       E.setAttributeNS element (Just ("http://www.w3.org/1999/xlink" :: Txt)) nm val
-      return attr
+      return (attr,didMount)
+
+    _ -> return (attr,didMount)
 #endif
 
 {-# NOINLINE cleanupAttr #-}
-cleanupAttr :: (e -> IO ()) -> Feature e -> IO ()
-cleanupAttr f attr =
+cleanupAttr :: (e -> IO ()) -> ENode -> Feature e -> IO () -> IO (IO ())
+cleanupAttr f element attr didUnmount =
 #ifndef __GHCJS__
-  return ()
+  return didUnmount
 #else
   case attr of
-    SVGLink _ unreg -> forM_ unreg id
-    Link _ unreg -> forM_ unreg id
-    On _ _ _ unreg -> forM_ unreg id
-    OnDoc _ _ _ unreg -> forM_ unreg id
-    OnWin _ _ _ unreg -> forM_ unreg id
-    OnDestroy e -> f e
-    _ -> return ()
+    SVGLink _ unreg -> do
+      forM_ unreg id
+      return didUnmount
+    Link _ unreg -> do
+      forM_ unreg id
+      return didUnmount
+    On _ _ _ unreg -> do
+      forM_ unreg id
+      return didUnmount
+    OnDoc _ _ _ unreg -> do
+      forM_ unreg id
+      return didUnmount
+    OnWin _ _ _ unreg -> do
+      forM_ unreg id
+      return didUnmount
+    OnDestroy e -> do
+      f e
+      return didUnmount
+    OnWillUnmount g -> do
+      g element
+      return didUnmount
+    OnDidUnmount g -> return (didUnmount >> g element)
+    _ -> return didUnmount
 #endif
 
 getWindow :: MonadIO c => c Win

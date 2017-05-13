@@ -1,5 +1,5 @@
 name:                atomic
-version:             4.0.0.0
+version:             0.5.0.0
 synopsis:            Atomic is a framework that unifies client and server programming.
 -- description:
 homepage:            github.com/grumply/atomic
