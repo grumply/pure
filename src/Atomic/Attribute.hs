@@ -121,6 +121,24 @@ data Feature e
     , _eventDocCreate :: ENode -> Doc -> Obj -> IO (Maybe e)
     , _eventListener :: Maybe (IO ())
     }
+  | OnBuild
+    { _buildEvent :: e
+    }
+  | OnDestroy
+    { _destroyEvent :: e
+    }
+  | OnWillMount
+    { _mountEvent :: IO ()
+    }
+  | OnDidMount
+    { _mountEvent :: IO ()
+    }
+  | OnWillUnmount
+    { _mountEvent :: IO ()
+    }
+  | OnDidUnmount
+    { _mountEvent :: IO ()
+    }
   | Link
     { _link :: Txt
     , _eventListener :: Maybe (IO ())
@@ -199,6 +217,18 @@ instance Eq (Feature e) where
     prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
   (==) (OnDoc e os ev _) (OnDoc e' os' ev' _) =
     prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
+  (==) (OnBuild e) (OnBuild e') =
+    reallyUnsafeEq e e'
+  (==) (OnDestroy e) (OnDestroy e') =
+    reallyUnsafeEq e e'
+  (==) (OnWillMount e) (OnWillMount e') =
+    reallyUnsafeEq e e'
+  (==) (OnDidMount e) (OnDidMount e') =
+    reallyUnsafeEq e e'
+  (==) (OnWillUnmount e) (OnWillUnmount e') =
+    reallyUnsafeEq e e'
+  (==) (OnDidUnmount e) (OnDidUnmount e') =
+    reallyUnsafeEq e e'
   (==) (Link t _) (Link t' _) =
     prettyUnsafeEq t t'
   (==) (SVGLink t _) (SVGLink t' _) =
@@ -212,14 +242,14 @@ instance Cond (Feature e) where
 instance IsString (Feature e) where
   fromString = Attribute "class" . fromString
 
-instance IsList (Feature e) where
+instance GHC.Exts.IsList (Feature e) where
   type Item (Feature e) = Txt
   fromList = fromTxt . T.intercalate " "
   toList (Attribute "class" cs) = T.words cs
   toList _ = []
 
 -- is this a terrible idea?
-instance IsList ([a] -> [a]) where
+instance GHC.Exts.IsList ([a] -> [a]) where
   type Item ([a] -> [a]) = a
   fromList = go
     where
@@ -249,7 +279,7 @@ property :: Txt -> Txt -> Feature e
 property = Property
 
 boolProperty :: Txt -> Bool -> Feature e
-boolProperty nm b = property nm (if b then "true" else "") -- exploit the truthy/falsey nature of non-empty and empty strings, respectively
+boolProperty nm b = property nm (if b then "true" else "") -- exploit the true/false nature of JS non-empty and empty strings, respectively
 
 on :: Txt -> (ENode -> Obj -> IO (Maybe e)) -> Feature e
 on ev f = On ev def f Nothing
@@ -268,6 +298,24 @@ onDoc' ev e = OnDoc ev def (\_ _ _ -> return (Just e)) Nothing
 
 onWin' :: Txt -> e -> Feature e
 onWin' ev e = OnWin ev def (\_ _ _ -> return (Just e)) Nothing
+
+onBuild :: e -> Feature e
+onBuild = OnBuild
+
+onWillMount :: IO () -> Feature e
+onWillMount = OnWillMount
+
+onDidMount :: IO () -> Feature e
+onDidMount = OnDidMount
+
+onWillUnmount :: IO () -> Feature e
+onWillUnmount = OnWillUnmount
+
+onDidUnmount :: IO () -> Feature e
+onDidUnmount = OnDidUnmount
+
+onDestroy :: e -> Feature e
+onDestroy = OnDestroy
 
 preventDefault :: Feature e -> Feature e
 preventDefault (On ev os f m) = On ev (os { _preventDef = True }) f m

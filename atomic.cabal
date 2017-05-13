@@ -56,6 +56,7 @@ library
                       , Atomic.Cond
                       , Atomic.Debounce
                       , Atomic.Default
+                      , Atomic.Dict
                       , Atomic.Ease
                       , Atomic.Endpoint
                       , Atomic.FromBS
@@ -136,6 +137,7 @@ library
                       , Atomic.Cond
                       , Atomic.Debounce
                       , Atomic.Default
+                      , Atomic.Dict
                       , Atomic.Ease
                       , Atomic.Endpoint
                       , Atomic.FromBS

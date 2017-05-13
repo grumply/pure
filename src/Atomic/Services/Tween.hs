@@ -28,19 +28,19 @@ scrollTo :: ( MonadIO c
          -> Double
          -> Atom (Code ms' IO ())
          -> Code ms c (Maybe (IO ()))
-scrollTo ease duration {- milliseconds -} to =
-  let me = getElement to
-  in case me of
-      Nothing -> return Nothing
-      Just dest  -> fmap Just $ do
-        win   <- getWindow
+scrollTo ease duration {- milliseconds -} to = do
+  me <- liftIO $ getElement to
+  case me of
+    Nothing -> return Nothing
+    Just dest  -> fmap Just $ do
+      win   <- getWindow
 #ifdef __GHCJS__
-        begin <- fmap fromIntegral $ W.getScrollY win
-        end   <- E.getOffsetTop dest
-        let delta = end - begin
-        onFrameWithTime (\_ -> easeScroll win ease begin delta dest duration)
+      begin <- fmap fromIntegral $ W.getScrollY win
+      end   <- E.getOffsetTop dest
+      let delta = end - begin
+      onFrameWithTime (\_ -> easeScroll win ease begin delta dest duration)
 #else
-        return (return ())
+      return (return ())
 #endif
 
 #ifdef __GHCJS__

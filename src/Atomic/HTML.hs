@@ -16,8 +16,8 @@ abbr = mkAtom "abbr"
 address :: [Feature e] -> [Atom e] -> Atom e
 address = mkAtom "address"
 
-area :: [Feature e] -> Atom e
-area fs = mkAtom "area" fs []
+area :: [Feature e] -> [Atom e] -> Atom e
+area = mkAtom "area"
 
 a :: [Feature e] -> [Atom e] -> Atom e
 a = mkAtom "a"
@@ -31,8 +31,8 @@ asideE = mkAtom "aside"
 audio :: [Feature e] -> [Atom e] -> Atom e
 audio = mkAtom "audio"
 
-base :: [Feature e] -> Atom e
-base fs = mkAtom "base" fs []
+base :: [Feature e] -> [Atom e] -> Atom e
+base = mkAtom "base"
 
 bdi :: [Feature e] -> [Atom e] -> Atom e
 bdi = mkAtom "bdi"
@@ -70,8 +70,8 @@ cite = mkAtom "cite"
 code :: [Feature e] -> [Atom e] -> Atom e
 code = mkAtom "code"
 
-col :: [Feature e] -> Atom e
-col fs = mkAtom "col" fs []
+col :: [Feature e] -> [Atom e] -> Atom e
+col = mkAtom "col"
 
 colgroup :: [Feature e] -> [Atom e] -> Atom e
 colgroup = mkAtom "colgroup"
@@ -86,7 +86,7 @@ dd :: [Feature e] -> [Atom e] -> Atom e
 dd = mkAtom "dd"
 
 description :: Txt -> Atom e
-description d = meta [ name "description", contentA d ]
+description d = meta [ name "description", contentA d ] []
 
 dl :: [Feature e] -> [Atom e] -> Atom e
 dl = mkAtom "dl"
@@ -160,8 +160,8 @@ h6 = mkAtom "h6"
 hgroup :: [Feature e] -> [Atom e] -> Atom e
 hgroup = mkAtom "hgroup"
 
-hr :: [Feature e] -> Atom e
-hr fs = mkAtom "hr" fs []
+hr :: [Feature e] -> [Atom e] -> Atom e
+hr = mkAtom "hr"
 
 htmlE :: [Feature e] -> [Atom e] -> Atom e
 htmlE = mkAtom "html"
@@ -169,11 +169,11 @@ htmlE = mkAtom "html"
 iframe :: [Feature e] -> [Atom e] -> Atom e
 iframe = mkAtom "iframe"
 
-img :: [Feature e] -> Atom e
-img fs = mkAtom "img" fs []
+img :: [Feature e] -> [Atom e] -> Atom e
+img = mkAtom "img"
 
-input :: [Feature e] -> Atom e
-input fs = mkAtom "input" fs []
+input :: [Feature e] -> [Atom e] -> Atom e
+input = mkAtom "input"
 
 textInput :: [Feature e] -> [Atom e] -> Atom e
 textInput fs = mkAtom "input" (typeA "text":fs)
@@ -199,8 +199,8 @@ legend = mkAtom "legend"
 li :: [Feature e] -> [Atom e] -> Atom e
 li = mkAtom "li"
 
-linkE :: [Feature e] -> Atom e
-linkE fs = mkAtom "link" fs []
+linkE :: [Feature e] -> [Atom e] -> Atom e
+linkE = mkAtom "link"
 
 mainE :: [Feature e] -> [Atom e] -> Atom e
 mainE = mkAtom "main"
@@ -217,8 +217,8 @@ menu = mkAtom "menu"
 menuitem :: [Feature e] -> [Atom e] -> Atom e
 menuitem = mkAtom "menuitem"
 
-meta :: [Feature e] -> Atom e
-meta fs = mkAtom "meta" fs []
+meta :: [Feature e] -> [Atom e] -> Atom e
+meta = mkAtom "meta"
 
 meter :: [Feature e] -> [Atom e] -> Atom e
 meter = mkAtom "meter"
@@ -247,8 +247,8 @@ output = mkAtom "output"
 p :: [Feature e] -> [Atom e] -> Atom e
 p = mkAtom "p"
 
-param :: [Feature e] -> Atom e
-param fs = mkAtom "param" fs []
+param :: [Feature e] -> [Atom e] -> Atom e
+param = mkAtom "param"
 
 picture :: [Feature e] -> [Atom e] -> Atom e
 picture = mkAtom "picture"

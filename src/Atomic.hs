@@ -56,6 +56,7 @@ import Atomic.Cond       as Export
 import Atomic.Debounce   as Export
 import Atomic.Default    as Export
 import Atomic.Dispatch   as Export
+import Atomic.Dict       as Export
 import Atomic.Ease       as Export
 import Atomic.Endpoint   as Export
 import Atomic.FromBS     as Export
@@ -246,15 +247,54 @@ this = do
 dash :: Txt -> Txt
 dash = Txt.map (\x -> if x == '.' then '-' else x)
 
+-- Look up an optional `Txt` from the `Dict` and call `fromTxt` on it. If
+-- no value exists, call `fromTxt` on the empty `Txt`.
+(?:|) :: FromTxt a => Dict -> Txt -> a
+(?:|) (Dict st _) k = fromTxt $
+  -- the stored value is optional; avoid the tracing in (?|)
+  case Map.lookup k st of
+    Just (Val s) ->
+      case cast s of
+        Just t   -> t
+        Nothing  -> ""
+    _            -> ""
+
+-- Look up an optional `Atom` from the `Dict`, on failure try to get a `Txt`
+-- value and call `fromTxt` on it. If that fails, return a nil node.
+(?^|) :: Typeable a => Dict -> Txt -> Atom a
+(?^|) (Dict st _) k =
+  -- the stored value is optional; avoid the tracing in (?|)
+  case Map.lookup k st of
+    Just (Val s) -> case cast s of
+      Just a     -> a
+      Nothing    -> case cast s of
+        Just t   -> fromTxt t
+        _        -> nil
+    _            -> nil
+
+-- Look up an optional `Value` from the `Dict`. On failure, return `Null`.
+(?*|) :: Dict -> Txt -> Value
+(?*|) (Dict st _) k =
+  case Map.lookup k st of
+    Just (Val s) ->
+      case cast s of
+        Just v   -> v
+#ifdef __GHCJS__
+        Nothing  -> nullValue
+    _            -> nullValue
+#else
+        Nothing  -> Null
+    _            -> Null
+#endif
+
 type Controller m = Component '[] m
 -- controller :: ComponentKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
-controller :: ComponentKey '[] m -> m -> (Store -> m -> Atom (Code (Base m) IO ())) -> Controller m
+controller :: ComponentKey '[] m -> m -> (m -> Atom (Code (Base m) IO ())) -> Controller m
 controller key0 model0 render0 = Component {..}
   where
     key = key0
     build = return
     prime = return ()
-    store = def
     model = model0
     render = render0
 
@@ -266,9 +306,8 @@ static key0 render0 = Component {..}
     key = key0
     build = return
     prime = return ()
-    store = def
     model = ()
-    render _ _ = render0
+    render _ = render0
 
 type Observatory m = Service '[Observable m]
 observatory :: ServiceKey '[Observable m] -> m -> Observatory m
@@ -290,16 +329,15 @@ change o m = void $ with o (setO m)
 type Observer m = Component '[] (Maybe m)
 -- observer :: Observatory m -> ComponentKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
 observer :: forall m ms w. (Eq m, With w (Code ms IO) (Code (Base (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
-         => w -> ComponentKey '[] (Maybe m) -> (Store -> m -> Atom (Code (Base (Maybe m)) IO ())) -> Observer m
+         => w -> ComponentKey '[] (Maybe m) -> (m -> Atom (Code (Base (Maybe m)) IO ())) -> Observer m
 observer s key0 render0 = Component {..}
   where
     key = key0
     build = return
     prime = void $ observe' s $ \(m :: m) -> puts (Just m)
-    store = def
     model = Nothing
-    render _ Nothing = nil
-    render st (Just m) = render0 st m
+    render Nothing = nil
+    render (Just m) = render0 m
 
 -- specialized to Observatory to avoid inline type signatures
 observes :: (MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (IO ())
@@ -395,7 +433,7 @@ instance ToTxt (Atom e) where
     case _constr of
       Component' Component {..} ->
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
-          ">"  <> toTxt (render store model) <> "</" <> _tag <> ">"
+          ">"  <> toTxt (render model) <> "</" <> _tag <> ">"
 
 instance ToTxt [Atom e] where
   toTxt = mconcat . map toTxt
@@ -430,7 +468,7 @@ renderSystem (System h c) =
       Component' Component {..} ->
         toTxt $
           htmlE []
-            [ render store model
+            [ render model
             , body []
                 [ case c of
                     Component' a@Component {} -> construct div [ idA "atomic" ] a

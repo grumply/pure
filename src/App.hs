@@ -116,7 +116,7 @@ onRoute fus rf = do
   return (stop s >> leaveNW)
 
 data Carrier where
-  Carrier :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),Store,m)
+  Carrier :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)
           -> Carrier
 
 run :: forall ts ms c r.
@@ -129,7 +129,7 @@ run App {..} = do
   ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
-  rt'     <- liftIO $ newIORef (NullAtom $ Just ph,NullAtom $ Just ph,def,())
+  rt'     <- liftIO $ newIORef (NullAtom $ Just ph,NullAtom $ Just ph,())
   nw :: Network r   <- network
   sdn :: Network () <- network
   built      <- build $ mkRouter nw routes
@@ -169,19 +169,20 @@ run App {..} = do
             mb_ <- lookupComponent (Component.key b)
             case mb_ of
               Nothing -> do
-                (old,_,_,_) <- readIORef rt
+                (old,_,_) <- readIORef rt
                 iob <- if first then
                          mkComponent (ClearAndAppend ort) b
                        else
                          mkComponent (Replace old) b
                 return (Carrier iob)
               Just (_,x_) -> do
-                (old,_,_,_) <- readIORef rt
-                (new,_,_,_) <- readIORef x_
+                (old,_,_) <- readIORef rt
+                (new,_,_) <- readIORef x_
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))
-                  forM_ (getNode new) (appendChild ort)
+                  mn <- getNode new
+                  forM_ mn (appendChild ort)
                 else
                   replace old new
                 return (Carrier x_)
@@ -208,25 +209,26 @@ run App {..} = do
 #else
                 let h = ()
 #endif
-                (new,_,_,_) <- readIORef x_
+                (new,_,_) <- readIORef x_
                 rebuild new
                 replace (NullAtom $ Just h) new
             mb_ <- lookupComponent (Component.key b)
             case mb_ of
               Nothing -> do
-                (old,_,_,_) <- readIORef rt
+                (old,_,_) <- readIORef rt
                 iob <- if first then
                          mkComponent (ClearAndAppend ort) b
                        else do
                          mkComponent (Replace old) b
                 return (Carrier iob)
               Just (_,x_) -> do
-                (old,_,_,_) <- readIORef rt
-                (new,_,_,_) <- readIORef x_
+                (old,_,_) <- readIORef rt
+                (new,_,_) <- readIORef x_
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))
-                  forM_ (getNode new) (appendChild ort)
+                  mn <- getNode new
+                  forM_ mn (appendChild ort)
                 else
                   replace old new
                 return (Carrier x_)
