@@ -8,9 +8,7 @@ import Data.Txt
 
 import Atomic.Component
 import Atomic.Ease
-import Atomic.Revent
 import Atomic.Service
-import Atomic.With
 
 import Atomic.Services.Frame
 

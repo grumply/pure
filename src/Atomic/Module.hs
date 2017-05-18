@@ -9,9 +9,7 @@ import Ef.Base hiding (Module,Client,Server)
 
 import Atomic.Key
 import Atomic.Observable
-import Atomic.Revent
 import Atomic.Vault
-import Atomic.With
 
 import Control.Concurrent
 import Data.IORef
@@ -28,7 +26,7 @@ type IsModule ms = IsModule' ms ms
 
 data Module' ts ms
   = Module
-    { key        :: !(Key (Code ms IO `As` IO))
+    { key        :: !(Key (As (Code ms IO)))
     , build      :: !(Modules ModuleBase (Action ts IO) -> IO (Modules ts (Action ts IO)))
     , prime      :: !(Code ms IO ())
     }
@@ -42,27 +40,27 @@ instance Eq (Module' ts ms) where
          1# -> True
          _  -> k1 == k2
 
-instance (IsModule' ts ms, MonadIO c, '[Revent,State () Vault] <: ms')
+-- the enacting context, ms', must coincidentally witness
+-- the same base type as modules.
+instance (IsModule' ts ms, MonadIO c, ModuleBase <: ms')
   => With (Module' ts ms) (Code ms IO) (Code ms' c)
   where
     using_ c = do
-      -- NOTE: this atomic mvar modification is unnecessary for local components, no?
-      lv <- get
+      lv  <- get
       mi_ <- vaultLookup lv (key c)
       case mi_ of
         Nothing -> do
+          sdn <- get
           let Key (_,i) = key c
           modifyVault lv $ \v ->
             case Map.lookup i v of
               Just as ->
                 return (v,liftIO . runAs as)
               Nothing -> do
-                rb <- newSignalBuffer
-                sig :: Signal ms IO (Code ms IO ()) <- runner
-                startModule lv rb c
-                let asModule :: Code ms IO `As` IO
-                    asModule = constructAs rb sig
-                    new_v = Map.insert i (unsafeCoerce asModule) v
+                buf <- newEvQueue
+                startModule sdn lv buf c
+                asModule :: As (Code ms IO) <- unsafeConstructAs buf
+                let new_v = Map.insert i (unsafeCoerce asModule) v
                 return (new_v,liftIO . runAs asModule)
         Just as ->
           return (liftIO . runAs as)
@@ -72,9 +70,9 @@ instance (IsModule' ts ms, MonadIO c, '[Revent,State () Vault] <: ms')
     shutdown_ c = do
       lv <- get
       with_ c $ do
-        buf <- getReventBuffer
+        buf <- get
         Shutdown sdn <- get
-        syndicate sdn ()
+        publish sdn ()
         delay 0 $
           liftIO $ do
             killBuffer buf
@@ -85,21 +83,23 @@ startModule :: forall ms' c ms ts.
              ( MonadIO c
              , IsModule' ts ms
              )
-          => Vault
-          -> Signaled
+          => Shutdown
+          -> Vault
+          -> EvQueue
           -> Module' ts ms
           -> c ()
-startModule lv rb Module {..} = do
-  sdn <- network
-  udn :: Network m <- network
-  built <- liftIO $ build (revent rb
+startModule (Shutdown sdn) lv rb Module {..} = do
+  sdn' <- syndicate
+  built <- liftIO $ build (   state rb
                           *:* state lv
-                          *:* state (Shutdown sdn)
+                          *:* state (Shutdown sdn')
                           *:* Empty
                           )
 
   void $ liftIO $ forkIO $ void $ do
-    (obj,_) <- Object built ! prime
+    (obj,_) <- Object built ! do
+                 connect sdn (const (lift shutdownSelf))
+                 prime
 #ifdef __GHCJS__
     driverPrintExceptions
       ("Module "

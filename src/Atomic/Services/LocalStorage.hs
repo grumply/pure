@@ -9,13 +9,11 @@ import Data.JSON
 import Data.ByteString
 
 import Atomic.Component (Win,getWindow)
-import Atomic.Revent
 import Atomic.Service
 import Atomic.Signals
 import Atomic.ToTxt
 import Atomic.FromTxt
 import Atomic.FromBS
-import Atomic.With
 import Atomic.Message
 import Atomic.TypeRep
 
@@ -141,7 +139,7 @@ onStorage :: ( MonadIO c
           => (Obj -> Code '[Event Obj] (Code ms c) ())
           -> Code ms c (IO ())
 onStorage =
-  onWindowNetwork
+  onWindowSyndicate
 #ifdef __GHCJS__
     (Ev.unsafeEventName "storage" :: EVName Win Obj)
 #else

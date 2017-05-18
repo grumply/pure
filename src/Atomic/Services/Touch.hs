@@ -9,10 +9,8 @@ import Data.JSON
 
 import Atomic.Component (Win,getWindow)
 import Atomic.IsString
-import Atomic.Revent
 import Atomic.Service
 import Atomic.Signals
-import Atomic.With
 
 import Data.IORef
 

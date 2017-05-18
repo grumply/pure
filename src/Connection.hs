@@ -6,9 +6,7 @@ import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
 
 import Atomic.WebSocket
 
-import Atomic.Revent
 import Atomic.Vault
-import Atomic.With
 
 type IsConnection' ts ms = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms))
 type IsConnection ms = IsConnection' ms ms

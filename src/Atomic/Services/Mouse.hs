@@ -8,10 +8,8 @@ import Data.Txt
 import Data.JSON
 
 import Atomic.Component (Win,getWindow)
-import Atomic.Revent
 import Atomic.Service
 import Atomic.Signals
-import Atomic.With
 
 import Data.IORef
 
@@ -33,9 +31,9 @@ data MousePosition = MousePosition
 data MouseState = MouseState
   { mouseXRef      :: IORef (Maybe Int)
   , mouseYRef      :: IORef (Maybe Int)
-  , mousePositionN :: Network MousePosition
-  , mouseXN        :: Network Int
-  , mouseYN        :: Network Int
+  , mousePositionN :: Syndicate MousePosition
+  , mouseXN        :: Syndicate Int
+  , mouseYN        :: Syndicate Int
   }
 
 mouseMove :: EVName Win Obj
@@ -54,9 +52,9 @@ mouseS = Service {..}
     build base = do
       mouseXRef      <- newIORef Nothing
       mouseYRef      <- newIORef Nothing
-      mouseXN        <- network
-      mouseYN        <- network
-      mousePositionN <- network
+      mouseXN        <- syndicate
+      mouseYN        <- syndicate
+      mousePositionN <- syndicate
       let ms = MouseState
                  mouseXRef
                  mouseYRef
@@ -70,9 +68,7 @@ mouseS = Service {..}
 
       win <- getWindow
 
-      rb <- getReventBuffer
-
-      void $ onWindowNetwork mouseMove $ \o -> do
+      void $ onWindowSyndicate mouseMove $ \o -> do
         let mxy = flip parseMaybe o $ \obj -> do
                     x <- obj .: "x"
                     y <- obj .: "y"
@@ -82,14 +78,14 @@ mouseS = Service {..}
           oldX <- liftIO $ readIORef mouseXRef
           oldY <- liftIO $ readIORef mouseYRef
           liftIO $ do
-            syndicate mousePositionN (MousePosition newX newY)
+            publish mousePositionN (MousePosition newX newY)
 
             when (oldX /= Just newX) $ do
-              syndicate mouseXN newX
+              publish mouseXN newX
               writeIORef mouseXRef (Just newX)
 
             when (oldY /= Just newY) $ do
-              syndicate mouseYN newY
+              publish mouseYN newY
               writeIORef mouseYRef (Just newY)
 
 getMouseXRef :: (MonadIO c) => c (Promise (IORef (Maybe Int)))
@@ -115,36 +111,30 @@ getMouseY = with mouseS $ do
 onMouseX :: (MonadIO c, '[Revent] <: ms)
          => (Int -> Code ms c ()) -> Code ms c (IO ())
 onMouseX f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with mouseS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with mouseS (do
     MouseState {..} <- get
-    joinNetwork mouseXN p buf
-    return (leaveNetwork mouseXN p))
-  return (stop s >> leaveNW)
+    connect_ mouseXN (return buf) (lift . f)
+    )
+  return stopper
 
 onMouseY :: (MonadIO c, '[Revent] <: ms)
          => (Int -> Code ms c ()) -> Code ms c (IO ())
 onMouseY f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with mouseS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with mouseS (do
     MouseState {..} <- get
-    joinNetwork mouseYN p buf
-    return (leaveNetwork mouseYN p))
-  return (stop s >> leaveNW)
+    connect_ mouseYN (return buf) (lift . f)
+    )
+  return stopper
 
 onMousePosition :: (MonadIO c, '[Revent] <: ms)
                 => (MousePosition -> Code ms c ())
                 -> Code ms c (IO ())
 onMousePosition f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with mouseS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with mouseS (do
     MouseState {..} <- get
-    joinNetwork mousePositionN p buf
-    return (leaveNetwork mousePositionN p))
-  return (stop s >> leaveNW)
+    connect_ mousePositionN (return buf) (lift . f)
+    )
+  return stopper

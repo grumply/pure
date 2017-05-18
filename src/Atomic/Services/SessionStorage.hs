@@ -9,7 +9,6 @@ import Data.JSON
 
 import Atomic.Component (Win,getWindow)
 import Atomic.Service
-import Atomic.With
 import Atomic.FromTxt
 import Atomic.ToTxt
 import Atomic.FromBS

@@ -10,87 +10,73 @@ import Data.Proxy
 import Data.Txt
 import Data.JSON
 
-data Endpoint ms c a
+import System.Mem.Weak
+
+data Endpoint a
   = Endpoint
-    { wsEndpointHeader :: Txt
-    , wsEndpointSubscription :: Subscription ms c a
-    , wsEndpointPeriodical :: Periodical ms c a
-    } deriving Eq
-instance Ord (Endpoint ms c a) where
+    { wsEndpointHeader       :: Txt
+    , wsEndpointSubscription :: forall c. Subscription c a
+    , wsEndpointSyndicate    :: Syndicate a
+    }
+instance Eq (Endpoint a) where
+  (==) (Endpoint h su sy) (Endpoint h' su' sy') =
+    h == h' && su == su'
+instance Ord (Endpoint a) where
   compare (Endpoint t0 _ _) (Endpoint t1 _ _) = compare t0 t1
 
-messageEndpointSubscription :: (MonadIO c, Message mty, Functor (Messages ms), M mty ~ message, ToJSON message)
-                            => Proxy mty -> message -> Endpoint ms c Dispatch -> Code ms c Bool
-messageEndpointSubscription mty_proxy message (Endpoint h s _) =
+sendEndpoint :: MonadIO c => Endpoint a -> a -> c ()
+sendEndpoint (Endpoint _ sub _) = issue sub
+
+sendEndpointSyndicate :: MonadIO c => Endpoint a -> a -> c ()
+sendEndpointSyndicate (Endpoint _ _ syn) a = publish syn a
+
+messageEndpoint :: (MonadIO c, Message mty, M mty ~ message, ToJSON message)
+                => Proxy mty -> message -> Endpoint Dispatch -> c Bool
+messageEndpoint mty_proxy message (Endpoint h sub _) =
   if h == messageHeader mty_proxy then do
-    trigger s (encodeDispatch h message)
+    issue sub (encodeDispatch h message)
     return True
   else
     return False
 
-messageEndpoint :: (MonadIO c, Message mty, Functor (Messages ms), M mty ~ message, ToJSON message)
-                => Proxy mty -> message -> Endpoint ms c Dispatch -> Code ms c Bool
-messageEndpoint mty_proxy message (Endpoint h _ p) =
+messageEndpointSyndicate :: (MonadIO c, Message mty, M mty ~ message, ToJSON message)
+                         => Proxy mty -> message -> Endpoint Dispatch -> c Bool
+messageEndpointSyndicate mty_proxy message (Endpoint h _ syn) =
   if h == messageHeader mty_proxy then do
-    publish p (encodeDispatch h message)
+    publish syn (encodeDispatch h message)
     return True
   else
     return False
 
--- NOTE: The dual end of the WS probably isn't awaiting the response! You should be looking for the
---       message instance of this method.
-requestEndpointSubscription :: ( MonadIO c
-                               , Functor (Messages ms)
-                               , Request rqty
-                               , Req rqty ~ request
-                               , ToJSON request
-                               , FromJSON request
-                               )
-                            => Proxy rqty -> request -> Endpoint ms c Dispatch -> Code ms c Bool
-requestEndpointSubscription rqty_proxy req (Endpoint h s _) =
-  if h == requestHeader rqty_proxy then do
-    trigger s (encodeDispatch h req)
-    return True
-  else
-    return False
-
--- NOTE: The dual end of the WS probably isn't awaiting the response! You should be looking for the
---       message instance of this method.
 requestEndpoint :: ( MonadIO c
-                   , Functor (Messages ms)
                    , Request rqty
                    , Req rqty ~ request
                    , ToJSON request
                    , FromJSON request
                    )
-                => Proxy rqty -> request -> Endpoint ms c Dispatch -> Code ms c Bool
-requestEndpoint rqty_proxy req (Endpoint h _ p) =
+                => Proxy rqty -> request -> Endpoint Dispatch -> c Bool
+requestEndpoint rqty_proxy req (Endpoint h sub _) =
   if h == requestHeader rqty_proxy then do
-    publish p (encodeDispatch h req)
+    issue sub (encodeDispatch h req)
     return True
   else
     return False
 
-respondEndpointSubscription :: ( MonadIO c
-                               , Functor (Messages ms)
-                               , Request rqty
-                               , Req rqty ~ request
-                               , Rsp rqty ~ response
-                               , ToJSON request
-                               , FromJSON request
-                               , ToJSON response
-                               , FromJSON response
-                               )
-                            => Proxy rqty -> request -> response -> Endpoint ms c Dispatch -> Code ms c Bool
-respondEndpointSubscription rqty_proxy req rsp (Endpoint h s _) =
-  if h == responseHeader rqty_proxy req then do
-    trigger s (encodeDispatch h rsp)
+requestEndpointSyndicate :: ( MonadIO c
+                            , Request rqty
+                            , Req rqty ~ request
+                            , ToJSON request
+                            , FromJSON request
+                            )
+                          => Proxy rqty -> request -> Endpoint Dispatch -> c Bool
+requestEndpointSyndicate rqty_proxy req (Endpoint h _ syn) =
+  if h == requestHeader rqty_proxy then do
+    publish syn (encodeDispatch h req)
     return True
   else
     return False
 
 respondEndpoint :: ( MonadIO c
-                   , Functor (Messages ms)
                    , Request rqty
                    , Req rqty ~ request
                    , Rsp rqty ~ response
@@ -99,10 +85,27 @@ respondEndpoint :: ( MonadIO c
                    , ToJSON response
                    , FromJSON response
                    )
-                => Proxy rqty -> request -> response -> Endpoint ms c Dispatch -> Code ms c Bool
-respondEndpoint rqty_proxy req rsp (Endpoint h _ p) =
+                => Proxy rqty -> request -> response -> Endpoint Dispatch -> c Bool
+respondEndpoint rqty_proxy req rsp (Endpoint h sub _) = do
   if h == responseHeader rqty_proxy req then do
-    publish p (encodeDispatch h rsp)
+    issue sub (encodeDispatch h rsp)
+    return True
+  else
+    return False
+
+respondEndpointSyndicate :: ( MonadIO c
+                            , Request rqty
+                            , Req rqty ~ request
+                            , Rsp rqty ~ response
+                            , ToJSON request
+                            , FromJSON request
+                            , ToJSON response
+                            , FromJSON response
+                            )
+                          => Proxy rqty -> request -> response -> Endpoint Dispatch -> c Bool
+respondEndpointSyndicate rqty_proxy req rsp (Endpoint h _ syn) =
+  if h == responseHeader rqty_proxy req then do
+    publish syn (encodeDispatch h rsp)
     return True
   else
     return False

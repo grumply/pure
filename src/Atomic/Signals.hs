@@ -4,7 +4,6 @@ module Atomic.Signals where
 
 import Ef.Base
 
-import Atomic.Revent
 import Atomic.Component (Win,Doc,getDocument,getWindow)
 
 #ifdef __GHCJS__
@@ -36,32 +35,32 @@ type IsEv e =
   Num Int
 #endif
 
-data NetworkVault =
-  forall a. NetworkVault (IORef (Map.HashMap Txt (Network a)))
+data SyndicateVault where
+  SyndicateVault :: IORef (Map.HashMap Txt (Syndicate a)) -> SyndicateVault
 
-{-# NOINLINE windowNetworks__ #-}
-windowNetworks__ :: NetworkVault
-windowNetworks__ = NetworkVault (unsafePerformIO (newIORef Map.empty))
+{-# NOINLINE windowSyndicates__ #-}
+windowSyndicates__ :: SyndicateVault
+windowSyndicates__ = SyndicateVault (unsafePerformIO (newIORef Map.empty))
 
-getWindowNetwork :: forall e c.
+getWindowSyndicate :: forall e c.
                    ( IsEv e
                    , MonadIO c
                    )
                 => EVName Win e
-                -> c (Network e)
-getWindowNetwork
+                -> c (Syndicate e)
+getWindowSyndicate
 #ifdef __GHCJS__
   en@(ETC.EventName doms)
 #else
   e
 #endif
   = liftIO $
-      case windowNetworks__ of
-        NetworkVault wn__ -> do
+      case windowSyndicates__ of
+        SyndicateVault wn__ -> do
 #ifdef __GHCJS__
           let e = unsafeCoerce doms
 #endif
-          nw :: Network e <- network
+          nw :: Syndicate e <- syndicate
           enw <- atomicModifyIORef wn__ $ \ws ->
             case Map.lookup e ws of
               Nothing -> (Map.insert e (unsafeCoerce nw) ws,Left nw)
@@ -72,54 +71,50 @@ getWindowNetwork
 #ifdef __GHCJS__
               Ev.on win en $ do
                 e <- Ev.event
-                syndicate nw e
+                publish nw e
 #endif
               return nw
             Right nw -> return nw
 
 triggerWindowEvent :: (IsEv e, MonadIO c) => EVName Win e -> e -> c ()
 triggerWindowEvent ev e = do
-  nw <- getWindowNetwork ev
-  syndicate nw e
+  nw <- getWindowSyndicate ev
+  publish nw e
 
-onWindowNetwork :: ( IsEv e
+onWindowSyndicate :: ( IsEv e
                    , MonadIO c
                    , '[Revent] <: ms
                    )
                 => EVName Win e
                 -> (e -> Code '[Event e] (Code ms c) ())
                 -> Code ms c (IO ())
-onWindowNetwork en f = do
-  rb <- getReventBuffer
-  nw <- getWindowNetwork en
-  p <- periodical
-  Just s <- subscribe p f
-  joinNetwork nw p rb
-  return (stop s >> leaveNetwork nw p)
+onWindowSyndicate en f = do
+  nw <- getWindowSyndicate en
+  connect nw f
 
-{-# NOINLINE documentNetworks__ #-}
-documentNetworks__ :: NetworkVault
-documentNetworks__ = NetworkVault (unsafePerformIO (newIORef Map.empty))
+{-# NOINLINE documentSyndicates__ #-}
+documentSyndicates__ :: SyndicateVault
+documentSyndicates__ = SyndicateVault (unsafePerformIO (newIORef Map.empty))
 
-getDocumentNetwork :: forall e c.
+getDocumentSyndicate :: forall e c.
                       ( IsEv e
                       , MonadIO c
                       )
                     => EVName Doc e
-                    -> c (Network e)
-getDocumentNetwork
+                    -> c (Syndicate e)
+getDocumentSyndicate
 #ifdef __GHCJS__
   en@(ETC.EventName doms)
 #else
   e
 #endif
   = liftIO $
-      case documentNetworks__ of
-        NetworkVault dn__ -> do
+      case documentSyndicates__ of
+        SyndicateVault dn__ -> do
 #ifdef __GHCJS__
           let e = unsafeCoerce doms
 #endif
-          nw <- network
+          nw <- syndicate
           enw <- atomicModifyIORef dn__ $ \ws ->
             case Map.lookup e ws of
               Nothing -> (Map.insert e (unsafeCoerce nw) ws,Left nw)
@@ -130,45 +125,41 @@ getDocumentNetwork
 #ifdef __GHCJS__
               Ev.on doc en $ do
                 e <- Ev.event
-                syndicate nw e
+                publish nw e
 #endif
               return nw
             Right nw -> return nw
 
-onDocumentNetwork :: ( IsEv e
+onDocumentSyndicate :: ( IsEv e
                      , MonadIO c
                      , '[Revent] <: ms
                      )
                   => EVName Doc e
                   -> (e -> Code '[Event e] (Code ms c) ())
                   -> Code ms c (IO ())
-onDocumentNetwork en f = do
-  rb <- getReventBuffer
-  nw <- getDocumentNetwork en
-  p <- periodical
-  Just s <- subscribe p f
-  joinNetwork nw p rb
-  return (stop s >> leaveNetwork nw p)
+onDocumentSyndicate en f = do
+  nw <- getDocumentSyndicate en
+  connect nw f
 
-{-# NOINLINE windowNetworksPreventDefault__ #-}
-windowNetworksPreventDefault__ :: NetworkVault
-windowNetworksPreventDefault__ = NetworkVault (unsafePerformIO (newIORef Map.empty))
+{-# NOINLINE windowSyndicatesPreventDefault__ #-}
+windowSyndicatesPreventDefault__ :: SyndicateVault
+windowSyndicatesPreventDefault__ = SyndicateVault (unsafePerformIO (newIORef Map.empty))
 
-getWindowNetworkPreventDefault :: (IsEv e, MonadIO c)
-                              => EVName Win e -> c (Network e)
-getWindowNetworkPreventDefault
+getWindowSyndicatePreventDefault :: (IsEv e, MonadIO c)
+                              => EVName Win e -> c (Syndicate e)
+getWindowSyndicatePreventDefault
 #ifdef __GHCJS__
   en@(ETC.EventName doms)
 #else
   e
 #endif
   = liftIO $
-      case windowNetworksPreventDefault__ of
-        NetworkVault wn__ -> do
+      case windowSyndicatesPreventDefault__ of
+        SyndicateVault wn__ -> do
 #ifdef __GHCJS__
           let e = unsafeCoerce doms
 #endif
-          nw :: Network e <- network
+          nw :: Syndicate e <- syndicate
           enw <- atomicModifyIORef wn__ $ \ws ->
             case Map.lookup e ws of
               Nothing -> (Map.insert e (unsafeCoerce nw) ws,Left nw)
@@ -180,28 +171,24 @@ getWindowNetworkPreventDefault
               Ev.on win en $ do
                 Ev.preventDefault
                 e <- Ev.event
-                syndicate nw e
+                publish nw e
 #endif
               return nw
             Right nw -> return nw
 
-onWindowNetworkPreventDefault :: ( IsEv e
+onWindowSyndicatePreventDefault :: ( IsEv e
                                  , MonadIO c
                                  , '[Revent] <: ms
                                  )
                               => EVName Win e
                               -> (e -> Code '[Event e] (Code ms c) ())
                               -> Code ms c (IO ())
-onWindowNetworkPreventDefault en f = do
-  rb <- getReventBuffer
-  nw <- getWindowNetworkPreventDefault en
-  p <- periodical
-  Just s <- subscribe p f
-  joinNetwork nw p rb
-  return (stop s >> leaveNetwork nw p)
+onWindowSyndicatePreventDefault en f = do
+  nw <- getWindowSyndicatePreventDefault en
+  connect nw f
 
 triggerWindowPreventDefaultEvent :: (IsEv e, MonadIO c) => EVName Win e -> e -> c ()
 triggerWindowPreventDefaultEvent ev e = do
-  nw <- getWindowNetworkPreventDefault ev
-  syndicate nw e
+  nw <- getWindowSyndicatePreventDefault ev
+  publish nw e
 

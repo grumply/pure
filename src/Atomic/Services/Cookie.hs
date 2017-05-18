@@ -8,7 +8,6 @@ import Data.Txt
 
 import Atomic.Component (Doc,getDocument)
 import Atomic.Service
-import Atomic.With
 
 import Data.Maybe
 import Data.Monoid

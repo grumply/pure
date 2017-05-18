@@ -12,9 +12,7 @@ import Data.Micros
 
 import Atomic.Component (Win,getWindow)
 import Atomic.Ease
-import Atomic.Revent
 import Atomic.Service
-import Atomic.With
 
 #ifdef __GHCJS__
 import GHCJS.DOM.RequestAnimationFrameCallback (newRequestAnimationFrameCallbackAsync)
@@ -24,7 +22,7 @@ import GHCJS.DOM.Window (requestAnimationFrame)
 import Unsafe.Coerce
 
 data FrameState = FrameState
-  { frames :: Network Double
+  { frames :: Syndicate Double
   , isRunning :: Bool
   }
 
@@ -34,56 +32,57 @@ frameS = Service {..}
     key = "atomic.frame"
 
     build base = do
-      frames <- network
+      frames <- syndicate
       let fs = FrameState frames False
       return (state fs *:* base)
 
     prime = return ()
 
-getFrameNetwork :: (MonadIO c)
-               => c (Promise (Network Double))
-getFrameNetwork =
+getFrameSyndicate :: (MonadIO c)
+               => c (Promise (Syndicate Double))
+getFrameSyndicate =
   with frameS $ do
     FrameState {..} <- get
     return frames
 
-onFrame :: ( MonadIO c
+onFrame :: forall ms c.
+           ( MonadIO c
            , '[Revent] <: ms
            )
         => (IO () -> Code ms c ())
         -> Code ms c (IO ())
 onFrame f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just frames <- demandMaybe =<< with frameS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with frameS (do
     FrameState {..} <- get
-    subscribe p (lift . const (f (leaveNetwork frames p)))
-    joinNetwork frames p buf
+    sub :: Subscription (Code ms c) Double <- subscribe frames (return buf)
+    bhv <- listen sub (\_ -> lift $ f (leaveSyndicate frames sub))
+    let stopper = stop bhv >> leaveSyndicate frames sub
     unless isRunning createFrameLoop
-    return frames)
-  return (leaveNetwork frames p)
+    return stopper)
+  return stopper
 
-onFPS :: (MonadIO c, '[Revent] <: ms)
+onFPS :: forall ms c.
+         (MonadIO c, '[Revent] <: ms)
       => Double
       -> (IO () -> Code ms c ())
       -> Code ms c (IO ())
 onFPS n f = do
-  buf <- getReventBuffer
+  buf <- get
 
   let delta = 1000 / n
 
-  p <- periodical
-
-  Just frames <- demandMaybe =<< with frameS (do
+  Just stopper <- demandMaybe =<< with frameS (do
     FrameState {..} <- get
-    let leave = leaveNetwork frames p
-    subscribe p (\timestamp -> lift (f leave) >> become (continue leave delta timestamp))
-    joinNetwork frames p buf
+    sub :: Subscription (Code ms c) Double <- subscribe frames (return buf)
+    let leave = leaveSyndicate frames sub
+    bhv <- listen sub (\timestamp -> lift (f leave) >> become (continue leave delta timestamp))
+    let stopper = stop bhv >> leaveSyndicate frames sub
     unless isRunning createFrameLoop
-    return frames)
+    return stopper)
 
 
-  return (leaveNetwork frames p)
+  return stopper
   where
     continue leave delta = go
       where
@@ -99,15 +98,16 @@ onFrameWithTime :: ( MonadIO c
                 => (IO () -> Double -> Code '[Event Double] (Code ms c) ())
                 -> Code ms c (IO ())
 onFrameWithTime f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just frames <- demandMaybe =<< with frameS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with frameS (do
     FrameState {..} <- get
-    subscribe p (f (leaveNetwork frames p))
-    joinNetwork frames p buf
+    sub :: Subscription (Code ms c) Double <- subscribe frames (return buf)
+    let leave = leaveSyndicate frames sub
+    bhv <- listen sub (f leave)
+    let stopper = stop bhv >> leaveSyndicate frames sub
     unless isRunning createFrameLoop
-    return frames)
-  return (leaveNetwork frames p)
+    return stopper)
+  return stopper
 
 rAF :: Win -> (Double -> IO ()) -> IO Int
 rAF win callback = do
@@ -123,16 +123,15 @@ rAF win callback = do
 createFrameLoop :: ('[State () FrameState,Revent] <: ms) => Code ms IO ()
 createFrameLoop = do
   FrameState {..} <- get
-  rb <- getReventBuffer
   win <- getWindow
   let createRAF = rAF win buf
       buf :: Double -> IO ()
       buf timestamp = do
-        isNull <- nullNetwork frames
+        isNull <- nullSyndicate frames
         if isNull
         then void $ with frameS $ modify $ \fs -> (fs { isRunning = False },())
         else void $ do
-          syndicate frames timestamp
+          publish frames timestamp
 #ifdef __GHCJS__
           createRAF
 #else

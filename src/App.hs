@@ -69,7 +69,7 @@ type IsApp ms r = IsApp' ms ms IO r
 
 type Base r = '[ State () (Router r), Revent, State () Shutdown ]
 
-type AppKey ms r = Key (Ef.Base.As (Code (Appended ms (Base r)) IO) IO)
+type AppKey ms r = Key (Ef.Base.As (Code (Appended ms (Base r)) IO))
 type AppBuilder ts r = Modules (Base r) (Action (Appended ts (Base r)) IO) -> IO (Modules (Appended ts (Base r)) (Action (Appended ts (Base r)) IO))
 type AppPrimer ms r = Code (Appended ms (Base r)) IO ()
 type AppRouter ms r = Code '[Route] (Code (Appended ms (Base r)) IO) r
@@ -77,7 +77,7 @@ type AppPages ms r = r -> Code (Appended ms (Base r)) IO System
 
 data App' ts ms c r
   = App
-    { key     :: !(Key (Ef.Base.As (Code ms c) c))
+    { key     :: !(Key (Ef.Base.As (Code ms c)))
     , build   :: !(Modules (Base r) (Action ts c) -> c (Modules ts (Action ts c)))
     , prime   :: !(Code ms c ())
     , root    :: !(Maybe Txt)
@@ -106,48 +106,43 @@ onRoute :: ( IsApp' ts ms IO r
          -> (r -> Code '[Event r] (Code ms' c') ())
          -> Code ms' c' (IO ())
 onRoute fus rf = do
-  p <- periodical
-  Just s <- subscribe p rf
-  buf <- getReventBuffer
-  Just leaveNW <- demandMaybe =<< with fus (do
-    crn <- getRouteNetwork
-    joinNetwork crn p buf
-    return (leaveNetwork crn p))
-  return (stop s >> leaveNW)
+  buf <- get
+  Just stopper <- demandMaybe =<< with fus (do
+    crn <- getRouteSyndicate
+    connect_ crn (return buf) rf
+    )
+  return stopper
 
-data Carrier where
-  Carrier :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)
-          -> Carrier
+data Carrier where Carrier :: IORef (ComponentView ms m) -> Carrier
 
 run :: forall ts ms c r.
        IsApp' ts ms c r
     => App' ts ms c r
     -> c ()
-run App {..} = do
+run app@App {..} = do
   doc     <- getDocument
-  q       <- newSignalBuffer
+  q       <- newEvQueue
   ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
-  rt'     <- liftIO $ newIORef (NullAtom $ Just ph,NullAtom $ Just ph,())
-  nw :: Network r   <- network
-  sdn :: Network () <- network
+  rt'     <- liftIO $ newIORef (ComponentView (NullAtom $ Just ph) (NullAtom $ Just ph) () True)
+  nw :: Syndicate r   <- syndicate
+  sdn :: Syndicate () <- syndicate
   built      <- build $ mkRouter nw routes
-                     *:* revent q
+                     *:* state q
                      *:* state (Shutdown sdn)
                      *:* Empty
-  sig :: Signal ms c (Code ms c ()) <- runner
-  addApp key (constructAs q sig)
+  (sig :: Signal ms c (Code ms c ()),_) <- runner
+  addApp key =<< unsafeConstructAs q
   (obj,_) <- Ef.Base.Object built ! do
-    p' <- periodical
-    subscribe p' $ \r -> do
+    crn <- getRouteSyndicate
+    connect crn $ \r -> do
       pg <- lift $ pages r
       go True ort doc (Carrier rt') pg
-    crn <- getRouteNetwork
-    joinNetwork crn p' q
-    onSelfShutdown $ do
-      syndicate mediatorShutdownNetwork ()
-      syndicate constructShutdownNetwork ()
+    Shutdown sdn <- get
+    connect sdn $ \_ -> do
+      publish mediatorShutdownSyndicate ()
+      publish constructShutdownSyndicate ()
     prime
     setupRouter (Proxy :: Proxy r)
 #ifdef __GHCJS__
@@ -169,15 +164,15 @@ run App {..} = do
             mb_ <- lookupComponent (Component.key b)
             case mb_ of
               Nothing -> do
-                (old,_,_) <- readIORef rt
+                ComponentView _ old _ _ <- readIORef rt
                 iob <- if first then
                          mkComponent (ClearAndAppend ort) b
                        else
                          mkComponent (Replace old) b
-                return (Carrier iob)
-              Just (_,x_) -> do
-                (old,_,_) <- readIORef rt
-                (new,_,_) <- readIORef x_
+                return (Carrier $ crView iob)
+              Just ComponentRecord {..} -> do
+                ComponentView _ old _ _ <- readIORef rt
+                ComponentView _ new _ _ <- readIORef crView
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))
@@ -185,7 +180,7 @@ run App {..} = do
                   forM_ mn (appendChild ort)
                 else
                   replace old new
-                return (Carrier x_)
+                return (Carrier crView)
           become $ \r -> do
             pg <- lift $ pages r
             go False ort doc b pg
@@ -202,28 +197,28 @@ run App {..} = do
                 let h = ()
 #endif
                 mkComponent (Replace (NullAtom (Just h))) hc
-              Just (_,x_) -> do
+              Just ComponentRecord {..} -> do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
                 let h = T.castToElement h_
 #else
                 let h = ()
 #endif
-                (new,_,_) <- readIORef x_
+                ComponentView _ new _ _ <- readIORef crView
                 rebuild new
                 replace (NullAtom $ Just h) new
             mb_ <- lookupComponent (Component.key b)
             case mb_ of
               Nothing -> do
-                (old,_,_) <- readIORef rt
-                iob <- if first then
-                         mkComponent (ClearAndAppend ort) b
-                       else do
-                         mkComponent (Replace old) b
-                return (Carrier iob)
-              Just (_,x_) -> do
-                (old,_,_) <- readIORef rt
-                (new,_,_) <- readIORef x_
+                ComponentView _ old _ _ <- readIORef rt
+                cr <- if first then
+                        mkComponent (ClearAndAppend ort) b
+                      else
+                        mkComponent (Replace old) b
+                return (Carrier $ crView cr)
+              Just ComponentRecord {..} -> do
+                ComponentView _ old _ _ <- readIORef rt
+                ComponentView _ new _ _ <- readIORef crView
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))
@@ -231,7 +226,7 @@ run App {..} = do
                   forM_ mn (appendChild ort)
                 else
                   replace old new
-                return (Carrier x_)
+                return (Carrier crView)
           become $ \r -> do
             pg <- lift $ pages r
             go False ort doc b pg
@@ -270,14 +265,15 @@ instance ( IsApp' ts ms c r
       run <- using_ f
       run m
     shutdown_ f = do
-      with_ f $ do
-        buf <- getReventBuffer
+      void $ with_ f $ do
+        buf <- get
         Shutdown sdn <- get
-        syndicate sdn ()
-        liftIO $ do
-          killBuffer buf
-          myThreadId >>= killThread
-      deleteApp (key f)
+        publish sdn ()
+        delay 0 $ do
+          deleteApp (key f)
+          liftIO $ do
+            killBuffer buf
+            myThreadId >>= killThread
 
 {-# NOINLINE organismVault__ #-}
 organismVault__ = Vault (unsafePerformIO (newMVar Map.empty))
@@ -299,8 +295,8 @@ setupRouter :: forall ms c routeType.
             => Proxy routeType
             -> Code ms c (IO (),Promise (IO ()))
 setupRouter _ = do
-  crn :: Network routeType <- getRouteNetwork
-  psn <- getWindowNetworkPreventDefault popstate
+  crn :: Syndicate routeType <- getRouteSyndicate
+  psn <- getWindowSyndicatePreventDefault popstate
   loc <- getLocation
   pn  <- getPathname
   qps <- getSearch
@@ -308,7 +304,7 @@ setupRouter _ = do
   rtr  <- getRouter
   mncr <- Route.route rtr p
   setRoute mncr
-  forM_ mncr $ syndicate crn
+  forM_ mncr $ publish crn
   delay 500000 (connect psn (go crn loc p mncr))
   where
     go crn loc = go'
@@ -325,8 +321,7 @@ setupRouter _ = do
               when (mncr /= cr) $ do
                 lift $ do
                   setRoute mncr
-                  syndicate crn ncr
-           
+                  publish crn ncr
 
 goto :: ( MonadIO c
         , With (App' ts ms IO r) (Code ms IO) IO
@@ -337,6 +332,6 @@ goto :: ( MonadIO c
 goto f rts rt = do
   pushPath rts
   with f $ do
-    crn <- getRouteNetwork
-    syndicate crn rt
+    crn <- getRouteSyndicate
+    publish crn rt
 

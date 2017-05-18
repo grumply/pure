@@ -8,9 +8,7 @@ module Atomic.Service (module Atomic.Service) where
 import Ef.Base hiding (Client,Server)
 
 import Atomic.Key
-import Atomic.Revent
 import Atomic.Vault
-import Atomic.With
 import Atomic.Observable
 
 import Control.Concurrent
@@ -38,12 +36,10 @@ instance (IsService' ts ms, MonadIO c) =>
           modifyVault mediatorVault__ $ \v ->
             case Map.lookup i v of
               Nothing -> do
-                rb <- newSignalBuffer
-                sig :: Signal ms IO (Code ms IO ()) <- runner
-                startService rb s
-                let asService :: Code ms IO `As` IO
-                    asService = constructAs rb sig
-                    new_v = Map.insert i (unsafeCoerce asService) v
+                buf <- newEvQueue
+                startService buf s
+                asService :: As (Code ms IO) <- unsafeConstructAs buf
+                let new_v = Map.insert i (unsafeCoerce asService) v
                 return (new_v,liftIO . runAs asService)
               Just as ->
                 return (v,liftIO . runAs as)
@@ -54,12 +50,13 @@ instance (IsService' ts ms, MonadIO c) =>
       run m
     shutdown_ s = do
       with_ s $ do
-        buf <- getReventBuffer
+        buf <- get
         Shutdown sdn <- get
-        syndicate sdn ()
-        liftIO $ do
-          killBuffer buf
-          myThreadId >>= killThread
+        publish sdn ()
+        delay 0 $ do
+          liftIO $ do
+            killBuffer buf
+            myThreadId >>= killThread
       deleteService (key s)
 
 
@@ -68,13 +65,13 @@ type IsService ms = IsService' (Appended Base ms) (Appended Base ms)
 
 type Base = '[Revent,State () Vault,State () Shutdown]
 
-type ServiceKey ms = Key (Code (Appended ms Base) IO `As` IO)
+type ServiceKey ms = Key (As (Code (Appended ms Base) IO))
 type ServiceBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
 type ServicePrimer ms = Code (Appended ms Base) IO ()
 
 data Service' ts ms
   = Service
-      { key      :: !(Key (Code ms IO `As` IO))
+      { key      :: !(Key (As (Code ms IO)))
       , build    :: !(Modules Base (Action ts IO) -> IO (Modules ts (Action ts IO)))
       , prime    :: !(Code ms IO ())
       }
@@ -92,19 +89,19 @@ startService :: forall ms ts c.
                 ( MonadIO c
                 , IsService' ts ms
                 )
-              => Signaled
+              => EvQueue
               -> Service' ts ms
               -> c ()
 startService rb Service {..} = do
-  sdn :: Network () <- network
+  sdn :: Syndicate () <- syndicate
   lv <- createVault
-  built <- liftIO $ build $ revent rb
+  built <- liftIO $ build $  state rb
                          *:* state lv
                          *:* state (Shutdown sdn)
                          *:* Empty
   void $ liftIO $ forkIO $ do
     (obj,_) <- Object built ! do
-      connect mediatorShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
+      connect mediatorShutdownSyndicate $ const (Ef.Base.lift shutdownSelf)
       prime
 #ifdef __GHCJS__
     driverPrintExceptions
@@ -117,9 +114,9 @@ startService rb Service {..} = do
 #endif
       rb obj
 
-{-# NOINLINE mediatorShutdownNetwork #-}
-mediatorShutdownNetwork :: Network ()
-mediatorShutdownNetwork = unsafePerformIO network
+{-# NOINLINE mediatorShutdownSyndicate #-}
+mediatorShutdownSyndicate :: Syndicate ()
+mediatorShutdownSyndicate = unsafePerformIO syndicate
 
 {-# NOINLINE mediatorVault__ #-}
 mediatorVault__ = Vault (unsafePerformIO (newMVar Map.empty))

@@ -62,9 +62,9 @@ instance ( IsServer' ts ms c
       run m
     shutdown_ s = do
       with_ s $ do
-        buf <- getReventBuffer
+        buf <- get
         Shutdown sdn <- get
-        syndicate sdn ()
+        publish sdn ()
         liftIO $ do
           killBuffer buf
           myThreadId >>= killThread
@@ -73,12 +73,12 @@ instance ( IsServer' ts ms c
 type IsServer' ts ms c = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms), MonadIO c)
 type IsServer ms = IsServer' ms ms IO
 
-type ServerKey ms = Key (Ef.Base.As (Code (Appended ms Base) IO) IO)
+type ServerKey ms = Key (Ef.Base.As (Code (Appended ms Base) IO))
 type ServerBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
 type ServerPrimer ms = Code (Appended ms Base) IO ()
-type ServerConnection pms ms = Ef.Base.As (Code (Appended ms Base) IO) IO -> Connection' (Appended pms Connection.Base) (Appended pms Connection.Base)
+type ServerConnection pms ms = Ef.Base.As (Code (Appended ms Base) IO) -> Connection' (Appended pms Connection.Base) (Appended pms Connection.Base)
 
-newtype Connections = Connections (Network (SockAddr,Socket,Signaled))
+newtype Connections = Connections (Syndicate (SockAddr,Socket,EvQueue))
 
 type Base = '[Revent,State () Connections,State () Vault,State () Shutdown]
 
@@ -86,25 +86,25 @@ data Server' ts ms c pts pms
   =
 #ifdef SECURE
     SecureServer
-    { key      :: !(Key (Ef.Base.As (Code ms c) IO))
-    , ip       :: !(String)
-    , port     :: !(Int)
-    , sslKey   :: !(FilePath)
-    , sslCert  :: !(FilePath)
-    , sslChain :: !(Maybe FilePath)
-    , build    :: !(Modules Base (Action ts c) -> c (Modules ts (Action ts c)))
-    , prime    :: !(Code ms c ())
-    , presence :: !(Ef.Base.As (Code ms c) IO -> Connection' pts pms)
+    { key        :: !(Key (Ef.Base.As (Code ms c)))
+    , ip         :: !(String)
+    , port       :: !(Int)
+    , sslKey     :: !(FilePath)
+    , sslCert    :: !(FilePath)
+    , sslChain   :: !(Maybe FilePath)
+    , build      :: !(Modules Base (Action ts c) -> c (Modules ts (Action ts c)))
+    , prime      :: !(Code ms c ())
+    , connection :: !(Ef.Base.As (Code ms c) IO -> Connection' pts pms)
     }
   |
 #endif
     Server
-    { key      :: !(Key (Ef.Base.As (Code ms c) IO))
-    , ip       :: !(String)
-    , port     :: !(Int)
-    , build    :: !(Modules Base (Action ts c) -> c (Modules ts (Action ts c)))
-    , prime    :: !(Code ms c ())
-    , presence :: !(Ef.Base.As (Code ms c) IO -> Connection' pts pms)
+    { key        :: !(Key (Ef.Base.As (Code ms c)))
+    , ip         :: !(String)
+    , port       :: !(Int)
+    , build      :: !(Modules Base (Action ts c) -> c (Modules ts (Action ts c)))
+    , prime      :: !(Code ms c ())
+    , connection :: !(Ef.Base.As (Code ms c) -> Connection' pts pms)
     }
 type Server ms pms = Server' (Appended ms Base) (Appended ms Base) IO (Appended pms Connection.Base) (Appended pms Connection.Base)
 
@@ -130,9 +130,9 @@ run :: forall ts ms c uTs uMs.
 #ifdef SECURE
 run SecureServer {..} = void $ do
 
-  nw :: Network (SockAddr,Socket,Signaled) <- network
+  nw :: Syndicate (SockAddr,Socket,EvQueue) <- syndicate
 
-  q <- newSignalBuffer
+  q <- newEvQueue
 
   ctx <- liftIO $ sslSetupServer sslKey sslCert sslChain
   sock <- newListenSocket ip port
@@ -140,27 +140,21 @@ run SecureServer {..} = void $ do
   gs <- createVault
 
   connSignal
-    :: Signal ms c (State () WebSocket (Action uTs IO),SockAddr,Signaled)
-    <- Ef.Event.construct
+    :: Signal ms c (State () WebSocket (Action uTs IO),SockAddr,EvQueue)
+    <- newSignal
 
-  acSignal
-    :: Network (Network uE)
-    <- network
+  acSignal :: Syndicate (Syndicate uE) <- syndicate
 
-  populationSig
-    :: Signal ms c (Code ms c ())
-    <- runner
-
-  let asServer = constructAs q populationSig
-      cli = presence asServer
+  asServer <- unsafeConstructAs q
+  let cli = connection asServer
 
   addServer key asServer
 
   liftIO $ forkIO $ void $ handleSecureConnections (ctx,sock) nw q connSignal
 
-  sdn <- network
+  sdn <- syndicate
 
-  populationObj <- build (revent q
+  populationObj <- build (state q
                       *:* state (Connections nw)
                       *:* state gs
                       *:* state (Shutdown sdn)
@@ -173,7 +167,7 @@ run SecureServer {..} = void $ do
       where
         go = do
           (conn,sockAddr) <- accept sock
-          buf <- newSignalBuffer
+          buf <- newEvQueue
           syndicate nw (sockAddr,conn,buf) -- if you set up a periodical to kill the connection and shut down to the user, the worst a
                                            -- malicious user could do is create a temporary thread and fill network buffers of something
                                            -- like 65k?
@@ -186,36 +180,30 @@ run SecureServer {..} = void $ do
 #endif
 run Server {..} = void $ do
 
-  nw :: Network (SockAddr,Socket,Signaled) <- network
+  nw :: Syndicate (SockAddr,Socket,EvQueue) <- syndicate
 
-  q <- newSignalBuffer
+  q <- newEvQueue
 
   sock <- newListenSocket ip port
 
   gs <- createVault
 
   connSignal
-    :: Signal ms c (State () WebSocket (Action uTs IO),SockAddr,Signaled)
-    <- Ef.Event.construct
+    :: Signal ms c (State () WebSocket (Action uTs IO),SockAddr,EvQueue)
+    <- construct
 
-  acSignal
-    :: Network (Network uE)
-    <- network
+  acSignal :: Syndicate (Syndicate uE) <- syndicate
 
-  populationSig
-    :: Signal ms c (Code ms c ())
-    <- runner
-
-  let asServer = constructAs q populationSig
-      cli = presence asServer
+  asServer <- unsafeConstructAs q
+  let cli = connection asServer
 
   addServer key asServer
 
   tid <- liftIO $ forkIO $ void $ handleConnections sock q connSignal
 
-  sdn <- network
+  sdn <- syndicate
 
-  populationObj <- build (revent q
+  populationObj <- build (state q
                       *:* state (Connections nw)
                       *:* state gs
                       *:* state (Shutdown sdn)
@@ -228,7 +216,7 @@ run Server {..} = void $ do
       where
         go = do
           (conn,sockAddr) <- accept sock
-          buf <- newSignalBuffer
+          buf <- newEvQueue
           forkIO $ void $
             E.handle (\(e :: E.SomeException) -> sClose conn) $ do
               ws <- serverWS buf conn unlimited
@@ -242,8 +230,8 @@ eventloop :: forall ts ms c uTs uMs.
              )
           => Code ms c ()
           -> Connection' uTs uMs
-          -> Signal ms c (State () WebSocket (Action uTs IO),SockAddr,Signaled)
-          -> Signaled
+          -> Signal ms c (State () WebSocket (Action uTs IO),SockAddr,EvQueue)
+          -> EvQueue
           -> Ef.Base.Object ts c
           -> c ()
 eventloop primeS pres connSignal q populationObj = do

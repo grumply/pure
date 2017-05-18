@@ -10,10 +10,8 @@ import Data.Txt
 import Data.JSON
 
 import Atomic.Component (Win,getWindow)
-import Atomic.Revent
 import Atomic.Service
 import Atomic.Signals
-import Atomic.With
 
 #ifdef __GHCJS__
 import qualified GHCJS.DOM.Window as W hiding (getWindow)
@@ -35,12 +33,12 @@ data ScrollPosition = ScrollPosition
   }
 
 data WindowState = WindowState
-  { windowDimensionsN :: Network WindowDimensions
-  , windowHeightN     :: Network Int
-  , windowWidthN      :: Network Int
-  , scrollPositionN   :: Network ScrollPosition
-  , scrollXN          :: Network Int
-  , scrollYN          :: Network Int
+  { windowDimensionsN :: Syndicate WindowDimensions
+  , windowHeightN     :: Syndicate Int
+  , windowWidthN      :: Syndicate Int
+  , scrollPositionN   :: Syndicate ScrollPosition
+  , scrollXN          :: Syndicate Int
+  , scrollYN          :: Syndicate Int
   }
 
 scrollEvent :: EVName Win Obj
@@ -123,12 +121,12 @@ windowS = Service {..}
     key = "atomic.window"
 
     build base = do
-      windowDimensionsN <- network
-      windowHeightN     <- network
-      windowWidthN      <- network
-      scrollPositionN   <- network
-      scrollXN          <- network
-      scrollYN          <- network
+      windowDimensionsN <- syndicate
+      windowHeightN     <- syndicate
+      windowWidthN      <- syndicate
+      scrollPositionN   <- syndicate
+      scrollXN          <- syndicate
+      scrollYN          <- syndicate
       let ws = WindowState
                  windowDimensionsN
                  windowHeightN
@@ -143,118 +141,104 @@ windowS = Service {..}
 
       win <- getWindow
 
-      rb  <- getReventBuffer
-
       initialScrollX <- getScrollX
       scrollX_ <- liftIO $ newIORef initialScrollX
       initialScrollY <- getScrollY
       scrollY_ <- liftIO $ newIORef initialScrollY
-      void $ onWindowNetwork scrollEvent $ \_ -> do
+      void $ onWindowSyndicate scrollEvent $ \_ -> do
         oldX <- liftIO $ readIORef scrollX_
         newX <- getScrollX
         oldY <- liftIO $ readIORef scrollY_
         newY <- getScrollY
         liftIO $ do
-          syndicate scrollPositionN (ScrollPosition newX newY)
+          publish scrollPositionN (ScrollPosition newX newY)
           when (oldX /= newX) $ do
-            syndicate scrollXN newX
+            publish scrollXN newX
             writeIORef scrollX_ newX
           when (oldY /= newY) $ do
-            syndicate scrollYN newY
+            publish scrollYN newY
             writeIORef scrollY_ newY
 
       initialWidth <- getInnerWidth
       width_ <- liftIO $ newIORef initialWidth
       initialHeight <- getInnerHeight
       height_ <- liftIO $ newIORef initialHeight
-      void $ onWindowNetwork resize $ \_ -> do
+      void $ onWindowSyndicate resize $ \_ -> do
         oldWidth <- liftIO $ readIORef width_
         newWidth <- getInnerWidth
         oldHeight <- liftIO $ readIORef height_
         newHeight <- getInnerHeight
         liftIO $ do
-          syndicate windowDimensionsN (WindowDimensions newHeight newWidth)
+          publish windowDimensionsN (WindowDimensions newHeight newWidth)
           when (oldWidth /= newWidth) $ do
-            syndicate windowWidthN newWidth
+            publish windowWidthN newWidth
             writeIORef width_ newWidth
           when (oldHeight /= newHeight) $ do
-            syndicate windowHeightN newHeight
+            publish windowHeightN newHeight
             writeIORef height_ newHeight
 
 onScrollX :: (MonadIO c, '[Revent] <: ms)
           => (Int -> Code ms c ())
           -> Code ms c (IO ())
 onScrollX f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with windowS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
-    joinNetwork scrollXN p buf
-    return (leaveNetwork scrollXN p))
-  return (stop s >> leaveNW)
+    connect_ scrollXN (return buf) (lift . f)
+    )
+  return stopper
 
 onScrollY :: (MonadIO c, '[Revent] <: ms)
           => (Int -> Code ms c ())
           -> Code ms c (IO ())
 onScrollY f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with windowS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
-    joinNetwork scrollYN p buf
-    return (leaveNetwork scrollYN p))
-  return (stop s >> leaveNW)
+    connect_ scrollYN (return buf) (lift . f)
+    )
+  return stopper
 
 onScrollPosition :: (MonadIO c, '[Revent] <: ms)
                  => (ScrollPosition -> Code ms c ())
                  -> Code ms c (IO ())
 onScrollPosition f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with windowS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
-    joinNetwork scrollPositionN p buf
-    return (leaveNetwork scrollPositionN p))
-  return (stop s >> leaveNW)
+    connect_ scrollPositionN (return buf) (lift . f)
+    )
+  return stopper
 
 onWindowHeight :: (MonadIO c, '[Revent] <: ms)
                => (Int -> Code ms c ())
                -> Code ms c (IO ())
 onWindowHeight f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with windowS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
-    joinNetwork windowHeightN p buf
-    return (leaveNetwork windowHeightN p))
-  return (stop s >> leaveNW)
+    connect_ windowHeightN (return buf) (lift . f)
+    )
+  return stopper
 
 onWindowWidth :: (MonadIO c, '[Revent] <: ms)
               => (Int -> Code ms c ())
               -> Code ms c (IO ())
 onWindowWidth f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with windowS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
-    joinNetwork windowWidthN p buf
-    return (leaveNetwork windowWidthN p))
-  return (stop s >> leaveNW)
+    connect_ windowWidthN (return buf) (lift . f)
+    )
+  return stopper
 
 onWindowDimensions :: (MonadIO c, '[Revent] <: ms)
                    => (WindowDimensions -> Code ms c ())
                    -> Code ms c (IO ())
 onWindowDimensions f = do
-  buf <- getReventBuffer
-  p <- periodical
-  Just s <- subscribe p (lift . f)
-  Just leaveNW <- demandMaybe =<< with windowS (do
+  buf <- get
+  Just stopper <- demandMaybe =<< with windowS (do
     WindowState {..} <- get
-    joinNetwork windowDimensionsN p buf
-    return (leaveNetwork windowDimensionsN p))
-  return (stop s >> leaveNW)
+    connect_ windowDimensionsN (return buf) (lift . f)
+    )
+  return stopper

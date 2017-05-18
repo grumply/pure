@@ -21,9 +21,7 @@ import Atomic.CSS
 import Atomic.Default
 -- import Atomic.Dict
 import Atomic.Key
-import Atomic.Revent
 import Atomic.Vault
-import Atomic.With
 import Atomic.ToTxt
 import Atomic.FromTxt
 import Atomic.Observable
@@ -73,6 +71,7 @@ import Data.Typeable
 import Data.Void
 import Data.Unique
 import GHC.Prim
+import System.Mem.StableName
 
 import qualified Data.HashMap.Strict as Map
 
@@ -89,7 +88,6 @@ import Control.Lens.At
 import Control.Lens.Prism
 
 import qualified GHC.Exts
-import Debug.Trace
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
@@ -105,7 +103,7 @@ foreign import javascript unsafe
   swap_js :: N.Node -> N.Node -> IO ()
 
 foreign import javascript unsafe
-  "$1.insertBefore($3,$1.children[$2]);"
+  "$1.insertBefore($3,$1.childNodes[$2]);"
   insert_at_js :: E.Element -> Int -> N.Node -> IO ()
 
 foreign import javascript unsafe
@@ -157,6 +155,14 @@ foreign import javascript unsafe
 
 data SomeAtom = SomeAtom (forall e. Atom e)
 
+data SPair a b = SPair !a !b
+
+sfst :: SPair a b -> a
+sfst (SPair a _) = a
+
+ssnd :: SPair a b -> b
+ssnd (SPair _ b) = b
+
 data Atom e where
   -- NullAtom must have a presence on the page for proper diffing
   NullAtom
@@ -175,6 +181,12 @@ data Atom e where
        , _content     :: !Txt
        } -> Atom e
 
+  Atom
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: !Txt
+        , _attributes :: ![Feature e]
+        , _atoms      :: ![Atom e]
+        } -> Atom e
   KAtom
     ::  { _node       :: !(Maybe ENode)
         , _tag        :: !Txt
@@ -182,18 +194,11 @@ data Atom e where
         , _keyed      :: ![(Int,Atom e)]
         } -> Atom e
 
-  Atom
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: !Txt
-        , _attributes :: ![Feature e]
-        , _atoms      :: ![Atom e]
-        } -> Atom e
-
   STAtom
     :: { _stmodel  :: !(model)
        , _ststate  :: !st
-       , _strecord :: !(Maybe (IORef (st,SomeAtom -> IO (),SomeAtom)))
-       , _stview   :: !(st -> (st -> IO ()) -> Atom e)
+       , _strecord :: !(Maybe (IORef (st,Syndicate st,SomeAtom -> IO () -> IO (),SomeAtom)))
+       , _stview   :: !(st -> ((st -> st) -> IO () -> IO ()) -> Atom e)
        } -> Atom e
 
   -- TODO: SVG keyed node
@@ -226,8 +231,8 @@ instance Default (Atom a) where
 instance Plated (Atom e) where
   plate f (STAtom _ st iorec v) =
     case iorec of
-      Nothing -> plate f $ v st (\_ -> return ())
-      Just ref -> plate f $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ -> return ())
+      Nothing -> plate f $ v st (\_ _ -> return ())
+      Just ref -> plate f $ v ((\(a,_,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ _ -> return ())
   plate f (KAtom n t as ks) = KAtom n t as <$> traverse (\(i,k) -> fmap (\k' -> (i,k')) (f k)) ks
   plate f (Atom n t as cs) = Atom n t as <$> traverse f cs
   plate f (SVGAtom n t as cs) = SVGAtom n t as <$> traverse f cs
@@ -240,8 +245,8 @@ type instance IxValue (Atom e) = Atom e
 instance Ixed (Atom e) where
   ix k f (STAtom _ st iorec v) =
     case iorec of
-      Nothing -> ix k f $ v st (\_ -> return ())
-      Just ref -> ix k f $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ -> return ())
+      Nothing -> ix k f $ v st (\_ _ -> return ())
+      Just ref -> ix k f $ v ((\(a,_,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ _ -> return ())
   ix k f (Atom n t as cs) = Atom n t as <$> ix k f cs
   ix k f (KAtom n t as ks) = KAtom n t as <$> go ks k
     where
@@ -265,8 +270,8 @@ instance ToJSON (Atom e) where
     where
       go (STAtom _ st iorec v) =
         case iorec of
-          Nothing -> go $ v st (\_ -> return ())
-          Just ref -> go $ v ((\(a,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ -> return ())
+          Nothing -> go $ v st (\_ _ -> return ())
+          Just ref -> go $ v ((\(a,_,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ _ -> return ())
       go (Text _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
       go (Raw _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
       go (KAtom _ t as ks) = object [ "type" .= ("keyed" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON ks ]
@@ -440,9 +445,9 @@ _text = prism text $ \a ->
 
 -- TODO: _st
 
-_construct :: ([Feature e] -> [Atom e] -> Atom e) -> Prism (Atom e) (Atom e) ([Feature e],Constr) ([Feature e],Constr)
-_construct x = prism build $ \a ->
-  case construct x [] (undefined :: Component '[] ()) of
+_component :: ([Feature e] -> [Atom e] -> Atom e) -> Prism (Atom e) (Atom e) ([Feature e],Constr) ([Feature e],Constr)
+_component x = prism build $ \a ->
+  case component x [] (undefined :: Component '[] ()) of
     Managed _ t _ _ ->
       case a of
         Managed _ t' fs c ->
@@ -453,7 +458,7 @@ _construct x = prism build $ \a ->
     _ -> Left a
   where
     build (fs,c) =
-      case construct x [] (undefined :: Component '[] ()) of
+      case component x [] (undefined :: Component '[] ()) of
         Managed _ t _ _ ->
           Managed Nothing t fs c
 
@@ -486,22 +491,16 @@ raw x _attributes _content =
       in Raw {..}
 
 list :: ([Feature e] -> [Atom e] -> Atom e) -> [Feature e] -> [(Int,Atom e)] -> Atom e
-list x _attributes _keyed0 =
+list x _attributes _keyed =
   case x [] [] of
     Atom _ _tag _ _ ->
       let
         _node = Nothing
-        _keyed = filter (notNullAtom . snd) _keyed0
-        notNullAtom (NullAtom _) = False
-        notNullAtom _ = True
       in
         KAtom {..}
     SVGAtom _ _tag _ _ ->
       let
         _node = Nothing
-        _keyed = filter (notNullAtom . snd) _keyed0
-        notNullAtom (NullAtom _) = False
-        notNullAtom _ = True
       in
         KSVGAtom {..}
 
@@ -524,12 +523,15 @@ list x _attributes _keyed0 =
 --               length list of children is required, either careful placement for the st element,
 --               or the use of NullAtoms as placeholders, or some uses of keyed atoms can overcome
 --               this problem.
-st :: forall model st e. model -> st -> (st -> (st -> IO ()) -> Atom e) -> Atom e
+st :: forall model st e. model -> st -> (st -> ((st -> st) -> IO () -> IO ()) -> Atom e) -> Atom e
 st watch_model initial_st view = STAtom watch_model initial_st Nothing view
 
-construct :: ([Feature e] -> [Atom e] -> Atom e)
+constant :: Atom e -> Atom e
+constant a = st () () $ \_ _ -> a
+
+component :: ([Feature e] -> [Atom e] -> Atom e)
           -> (forall ts' ms' m. IsComponent' ts' ms' m => [Feature e] -> Component' ts' ms' m -> Atom e)
-construct f = \as c ->
+component f = \as c ->
   case f [] [] of
     Atom _ t _ _ -> Managed Nothing t as (Component' c)
     _ -> error "Incorrect usage of construct; Components may only be embedded in plain html Atoms."
@@ -590,14 +592,14 @@ styles = css' True . classify
         _ -> error "impossible"
 
 
--- Useful for standalone components without a Atomic root.
-renderComponent' :: IsComponent' ts ms m => Component' ts ms m -> ENode -> Atom (Code ms IO ()) -> IO (Atom (Code ms IO ()))
-renderComponent' a parent html = do
-  let f e = void $ with a e
-  doc <- getDocument
-  html' <- buildHTML doc f html
-  embed_ parent html'
-  return html'
+-- -- Useful for standalone components without a Atomic root.
+-- renderComponent' :: IsComponent' ts ms m => Component' ts ms m -> ENode -> Atom (Code ms IO ()) -> IO (Atom (Code ms IO ()))
+-- renderComponent' a parent html = do
+--   let f e = void $ with a e
+--   doc <- getDocument
+--   html' <- buildHTML doc f html
+--   embed_ parent html'
+--   return html'
 
 -- rebuild finds managed nodes and re-embeds them in case they were
 -- removed for other uses
@@ -610,7 +612,7 @@ rebuild h =
   where
     go STAtom {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,SomeAtom e) <- readIORef ref
+        (_,_,_,SomeAtom e) <- readIORef ref
         rebuild e
     go Atom {..}    = mapM_ go _atoms
     go SVGAtom {..} = mapM_ go _atoms
@@ -619,14 +621,81 @@ rebuild h =
       case _constr of
         Component' c -> do
           mi_ <- lookupComponent (key c)
-          forM_ mi_ $ \(_,x_) -> do
-            (h,_,_) <- readIORef x_
-            rebuild h
+          forM_ mi_ $ \ComponentRecord {..} -> do
+            ComponentView {..} <- readIORef crView
+            rebuild cvCurrentLive
             forM_ _node $ \node ->
-              embed_ node h
+              embed_ node cvCurrentLive
     go _ =
       return ()
 #endif
+
+
+triggerBackground :: MonadIO m => Atom e -> m ()
+triggerBackground = go
+  where
+    bg Component {..} = do
+      mc <- lookupComponent key
+      case mc of
+        Nothing -> return ()
+        Just ComponentRecord {..} -> do
+          let ComponentHooks _ bg _= crHooks
+          publish bg ()
+          ComponentView {..} <- liftIO $ readIORef crView
+          go $ unsafeCoerce cvCurrentLive
+
+    go STAtom {..}  =
+      forM_ _strecord $ \ref -> do
+        (_,_,_,SomeAtom e) <- liftIO $ readIORef ref
+        go (unsafeCoerce e)
+    go Atom {..}    = mapM_ go _atoms
+    go SVGAtom {..} = mapM_ go _atoms
+    go KAtom {..}   = mapM_ (go . snd) _keyed
+    go KSVGAtom {..} = mapM_ (go . snd) _keyed
+    go m@Managed {..} = case _constr of Component' c -> bg (unsafeCoerce c)
+    go _ = return ()
+
+triggerForeground :: MonadIO m => Atom e -> m ()
+triggerForeground = go
+  where
+    fg Component {..} = do
+      mc <- lookupComponent key
+      case mc of
+        Nothing -> return ()
+        Just ComponentRecord {..} -> do
+          let ComponentHooks _ _ fg = crHooks
+          publish fg ()
+          ComponentView {..} <- liftIO $ readIORef crView
+          go (unsafeCoerce cvCurrentLive)
+
+    go STAtom {..}  =
+      forM_ _strecord $ \ref -> do
+        (_,_,_,SomeAtom e) <- liftIO $ readIORef ref
+        go (unsafeCoerce e)
+    go Atom {..}    = mapM_ go _atoms
+    go SVGAtom {..} = mapM_ go _atoms
+    go KAtom {..}   = mapM_ (go . snd) _keyed
+    go KSVGAtom {..} = mapM_ (go . snd) _keyed
+    go m@Managed {..} = case _constr of Component' c -> fg (unsafeCoerce c)
+    go _ = return ()
+
+onForeground :: ( MonadIO c, MonadIO c'
+                , '[Revent] <: ms
+                , '[State () ComponentHooks] <: ms'
+                , With w (Narrative (Messages ms') c') IO
+                )
+             => w -> Code '[Event ()] (Code ms c) () -> Code ms c (Promise (IO ()))
+onForeground c f = do
+  connectWith c (get >>= \(ComponentHooks _ _ fg) -> return fg) $ \_ -> f
+
+onBackground :: ( MonadIO c, MonadIO c'
+                , '[Revent] <: ms
+                , '[State () ComponentHooks] <: ms'
+                , With w (Narrative (Messages ms') c') IO
+                )
+             => w -> Code '[Event ()] (Code ms c) () -> Code ms c (Promise (IO ()))
+onBackground c f = do
+  connectWith c (get >>= \(ComponentHooks _ bg _) -> return bg) $ \_ -> f
 
 reflect :: forall ts ms m c.
            ( IsComponent' ts ms m
@@ -637,20 +706,20 @@ reflect :: forall ts ms m c.
 reflect c =
   with c $ do
     ComponentState {..} :: ComponentState m <- get
-    (l,_,_) <- liftIO $ readIORef asLive
-    return (unsafeCoerce l)
+    ComponentView {..} <- liftIO $ readIORef asLive
+    return (unsafeCoerce cvCurrentLive)
 
 data DiffStrategy = Unequal | Eager | Manual deriving (Eq)
 
 type Differ ms m =
        (m -> Atom (Code ms IO ()))
-    -> ((m,Atom (Code ms IO ())) -> IO ())
+    -> IO ()
     -> (Code ms IO () -> IO ())
     -> ComponentState m
     -> Code ms IO ()
 
 data AState m = AState
-  { as_live :: forall ms. IORef (Atom (Code ms IO ()), Atom (Code ms IO ()),m)
+  { as_live :: forall ms. IORef (ComponentView ms m)
   , as_model :: m
   }
 
@@ -660,25 +729,45 @@ data ComponentPatch m where
     { ap_send         :: Code ms IO () -> IO ()
     , ap_AState       :: IORef (Maybe (AState m),Bool) -- an AState record for manipulation; nullable by component to stop a patch.
     , ap_patchView    :: (m -> Atom (Code ms IO ()))
-    , ap_viewTrigger  :: (m,Atom (Code ms IO ())) -> IO ()
+    , ap_viewTrigger  :: IO ()
+    , ap_hooks        :: ComponentHooks
     } -> ComponentPatch m
 
 type IsComponent' ts ms m = (Base m <: ms, Base m <. ts, Delta (Modules ts) (Messages ms), Eq m)
 type IsComponent ms m = IsComponent' ms ms m
+
+data ComponentHooks = ComponentHooks
+  { chViews      :: Syndicate ()
+  , chForeground :: Syndicate ()
+  , chBackground :: Syndicate ()
+  }
+
+data ComponentView ms m = ComponentView
+  { cvCurrent     :: Atom (Code ms IO ()) -- un-rendered
+  , cvCurrentLive :: Atom (Code ms IO ())
+  , cvModel       :: m
+  , cvForeground  :: Bool
+  }
+
+data ComponentRecord ms m = ComponentRecord
+  { crAsComponent :: As (Code ms IO)
+  , crView        :: IORef (ComponentView ms m)
+  , crHooks       :: ComponentHooks
+  }
 
 data ComponentState m where
   ComponentState ::
     { asPatch        :: Maybe (ComponentPatch m)
     , asDiffer       :: ComponentState m -> Code ms IO ()
     , asDiffStrategy :: DiffStrategy
-    , asViews        :: Network (m,Atom (Code ms IO ()))
-    , asUpdates      :: Network m
+    , asUpdates      :: Syndicate m
     , asModel        :: m
-    , asLive         :: IORef (Atom (Code ms IO ()), Atom (Code ms IO ()), m)
+    , asLive         :: IORef (ComponentView ms m)
     } -> ComponentState m
 
 type Base m
   = '[ State () (ComponentState m)
+     , State () ComponentHooks
      , State () Shutdown
      , Revent
      ]
@@ -727,13 +816,13 @@ instance ToTxt [Feature e] where
      (Txt.singleton ' ')
      (Prelude.filter (not . Txt.null) $ Prelude.map toTxt fs)
 
-type ComponentKey ms m = Key (Code (Appended ms (Base m)) IO `As` IO, IORef (Atom (Code (Appended ms (Base m)) IO ()),Atom (Code (Appended ms (Base m)) IO ()),m))
+type ComponentKey ms m = Key (ComponentRecord (Appended ms (Base m)) m)
 type ComponentBuilder ts m = Modules (Base m) (Action (Appended ts (Base m)) IO) -> IO (Modules (Appended ts (Base m)) (Action (Appended ts (Base m)) IO))
 type ComponentPrimer ms m = Code (Appended ms (Base m)) IO ()
 
 data Component' ts ms m
   = Component
-      { key       :: !(Key (Code ms IO `As` IO, IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m)))
+      { key       :: !(Key (ComponentRecord ms m))
       , build     :: !(Modules (Base m) (Action ts IO) -> IO (Modules ts (Action ts IO)))
       , prime     :: !(Code ms IO ())
       , model     :: !(m)
@@ -762,7 +851,7 @@ instance IsComponent' ts ms m
       -- FIXME: likely a bug here with double initialization in multithreaded contexts!
       mi_ <- lookupComponent (key c)
       case mi_ of
-        Just (as,_) -> return (runAs as)
+        Just (ComponentRecord {..}) -> return (runAs crAsComponent)
         Nothing -> do
           mkComponent BuildOnly c
           using_ c
@@ -772,26 +861,27 @@ instance IsComponent' ts ms m
     shutdown_ c = do
       -- this method should 1. destroy the view 2. syndicate a shutdown event 3. poison the component
       -- so that unmount events that call with on the component do not fail
-      with_ c $ do
-        buf <- getReventBuffer
-        Shutdown sdn <- get
-        syndicate sdn ()
-        delay 0 $
-          liftIO $ do
-            killBuffer buf
-            myThreadId >>= killThread
       miohhm <- lookupComponent (key c)
       case miohhm of
-        Just (_,iohhm) -> do
-          (h,_,_) <- liftIO $ readIORef iohhm
-          cleanup (void . with c) [h]
-          delete h
+        Just ComponentRecord {..} -> do
+          ComponentView {..} <- liftIO $ readIORef crView
+          cleanup (void . with c) [cvCurrentLive]
+          delete cvCurrentLive
+          void $ runAs crAsComponent $ do
+            buf <- get
+            Shutdown sdn <- get
+            publish sdn ()
+            -- this is where things get iffy... what should this look like?
+            delay 0 $ do
+              deleteComponent (key c)
+              liftIO $ do
+                killBuffer buf
+                myThreadId >>= killThread
         _ -> return ()
-      deleteComponent (key c)
 
-{-# NOINLINE constructShutdownNetwork #-}
-constructShutdownNetwork :: Network ()
-constructShutdownNetwork = unsafePerformIO network
+{-# NOINLINE constructShutdownSyndicate #-}
+constructShutdownSyndicate :: Syndicate ()
+constructShutdownSyndicate = unsafePerformIO syndicate
 
 {-# NOINLINE constructVault__ #-}
 constructVault__ :: Vault
@@ -821,72 +911,60 @@ mkComponent :: forall ms ts m.
           )
        => MkComponentAction
        -> Component' ts ms m
-       -> IO (IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m))
+       -> IO (ComponentRecord ms m)
 mkComponent mkComponentAction c@Component {..} = do
   let !m = model
       !raw = render m
   doc <- getDocument
-  sig :: Signal ms IO (Code ms IO ()) <- runner
-  sigBuf <- newSignalBuffer
-  us :: Network m <- network
-  views :: Network (m,Atom (Code ms IO ())) <- network
-  let asComp = constructAs sigBuf sig
-      sendEv :: Code ms IO () -> IO ()
-      sendEv = void . runAs asComp
-      initialize =
-        case mkComponentAction of
-          ClearAndAppend n -> do
-            i <- buildAndEmbedMaybe sendEv doc Nothing raw
-            clearNode (Just $ toNode n)
-            mn <- getNode i
-            forM_ mn (appendChild n)
-            return i
-          Replace a -> do
-            i <- buildAndEmbedMaybe sendEv doc Nothing raw
-            replace a i
-            return i
-          Append en -> do
-            i <- buildAndEmbedMaybe sendEv doc (Just en) raw
-            return i
-          BuildOnly -> do
-            i <- buildAndEmbedMaybe sendEv doc Nothing raw
-            return i
-  doc <- getDocument
-
-  -- Initially, I thought I could put this in an animation frame, but that has odd effects
-  i <- initialize
-
-  cs_live_ :: IORef (Atom (Code ms IO ()),Atom (Code ms IO ()),m) <- newIORef (i,raw,m)
-
+  buf <- newEvQueue
+  ch  <- ComponentHooks <$> syndicate <*> syndicate <*> syndicate
+  us  <- syndicate
+  sdn <- Shutdown <$> syndicate
+  as  <- unsafeConstructAs buf
+  let sendEv = void . runAs as
+  (i,l) <- case mkComponentAction of
+            ClearAndAppend n -> do
+              i <- buildAndEmbedMaybe sendEv doc ch True Nothing raw
+              clearNode (Just $ toNode n)
+              mn <- getNode i
+              forM_ mn (appendChild n)
+              return (i,True)
+            Replace as -> do
+              i <- buildAndEmbedMaybe sendEv doc ch True Nothing raw
+              replace as i
+              return (i,True)
+            Append en -> do
+              i <- buildAndEmbedMaybe sendEv doc ch True (Just en) raw
+              return (i,True)
+            BuildOnly -> do
+              i <- buildAndEmbedMaybe sendEv doc ch False Nothing raw
+              return (i,False)
+  cr <- ComponentRecord <$> pure as <*> newIORef (ComponentView raw i m l) <*> pure ch
   -- keep out of forkIO to prevent double-initialization
-  addComponent key (asComp,cs_live_)
-
+  addComponent key cr
   forkIO $ do
-    sdn :: Network () <- network
-    let trig = syndicate views
     built <- build $ state (ComponentState
                                 Nothing
-                                (differ render trig sendEv)
+                                (differ render (publish (chViews ch) ()) sendEv)
                                 Unequal
-                                views
                                 us
                                 model
-                                cs_live_
+                                (crView cr)
                             )
-                    *:* state (Shutdown sdn)
-                    *:* revent sigBuf
+                    *:* state ch
+                    *:* state sdn
+                    *:* state buf
                     *:* Empty
     (obj',_) <- Ef.Base.Object built Ef.Base.! do
-      connect constructShutdownNetwork $ const (Ef.Base.lift shutdownSelf)
+      connect constructShutdownSyndicate $ const (Ef.Base.lift shutdownSelf)
       prime
-#ifdef __GHCJS__
-    driverPrintExceptions
-      ("Component' (" ++ show key ++ ") exception. If this is a DriverStopped exception, this Component' may be blocked in its event loop, likely caused by cyclic 'with' calls. Exception: ")
+#if (defined __GHCJS__) || (defined DEVEL)
+    driverPrintExceptions (show key ++ " - component exception: ")
 #else
     driver
 #endif
-        sigBuf obj'
-  return cs_live_
+        buf obj'
+  return cr
 
 diff :: forall m ms. (Base m <: ms) => Proxy m -> Code ms IO ()
 diff _ = do
@@ -922,99 +1000,81 @@ currentView c = with c $ ownView c
 ownView :: forall ts ms c m.
            ( IsComponent' ts ms m
            , MonadIO c
+           , Base m <: ms
            )
         => Component' ts ms m
         -> Code ms c (Atom (Code ms IO ()))
 ownView _ = do
   ComponentState {..} :: ComponentState m <- get
-  (h,_,_) <- liftIO $ readIORef asLive
-  return (unsafeCoerce h)
-
-onViewChange :: forall ts ms ms' m c.
-                ( IsComponent' ts ms m
-                , MonadIO c
-                , '[Revent] <: ms'
-                )
-            => Component' ts ms m
-            -> ((m,Atom (Code ms IO ())) -> Code '[Event (m,Atom (Code ms IO ()))] (Code ms' c) ())
-            -> Code ms' c (IO ())
-onViewChange c f = do
-  p <- periodical
-  Just s <- subscribe p f
-  buf <- getReventBuffer
-  Just leaveNW <- demandMaybe =<< with c (do
-    ComponentState {..} :: ComponentState m <- get
-    let av = unsafeCoerce asViews :: Network (m,Atom (Code ms IO ()))
-    joinNetwork av p buf
-    return (leaveNetwork av p))
-  return (stop s >> leaveNW)
-
-onOwnViewChange :: forall ts ms m c.
-                ( IsComponent' ts ms m
-                , MonadIO c
-                )
-            => Component' ts ms m
-            -> ((m,Atom (Code ms IO ())) -> Code '[Event (m,Atom (Code ms IO ()))] (Code ms c) ())
-            -> Code ms c (IO ())
-onOwnViewChange _ f = do
-  p <- periodical
-  Just s <- subscribe p f
-  buf <- getReventBuffer
-  ComponentState {..} :: ComponentState m <- get
-  let av = unsafeCoerce asViews :: Network (m,Atom (Code ms IO ()))
-  joinNetwork av p buf
-  return (stop s >> leaveNetwork av p)
-
-onOwnViewChangeByProxy :: forall ms m c.
-                ( Base m <: ms, MonadIO c )
-            => Proxy m
-            -> ((m,Atom (Code ms IO ())) -> Code '[Event (m,Atom (Code ms IO ()))] (Code ms c) ())
-            -> Code ms c (IO ())
-onOwnViewChangeByProxy _ f = do
-  p <- periodical
-  Just s <- subscribe p f
-  buf <- getReventBuffer
-  ComponentState {..} :: ComponentState m <- get
-  let av = unsafeCoerce asViews :: Network (m,Atom (Code ms IO ()))
-  joinNetwork av p buf
-  return (stop s >> leaveNetwork av p)
+  ComponentView {..} <- liftIO $ readIORef asLive
+  return (unsafeCoerce cvCurrent)
 
 onModelChange :: forall ts ms ms' m c.
                 ( IsComponent' ts ms m
                 , MonadIO c
+                , Base m <: ms
                 , '[Revent] <: ms'
                 )
               => Component' ts ms m
               -> (m -> Code '[Event m] (Code ms' c) ())
-              -> Code ms' c (IO ())
+              -> Code ms' c (Promise (IO ()))
 onModelChange c f = do
-  p <- periodical
-  Just s <- subscribe p f
-  buf <- getReventBuffer
-  Just leaveNW <- demandMaybe =<< with c (do
+  buf <- get
+  with c $ do
     ComponentState {..} :: ComponentState m <- get
-    joinNetwork asUpdates p buf
-    return (leaveNetwork asUpdates p))
-  return (stop s >> leaveNW)
+    sub <- subscribe asUpdates (return buf)
+    bhv <- listen sub f
+    return (stop bhv >> leaveSyndicate asUpdates sub)
 
-{-# INLINE gets #-}
-gets :: ('[State () (ComponentState m)] <: ms) => Code ms IO m
-gets = do
+onOwnModelChange :: forall ts ms ms' m c.
+                    ( IsComponent' ts ms m
+                    , MonadIO c
+                    , Base m <: ms
+                    )
+                  => Component' ts ms m
+                  -> (m -> Code '[Event m] (Code ms c) ())
+                  -> Code ms c (IO ())
+onOwnModelChange _ f = do
+  buf <- get
+  pr  <- promise
+  ComponentState {..} :: ComponentState m <- get
+  sub <- subscribe asUpdates (return buf)
+  bhv <- listen sub f
+  return (stop bhv >> leaveSyndicate asUpdates sub)
+
+onOwnModelChangeByProxy :: forall ms m c.
+                           ( MonadIO c
+                           , Base m <: ms
+                           )
+                         => Proxy m
+                         -> (m -> Code '[Event m] (Code ms c) ())
+                         -> Code ms c (IO ())
+onOwnModelChangeByProxy _ f = do
+  buf <- get
+  pr  <- promise
+  ComponentState {..} :: ComponentState m <- get
+  sub <- subscribe asUpdates (return buf)
+  bhv <- listen sub f
+  return (stop bhv >> leaveSyndicate asUpdates sub)
+
+{-# INLINE getModel #-}
+getModel :: ('[State () (ComponentState m)] <: ms) => Code ms IO m
+getModel = do
   ComponentState {..} <- get
   return asModel
 
-{-# INLINE puts #-}
-puts :: forall ms m.
+{-# INLINE putModel #-}
+putModel :: forall ms m.
         ( Base m <: ms
         , Eq m
         )
      => m -> Code ms IO ()
-puts !new = do
+putModel !new = do
   (ComponentState {..},(old,cmp')) <- modify $ \(ComponentState {..} :: ComponentState m) ->
     let !old = asModel
         cmp' = ComponentState { asModel = new, .. }
     in (cmp',(old,cmp'))
-  syndicate asUpdates new
+  publish asUpdates new
   let d :: ComponentState m -> Code ms IO ()
       d = unsafeCoerce asDiffer
 #ifdef __GHCJS__
@@ -1029,20 +1089,20 @@ puts !new = do
   d cmp'
 #endif
 
-{-# INLINE updates #-}
-updates :: forall ms m.
+{-# INLINE modifyModel #-}
+modifyModel :: forall ms m.
            ( Base m <: ms
            , Eq m
            )
         => (m -> m)
         -> Code ms IO ()
-updates f = do
+modifyModel f = do
   (ComponentState {..},(old,!new,cmp')) <- modify $ \ComponentState {..} ->
     let !old = asModel
         !new = f old
         cmp' = ComponentState { asModel = new, ..  }
     in (cmp',(old,new,cmp'))
-  syndicate asUpdates new
+  publish asUpdates new
   let d :: ComponentState m -> Code ms IO ()
       d = unsafeCoerce asDiffer
 #ifdef __GHCJS__
@@ -1060,10 +1120,11 @@ updates f = do
 differ :: (Base m <: ms) => Differ ms m
 differ render trig sendEv ComponentState {..} = do
 #ifdef __GHCJS__
+  ch <- get
   let setupDiff = do
         let !new_as = AState (unsafeCoerce asLive) asModel
         new_ap_AState <- liftIO $ newIORef (Just new_as,False)
-        let !aPatch = APatch sendEv new_ap_AState render trig
+        let !aPatch = APatch sendEv new_ap_AState render trig ch
         put ComponentState { asPatch = Just aPatch, .. }
         liftIO $ diff_ aPatch
         return ()
@@ -1085,8 +1146,8 @@ differ render trig sendEv ComponentState {..} = do
 #else
   let v = render asModel
   liftIO $ do
-    writeIORef asLive $ unsafeCoerce (v,v,asModel)
-    syndicate asViews $ unsafeCoerce (asModel,v)
+    ComponentView _ _ _ isFG <- liftIO $ readIORef asLive
+    writeIORef asLive $ unsafeCoerce $ ComponentView v v asModel isFG
 #endif
 
 #ifdef __GHCJS__
@@ -1183,7 +1244,7 @@ swapContent t e =
 embed_ :: ENode -> Atom e -> IO ()
 embed_ parent STAtom {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a) <- readIORef ref
+    (_,_,_,SomeAtom a) <- readIORef ref
     embed_ parent a
 embed_ parent Text {..} =
   forM_ _tnode $ \node -> do
@@ -1193,6 +1254,11 @@ embed_ parent n =
   forM_ (_node n) $ \node -> do
     ae <- isAlreadyEmbedded node parent
     unless ae (void $ appendChild parent node)
+
+{-# NOINLINE embedMany_ #-}
+embedMany_ parent children = do
+  forM_ children $ \child -> do
+    embed_ parent child
 
 setAttributes :: [Feature e] -> (e -> IO ()) -> ENode -> IO ([Feature e],IO ())
 setAttributes as f el = do
@@ -1214,8 +1280,8 @@ setAttributes as f el = do
 #endif
 
 {-# NOINLINE buildAndEmbedMaybe #-}
-buildAndEmbedMaybe :: (e -> IO ()) -> Doc -> Maybe ENode -> Atom e -> IO (Atom e)
-buildAndEmbedMaybe f doc = go
+buildAndEmbedMaybe :: (e -> IO ()) -> Doc -> ComponentHooks -> Bool -> Maybe ENode -> Atom e -> IO (Atom e)
+buildAndEmbedMaybe f doc ch isFG = go
   where
     go mparent nn@NullAtom {..} = do
       _cond@(Just el) <- createElement doc "template"
@@ -1241,19 +1307,23 @@ buildAndEmbedMaybe f doc = go
     go mparent STAtom {..} = do
       strec <- newIORef undefined
       cur_ <- newIORef (nil,nil)
-      let upd_st st = do
-            modifyIORef strec $ \(_,upd,sa) -> (st,upd,sa)
-            upd (SomeAtom $ unsafeCoerce $ _stview st upd_st)
-          upd (SomeAtom a) = do
+      udn <- syndicate
+      let upd_st f cb = do
+            modifyIORef strec $ \(st,udn,upd,sa) -> (f st,udn,upd,sa)
+            (st,_,_,_) <- readIORef strec
+            publish udn st
+            upd (SomeAtom $ unsafeCoerce $ _stview st upd_st) cb
+          upd (SomeAtom a) cb = do
             (old,mid) <- readIORef cur_
-            new <- either id id <$> diffHelper f doc old mid a
-            modifyIORef strec $ \(st,upd,_) -> (st,upd,SomeAtom (unsafeCoerce new))
+            new <- diffHelper f doc ch isFG old mid a
+            modifyIORef strec $ \(st,udn,upd,_) -> (st,udn,upd,SomeAtom (unsafeCoerce new))
             writeIORef cur_ (new,a)
+            cb
 
       let mid = _stview _ststate upd_st
       new <- go mparent mid
       writeIORef cur_ (new,mid)
-      writeIORef strec (_ststate,upd,SomeAtom (unsafeCoerce new))
+      writeIORef strec (_ststate,udn,upd,SomeAtom (unsafeCoerce new))
 
       return $ STAtom _stmodel _ststate (Just strec) _stview
 
@@ -1298,15 +1368,18 @@ buildAndEmbedMaybe f doc = go
               case mi_ of
                 Nothing -> do
                   -- never built before; make and embed
-                  x_ <- mkComponent BuildOnly a
-                  (h,_,_) <- liftIO $ readIORef x_
-                  forM_ mparent $ \parent -> embed_ parent Managed {..}
-                  embed_ el h
+                  ComponentRecord {..} <- mkComponent BuildOnly a
+                  ComponentView {..} <- liftIO $ readIORef crView
+                  forM_ mparent $ \parent -> do
+                    when isFG (triggerForeground m)
+                    embed_ parent Managed {..}
+                  embed_ el cvCurrentLive
                   return Managed {..}
-                Just (_,x_) -> do
-                  (h,_,_) <- liftIO $ readIORef x_
+                Just ComponentRecord {..} -> do
+                  ComponentView {..} <- liftIO $ readIORef crView
                   rebuild Managed {..}
-                  embed_ el h
+                  when isFG (triggerForeground m)
+                  embed_ el cvCurrentLive
                   forM_ mparent $ \parent -> embed_ parent Managed {..}
                   return Managed {..}
 
@@ -1315,27 +1388,30 @@ buildAndEmbedMaybe f doc = go
               case mi_ of
                 Nothing -> do
                   -- shut down?
-                  x_ <- mkComponent BuildOnly a
-                  (h,_,_) <- liftIO $ readIORef x_
-                  forM_ mparent (`embed_` Managed {..})
-                  embed_ e h
+                  ComponentRecord {..} <- mkComponent BuildOnly a
+                  ComponentView {..} <- liftIO $ readIORef crView
+                  forM_ mparent $ \parent -> do
+                    when isFG (triggerForeground m)
+                    embed_ parent Managed {..}
+                  embed_ e cvCurrentLive
                   return Managed {..}
-                Just (_,x_) -> do
-                  (h,_,_) <- liftIO $ readIORef x_
+                Just ComponentRecord {..} -> do
+                  ComponentView {..} <- liftIO $ readIORef crView
                   rebuild m
-                  embed_ e h
+                  when isFG (triggerForeground m)
+                  embed_ e cvCurrentLive
                   return m
 
 {-# NOINLINE buildHTML #-}
-buildHTML :: Doc -> (e -> IO ()) -> Atom e -> IO (Atom e)
-buildHTML doc f = buildAndEmbedMaybe f doc Nothing
+buildHTML :: Doc -> ComponentHooks -> Bool -> (e -> IO ()) -> Atom e -> IO (Atom e)
+buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing
 
 getElement Text {} = return Nothing
 getElement STAtom {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,SomeAtom a) <- readIORef ref
+      (_,_,_,SomeAtom a) <- readIORef ref
       getElement a
 getElement n = return $ _node n
 
@@ -1344,7 +1420,7 @@ getNode STAtom {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,SomeAtom a) <- readIORef ref
+      (_,_,_,SomeAtom a) <- readIORef ref
       getNode a
 getNode n = return $ fmap toNode $ _node n
 
@@ -1355,19 +1431,17 @@ diff_ APatch {..} = do
   -- made a choice here to do all the diffing in the animation frame; this way we
   -- can avoid recalculating changes multiple times during a frame. No matter how
   -- many changes occur in any component, the diff is only calculated once per frame.
-  mv <- newEmptyMVar
   rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
     (mcs,b) <- atomicModifyIORef' ap_AState $ \(mcs,b) -> ((Nothing,True),(mcs,b))
     case mcs of
       Nothing -> return ()
       Just (AState as_live !as_model) -> do
         doc <- getDocument
-        (live_html,!raw_html,live_m) <- readIORef as_live
+        ComponentView !raw_html !live_html live_m isFG <- readIORef as_live
         let !new_html = ap_patchView as_model
-        new_live_html <- either id id <$> diffHelper ap_send doc live_html raw_html new_html
-        writeIORef as_live (new_live_html,new_html,as_model)
-        ap_viewTrigger (as_model,new_html)
-        putMVar mv ()
+        new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
+        writeIORef as_live $ ComponentView new_html new_live_html as_model isFG
+        ap_viewTrigger
   win <- getWindow
   requestAnimationFrame win (Just rafCallback)
   return ()
@@ -1378,11 +1452,11 @@ diff_ APatch {..} = do
     Nothing -> return ()
     Just (AState as_live !as_model) -> do
       doc <- getDocument
-      (live_html,!raw_html,!live_m) <- readIORef as_live
+      ComponentView !raw_html !live_html live_m isFG <- readIORef as_live
       let !new_html = ap_patchView as_model
-      new_live_html <- either id id <$> diffHelper ap_send doc live_html raw_html new_html
-      writeIORef as_live (new_live_html,new_html,as_model)
-      ap_viewTrigger (as_model,new_html)
+      new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
+      writeIORef as_live $ ComponentView new_html new_live_html as_model isFG
+      ap_viewTrigger
 #endif
 
 {-# NOINLINE replace #-}
@@ -1393,8 +1467,8 @@ replace _ _ = return ()
 replace old@STAtom {} new@STAtom {} =
   case (old,new) of
     (STAtom _ _ (Just r) _,STAtom _ _ (Just r') _) -> do
-      (_,_,SomeAtom a) <- readIORef r
-      (_,_,SomeAtom b) <- readIORef r'
+      (_,_,_,SomeAtom a) <- readIORef r
+      (_,_,_,SomeAtom b) <- readIORef r'
       replace a b
     _ -> return ()
 
@@ -1402,14 +1476,14 @@ replace STAtom {..} new = do
   case _strecord of
     Nothing -> return ()
     Just ref -> do
-      (_,_,SomeAtom a) <- readIORef ref
+      (_,_,_,SomeAtom a) <- readIORef ref
       replace a new
 
 replace old STAtom {..} = do
   case _strecord of
     Nothing -> return ()
     Just ref -> do
-      (_,_,SomeAtom a) <- readIORef ref
+      (_,_,_,SomeAtom a) <- readIORef ref
       replace old a
 
 replace old@Text {} new@Text {} = do
@@ -1442,7 +1516,7 @@ delete STAtom {..} = do
   case _strecord of
     Nothing -> return ()
     Just ref -> do
-      (_,_,SomeAtom a) <- readIORef ref
+      (_,_,_,SomeAtom a) <- readIORef ref
       delete a
 delete Text {..} = forM_ _tnode (delete_js . toNode)
 delete n = forM_ (_node n) (delete_js . toNode)
@@ -1460,7 +1534,7 @@ cleanup f = go (return ())
       didUnmount' <- case _strecord of
                        Nothing -> return (return ())
                        Just ref -> do
-                         (_,_,SomeAtom a) <- readIORef ref
+                         (_,_,_,SomeAtom a) <- readIORef ref
                          cleanup f [a]
       go (didUnmount' >> didUnmount) rest
     go didUnmount (NullAtom{}:rest) = go didUnmount rest
@@ -1514,7 +1588,7 @@ insertAt _ _ _ = return ()
 #else
 insertAt parent ind STAtom {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a) <- readIORef ref
+    (_,_,_,SomeAtom a) <- readIORef ref
     insertAt parent ind a
 insertAt parent ind Text {..} = forM_ _tnode $ insert_at_js parent ind . toNode
 insertAt parent ind n = forM_ (_node n) $ insert_at_js parent ind . toNode
@@ -1528,17 +1602,17 @@ insertBefore_ _ _ _ = return ()
 insertBefore_ parent child@(STAtom{}) new@(STAtom{}) = do
   case (child,new) of
     (STAtom _ _ (Just r) _, STAtom _ _ (Just r') _) -> do
-      (_,_,SomeAtom a) <- readIORef r
-      (_,_,SomeAtom b) <- readIORef r'
+      (_,_,_,SomeAtom a) <- readIORef r
+      (_,_,_,SomeAtom b) <- readIORef r'
       insertBefore_ parent a b
     _ -> return ()
 insertBefore_ parent STAtom {..} new = do
   forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a) <- readIORef ref
+    (_,_,_,SomeAtom a) <- readIORef ref
     insertBefore_ parent a new
 insertBefore_ parent child STAtom {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a) <- readIORef ref
+    (_,_,_,SomeAtom a) <- readIORef ref
     insertBefore_ parent child a
 insertBefore_ parent child@(Text {}) new@(Text{}) = void $ N.insertBefore parent (_tnode new) (_tnode child)
 insertBefore_ parent child new@(Text{}) = void $ N.insertBefore parent (_tnode new) (_node child)
@@ -1546,217 +1620,213 @@ insertBefore_ parent child@(Text {}) new = void $ N.insertBefore parent (_node n
 insertBefore_ parent child new = void $ N.insertBefore parent (_node new) (_node child)
 #endif
 
--- Either here seems to no longer be used
-diffHelper :: (e -> IO ()) -> Doc -> Atom e -> Atom e -> Atom e -> IO (Either (Atom e) (Atom e))
-diffHelper f doc =
+diffHelper :: (e -> IO ()) -> Doc -> ComponentHooks -> Bool -> Atom e -> Atom e -> Atom e -> IO (Atom e)
+diffHelper f doc ch isFG =
 #ifdef __GHCJS__
     go
 #else
-    \_ _ n -> return $ Left n
+    \_ _ n -> return n
 #endif
   where
 
     go old mid new =
-      if reallyUnsafeEq mid new then
-        return $ Right old
+      if reallyUnsafeEq mid new then do
+        return old
       else
         go' old mid new
 
-      where
-        go' old@NullAtom{} _ new = do
-          case new of
-            NullAtom _ -> return $ Right old
-            _          -> do
-              new' <- buildHTML doc f new
-              replace old new'
-              didUnmount <- cleanup f [old]
-              delete old
-              didUnmount
-              return $ Left new'
-
-        go' old _ new@NullAtom{} = do
-          new' <- buildHTML doc f new
+    go' old@NullAtom{} _ new = do
+      case new of
+        NullAtom _ -> return old
+        _          -> do
+          new' <- buildHTML doc ch isFG f new
           replace old new'
           didUnmount <- cleanup f [old]
           delete old
           didUnmount
-          return $ Left new'
+          return new'
 
-        go' old@Atom {} mid@Atom {} new@Atom {} =
-          if prettyUnsafeEq (_tag old) (_tag new)
-          then do
-            let Just n = _node old
-            (a',didMount) <-
-                  if reallyUnsafeEq (_attributes mid) (_attributes new) then do
-                    return (_attributes old,return ())
-                  else
-                    runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
-            c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
-                    return (_atoms old)
-                  else
-                    diffChildren n (_atoms old) (_atoms mid) (_atoms new)
-            didMount
-            return $ Right $ Atom (_node old) (_tag old) a' c'
-          else do new' <- buildHTML doc f new
-                  replace old new'
-                  didUnmount <- cleanup f [old]
-                  delete old
-                  didUnmount
-                  return $ Left new'
+    go' old _ new@NullAtom{} = do
+      new' <- buildHTML doc ch isFG f new
+      replace old new'
+      didUnmount <- cleanup f [old]
+      delete old
+      didUnmount
+      return new'
 
-        go' old@STAtom {} _ new@STAtom {} = do
-          case (old,new) of
-            (STAtom m s ~(Just r) v,STAtom m' s' _ v') -> do
-              if reallyVeryUnsafeEq s s' then
-                if reallyVeryUnsafeEq m m' then do
-                  return $ Right old
-                else do
-                  (st,upd,_) <- readIORef (unsafeCoerce r)
-                  let upd_st st' = do
-                        modifyIORef (unsafeCoerce r) $ \(_,upd,sa) -> (st',upd,sa)
-                        upd (SomeAtom $ unsafeCoerce $ v' st' upd_st)
-                  unsafeCoerce upd (SomeAtom $ unsafeCoerce $ v' st upd_st)
-                  return $ Right $ STAtom m' s' (Just $ unsafeCoerce r) v'
-              else do
-                (_,_,SomeAtom a) <- readIORef r
-                new' <- buildHTML doc f new
-                replace a new'
-                didUnmount <- cleanup f [a]
-                delete a
-                didUnmount
-                return $ Left new'
-
-        go' old@SVGAtom {} mid@SVGAtom {} new@SVGAtom {} =
-          if prettyUnsafeEq (_tag old) (_tag new)
-          then do
-            let Just n = _node old
-            (a',didMount) <-
-                  if reallyUnsafeEq (_attributes mid) (_attributes new) then do
-                    return (_attributes old,return ())
-                  else do
-                    runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
-            c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
-                    return (_atoms old)
-                  else do
-                    diffChildren n (_atoms old) (_atoms mid) (_atoms new)
-            didMount
-            return $ Right $ SVGAtom (_node old) (_tag old) a' c'
-          else do new' <- buildHTML doc f new
-                  replace old new'
-                  didUnmount <- cleanup f [old]
-                  delete old
-                  didUnmount
-                  return $ Left new'
-
-        go' old@(KAtom old_node old_tag old_attributes old_keyed)
-          mid@(KAtom midAnode _ midAattributes midAkeyed)
-          new@(KAtom _ new_tag new_attributes new_keyed) =
-          if prettyUnsafeEq old_tag new_tag
-          then do
-            let Just n = old_node
-            (a',didMount) <-
-                  if reallyUnsafeEq midAattributes new_attributes then
-                    return (old_attributes,return ())
-                  else
-                    runElementDiff f n old_attributes midAattributes new_attributes
-            c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
-                    diffKeyedChildren n old_keyed midAkeyed new_keyed
-            didMount
-            return $ Right $ KAtom old_node old_tag a' c'
-          else do new' <- buildHTML doc f new
-                  replace old new'
-                  didUnmount <- cleanup f [old]
-                  delete old
-                  didUnmount
-                  return $ Left new'
-
-        go' old@(KSVGAtom old_node old_tag old_attributes old_keyed)
-          mid@(KSVGAtom midAnode _ midAattributes midAkeyed)
-          new@(KSVGAtom _ new_tag new_attributes new_keyed) =
-          if prettyUnsafeEq old_tag new_tag
-          then do
-            let Just n = old_node
-            (a',didMount) <-
-                  if reallyUnsafeEq midAattributes new_attributes then
-                    return (old_attributes,return ())
-                  else
-                    runElementDiff f n old_attributes midAattributes new_attributes
-            c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
-                    diffKeyedChildren n old_keyed midAkeyed new_keyed
-            didMount
-            return $ Right $ KSVGAtom old_node old_tag a' c'
-          else do new' <- buildHTML doc f new
-                  replace old new'
-                  didUnmount <- cleanup f [old]
-                  delete old
-                  didUnmount
-                  return $ Left new'
-
-
-
-        go' txt@(Text (Just t) cnt) mid@(Text _ mcnt) new@(Text _ cnt') =
-          if reallyUnsafeEq mcnt cnt' then do
-            return $ Right txt
-          else
-            if prettyUnsafeEq cnt cnt' then do
-              return $ Right txt
-            else do
-              changeText t cnt'
-              return $ Right $ Text (Just t) cnt'
-
-        go' old@(Raw {}) mid@(Raw {}) new@(Raw {}) =
-          if prettyUnsafeEq (_tag old) (_tag new) then do
-            let Just n = _node old
-            (a',didMount) <-
-                    if reallyUnsafeEq (_attributes mid) (_attributes new) then
-                      return (_attributes old,return ())
-                    else
-                      runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
-            if prettyUnsafeEq (_content mid) (_content new) then do
-              didMount
-              return $ Right $ Raw (_node old) (_tag old) a' (_content old)
-            else do
-              setInnerHTML n (_content new)
-              didMount
-              return $ Right $ Raw (_node old) (_tag old) a' (_content new)
-          else do new' <- buildHTML doc f new
-                  replace old new'
-                  didUnmount <- cleanup f [old]
-                  delete old
-                  didUnmount
-                  return $ Left new'
-
-        go' old@(Managed {}) mid new@(Managed {}) =
-          if    (_constr old) == (_constr new)
-            && prettyUnsafeEq (_tag old) (_tag new)
-          then do
-            let Just n = _node old
-            (a',didMount) <-
-                    if reallyUnsafeEq (_attributes mid) (_attributes new) then
-                      return (_attributes old,return ())
-                    else
-                      runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
-            didMount
-            return $ Right $ Managed (_node old) (_tag old) a' (_constr old)
-          else do
-            new' <- buildAndEmbedMaybe f doc Nothing new
-            replace old new'
-            didUnmount <- cleanup f [old]
-            delete old
-            didUnmount
-            return $ Left new'
-
-        go' old _ n = do
-          n' <- buildAndEmbedMaybe f doc Nothing n
-          case old of
-            t@(Text (Just o) _) ->
-              forM_ (_node n') (swapContent o)
-            _ -> do
-              replace old n'
+    go' old@Atom {} mid@Atom {} new@Atom {} =
+      if prettyUnsafeEq (_tag old) (_tag new)
+      then do
+        let Just n = _node old
+        (a',didMount) <-
+              if reallyUnsafeEq (_attributes mid) (_attributes new) then do
+                return (_attributes old,return ())
+              else
+                runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
+        c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
+                return (_atoms old)
+              else
+                diffChildren n (_atoms old) (_atoms mid) (_atoms new)
+        didMount
+        return $ Atom (_node old) (_tag old) a' c'
+      else do new' <- buildHTML doc ch isFG f new
+              replace old new'
               didUnmount <- cleanup f [old]
               delete old
               didUnmount
-          return $ Left n'
+              return new'
+
+    go' old@STAtom {} _ new@STAtom {} = do
+      case (old,new) of
+        (STAtom m s ~(Just r) v,STAtom m' s' _ v') -> do
+          if reallyVeryUnsafeEq s s' then
+            if reallyVeryUnsafeEq m m' then do
+              return old
+            else do
+              (st,_,upd,_) <- readIORef (unsafeCoerce r)
+              let upd_st f cb = do
+                    modifyIORef (unsafeCoerce r) $ \(st,syn,upd,sa) -> (f st,syn,upd,sa)
+                    (st',_,_,_) <- readIORef (unsafeCoerce r)
+                    upd (SomeAtom $ unsafeCoerce $ v' st' upd_st) cb
+              upd (SomeAtom $ unsafeCoerce $ v' st upd_st) (return ()) 
+              return $ STAtom m' s' (Just $ unsafeCoerce r) v'
+          else do
+            (_,_,_,SomeAtom a) <- readIORef r
+            new' <- buildHTML doc ch isFG f new
+            replace a new'
+            didUnmount <- cleanup f [a]
+            delete a
+            didUnmount
+            return new'
+
+    go' old@SVGAtom {} mid@SVGAtom {} new@SVGAtom {} =
+      if prettyUnsafeEq (_tag old) (_tag new)
+      then do
+        let Just n = _node old
+        (a',didMount) <-
+              if reallyUnsafeEq (_attributes mid) (_attributes new) then do
+                return (_attributes old,return ())
+              else do
+                runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
+        c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
+                return (_atoms old)
+              else do
+                diffChildren n (_atoms old) (_atoms mid) (_atoms new)
+        didMount
+        return $ SVGAtom (_node old) (_tag old) a' c'
+      else do new' <- buildHTML doc ch isFG f new
+              replace old new'
+              didUnmount <- cleanup f [old]
+              delete old
+              didUnmount
+              return new'
+
+    go' old@(KAtom old_node old_tag old_attributes old_keyed)
+      mid@(KAtom midAnode _ midAattributes midAkeyed)
+      new@(KAtom _ new_tag new_attributes new_keyed) =
+      if prettyUnsafeEq old_tag new_tag
+      then do
+        let Just n = _node old
+        (a',didMount) <-
+              if reallyUnsafeEq midAattributes new_attributes then
+                return (old_attributes,return ())
+              else
+                runElementDiff f n old_attributes midAattributes new_attributes
+        c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
+                diffKeyedChildren n old_keyed midAkeyed new_keyed
+        didMount
+        return $ KAtom old_node old_tag a' c'
+      else do new' <- buildHTML doc ch isFG f new
+              replace old new'
+              didUnmount <- cleanup f [old]
+              delete old
+              didUnmount
+              return new'
+
+    go' old@(KSVGAtom old_node old_tag old_attributes old_keyed)
+      mid@(KSVGAtom midAnode _ midAattributes midAkeyed)
+      new@(KSVGAtom _ new_tag new_attributes new_keyed) =
+      if prettyUnsafeEq old_tag new_tag
+      then do
+        let Just n = _node old
+        (a',didMount) <-
+              if reallyUnsafeEq midAattributes new_attributes then
+                return (old_attributes,return ())
+              else
+                runElementDiff f n old_attributes midAattributes new_attributes
+        c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
+                diffKeyedChildren n old_keyed midAkeyed new_keyed
+        didMount
+        return $ KSVGAtom old_node old_tag a' c'
+      else do new' <- buildHTML doc ch isFG f new
+              replace old new'
+              didUnmount <- cleanup f [old]
+              delete old
+              didUnmount
+              return new'
+
+    go' txt@(Text (Just t) cnt) mid@(Text _ mcnt) new@(Text _ cnt') =
+      if prettyUnsafeEq mcnt cnt' then do
+        return txt
+      else do
+        changeText t cnt'
+        return $ Text (Just t) cnt'
+
+    go' old@(Raw {}) mid@(Raw {}) new@(Raw {}) =
+      if prettyUnsafeEq (_tag old) (_tag new) then do
+        let Just n = _node old
+        (a',didMount) <-
+                if reallyUnsafeEq (_attributes mid) (_attributes new) then
+                  return (_attributes old,return ())
+                else
+                  runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
+        if prettyUnsafeEq (_content mid) (_content new) then do
+          didMount
+          return $ Raw (_node old) (_tag old) a' (_content old)
+        else do
+          setInnerHTML n (_content new)
+          didMount
+          return $ Raw (_node old) (_tag old) a' (_content new)
+      else do new' <- buildHTML doc ch isFG f new
+              replace old new'
+              didUnmount <- cleanup f [old]
+              delete old
+              didUnmount
+              return new'
+
+    go' old@(Managed {}) mid new@(Managed {}) =
+      if    (_constr old) == (_constr new)
+        && prettyUnsafeEq (_tag old) (_tag new)
+      then do
+        let Just n = _node old
+        (a',didMount) <-
+                if reallyUnsafeEq (_attributes mid) (_attributes new) then
+                  return (_attributes old,return ())
+                else
+                  runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
+        didMount
+        return $ Managed (_node old) (_tag old) a' (_constr old)
+      else do
+        when isFG (triggerBackground old)
+        new' <- buildAndEmbedMaybe f doc ch isFG Nothing new
+        replace old new'
+        when isFG (triggerForeground new')
+        didUnmount <- cleanup f [old]
+        delete old
+        didUnmount
+        return new'
+
+    go' old _ n = do
+      n' <- buildAndEmbedMaybe f doc ch isFG Nothing n
+      case old of
+        t@(Text (Just o) _) ->
+          forM_ (_node n') (swapContent o)
+        _ -> do
+          replace old n'
+          didUnmount <- cleanup f [old]
+          delete old
+          didUnmount
+      return n'
 
     diffChildren n olds mids news = do
       withLatest Nothing olds mids news
@@ -1766,7 +1836,7 @@ diffHelper f doc =
           where
 
             go_ [] _ news =
-              mapM (buildAndEmbedMaybe f doc (Just n)) news
+              mapM (buildAndEmbedMaybe f doc ch isFG (Just n)) news
 
             go_ olds _ [] = do
               didUnmount <- cleanup f olds
@@ -1794,7 +1864,7 @@ diffHelper f doc =
                       continue old
 
                     (_,NullAtom {}) -> do
-                      new' <- buildHTML doc f new
+                      new' <- buildHTML doc ch isFG f new
                       replace old new'
                       didUnmount <- cleanup f [old]
                       delete old
@@ -1802,7 +1872,7 @@ diffHelper f doc =
                       continue new'
 
                     (NullAtom{},_) -> do
-                      new' <- buildHTML doc f new
+                      new' <- buildHTML doc ch isFG f new
                       replace old new'
                       didUnmount <- cleanup f [old]
                       delete old
@@ -1810,85 +1880,87 @@ diffHelper f doc =
                       continue new'
 
                     (m,n) -> do
-                      enew <- go old mid new
-                      continue (either id id enew)
+                      new <- go old mid new
+                      continue new
 
     -- note that keyed nodes are filtered for NullAtoms during construction
     diffKeyedChildren n = go_ 0
       where
 
-        go_ _ [] _ news =
-          forM news $ \(bkey,b) -> do
-            new <- buildAndEmbedMaybe f doc (Just n) b
-            return (bkey,new)
+        go_ i a m b = do
+          if reallyUnsafeEq m b then do
+            return a
+          else
+            go__ i a m b
+          where
 
-        go_ _ olds _ [] = do
-          forM_ olds $ \(_,a) -> do
-            didUnmount <- cleanup f [a]
-            delete a
-            didUnmount
-          return []
+            go__ _ [] _ news = do
+              forM (Prelude.zip [i..] news) $ \(i,(bkey,b)) -> do
+                new <- buildAndEmbedMaybe f doc ch isFG (Just n) b
+                return (bkey,new)
 
-        go_ i a_@((akey,a):(akey',a'):as) m_@((mkey,m):(mkey',m'):ms) b_@((bkey,b):(bkey',b'):bs)
-          -- heads match
-          | prettyUnsafeEq akey bkey = do
-            enew <- go a m b
-            let new = either id id enew
-            if reallyUnsafeEq ms bs then
-              return $ (akey,new):as
-            else do
-              let !i' = i + 1
-              rest <- go_ i' ((akey',a'):as) ((mkey',m'):ms) ((bkey',b'):bs)
-              return $ (akey,new):rest
+            go__ _ olds _ [] = do
+              forM_ olds $ \(_,a) -> do
+                didUnmount <- cleanup f [a]
+                delete a
+                didUnmount
+              return []
 
-          -- swap 2
-          | prettyUnsafeEq bkey akey' && prettyUnsafeEq akey bkey' = do
-            enew1 <- go a m b'
-            enew2 <- go a' m' b
-            let new1 = either id id enew1
-                new2 = either id id enew2
-                !i' = i + 2
-            if reallyUnsafeEq ms bs then
-              return $ (akey',new1):(akey,new2):as
-            else do
-              rest <- go_ i' as ms bs
-              return $ (akey',new1):(akey,new2):rest
+            go__ i old@((akey,a):as) mid@((mkey,m):ms) new@((bkey,b):bs)
+              | reallyUnsafeEq mid new = do
+                  return old
 
-          -- insert
-          | prettyUnsafeEq akey bkey' = do
-            new <- buildAndEmbedMaybe f doc Nothing b
-            insertAt n i new
-            let !i' = i + 1
-            rest <- go_ i' a_ m_ ((bkey',b'):bs)
-            return $ (bkey,new):rest
+              | prettyUnsafeEq akey bkey = do
+                  new <- go' a m b
+                  let !i' = i + 1
+                  rest <- go_ i' as ms bs
+                  return $ (akey,new):rest
 
-          -- delete
-          | otherwise = do
-            didUnmount <- cleanup f [a]
-            delete a
-            didUnmount
-            if prettyUnsafeEq bkey akey' then
-              go_ i ((akey',a'):as) ((mkey',m'):ms) b_
-            else do
-              new <- buildAndEmbedMaybe f doc Nothing b
-              insertAt n i new
-              let !i' = i + 1
-              rest <- go_ i' ((akey',a'):as) ((mkey',m'):ms) ((bkey',b'):bs)
-              return $ (bkey,new):rest
+              | otherwise =
+                  case (as,ms,bs) of
+                    ((akey',a'):as',(mkey',m'):ms',(bkey',b'):bs')
+                      -- swap 2
+                      | prettyUnsafeEq bkey akey' && prettyUnsafeEq akey bkey' -> do
+                          new1 <- go' a m b'
+                          new2 <- go' a' m' b
+                          let !i' = i + 2
+                          rest <- go_ i' as' ms' bs'
+                          return $ (akey',new1):(akey,new2):rest
 
-        go_ i ((akey,a):as) ((mkey,m):ms) ((bkey,b):bs)
-          | prettyUnsafeEq akey bkey = do
-            enew <- go a m b
-            let new = either id id enew
-                !i' = i + 1
-            rest <- go_ i' as ms bs
-            return $ (akey,new):rest
+                      -- insert
+                      | prettyUnsafeEq akey bkey' -> do
+                          new <- buildAndEmbedMaybe f doc ch isFG Nothing b
+                          insertAt n i new
+                          let !i' = i + 1
+                          rest <- go_ i' old mid bs
+                          return $ (bkey,new):rest
 
-          | otherwise = do
-            didUnmount <- cleanup f [a]
-            delete a
-            didUnmount
-            go_ i as ms ((bkey,b):bs)
+                      -- delete
+                      | otherwise -> do
+                          didUnmount <- cleanup f [a]
+                          delete a
+                          didUnmount
+                          if prettyUnsafeEq bkey akey' then
+                            go_ i ((akey',a'):as) ((mkey',m'):ms) new
+                          else do
+                            -- replace
+                            new <- buildAndEmbedMaybe f doc ch isFG Nothing b
+                            insertAt n i new
+                            let !i' = i + 1
+                            rest <- go_ i' as ms bs
+                            return $ (bkey,new):rest
+
+                    _ | prettyUnsafeEq akey bkey -> do
+                          new <- go a m b
+                          let !i' = i + 1
+                          rest <- go_ i' as ms bs
+                          return $ (akey,new):rest
+
+                      | otherwise -> do
+                          didUnmount <- cleanup f [a]
+                          delete a
+                          didUnmount
+                          go_ i as ms ((bkey,b):bs)
 
 {-# NOINLINE applyStyleDiffs #-}
 applyStyleDiffs :: ENode -> [(Txt,Txt)] -> [(Txt,Txt)] -> IO [(Txt,Txt)]
@@ -1985,10 +2057,8 @@ runElementDiff f el os0 ms0 ns0 = do
 
         continue up = do
           upds <- if reallyUnsafeEq mids news then do
-                    -- liftIO $ putStrLn "mids === news"
                     return olds
                   else do
-                    -- liftIO $ putStrLn "mids /== news"
                     goRest
           return (up:upds)
 
@@ -2002,7 +2072,6 @@ runElementDiff f el os0 ms0 ns0 = do
 
       in
         if reallyUnsafeEq mid new then do
-          -- liftIO $ putStrLn "Really unsafe equality of element attributes"
           continue old
         else
           case (mid,new) of
@@ -2030,36 +2099,28 @@ runElementDiff f el os0 ms0 ns0 = do
             (Attribute nm val,Attribute nm' val') ->
               if prettyUnsafeEq nm nm' then
                 if prettyUnsafeEq val val' then do
-                  -- liftIO $ putStrLn $ "nm == nm' and val == val':" ++ show (nm,val)
                   continue old
                 else do
-                  -- liftIO $ putStrLn $ show (nm,val,nm',val')
                   update
               else
                 replace
 
             (On e os g _,On e' os' g' _) ->
               if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then do
-                -- liftIO $ putStrLn $ "On': Event types same, IO actons really unsafe eq: " ++ show (e,e')
                 continue old
               else do
-                -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
                 replace
 
             (OnDoc e os g _,OnDoc e' os' g' _) ->
               if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then do
-                -- liftIO $ putStrLn $ "On': Event types same, IO actons really unsafe eq: " ++ show (e,e')
                 continue old
               else do
-                -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
                 replace
 
             (OnWin e os g _,OnWin e' os' g' _) ->
               if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then do
-                -- liftIO $ putStrLn $ "On': Event types same, IO actons really unsafe eq: " ++ show (e,e')
                 continue old
               else do
-                -- liftIO $ putStrLn $ "On': Event type not eq or IO actions not eq: " ++ show (e,e')
                 replace
 
             (OnBuild e,OnBuild e') ->
@@ -2202,7 +2263,6 @@ setAttribute_ c element attr didMount =
 
     -- optimize this; we're doing a little more work than necessary!
     Attribute nm val -> do
-      -- liftIO $ putStrLn $ "Setting attribute: " ++ show (nm,eval)
       E.setAttribute element nm val
       return (attr,didMount)
 

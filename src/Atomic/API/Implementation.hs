@@ -103,7 +103,7 @@ data ActiveEndpoints ms c es
 
     ActiveEndpointsCons
       :: Proxy e
-      -> Endpoint ms c a
+      -> Endpoint a
       -> ActiveEndpoints ms c es
       -> ActiveEndpoints ms c (e ': es)
 

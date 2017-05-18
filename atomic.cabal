@@ -73,7 +73,6 @@ library
                       , Atomic.Dispatch
                       , Atomic.Observable
                       , Atomic.Request
-                      , Atomic.Revent
                       , Atomic.Route
                       , Atomic.Router
                       , Atomic.Service
@@ -94,7 +93,6 @@ library
                       , Atomic.UnsafeEq
                       , Atomic.Vault
                       , Atomic.WebSocket
-                      , Atomic.With
     build-depends:      base >=4.8
                       , ef-core >= 2.0
                       , ef-base >= 2.0
@@ -154,7 +152,6 @@ library
                       , Atomic.Dispatch
                       , Atomic.Observable
                       , Atomic.Request
-                      , Atomic.Revent
                       , Atomic.Route
                       , Atomic.Router
                       , Atomic.Service
@@ -175,7 +172,6 @@ library
                       , Atomic.UnsafeEq
                       , Atomic.Vault
                       , Atomic.WebSocket
-                      , Atomic.With
     if flag(secure)
       cpp-options:    -DSECURE
       build-depends:    base >=4.8

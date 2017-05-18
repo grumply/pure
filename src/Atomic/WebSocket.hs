@@ -23,8 +23,6 @@ import Atomic.Identify
 import Atomic.Message
 import Atomic.TypeRep
 import Atomic.Request
-import Atomic.Revent
-import Atomic.With
 import Atomic.ToBS
 import Atomic.ToTxt
 import Atomic.FromBS
@@ -115,12 +113,18 @@ data WebSocket
   = WebSocket
     { wsSocket           :: !(Maybe (S.SockAddr,S.Socket,WS.Connection,WS.Stream))
     , wsReceiveThread    :: !(Maybe ThreadId)
-    , wsMessageHandlers  :: !(IORef (Map.HashMap Txt (Network Dispatch)))
+    , wsMessageHandlers  :: !(IORef (Map.HashMap Txt (Syndicate Dispatch)))
     , wsStatus           :: !WSStatus
-    , wsStatusNetwork    :: !(Network WSStatus)
+    , wsStatusSyndicate    :: !(Syndicate WSStatus)
     , wsThroughputLimits :: !(Throughput,ThroughputLimits)
     , wsBytesReadRef     :: !(IORef (Int64,Int64))
     }
+
+getWSMsgHandlers :: ('[State () WebSocket] <: ms, Monad c)
+                 => Code ms c (IORef (Map.HashMap Txt (Syndicate Dispatch)))
+getWSMsgHandlers = do
+  WebSocket {..} <- get
+  return wsMessageHandlers
 
 data ThroughputLimits
   = ThroughputLimits
@@ -304,7 +308,7 @@ cleanupEndpoints = do
   mh <- liftIO $ readIORef wsMessageHandlers
   let mhl = Map.toList mh
   mmhl' <- forM mhl $ \(h,n) -> do
-             nn <- nullNetwork n
+             nn <- nullSyndicate n
              if nn then
                return Nothing
              else
@@ -333,12 +337,8 @@ onWSStatus :: ('[State () WebSocket, Revent] <: ms,MonadIO c)
         => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
         -> Code ms c (IO ())
 onWSStatus f = do
-  buf <- getReventBuffer
   WebSocket {..} <- get
-  p <- periodical
-  Just s <- subscribe p f
-  joinNetwork wsStatusNetwork p buf
-  return (stop s >> leaveNetwork wsStatusNetwork p)
+  connect wsStatusSyndicate f
 
 onWSClose :: ('[State () WebSocket, Revent] <: ms,MonadIO c)
         => (WSCloseReason -> Code '[Event WSStatus] (Code ms c) ())
@@ -356,7 +356,7 @@ setWSStatus :: ('[State () WebSocket] <: ms, MonadIO c)
 setWSStatus wss = do
   ws <- get
   put ws { wsStatus = wss }
-  syndicate (wsStatusNetwork ws) wss
+  publish (wsStatusSyndicate ws) wss
 
 getWSInfo :: ('[State () WebSocket] <: ms, MonadIO c)
           => Code ms c (Maybe (S.SockAddr,S.Socket))
@@ -371,10 +371,10 @@ onWSCloseSimplyShutdown :: forall ms c.
                       => Code ms c (IO ())
 onWSCloseSimplyShutdown = do
   onWSClose $ \closeReason -> lift $ do
-    buf <- getReventBuffer
+    buf <- get
     Shutdown sdn <- get
-    syndicate sdn ()
-    rnr <- (runner :: Code ms c (Signal ms c (Code ms c ())))
+    publish sdn ()
+    (rnr :: Signal ms c (Code ms c ()),_) <- runner
     buffer buf rnr $ liftIO $ do
       killBuffer buf
       tid <- myThreadId
@@ -385,15 +385,15 @@ onWSCloseSimplyShutdown = do
 websocket :: forall c. (MonadIO c) => Throughput -> c WebSocket
 websocket tp = liftIO $ do
   tpl <- throughputToThroughputLimits tp
-  mhs <- newIORef (Map.empty :: Map.HashMap Txt (Network Dispatch))
-  wssn <- network
+  mhs <- newIORef (Map.empty :: Map.HashMap Txt (Syndicate Dispatch))
+  wssn <- syndicate
   brr <- newIORef (2 * 1024 * 1024,2 * 1024 * 1024) -- 2MiB
   return $ WebSocket
     { wsSocket           = Nothing
     , wsReceiveThread    = Nothing
     , wsMessageHandlers  = unsafeCoerce mhs
     , wsStatus           = WSUnopened
-    , wsStatusNetwork    = wssn
+    , wsStatusSyndicate    = wssn
     , wsThroughputLimits = (tp,tpl)
     , wsBytesReadRef     = brr
     }
@@ -409,15 +409,15 @@ serverWS :: forall ts ms c c'.
             , '[State () WebSocket] <: ms
             , Delta (Modules ts) (Messages ms)
             )
-         => Signaled
+         => EvQueue
          -> S.Socket
          -> Throughput
          -> c' (State () WebSocket (Action ts c))
 serverWS q sock tp = liftIO $ do
   sa <- liftIO $ S.getSocketName sock
   tpl <- throughputToThroughputLimits tp
-  mhs <- newIORef (Map.empty :: Map.HashMap Txt (Network Dispatch))
-  wssn <- network
+  mhs <- newIORef (Map.empty :: Map.HashMap Txt (Syndicate Dispatch))
+  wssn <- syndicate
   brr <- newIORef (2 * 1024 * 1024,2 * 1024 * 1024)
 
   streams <- Streams.socketToStreams sock
@@ -430,7 +430,7 @@ serverWS q sock tp = liftIO $ do
 
   c <- WS.acceptRequest pc
 
-  rnr :: Signal ms c (Code ms c ()) <- runner
+  (rnr :: Signal ms c (Code ms c ()),_) <- runner
 
   rt <- forkIO $ receiveLoop sock tpl mhs brr q c rnr
 
@@ -439,7 +439,7 @@ serverWS q sock tp = liftIO $ do
     , wsReceiveThread = Just rt
     , wsMessageHandlers = unsafeCoerce mhs
     , wsStatus = WSOpened
-    , wsStatusNetwork = wssn
+    , wsStatusSyndicate = wssn
     , wsThroughputLimits = (tp,tpl)
     , wsBytesReadRef = brr
     }
@@ -481,12 +481,12 @@ initializeClientWS host port path = do
           void $ delay i $ connectWithExponentialBackoff (min (n + 1) 12) -- ~ 200 second max interval; average max interval 100 seconds
         Just sock -> do
           sa <- liftIO $ S.getPeerName sock
-          q <- getReventBuffer
+          q <- get
           ws@WebSocket {..} <- get
 
           streams <- liftIO $ Streams.socketToStreams sock
 
-          wsStream <- liftIO $ makeExhaustible wsBytesReadRef wsStatusNetwork sock streams
+          wsStream <- liftIO $ makeExhaustible wsBytesReadRef wsStatusSyndicate sock streams
 
           c <- liftIO $
             WS.runClientWithStream
@@ -497,7 +497,7 @@ initializeClientWS host port path = do
               []
               return
 
-          rnr :: Signal ms c (Code ms c ()) <- runner
+          (rnr :: Signal ms c (Code ms c ()),_) <- runner
 
           rt <- liftIO $ forkIO $ receiveLoop sock (snd wsThroughputLimits) wsMessageHandlers wsBytesReadRef q c rnr
 
@@ -515,7 +515,7 @@ serverWSS :: forall ts ms c c'.
              , '[State () WebSocket] <: ms
              , Delta (Modules ts) (Messages ms)
              )
-          => Signaled
+          => EvQueue
           -> S.Socket
           -> SSL
           -> Throughput
@@ -523,8 +523,8 @@ serverWSS :: forall ts ms c c'.
 serverWSS q sock ssl tp = liftIO $ do
   sa <- liftIO $ S.getSocketName sock
   tpl <- throughputToThroughputLimits tp
-  mhs <- newIORef (Map.empty :: Map.HashMap Txt (Network Dispatch))
-  wssn <- network
+  mhs <- newIORef (Map.empty :: Map.HashMap Txt (Syndicate Dispatch))
+  wssn <- syndicate
   brr <- newIORef (2 * 1024 * 1024,2 * 1024 * 1024)
 
   streams <- Streams.sslToStreams ssl
@@ -546,7 +546,7 @@ serverWSS q sock ssl tp = liftIO $ do
     , wsReceiveThread = Just rt
     , wsMessageHandlers = unsafeCoerce mhs
     , wsStatus          = WSOpened
-    , wsStatusNetwork = wssn
+    , wsStatusSyndicate = wssn
     , wsBytesReadRef = brr
     , wsThroughputLimits = (tp,tpl)
     }
@@ -583,7 +583,7 @@ initializeClientWSS host port path = do
           void $ delay i $ connectWithExponentialBackoff (min (n + 1) 12) -- ~ 200 second max interval; average max interval 100 seconds
         Just sock -> do
           sa <- liftIO $ S.getPeerName sock
-          q <- getReventBuffer
+          q <- get
           ws@WebSocket {..} <- get
 
           -- following two lines differ from non-ssl
@@ -591,7 +591,7 @@ initializeClientWSS host port path = do
 
           streams <- liftIO $ Streams.sslToStreams ssl
 
-          wsStream <- liftIO $ makeExhaustible wsBytesReadRef wsStatusNetwork sock streams
+          wsStream <- liftIO $ makeExhaustible wsBytesReadRef wsStatusSyndicate sock streams
 
           c <- liftIO $
             WS.runClientWithStream
@@ -699,7 +699,7 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
 #if defined(DEBUGWS) || defined(DEVEL)
                 Prelude.putStrLn $ "Dispatching message: " ++ show (encode m)
 #endif
-                syndicate mnw m
+                publish mnw m
             simpleCheckThroughput
 
       case eem of
@@ -778,7 +778,7 @@ newListenSocket :: (MonadIO c)
 newListenSocket hn p = liftIO $ WS.makeListenSocket hn p
 
 makeExhaustible :: IORef (Int64,Int64)
-                -> Network WSStatus
+                -> Syndicate WSStatus
                 -> S.Socket
                 -> (Streams.InputStream B.ByteString,Streams.OutputStream B.ByteString)
                 -> IO WS.Stream
@@ -802,7 +802,7 @@ makeExhaustible readCount wssn sock (i,o) = do
             in res
           when kill $ do
             S.sClose sock
-            syndicate wssn (WSClosed (MessageLengthLimitExceeded count))
+            publish wssn (WSClosed (MessageLengthLimitExceeded count))
           return (Just x)
 
         {-# INLINE pb #-}
@@ -1047,43 +1047,52 @@ requestWith :: ( MonadIO c
             -> Proxy rqTy
             -> request
             -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Endpoint ms c Dispatch)
+            -> Code ms c (Promise (Endpoint Dispatch))
 requestWith srv rqty_proxy req f = do
-  buf <- getReventBuffer
-  p <- periodical
-  newn <- network
+  pr <- promise
+  buf <- get
   s_ <- liftIO $ newIORef undefined
+
   let header = responseHeader rqty_proxy req
+
       bhvr m =
         let done = do
-              (n,su) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then
                 void $ with srv $ do
-                  nn <- nullNetwork n -- might have changed
-                  when nn $ do
-                    WebSocket {..} <- get
-                    liftIO $ atomicModifyIORef' wsMessageHandlers $ \old_mhs ->
-                      let !new_mhs = Map.delete header old_mhs
-                      in (new_mhs,())
+                  WebSocket {..} <- get
+                  liftIO $ modifyIORef wsMessageHandlers $ \mhs ->
+                    let !mhs' = Map.delete header mhs
+                    in mhs'
+                  putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+             
         in f done (maybe (Left m) Right (decodeDispatch m))
+
   -- liftIO $ Prelude.putStrLn $ "Adding response handler in requestWith: " ++ show header
-  Just sb <- subscribe p bhvr
+  newn <- syndicate
   with srv $ do
     WebSocket {..} <- get
     n <- liftIO $ atomicModifyIORef' wsMessageHandlers $ \mhs ->
       case Map.lookup header mhs of
         Nothing -> (Map.insert header newn mhs,newn)
         Just n  -> (mhs,n)
-    joinNetwork n p buf
-    liftIO $ writeIORef s_ (n,sb)
+
+    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    bhv <- listen sub bhvr
+    let stopper = stop bhv >> leaveSyndicate n sub
+
+    liftIO $ writeIORef s_ (n,stopper)
     sendRawWith srv $ toBS $ encodeDispatch (requestHeader rqty_proxy) req
-  return $ Endpoint header sb p
+    fulfill pr (Endpoint header (unsafeCoerce sub) n)
 
+  return pr
 
-apiRequestWith :: ( MonadIO c
+apiRequestWith :: forall w ms c ms' c' rqTy request rqI msgs rqs response.
+                  ( MonadIO c
                   , MonadIO c'
 
                   , With w (Code ms' c') IO
@@ -1109,88 +1118,59 @@ apiRequestWith :: ( MonadIO c
                 -> Proxy rqTy
                 -> request
                 -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-                -> Code ms c (Endpoint ms c Dispatch)
-apiRequestWith _ srv rqty_proxy req f = do
-  buf <- getReventBuffer
-  p <- periodical
-  newn <- network
-  s_ <- liftIO $ newIORef undefined
-  let header = responseHeader rqty_proxy req
-      bhvr m =
-        let done = do
-              (n,su) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $
-                void $ with srv $ do
-                  nn <- nullNetwork n -- might have changed
-                  when nn $ do
-                    WebSocket {..} <- get
-                    liftIO $ atomicModifyIORef' wsMessageHandlers $ \old_mhs ->
-                      let !new_mhs = Map.delete header old_mhs
-                      in (new_mhs,())
-        in f done (maybe (Left m) Right (decodeDispatch m))
-  -- liftIO $ Prelude.putStrLn $ "Adding response handler in requestWith: " ++ show header
-  Just sb <- subscribe p bhvr
-  with srv $ do
-    WebSocket {..} <- get
-    n <- liftIO $ atomicModifyIORef' wsMessageHandlers $ \mhs ->
-      case Map.lookup header mhs of
-        Nothing -> (Map.insert header newn mhs,newn)
-        Just n  -> (mhs,n)
-    joinNetwork n p buf
-    liftIO $ writeIORef s_ (n,sb)
-    sendRawWith srv $ toBS $ encodeDispatch (requestHeader rqty_proxy) req
-  return $ Endpoint header sb p
+                -> Code ms c (Promise (Endpoint Dispatch))
+apiRequestWith _ = requestWith
 
-request :: ( MonadIO c
+request :: forall c ms rqTy request rqI rsp.
+            ( MonadIO c
 
-           , '[State () WebSocket,Revent] <: ms
+            , '[Revent,State () WebSocket] <: ms
 
-           , Request rqTy
+            , Request rqTy
 
-           , Req rqTy ~ request
-           , ToJSON request
-           , Identify request
-           , I request ~ rqI
+            , Req rqTy ~ request
+            , ToJSON request
+            , Identify request
+            , I request ~ rqI
 
-           , Rsp rqTy ~ response
-           , FromJSON response
-           )
-        => Proxy rqTy
-        -> request
-        -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-        -> Code ms c (Endpoint ms c Dispatch)
+            , Rsp rqTy ~ rsp
+            , FromJSON rsp
+            )
+         => Proxy rqTy
+         -> request
+         -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
+         -> Code ms c (Endpoint Dispatch) 
 request rqty_proxy req f = do
-  buf <- getReventBuffer
-  p <- periodical
-  newn <- network
   s_ <- liftIO $ newIORef undefined
   let header = responseHeader rqty_proxy req
       bhvr m =
         let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
-                WebSocket {..} <- get
-                liftIO $ atomicModifyIORef' wsMessageHandlers $ \old_mhs ->
-                  let !new_mhs = Map.delete header old_mhs
-                  in (new_mhs,())
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then do
+                mhs_ <- getWSMsgHandlers
+                liftIO $ modifyIORef mhs_ $ \mhs ->
+                  let !mhs' = Map.delete header mhs
+                  in mhs'
+                putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
         in f done (maybe (Left m) Right (decodeDispatch m))
-  Just sb <- subscribe p bhvr
-  WebSocket {..} <- get
-  hm <- liftIO $ readIORef wsMessageHandlers
-  n <- liftIO $ atomicModifyIORef' wsMessageHandlers $ \mhs ->
-    case Map.lookup header mhs of
-      Nothing -> (Map.insert header newn mhs,newn)
-      Just n  -> (mhs,n)
-  joinNetwork n p buf
-  liftIO $ writeIORef s_ (sb,n)
+  mhs_ <- getWSMsgHandlers
+  newn <- syndicate
+  n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
+          case Map.lookup header mhs of
+            Nothing -> (Map.insert header newn mhs,newn)
+            Just n -> (mhs,n)
+
+  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  bhv <- listen sub bhvr
+  let stopper = stop bhv >> leaveSyndicate n sub
+
+  liftIO $ writeIORef s_ (n,stopper)
   sendRaw $ toBS $ encodeDispatch (requestHeader rqty_proxy) req
-  return $ Endpoint header sb p
+  return (Endpoint header (unsafeCoerce sub) n)
 
 apiRequest :: forall c ms rqTy request rqI response rqs msgs.
               ( MonadIO c
@@ -1213,37 +1193,8 @@ apiRequest :: forall c ms rqTy request rqI response rqs msgs.
            -> Proxy rqTy
            -> request
            -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-           -> Code ms c (Endpoint ms c Dispatch)
-apiRequest _ rqty_proxy req f = do
-  buf <- getReventBuffer
-  p :: Periodical ms c Dispatch <- periodical
-  newn :: Network Dispatch <- network
-  s_ <- liftIO $ newIORef undefined
-  let header = responseHeader rqty_proxy req
-      bhvr m =
-        let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
-                WebSocket {..} <- get
-                liftIO $ atomicModifyIORef' wsMessageHandlers $ \old_mhs ->
-                  let !new_mhs = Map.delete header old_mhs
-                  in (new_mhs,())
-        in f done (maybe (Left m) Right (decodeDispatch m))
-  Just (sb :: Subscription ms c Dispatch) <- subscribe p bhvr
-  WebSocket {..} <- get
-  hm <- liftIO $ readIORef wsMessageHandlers
-  n <- liftIO $ atomicModifyIORef' wsMessageHandlers $ \mhs ->
-    case Map.lookup header mhs of
-      Nothing -> (Map.insert header newn mhs,newn)
-      Just n  -> (mhs,n)
-  joinNetwork n p buf
-  liftIO $ writeIORef s_ (sb,n)
-  sendRaw $ toBS $ encodeDispatch (requestHeader rqty_proxy) req
-  return $ Endpoint header sb p
-
+           -> Code ms c (Endpoint Dispatch)
+apiRequest _ = request
 
 respondWith :: ( MonadIO c
                , MonadIO c'
@@ -1268,45 +1219,53 @@ respondWith :: ( MonadIO c
             -> Proxy rqTy
             -> (Code ms c () -> Either Dispatch (Either LazyByteString response -> Code ms c (Promise (Either WSStatus ())),request) -> Code '[Event Dispatch] (Code ms c) ()
                )
-            -> Code ms c (Endpoint ms c Dispatch)
+            -> Code ms c (Promise (Endpoint Dispatch))
 respondWith srv rqty_proxy rr = do
-  buf <- getReventBuffer
-  p <- periodical
+  pr <- promise
+  buf <- get
   s_ <- liftIO $ newIORef undefined
-  newn <- network
+
   let header = requestHeader rqty_proxy
+
       bhvr m =
         let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then
                 void $ with srv $ do
-                  nn <- nullNetwork n
-                  when nn $ do
-                    WebSocket {..} <- get
-                    liftIO $ atomicModifyIORef' wsMessageHandlers $ \old_mhs ->
-                      let !new_mhs = Map.delete header old_mhs
-                      in (new_mhs,())
+                  mhs_ <- getWSMsgHandlers
+                  liftIO $ modifyIORef mhs_ $ \mhs ->
+                    let !mhs' = Map.delete header mhs
+                    in mhs'
+                  putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in
-            -- technically rr could kill the behavior and the network might be left as garbage that never gets
+            -- technically rr could kill the behavior and the syndicate might be left as garbage that never gets
             -- cleaned up, but it shouldn't matter too much since servers will have a limited set of msgs
             -- to which they're responding.
             void $ rr done $ maybe (Left m) (\rq -> Right
               (sendRawWith srv . either id (toBS . encodeDispatch (responseHeader rqty_proxy rq))
               ,rq
               )) (decodeDispatch m)
-  Just sb <- subscribe p bhvr
+  newn <- syndicate
   with srv $ do
-    WebSocket {..} <- get
-    n <- liftIO $ atomicModifyIORef' wsMessageHandlers $ \mhs ->
-      case Map.lookup header mhs of
-        Nothing -> (Map.insert header newn mhs,newn)
-        Just n  -> (mhs,n)
-    joinNetwork n p buf
-    liftIO $ writeIORef s_ (sb,n)
-  return $ Endpoint header sb p
+    mhs_ <- getWSMsgHandlers
+    n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
+           case Map.lookup header mhs of
+              Nothing -> (Map.insert header newn mhs,newn)
+              Just n -> (mhs,n)
+
+    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    bhv <- listen sub bhvr
+    let stopper = stop bhv >> leaveSyndicate n sub
+
+    liftIO $ writeIORef s_ (n,stopper)
+    fulfill pr (Endpoint header (unsafeCoerce sub) n)
+
+  return pr
 
 respond :: ( MonadIO c
 
@@ -1324,41 +1283,48 @@ respond :: ( MonadIO c
            )
         => Proxy rqTy
         -> (Code ms c () -> Either Dispatch (Either LazyByteString response -> Code ms c (Either WSStatus ()),request) -> Code '[Event Dispatch] (Code ms c) ())
-        -> Code ms c (Endpoint ms c Dispatch)
+        -> Code ms c (Endpoint Dispatch)
 respond rqty_proxy rr = do
-  buf <- getReventBuffer
-  p <- periodical
   s_ <- liftIO $ newIORef undefined
-  newn <- network
+
   let header = requestHeader rqty_proxy
+
       bhvr m =
         let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
-                WebSocket {..} <- get
-                liftIO $ atomicModifyIORef' wsMessageHandlers $ \old_mhs ->
-                  let !new_mhs = Map.delete header old_mhs
-                  in (new_mhs,())
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then do
+                mhs_ <- getWSMsgHandlers
+                liftIO $ modifyIORef mhs_ $ \mhs ->
+                  let !mhs' = Map.delete header mhs
+                  in mhs'
+                putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in
-            -- technically rr could kill the behavior and the network might be left as garbage that never gets
+            -- technically rr could kill the behavior and the syndicate might be left as garbage that never gets
             -- cleaned up, but it shouldn't matter too much since servers will have a limited set of msgs
             -- to which they're responding.
             void $ rr done $ maybe (Left m) (\rq -> Right
               (sendRaw . either id (toBS . encodeDispatch (responseHeader rqty_proxy rq))
               , rq
               )) (decodeDispatch m)
-  Just sb <- subscribe p bhvr
-  WebSocket {..} <- get
-  n <- liftIO $ atomicModifyIORef' wsMessageHandlers $ \mhs ->
-    case Map.lookup header mhs of
-      Nothing -> (Map.insert header newn mhs,newn)
-      Just n  -> (mhs,n)
-  joinNetwork n p buf
-  liftIO $ writeIORef s_ (sb,n)
-  return $ Endpoint header sb p
+
+  newn <- syndicate
+  mhs_ <- getWSMsgHandlers
+  n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
+          case Map.lookup header mhs of
+            Nothing -> (Map.insert header newn mhs,newn)
+            Just n -> (mhs,n)
+
+  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  bhv <- listen sub bhvr
+  let stopper = stop bhv >> leaveSyndicate n sub
+
+  liftIO $ writeIORef s_ (n,stopper)
+  return (Endpoint header (unsafeCoerce sub) n)
 
 messageWith :: ( MonadIO c
                , MonadIO c'
@@ -1431,38 +1397,46 @@ onMessageWith :: ( MonadIO c
               => w
               -> Proxy mTy
               -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-              -> Code ms c (Endpoint ms c Dispatch)
+              -> Code ms c (Promise (Endpoint Dispatch))
 onMessageWith s mty_proxy f = do
-  buf <- getReventBuffer
-  p <- periodical
+  pr <- promise
+  buf <- get
   s_ <- liftIO $ newIORef undefined
-  newn <- network
+
   let header = messageHeader mty_proxy
+
       bhvr m =
         let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then
                 void $ with s $ do
-                  nn <- nullNetwork n
-                  when nn $ do
-                    WebSocket {..} <- get
-                    liftIO $ atomicModifyIORef' wsMessageHandlers $ \old_mhs ->
-                      let !new_mhs = Map.delete header old_mhs
-                      in (new_mhs,())
+                  mhs_ <- getWSMsgHandlers
+                  liftIO $ modifyIORef mhs_ $ \mhs ->
+                    let !mhs' = Map.delete header mhs
+                    in mhs'
+                  putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in f done (maybe (Left m) Right (decodeDispatch m))
-  Just sb <- subscribe p bhvr
+
+  newn <- syndicate
   with s $ do
-    WebSocket {..} <- get
-    n <- liftIO $ atomicModifyIORef' wsMessageHandlers $ \mhs ->
-      case Map.lookup header mhs of
-        Nothing -> (Map.insert header newn mhs,newn)
-        Just n  -> (mhs,n)
-    joinNetwork n p buf
-    liftIO $ writeIORef s_ (sb,n)
-  return $ Endpoint header sb p
+    mhs_ <- getWSMsgHandlers
+    n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
+            case Map.lookup header mhs of
+              Nothing -> (Map.insert header newn mhs,newn)
+              Just n -> (mhs,n)
+
+    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    bhv <- listen sub bhvr
+    let stopper = stop bhv >> leaveSyndicate n sub
+
+    liftIO $ writeIORef s_ (n,stopper)
+    fulfill pr (Endpoint header (unsafeCoerce sub) n)
+  return pr
 
 onMessage :: ( MonadIO c
              , '[Revent,State () WebSocket] <: ms
@@ -1472,34 +1446,41 @@ onMessage :: ( MonadIO c
              )
           => Proxy mTy
           -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint ms c Dispatch)
+          -> Code ms c (Endpoint Dispatch)
 onMessage mty_proxy f = do
-  buf <- getReventBuffer
-  p <- periodical
   s_ <- liftIO $ newIORef undefined
-  newn <- network
+
   let header = messageHeader mty_proxy
+
       bhvr m =
         let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
-                WebSocket {..} <- get
-                liftIO $ atomicModifyIORef' wsMessageHandlers $ \old_mhs ->
-                  let !new_mhs = Map.delete header old_mhs
-                  in (new_mhs,())
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper 
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then do
+                mhs_ <- getWSMsgHandlers
+                liftIO $ modifyIORef mhs_ $ \mhs ->
+                  let !mhs' = Map.delete header mhs
+                  in mhs'
+                putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in f done (maybe (Left m) Right (decodeDispatch m))
-  Just sb <- subscribe p bhvr
-  WebSocket {..} <- get
-  n <- liftIO $ atomicModifyIORef' wsMessageHandlers $ \mhs ->
-    case Map.lookup header mhs of
-      Nothing -> (Map.insert header newn mhs,newn)
-      Just n  -> (mhs,n)
-  joinNetwork n p buf
-  liftIO $ writeIORef s_ (sb,n)
-  return $ Endpoint header sb p
+
+  newn <- syndicate
+  mhs_ <- getWSMsgHandlers
+  n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
+          case Map.lookup header mhs of
+            Nothing -> (Map.insert header newn mhs,newn)
+            Just n -> (mhs,n)
+
+  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  bhv <- listen sub bhvr
+  let stopper = stop bhv >> leaveSyndicate n sub
+
+  liftIO $ writeIORef s_ (n,stopper)
+  return (Endpoint header (unsafeCoerce sub) n)
 #else
 {-# language MagicHash #-}
 {-# language UnboxedTuples #-}
@@ -1527,8 +1508,6 @@ import Atomic.Identify
 import Atomic.Message
 import Atomic.TypeRep
 import Atomic.Request
-import Atomic.Revent
-import Atomic.With
 import Atomic.ToBS
 import Atomic.ToTxt
 import Atomic.FromBS
@@ -1603,15 +1582,15 @@ data WebSocket k
     , webSocketState       :: (WSStatus,k)
     , webSocketStateSetter :: WSStatus -> k
 
-    , webSocketStates         :: (Network WSStatus,k)
-    , webSocketStatesSetter   :: Network WSStatus -> k
+    , webSocketStates         :: (Syndicate WSStatus,k)
+    , webSocketStatesSetter   :: Syndicate WSStatus -> k
 
-    , webSocketMsgHandlers :: (IORef (Map.HashMap Txt (Network Dispatch)),k)
-    , webSocketMsgHandlersSetter :: IORef (Map.HashMap Txt (Network Dispatch)) -> k
+    , webSocketMsgHandlers :: (IORef (Map.HashMap Txt (Syndicate Dispatch)),k)
+    , webSocketMsgHandlersSetter :: IORef (Map.HashMap Txt (Syndicate Dispatch)) -> k
 
     , webSocketInitializer :: k
 
-    , webSocketConnecter :: Signaled -> k
+    , webSocketConnecter :: EvQueue -> k
 
     }
   | GetWebSocket (Maybe WS.WebSocket -> k)
@@ -1623,15 +1602,15 @@ data WebSocket k
   | GetWSStatus (WSStatus -> k)
   | SetWSStatus WSStatus k
 
-  | GetWSStatuss (Network WSStatus -> k)
-  | SetWSStatuss (Network WSStatus) k
+  | GetWSStatuss (Syndicate WSStatus -> k)
+  | SetWSStatuss (Syndicate WSStatus) k
 
-  | GetWebSocketMsgHandlers (IORef (Map.HashMap Txt (Network Dispatch)) -> k)
-  | SetWebSocketMsgHandlers (IORef (Map.HashMap Txt (Network Dispatch))) k
+  | GetWebSocketMsgHandlers (IORef (Map.HashMap Txt (Syndicate Dispatch)) -> k)
+  | SetWebSocketMsgHandlers (IORef (Map.HashMap Txt (Syndicate Dispatch))) k
 
   | InitializeWebSocket k
 
-  | ConnectWebSocket Signaled k
+  | ConnectWebSocket EvQueue k
   deriving Functor
 
 instance Delta WebSocket WebSocket where
@@ -1796,7 +1775,7 @@ cleanupEndpoints = do
   mh <- liftIO $ readIORef mh_
   let mhl = Map.toList mh
   mmhl' <- forM mhl $ \(h,n) -> do
-             nn <- nullNetwork n
+             nn <- nullSyndicate n
              if nn then
                return Nothing
              else
@@ -1865,17 +1844,17 @@ ws_ hn p secure = WebSocket
         let Module ws _ = o
             (_,wsssGetter) = webSocketStates ws
             (_,wsmhsGetter) = webSocketMsgHandlers ws
-        in do statesNetwork :: Network WSStatus <- network
-              msgHandlers <- liftIO $ newIORef (Map.empty :: Map.HashMap Txt (Network Dispatch))
+        in do statesSyndicate :: Syndicate WSStatus <- syndicate
+              msgHandlers <- liftIO $ newIORef (Map.empty :: Map.HashMap Txt (Syndicate Dispatch))
               return $ Module ws
-                { webSocketStates = (statesNetwork,wsssGetter)
+                { webSocketStates = (statesSyndicate,wsssGetter)
                 , webSocketMsgHandlers = (msgHandlers,wsmhsGetter)
                 } o
 
     , webSocketConnecter = \gb o ->
         let Module ws _ = o
             (cws,wsGetter) = webSocket ws
-            (statesNetwork,wsssGetter) = webSocketStates ws
+            (statesSyndicate,wsssGetter) = webSocketStates ws
             (curState,wssGetter) = webSocketState ws
             (mhs_,_) = webSocketMsgHandlers ws
             port = show p
@@ -1883,14 +1862,14 @@ ws_ hn p secure = WebSocket
                 Just sock -> return cws
                 Nothing -> liftIO $ do
                   msock <- tryNewWebSocket ((if secure then "wss://" else "ws://") ++ hn ++ ':':port) (Just [] :: Maybe [String])
-                  rnr :: Signal ms c (Code ms c ()) <- runner
+                  (rnr,_) :: (Signal ms c (Code ms c ()),Behavior ms c (Code ms c ())) <- runner
                   cBuf <- liftIO $ newIORef mempty
                   case msock of
                     Nothing -> return Nothing
                     Just sock -> do
-                      Ev.on sock WS.open $ lift $ syndicate statesNetwork WSOpened
-                      Ev.on sock WS.closeEvent $ lift $ syndicate statesNetwork $ WSClosed ServerClosedConnection
-                      Ev.on sock WS.error $ lift $ syndicate statesNetwork $ WSClosed ServerClosedConnection
+                      Ev.on sock WS.open $ lift $ publish statesSyndicate WSOpened
+                      Ev.on sock WS.closeEvent $ lift $ publish statesSyndicate $ WSClosed ServerClosedConnection
+                      Ev.on sock WS.error $ lift $ publish statesSyndicate $ WSClosed ServerClosedConnection
                       Ev.on sock WS.message $ do
                         ev <- Ev.event
                         case WME.getData $ unsafeCoerce ev of
@@ -1920,7 +1899,7 @@ ws_ hn p secure = WebSocket
 #if defined(DEBUGWS) || defined(DEVEL)
                                         putStrLn $ "Handled message at endpoint: " ++ show (ep m)
 #endif
-                                        buffer gb rnr $ syndicate h m
+                                        buffer gb rnr $ publish h m
 
                               Just ('{',_) -> do
                                 let val = js_JSON_parse sd
@@ -1934,7 +1913,7 @@ ws_ hn p secure = WebSocket
 #if defined(DEBUGWS) || defined(DEVEL)
                                         putStrLn $ "Handled message at endpoint: " ++ show (ep m)
 #endif
-                                        buffer gb rnr $ syndicate h m
+                                        buffer gb rnr $ publish h m
 
                               _ ->
                               -- Any message not beginning with 'C', 'F', or '{' is guaranteed to be invalid.
@@ -1989,12 +1968,12 @@ setWSState wss = Send (SetWSStatus wss (Return ()))
 
 getWSMsgHandlers :: forall ms c.
                     (Monad c, '[WebSocket] <: ms)
-                 => Code ms c (IORef (Map.HashMap Txt (Network Dispatch)))
+                 => Code ms c (IORef (Map.HashMap Txt (Syndicate Dispatch)))
 getWSMsgHandlers = Send (GetWebSocketMsgHandlers Return)
 
 putWSMsgHandlers :: forall ms c.
                     (Monad c, '[WebSocket] <: ms)
-                => IORef (Map.HashMap Txt (Network Dispatch))
+                => IORef (Map.HashMap Txt (Syndicate Dispatch))
                 -> Code ms c ()
 putWSMsgHandlers hm = Send (SetWebSocketMsgHandlers hm (Return ()))
 
@@ -2008,11 +1987,8 @@ wsInitialize :: forall ms c.
              => Code ms c WSStatus
 wsInitialize = do
   wsSetup
-  buf <- getReventBuffer
   wssn <- Send (GetWSStatuss Return)
-  p :: Periodical ms c WSStatus <- periodical
-  joinNetwork wssn p buf
-  subscribe p $ \wss -> lift $ do
+  connect wssn $ \wss -> lift $ do
     setWSState wss
     case wss of
       WSClosed _ -> void $ do
@@ -2025,7 +2001,7 @@ wsConnect :: forall ms c.
              (MonadIO c, '[Revent,WebSocket] <: ms)
           => Code ms c WSStatus
 wsConnect = do
-  sig <- getReventBuffer
+  sig <- get
   Send (ConnectWebSocket sig (Return ()))
   getWSState
 
@@ -2123,12 +2099,8 @@ onWSStatus :: forall ms c.
         => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
         -> Code ms c (IO ())
 onWSStatus bhvr = do
-  buf <- getReventBuffer
-  p :: Periodical ms c WSStatus <- periodical
-  Just s <- subscribe p bhvr
   wsn <- Send (GetWSStatuss Return)
-  joinNetwork wsn p buf
-  return (stop s >> leaveNetwork wsn p)
+  connect wsn bhvr
 
 onWSClose :: forall ms c.
             (MonadIO c, '[Revent,WebSocket] <: ms)
@@ -2213,9 +2185,10 @@ sendSelfMessage s mty_proxy m =
     let header = messageHeader mty_proxy
     case Map.lookup header mhs of
       Nothing -> return ()
-      Just n -> syndicate n (Dispatch header $ toJSON m)
+      Just n -> publish n (Dispatch header $ toJSON m)
 
-request :: ( MonadIO c
+request :: forall c ms rqTy request rqI rsp.
+            ( MonadIO c
 
             , '[Revent,WebSocket] <: ms
 
@@ -2232,33 +2205,38 @@ request :: ( MonadIO c
          => Proxy rqTy
          -> request
          -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-         -> Code ms c (Endpoint ms c Dispatch) 
+         -> Code ms c (Endpoint Dispatch) 
 request rqty_proxy req f = do
-  buf <- getReventBuffer
-  p   <- periodical
   s_ <- liftIO $ newIORef undefined
-  newn <- network
   let header = responseHeader rqty_proxy req
       bhvr m =
         let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then do
                 mhs_ <- getWSMsgHandlers
-                liftIO $ modifyIORef mhs_ (Map.delete header)
+                liftIO $ modifyIORef mhs_ $ \mhs ->
+                  let !mhs' = Map.delete header mhs
+                  in mhs'
+                putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
         in f done (maybe (Left m) Right (decodeDispatch m))
-  Just sb <- subscribe p bhvr
   mhs_ <- getWSMsgHandlers
+  newn <- syndicate
   n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
           case Map.lookup header mhs of
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
-  joinNetwork n p buf
-  liftIO $ writeIORef s_ (sb,n)
+
+  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  bhv <- listen sub bhvr
+  let stopper = stop bhv >> leaveSyndicate n sub
+
+  liftIO $ writeIORef s_ (n,stopper)
   send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
-  return $ Endpoint header sb p
+  return (Endpoint header (unsafeCoerce sub) n)
 
 apiRequest :: ( MonadIO c
 
@@ -2280,35 +2258,11 @@ apiRequest :: ( MonadIO c
           -> Proxy rqTy
           -> request
           -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint ms c Dispatch) 
-apiRequest _ rqty_proxy req f = do
-  buf <- getReventBuffer
-  p   <- periodical
-  s_ <- liftIO $ newIORef undefined
-  newn <- network
-  let header = responseHeader rqty_proxy req
-      bhvr m =
-        let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
-                mhs_ <- getWSMsgHandlers
-                liftIO $ modifyIORef mhs_ (Map.delete header)
-        in f done (maybe (Left m) Right (decodeDispatch m))
-  Just sb <- subscribe p bhvr
-  mhs_ <- getWSMsgHandlers
-  n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
-          case Map.lookup header mhs of
-            Nothing -> (Map.insert header newn mhs,newn)
-            Just n -> (mhs,n)
-  joinNetwork n p buf
-  liftIO $ writeIORef s_ (sb,n)
-  send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
-  return $ Endpoint header sb p
+          -> Code ms c (Endpoint Dispatch) 
+apiRequest _ = request
 
-requestWith :: ( MonadIO c
+requestWith :: forall c c' ms ms' w rqTy request rqI rsp.
+               ( MonadIO c
                , MonadIO c'
 
                , With w (Code ms' c') IO
@@ -2331,37 +2285,48 @@ requestWith :: ( MonadIO c
             -> Proxy rqTy
             -> request
             -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Endpoint ms c Dispatch) 
+            -> Code ms c (Promise (Endpoint Dispatch))
 requestWith s rqty_proxy req f = do
-  buf <- getReventBuffer
-  p   <- periodical
+  pr <- promise
+  buf <- get
   s_ <- liftIO $ newIORef undefined
-  newn <- network
+
   let header = responseHeader rqty_proxy req
+
       bhvr m =
         let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then
                 void $ with s $ do
-                  nn <- nullNetwork n -- might have changed
-                  when nn $ do
-                    mhs_ <- getWSMsgHandlers
-                    liftIO $ atomicModifyIORef' mhs_ $ \mhs -> (Map.delete header mhs,())
+                  mhs_ <- getWSMsgHandlers
+                  liftIO $ modifyIORef mhs_ $ \mhs ->
+                    let !mhs' = Map.delete header mhs
+                    in mhs'
+                  putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in f done (maybe (Left m) Right (decodeDispatch m))
-  Just sb <- subscribe p bhvr
+
+  newn <- syndicate
   with s $ do
     mhs_ <- getWSMsgHandlers
     n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
            case Map.lookup header mhs of
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
-    liftIO $ writeIORef s_ (sb,n)
-    joinNetwork n p buf
+
+    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    bhv <- listen sub bhvr
+    let stopper = stop bhv >> leaveSyndicate n sub
+
+    liftIO $ writeIORef s_ (n,stopper)
     send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
-  return $ Endpoint header sb p
+    fulfill pr (Endpoint header (unsafeCoerce sub) n)
+
+  return pr
 
 apiRequestWith :: ( MonadIO c
                   , MonadIO c'
@@ -2389,39 +2354,11 @@ apiRequestWith :: ( MonadIO c
                -> Proxy rqTy
                -> request
                -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-               -> Code ms c (Endpoint ms c Dispatch) 
-apiRequestWith _ s rqty_proxy req f = do
-  buf <- getReventBuffer
-  p   <- periodical
-  s_ <- liftIO $ newIORef undefined
-  newn <- network
-  let header = responseHeader rqty_proxy req
-      bhvr m =
-        let done = do
-              (su,n) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $
-                void $ with s $ do
-                  nn <- nullNetwork n -- might have changed
-                  when nn $ do
-                    mhs_ <- getWSMsgHandlers
-                    liftIO $ atomicModifyIORef' mhs_ $ \mhs -> (Map.delete header mhs,())
-        in f done (maybe (Left m) Right (decodeDispatch m))
-  Just sb <- subscribe p bhvr
-  with s $ do
-    mhs_ <- getWSMsgHandlers
-    n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
-           case Map.lookup header mhs of
-              Nothing -> (Map.insert header newn mhs,newn)
-              Just n -> (mhs,n)
-    joinNetwork n p buf
-    liftIO $ writeIORef s_ (sb,n)
-    send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
-  return $ Endpoint header sb p
+               -> Code ms c (Promise (Endpoint Dispatch))
+apiRequestWith _ = requestWith
 
-respondWith :: ( MonadIO c
+respondWith :: forall c c' w ms ms' rqTy request rqI rsp.
+               ( MonadIO c
                , MonadIO c'
 
                , With w (Code ms' c') IO
@@ -2443,38 +2380,50 @@ respondWith :: ( MonadIO c
             => w
             -> Proxy rqTy
             -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (Promise ()),request) -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Endpoint ms c Dispatch)
+            -> Code ms c (Promise (Endpoint Dispatch))
 respondWith s rqty_proxy rr = do
-  buf <- getReventBuffer
-  p <- periodical
-  newn <- network
+  pr <- promise
+  buf <- get
   s_ <- liftIO $ newIORef undefined
+
   let header = requestHeader rqty_proxy
-  let bhvr m =
+
+      bhvr m =
         let done = do
-              (n,su) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then
                 void $ with s $ do
                   mhs_ <- getWSMsgHandlers
-                  liftIO $ atomicModifyIORef' mhs_ $ \old_mhs ->
-                    let !new_mhs = Map.delete header old_mhs
-                    in (new_mhs,())
+                  liftIO $ modifyIORef mhs_ $ \mhs ->
+                    let !mhs' = Map.delete header mhs
+                    in mhs'
+                  putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in rr done (maybe (Left m) (\rq -> Right (with s . void . send' . either Left (Right . Dispatch (responseHeader rqty_proxy rq) . toJSON),rq)) (decodeDispatch m))
-  Just sb <- subscribe p bhvr
+
+  newn <- syndicate
   with s $ do
     mhs_ <- getWSMsgHandlers
     n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
            case Map.lookup header mhs of
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
-    joinNetwork n p buf
-    liftIO $ writeIORef s_ (n,sb)
-  return $ Endpoint header sb p
 
-respond :: ( MonadIO c
+    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    bhv <- listen sub bhvr
+    let stopper = stop bhv >> leaveSyndicate n sub
+
+    liftIO $ writeIORef s_ (n,stopper)
+    fulfill pr (Endpoint header (unsafeCoerce sub) n)
+
+  return pr
+
+respond :: forall c ms rqTy request rqI rsp.
+           ( MonadIO c
 
            , '[Revent,WebSocket] <: ms
 
@@ -2490,51 +2439,40 @@ respond :: ( MonadIO c
            )
         => Proxy rqTy
         -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
-        -> Code ms c (Endpoint ms c Dispatch)
+        -> Code ms c (Endpoint Dispatch)
 respond rqty_proxy rr = do
-  buf <- getReventBuffer
-  p <- periodical
-  newn <- network
   s_ <- liftIO $ newIORef undefined
   let header = requestHeader rqty_proxy
-  let bhvr m =
+
+      bhvr m =
         let done = do
-              (n,su) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then do
                 mhs_ <- getWSMsgHandlers
-                liftIO $ atomicModifyIORef' mhs_ $ \old_mhs ->
-                  let !new_mhs = Map.delete header old_mhs
-                  in (new_mhs,())
+                liftIO $ modifyIORef mhs_ $ \mhs ->
+                  let !mhs' = Map.delete header mhs
+                  in mhs'
+                putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in rr done (maybe (Left m) (\rq -> Right (void . send' . either Left (Right . Dispatch (responseHeader rqty_proxy rq) . toJSON),rq)) (decodeDispatch m))
-  Just sb <- subscribe p bhvr
+
+  newn <- syndicate
   mhs_ <- getWSMsgHandlers
   n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
           case Map.lookup header mhs of
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
-  liftIO $ writeIORef s_ (n,sb)
-  joinNetwork n p buf
-  return $ Endpoint header sb p
 
-apiMessageWith :: ( MonadIO c
-                  , MonadIO c'
-                  , '[Revent,WebSocket] <: ms'
-                  , With w (Code ms' c') IO
-                  , Message mTy
-                  , M mTy ~ msg
-                  , ToJSON msg
-                  , (mTy ∈ msgs) ~ 'True
-                  , Functor (Messages ms)
-                  )
-                => FullAPI msgs rqs
-                -> w
-                -> Proxy mTy
-                -> msg
-                -> Code ms c (Promise (Either WSException SendStatus))
-apiMessageWith _ s mty_proxy m = messageWith s mty_proxy m
+  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  bhv <- listen sub bhvr
+  let stopper = stop bhv >> leaveSyndicate n sub
+
+  liftIO $ writeIORef s_ (n,stopper)
+  return (Endpoint header (unsafeCoerce sub) n)
 
 messageWith :: ( MonadIO c
                , MonadIO c'
@@ -2551,18 +2489,22 @@ messageWith :: ( MonadIO c
             -> Code ms c (Promise (Either WSException SendStatus))
 messageWith s mty_proxy m = send s (messageHeader mty_proxy) m
 
-apiMessage :: ( MonadIO c
-              , '[Revent,WebSocket] <: ms
-              , Message mTy
-              , M mTy ~ msg
-              , ToJSON msg
-              , (mTy ∈ msgs) ~ 'True
-              )
-            => FullAPI msgs rqs
-            -> Proxy mTy
-            -> msg
-            -> Code ms c (Either WSException SendStatus)
-apiMessage _ mty_proxy m = send' $ Right (Dispatch (messageHeader mty_proxy) (toJSON m))
+apiMessageWith :: ( MonadIO c
+                  , MonadIO c'
+                  , '[Revent,WebSocket] <: ms'
+                  , With w (Code ms' c') IO
+                  , Message mTy
+                  , M mTy ~ msg
+                  , ToJSON msg
+                  , (mTy ∈ msgs) ~ 'True
+                  , Functor (Messages ms)
+                  )
+                => FullAPI msgs rqs
+                -> w
+                -> Proxy mTy
+                -> msg
+                -> Code ms c (Promise (Either WSException SendStatus))
+apiMessageWith _ = messageWith
 
 message :: ( MonadIO c
            , '[Revent,WebSocket] <: ms
@@ -2575,7 +2517,21 @@ message :: ( MonadIO c
         -> Code ms c (Either WSException SendStatus)
 message mty_proxy m = send' $ Right (Dispatch (messageHeader mty_proxy) (toJSON m))
 
-onMessageWith :: ( MonadIO c
+apiMessage :: ( MonadIO c
+              , '[Revent,WebSocket] <: ms
+              , Message mTy
+              , M mTy ~ msg
+              , ToJSON msg
+              , (mTy ∈ msgs) ~ 'True
+              )
+            => FullAPI msgs rqs
+            -> Proxy mTy
+            -> msg
+            -> Code ms c (Either WSException SendStatus)
+apiMessage _ = message
+
+onMessageWith :: forall c c' ms ms' w mTy msg.
+                 ( MonadIO c
                  , MonadIO c'
                  , '[WebSocket] <: ms'
                  , '[Revent] <: ms
@@ -2587,38 +2543,49 @@ onMessageWith :: ( MonadIO c
                => w
                -> Proxy mTy
                -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-               -> Code ms c (Endpoint ms c Dispatch) 
+               -> Code ms c (Promise (Endpoint Dispatch))
 onMessageWith s mty_proxy f = do
-  buf <- getReventBuffer
+  pr <- promise
+  buf <- get
   s_ <- liftIO $ newIORef undefined
-  p <- periodical
+
   let header = messageHeader mty_proxy
-  let bhvr m =
+
+      bhvr m =
         let done = do
-              (n,su) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then
                 void $ with s $ do
                   mhs_ <- getWSMsgHandlers
-                  liftIO $ atomicModifyIORef' mhs_ $ \old_mhs ->
-                    let !new_mhs = Map.delete header old_mhs
-                    in (new_mhs,())
+                  liftIO $ modifyIORef mhs_ $ \mhs ->
+                    let !mhs' = Map.delete header mhs
+                    in mhs'
+                  putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in f done (maybe (Left m) Right (decodeDispatch m))
-  newn <- network
-  Just sb <- subscribe p bhvr
+
+  newn <- syndicate
   with s $ do
     mhs_ <- getWSMsgHandlers
     n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
             case Map.lookup header mhs of
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
-    joinNetwork n p buf
-    liftIO $ writeIORef s_ (n,sb)
-  return $ Endpoint header sb p
 
-onMessage :: ( MonadIO c
+    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    bhv <- listen sub bhvr
+    let stopper = stop bhv >> leaveSyndicate n sub
+
+    liftIO $ writeIORef s_ (n,stopper)
+    fulfill pr (Endpoint header (unsafeCoerce sub) n)
+  return pr
+
+onMessage :: forall c ms mTy msg.
+             ( MonadIO c
              , '[Revent,WebSocket] <: ms
              , Message mTy
              , M mTy ~ msg
@@ -2626,32 +2593,40 @@ onMessage :: ( MonadIO c
              )
           => Proxy mTy
           -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint ms c Dispatch) 
+          -> Code ms c (Endpoint Dispatch) 
 onMessage mty_proxy f = do
-  buf <- getReventBuffer
   s_ <- liftIO $ newIORef undefined
-  p <- periodical
+
   let header = messageHeader mty_proxy
-  let bhvr m =
+
+      bhvr m =
         let done = do
-              (n,su) <- liftIO $ readIORef s_
-              stop su
-              leaveNetwork n p
-              nn <- nullNetwork n
-              when nn $ do
+              (syn,stopper) <- liftIO $ readIORef s_
+              liftIO stopper 
+              (me,subs) <- takeSyndicate syn
+              if Prelude.null subs then do
                 mhs_ <- getWSMsgHandlers
-                liftIO $ atomicModifyIORef' mhs_ $ \old_mhs ->
-                  let !new_mhs = Map.delete header old_mhs
-                  in (new_mhs,())
+                liftIO $ modifyIORef mhs_ $ \mhs ->
+                  let !mhs' = Map.delete header mhs
+                  in mhs'
+                putSyndicate syn (me,subs)
+              else
+                putSyndicate syn (me,subs)
+
         in f done (maybe (Left m) Right (decodeDispatch m))
-  newn <- network
-  Just sb <- subscribe p bhvr
+
+  newn <- syndicate
   mhs_ <- getWSMsgHandlers
   n <- liftIO $ atomicModifyIORef' mhs_ $ \mhs ->
           case Map.lookup header mhs of
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
-  liftIO $ writeIORef s_ (n,sb)
-  joinNetwork n p buf
-  return $ Endpoint header sb p
+
+  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  bhv <- listen sub bhvr
+  let stopper = stop bhv >> leaveSyndicate n sub
+
+  liftIO $ writeIORef s_ (n,stopper)
+  return (Endpoint header (unsafeCoerce sub) n)
+
 #endif

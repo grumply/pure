@@ -31,7 +31,7 @@ data Router r
   = Router
       { router :: forall ms c. Code '[Route] (Code ms c) r
       , currentRoute :: Maybe r
-      , routeNetwork :: Network r
+      , routeSyndicate :: Syndicate r
       }
 
 getRouter :: (MonadIO c, '[State () (Router r)] <: ms) => Code ms c (Code '[Route] (Code ms c) r)
@@ -46,11 +46,11 @@ getRoute = currentRoute <$> get
 setRoute :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Maybe r -> Code ms c ()
 setRoute mr = void $ modify (\rtr -> (rtr { currentRoute = mr },()))
 
-getRouteNetwork :: (MonadIO c, '[State () (Router r)] <: ms) => Code ms c (Network r)
-getRouteNetwork = routeNetwork <$> get
+getRouteSyndicate :: (MonadIO c, '[State () (Router r)] <: ms) => Code ms c (Syndicate r)
+getRouteSyndicate = routeSyndicate <$> get
 
-setRouteNetwork :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Network r -> Code ms c ()
-setRouteNetwork rn = void $ modify (\rtr -> (rtr { routeNetwork = rn } :: Router r,()))
+setRouteSyndicate :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Syndicate r -> Code ms c ()
+setRouteSyndicate rn = void $ modify (\rtr -> (rtr { routeSyndicate = rn } :: Router r,()))
 
 mkRouter :: forall ms c ts r.
             ( Monad c
@@ -59,7 +59,7 @@ mkRouter :: forall ms c ts r.
             , '[State () (Router r)] <: ms
             , Delta (Modules ts) (Messages ms)
             )
-         => Network r -> Code '[Route] (Code ms c) r -> State () (Router r) (Action ts c)
+         => Syndicate r -> Code '[Route] (Code ms c) r -> State () (Router r) (Action ts c)
 mkRouter nw rtr = state (Router (unsafeCoerce rtr) Nothing nw)
 
 -- Note that this /should not/ be called within the first 500 milliseconds
