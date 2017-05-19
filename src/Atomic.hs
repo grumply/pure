@@ -574,7 +574,7 @@ renderDynamicHTML h =
       case _strecord of
         Nothing -> return $ toTxt (_stview _ststate (\_ _ -> return ()))
         Just str -> do
-          (_,_,_,SomeAtom a) <- readIORef str
+          (_,_,SomeAtom a,_) <- readIORef str
           renderDynamicHTML a
 
     SVGAtom {..} -> do

@@ -105,48 +105,59 @@ data Feature e
   | Style
     { _stylePairs :: [(Txt,Txt)] }
   | On
-    { _eventName :: Txt
+    { _eventId :: Txt
+    , _eventName :: Txt
     , _eventOptions :: Options
-    , _eventCreate :: ENode -> Obj -> IO (Maybe e)
+    , _eventCreate :: IO () -> ENode -> Obj -> IO (Maybe e)
     , _eventListener :: Maybe (IO ())
     }
   | OnWin
-    { _eventName :: Txt
+    { _eventId :: Txt
+    , _eventName :: Txt
     , _eventOptions :: Options
-    , _eventWinCreate :: ENode -> Win -> Obj -> IO (Maybe e)
+    , _eventWinCreate :: IO () -> ENode -> Win -> Obj -> IO (Maybe e)
     , _eventListener :: Maybe (IO ())
     }
   | OnDoc
-    { _eventName :: Txt
+    { _eventId :: Txt
+    , _eventName :: Txt
     , _eventOptions :: Options
-    , _eventDocCreate :: ENode -> Doc -> Obj -> IO (Maybe e)
+    , _eventDocCreate :: IO () -> ENode -> Doc -> Obj -> IO (Maybe e)
     , _eventListener :: Maybe (IO ())
     }
   | OnBuild
-    { _buildEvent :: e
+    { _eventId :: Txt
+    , _buildEvent :: e
     }
   | OnDestroy
-    { _destroyEvent :: e
+    { _eventId :: Txt
+    , _destroyEvent :: e
     }
   | OnWillMount
-    { _willMountEvent :: ENode -> IO ()
+    { _eventId :: Txt
+    , _willMountEvent :: ENode -> IO ()
     }
   | OnDidMount
-    { _didMountEvent :: ENode -> IO ()
+    { _eventId :: Txt
+    , _didMountEvent :: ENode -> IO ()
     }
   | forall model. OnUpdate
-    { _updateModel :: model
+    { _eventId :: Txt
+    , _updateModel :: model
     , _updateEvent :: model -> ENode -> IO ()
     }
   | forall model. OnModel
-    { _watchModel :: model
+    { _eventId :: Txt
+    , _watchModel :: model
     , _modelEvent :: model -> ENode -> e
     }
   | OnWillUnmount
-    { _willUnmountEvent :: ENode -> IO ()
+    { _eventId :: Txt
+    , _willUnmountEvent :: ENode -> IO ()
     }
   | OnDidUnmount
-    { _didUnmountEvent :: ENode -> IO ()
+    { _eventId :: Txt
+    , _didUnmountEvent :: ENode -> IO ()
     }
   | Link
     { _link :: Txt
@@ -221,28 +232,28 @@ instance Eq (Feature e) where
     prettyUnsafeEq a a' && prettyUnsafeEq v v'
   (==) (Style ss) (Style ss') =
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
-  (==) (On e os ev _) (On e' os' ev' _) =
-    prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
-  (==) (OnWin e os ev _) (OnWin e' os' ev' _) =
-    prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
-  (==) (OnDoc e os ev _) (OnDoc e' os' ev' _) =
-    prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq ev ev'
-  (==) (OnBuild e) (OnBuild e') =
-    reallyUnsafeEq e e'
-  (==) (OnDestroy e) (OnDestroy e') =
-    reallyUnsafeEq e e'
-  (==) (OnWillMount e) (OnWillMount e') =
-    reallyUnsafeEq e e'
-  (==) (OnDidMount e) (OnDidMount e') =
-    reallyUnsafeEq e e'
-  (==) (OnUpdate m f) (OnUpdate m' f') =
-    reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
-  (==) (OnModel m f) (OnModel m' f') =
-    reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
-  (==) (OnWillUnmount e) (OnWillUnmount e') =
-    reallyUnsafeEq e e'
-  (==) (OnDidUnmount e) (OnDidUnmount e') =
-    reallyUnsafeEq e e'
+  (==) (On en e os ev _) (On en' e' os' ev' _) =
+    prettyUnsafeEq en en' && prettyUnsafeEq e e' && prettyUnsafeEq os os'
+  (==) (OnWin en e os ev _) (OnWin en' e' os' ev' _) =
+    prettyUnsafeEq en en' && prettyUnsafeEq e e' && prettyUnsafeEq os os'
+  (==) (OnDoc en e os ev _) (OnDoc en' e' os' ev' _) =
+    prettyUnsafeEq en en' && prettyUnsafeEq e e' && prettyUnsafeEq os os'
+  (==) (OnBuild en e) (OnBuild en' e') =
+    prettyUnsafeEq en en'
+  (==) (OnDestroy en e) (OnDestroy en' e') =
+    prettyUnsafeEq en en'
+  (==) (OnWillMount en e) (OnWillMount en' e') =
+    prettyUnsafeEq en en'
+  (==) (OnDidMount en e) (OnDidMount en' e') =
+    prettyUnsafeEq en en'
+  (==) (OnUpdate en m f) (OnUpdate en' m' f') =
+    prettyUnsafeEq en en' && reallyVeryUnsafeEq m m'
+  (==) (OnModel en m f) (OnModel en' m' f') =
+    prettyUnsafeEq en en' && reallyVeryUnsafeEq m m'
+  (==) (OnWillUnmount en e) (OnWillUnmount en' e') =
+    prettyUnsafeEq en en'
+  (==) (OnDidUnmount en e) (OnDidUnmount en' e') =
+    prettyUnsafeEq en en'
   (==) (Link t _) (Link t' _) =
     prettyUnsafeEq t t'
   (==) (SVGLink t _) (SVGLink t' _) =
@@ -296,77 +307,110 @@ property = Property
 boolProperty :: Txt -> Bool -> Feature e
 boolProperty nm b = property nm (if b then "true" else "") -- exploit the true/false nature of JS non-empty and empty strings, respectively
 
-on :: Txt -> (ENode -> Obj -> IO (Maybe e)) -> Feature e
-on ev f = On ev def f Nothing
+on :: Txt -> e -> Feature e
+on ev e = On "" ev def (\_ _ _ -> return (Just e)) Nothing
 
-onDoc :: Txt -> (ENode -> Doc -> Obj -> IO (Maybe e)) -> Feature e
-onDoc ev f = OnDoc ev def f Nothing
+on' :: Txt -> (IO () -> ENode -> Obj -> IO (Maybe e)) -> Feature e
+on' = on_ ""
 
-onWin :: Txt -> (ENode -> Win -> Obj -> IO (Maybe e)) -> Feature e
-onWin ev f = OnWin ev def f Nothing
+on_ :: Txt -> Txt -> (IO () -> ENode -> Obj -> IO (Maybe e)) -> Feature e
+on_ en ev f = On en ev def f Nothing
 
-on' :: Txt -> e -> Feature e
-on' ev e = On ev def (\_ _ -> return (Just e)) Nothing
+onDoc :: Txt -> e -> Feature e
+onDoc ev e = OnDoc "" ev def (\_ _ _ _ -> return (Just e)) Nothing
 
-onDoc' :: Txt -> e -> Feature e
-onDoc' ev e = OnDoc ev def (\_ _ _ -> return (Just e)) Nothing
+onDoc' :: Txt -> (IO () -> ENode -> Doc -> Obj -> IO (Maybe e)) -> Feature e
+onDoc' = onDoc_ ""
 
-onWin' :: Txt -> e -> Feature e
-onWin' ev e = OnWin ev def (\_ _ _ -> return (Just e)) Nothing
+onDoc_ :: Txt -> Txt -> (IO () -> ENode -> Doc -> Obj -> IO (Maybe e)) -> Feature e
+onDoc_ en ev f = OnDoc en ev def f Nothing
+
+onWin :: Txt -> e -> Feature e
+onWin ev e = OnWin "" ev def (\_ _ _ _ -> return (Just e)) Nothing
+
+onWin' :: Txt -> (IO () -> ENode -> Win -> Obj -> IO (Maybe e)) -> Feature e
+onWin' = onWin_ ""
+
+onWin_ :: Txt -> Txt -> (IO () -> ENode -> Win -> Obj -> IO (Maybe e)) -> Feature e
+onWin_ en ev f = OnWin en ev def f Nothing
 
 -- runs when the feature is created; top-down
 -- onBuild is guaranteed to run before onDestroy, but ordering w.r.t. mount/update/unmount is undetermined
 onBuild :: e -> Feature e
-onBuild = OnBuild
+onBuild = onBuild' ""
+
+onBuild' :: Txt -> e -> Feature e
+onBuild' = OnBuild
 
 -- runs when the feature is destroyed; top-down
 -- onDestroy is guaranteed to run after onBuild, but ordering w.r.t. mount/update/unmount is undetermined
 onDestroy :: e -> Feature e
-onDestroy = OnDestroy
+onDestroy = onDestroy' ""
+
+onDestroy' :: Txt -> e -> Feature e
+onDestroy' = OnDestroy
 
 -- runs when the attribute is being set; top-down
 onWillMount :: (ENode -> IO ()) -> Feature e
-onWillMount = OnWillMount
+onWillMount = onWillMount' ""
+
+onWillMount' :: Txt -> (ENode -> IO ()) -> Feature e
+onWillMount' = OnWillMount
 
 -- runs when the element is inserted into its parent, not after it is inserted into the DOM; bottom-up
 -- not guaranteed to run
 onDidMount :: (ENode -> IO ()) -> Feature e
-onDidMount = OnDidMount
+onDidMount = onDidMount' ""
+
+onDidMount' :: Txt -> (ENode -> IO ()) -> Feature e
+onDidMount' = OnDidMount
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
 -- make sure the body of the function will not change; must be totally static modulo the model/enode!
 onModel :: model -> (model -> ENode -> e) -> Feature e
-onModel = OnModel
+onModel = onModel' ""
+
+onModel' :: Txt -> model -> (model -> ENode -> e) -> Feature e
+onModel' = OnModel
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
 -- make sure the body of the function will not change; must be totally static modulo the model/enode!
 onModelIO :: model -> (model -> ENode -> IO ()) -> Feature e
-onModelIO = OnUpdate
+onModelIO = onModelIO' ""
+
+onModelIO' :: Txt -> model -> (model -> ENode -> IO ()) -> Feature e
+onModelIO' = OnUpdate
 
 -- runs when the attribute is being cleaned up; top-down
 onWillUnmount :: (ENode -> IO ()) -> Feature e
-onWillUnmount = OnWillUnmount
+onWillUnmount = onWillUnmount' ""
+
+onWillUnmount' :: Txt -> (ENode -> IO ()) -> Feature e
+onWillUnmount' = OnWillUnmount
 
 -- runs when the element is remove()'d, not when it is removed from the DOM; bottom-up
 onDidUnmount :: (ENode -> IO ()) -> Feature e
-onDidUnmount = OnDidUnmount
+onDidUnmount = onDidUnmount' ""
+
+onDidUnmount' :: Txt -> (ENode -> IO ()) -> Feature e
+onDidUnmount' = OnDidUnmount
 
 preventDefault :: Feature e -> Feature e
-preventDefault (On ev os f m) = On ev (os { _preventDef = True }) f m
-preventDefault (OnDoc ev os f m) = OnDoc ev (os { _preventDef = True }) f m
-preventDefault (OnWin ev os f m) = OnWin ev (os { _preventDef = True }) f m
+preventDefault (On en ev os f m) = On en ev (os { _preventDef = True }) f m
+preventDefault (OnDoc en ev os f m) = OnDoc en ev (os { _preventDef = True }) f m
+preventDefault (OnWin en ev os f m) = OnWin en ev (os { _preventDef = True }) f m
 preventDefault f = f
 
 stopPropagation :: Feature e -> Feature e
-stopPropagation (On ev os f m) = On ev (os { _stopProp = True }) f m
-stopPropagation (OnDoc ev os f m) = OnDoc ev (os { _stopProp = True }) f m
-stopPropagation (OnWin ev os f m) = OnWin ev (os { _stopProp = True }) f m
+stopPropagation (On en ev os f m) = On en ev (os { _stopProp = True }) f m
+stopPropagation (OnDoc en ev os f m) = OnDoc en ev (os { _stopProp = True }) f m
+stopPropagation (OnWin en ev os f m) = OnWin en ev (os { _stopProp = True }) f m
 stopPropagation f = f
 
 intercept :: Feature e -> Feature e
-intercept (On ev os f m) = On ev (os { _preventDef = True, _stopProp = True }) f m
-intercept (OnDoc ev os f m) = OnDoc ev (os { _preventDef = True, _stopProp = True }) f m
-intercept (OnWin ev os f m) = OnWin ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (On en ev os f m) = On en ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnDoc en ev os f m) = OnDoc en ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnWin en ev os f m) = OnWin en ev (os { _preventDef = True, _stopProp = True }) f m
 intercept f = f
 
 styleList :: [(Txt,Txt)] -> Feature e
@@ -1497,86 +1541,86 @@ clipPathUrl = attribute "clip-path" . (\x -> "url(#" <> x <> ")")
 -- Event listener 'Attribute's
 
 onClick :: e -> Feature e
-onClick = on' "click"
+onClick = on "click"
 
 onDoubleClick :: e -> Feature e
-onDoubleClick = on' "dblclick"
+onDoubleClick = on "dblclick"
 
 onMouseDown :: e -> Feature e
-onMouseDown = on' "mousedown"
+onMouseDown = on "mousedown"
 
 onMouseUp :: e -> Feature e
-onMouseUp = on' "mouseup"
+onMouseUp = on "mouseup"
 
 onTouchStart :: e -> Feature e
-onTouchStart = on' "touchstart"
+onTouchStart = on "touchstart"
 
 onTouchEnd :: e -> Feature e
-onTouchEnd = on' "touchend"
+onTouchEnd = on "touchend"
 
 onMouseEnter :: e -> Feature e
-onMouseEnter = on' "mouseenter"
+onMouseEnter = on "mouseenter"
 
 onMouseLeave :: e -> Feature e
-onMouseLeave = on' "mouseleave"
+onMouseLeave = on "mouseleave"
 
 onMouseOver :: e -> Feature e
-onMouseOver = on' "mouseover"
+onMouseOver = on "mouseover"
 
 onMouseOut :: e -> Feature e
-onMouseOut = on' "mouseout"
+onMouseOut = on "mouseout"
 
 onMouseMove :: e -> Feature e
-onMouseMove = on' "mousemove"
+onMouseMove = on "mousemove"
 
 onTouchMove :: e -> Feature e
-onTouchMove = on' "touchmove"
+onTouchMove = on "touchmove"
 
 onTouchCancel :: e -> Feature e
-onTouchCancel = on' "touchcancel"
+onTouchCancel = on "touchcancel"
 
 onInput :: (Txt -> e) -> Feature e
-onInput f = on "input" $ \_ -> fmap return $ flip parse $ \o -> do
+onInput f = on' "input" $ \_ _ -> fmap return $ flip parse $ \o -> do
   target <- o .: "target"
   value <- target .: "value"
   pure $ f value
 
 onInputChange :: (Txt -> e) -> Feature e
-onInputChange f = on "change" $ \_ -> fmap return $ flip parse $ \o -> do
+onInputChange f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
   target <- o .: "target"
   value <- target .: "value"
   pure $ f value
 
 onCheck :: (Bool -> e) -> Feature e
-onCheck f = on "change" $ \_ -> fmap return $ flip parse $ \o -> do
+onCheck f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
   target <- o .: "target"
   checked <- target .: "checked"
   pure $ f checked
 
 onSubmit :: e -> Feature e
-onSubmit e = intercept $ on "submit" $ \_ _ -> return $ Just e
+onSubmit e = intercept $ on' "submit" $ \_ _ _ -> return $ Just e
 
 onBlur :: e -> Feature e
-onBlur = on' "blur"
+onBlur = on "blur"
 
 onFocus :: e -> Feature e
-onFocus = on' "focus"
+onFocus = on "focus"
 
 onKeyUp :: (Int -> e) -> Feature e
-onKeyUp f = on "keyup" $ \_ -> fmap return $ flip parse $ \o -> do
+onKeyUp f = on' "keyup" $ \_ _ -> fmap return $ flip parse $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 
 
 onKeyDown :: (Int -> e) -> Feature e
-onKeyDown f = on "keydown" $ \_ -> fmap return $ flip parse $ \o -> do
+onKeyDown f = on' "keydown" $ \_ _ -> fmap return $ flip parse $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 
 onKeyPress :: (Int -> e) -> Feature e
-onKeyPress f = on "keypress" $ \_ -> fmap return $ flip parse $ \o -> do
+onKeyPress f = on' "keypress" $ \_ _ -> fmap return $ flip parse $ \o -> do
   key <- o .: "keyCode"
   pure $ f key
 
 ignoreClick :: Feature e
-ignoreClick = intercept $ on "click" $ \_ _ -> return Nothing
+ignoreClick = intercept $ on' "click" $ \_ _ _ -> return Nothing
