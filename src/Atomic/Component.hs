@@ -2238,6 +2238,18 @@ removeAttribute_ element attr =
     _ -> return ()
 #endif
 
+onRaw :: ENode -> Txt -> Atomic.Attribute.Options -> (IO () -> Obj -> IO ()) -> IO (IO ())
+onRaw el nm os f = do
+  stopper <- newIORef undefined
+  stopListener <- Ev.on el (Ev.unsafeEventName nm :: Ev.EventName E.Element T.CustomEvent) $ do
+    ce <- Ev.event
+    when (_preventDef os) Ev.preventDefault
+    when (_stopProp os) Ev.stopPropagation
+    stop <- liftIO $ readIORef stopper
+    liftIO $ f stop (unsafeCoerce ce)
+  writeIORef stopper stopListener
+  return stopListener
+
 {-# NOINLINE setAttribute_ #-}
 setAttribute_ :: (e -> IO ()) -> Bool -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())
 setAttribute_ c diffing element attr didMount =
