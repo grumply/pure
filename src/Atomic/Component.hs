@@ -705,7 +705,7 @@ reflect c =
     ComponentView {..} <- liftIO $ readIORef asLive
     return (unsafeCoerce cvCurrentLive)
 
-data DiffStrategy = Unequal | Eager | Manual deriving (Eq)
+data DiffStrategy = Eager | Manual deriving (Eq)
 
 type Differ ms m =
        (m -> Atom (Code ms IO ()))
@@ -939,7 +939,7 @@ mkComponent mkComponentAction c@Component {..} = do
     built <- build $ state (ComponentState
                                 Nothing
                                 (differ render (publish (chViews ch) ()) sendEv)
-                                Unequal
+                                Eager
                                 us
                                 model
                                 (crView cr)
@@ -963,12 +963,6 @@ diff :: forall m ms. (Base m <: ms) => Proxy m -> Code ms IO ()
 diff _ = do
   as@ComponentState {..} :: ComponentState m <- get
   unsafeCoerce (asDiffer as)
-
-setUnequalDiff :: forall m ms. ('[State () (ComponentState m)] <: ms)
-            => Proxy m -> Code ms IO ()
-setUnequalDiff _ = do
-  ComponentState {..} :: ComponentState m <- get
-  put ComponentState { asDiffStrategy = Unequal, .. }
 
 setEagerDiff :: forall m ms. ('[State () (ComponentState m)] <: ms)
              => Proxy m -> Code ms IO ()
