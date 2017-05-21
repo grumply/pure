@@ -11,7 +11,7 @@ module Atomic
   , Atom(..)
   , mkAtom, mkSVGAtom, text, unindent, raw, keyed, hashed, component, st
   , css, css', scss, scss', styles
-  , diff, setManualDiff, setEagerDiff, setUnequalDiff
+  , diff, setManualDiff, setEagerDiff
   , getModel, putModel, modifyModel
   , onModelChange, onOwnModelChange, onOwnModelChangeByProxy, ownView, currentView
   , ComponentHooks(..)

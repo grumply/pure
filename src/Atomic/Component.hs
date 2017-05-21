@@ -729,7 +729,7 @@ data ComponentPatch m where
     , ap_hooks        :: ComponentHooks
     } -> ComponentPatch m
 
-type IsComponent' ts ms m = (Base m <: ms, Base m <. ts, Delta (Modules ts) (Messages ms), Eq m)
+type IsComponent' ts ms m = (Base m <: ms, Base m <. ts, Delta (Modules ts) (Messages ms))
 type IsComponent ms m = IsComponent' ms ms m
 
 data ComponentHooks = ComponentHooks
@@ -1059,7 +1059,6 @@ getModel = do
 {-# INLINE putModel #-}
 putModel :: forall ms m.
         ( Base m <: ms
-        , Eq m
         )
      => m -> Code ms IO ()
 putModel !new = do
@@ -1075,7 +1074,6 @@ putModel !new = do
     1# -> return ()
     _  ->
       case asDiffStrategy of
-        Unequal   -> unless (old == new) (d cmp')
         Eager  -> d cmp'
         Manual -> return ()
 #else
@@ -1085,7 +1083,6 @@ putModel !new = do
 {-# INLINE modifyModel #-}
 modifyModel :: forall ms m.
            ( Base m <: ms
-           , Eq m
            )
         => (m -> m)
         -> Code ms IO ()
@@ -1103,7 +1100,6 @@ modifyModel f = do
     1# -> return ()
     _  ->
       case asDiffStrategy of
-        Unequal   -> unless (old == new) (d cmp')
         Eager  -> d cmp'
         Manual -> return ()
 #else
@@ -1943,11 +1939,25 @@ diffHelper f doc ch isFG =
                           rest <- go_ i' as ms bs
                           return $ (akey,new):rest
 
-                      | otherwise -> do
-                          didUnmount <- cleanup f [a]
-                          delete a
-                          didUnmount
-                          go_ i as ms ((bkey,b):bs)
+                      | otherwise ->
+                          case (old,new) of
+                            ([_],(_:(bkey',b'):_)) ->
+                              if prettyUnsafeEq akey bkey' then do
+                                new <- buildAndEmbedMaybe f doc ch isFG Nothing b
+                                insertAt n i new
+                                let !i' = i + 1
+                                rest <- go_ i' old mid bs
+                                return $ (bkey,new):rest
+                              else do
+                                didUnmount <- cleanup f [a]
+                                delete a
+                                didUnmount
+                                go_ i as ms ((bkey,b):bs)
+                            _ -> do
+                              didUnmount <- cleanup f [a]
+                              delete a
+                              didUnmount
+                              go_ i as ms ((bkey,b):bs)
 
 {-# NOINLINE applyStyleDiffs #-}
 applyStyleDiffs :: ENode -> [(Txt,Txt)] -> [(Txt,Txt)] -> IO [(Txt,Txt)]
