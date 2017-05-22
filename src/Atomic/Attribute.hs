@@ -2,12 +2,15 @@
 {-# language OverloadedStrings #-}
 {-# language TemplateHaskell #-}
 {-# language StandaloneDeriving #-}
+{-# language PatternSynonyms #-}
+{-# language ViewPatterns #-}
 {-# language CPP #-}
 module Atomic.Attribute where
 
 import Ef.Base hiding (Object,object)
 
-import Data.Txt as T
+import Data.Txt as T hiding (readIntegerMaybe)
+import qualified Data.Txt as T
 import Data.JSON hiding (Options)
 
 import Atomic.Default
@@ -37,9 +40,11 @@ import qualified GHCJS.DOM.Types as T
 import qualified GHCJS.DOM.Window as W
 import qualified GHCJS.DOM.Document as D
 import qualified GHCJS.DOM.Location as L
+import qualified Data.JSString.Read as T
 #else
 import qualified Data.Text as JSS
 import Data.Aeson (Value(..))
+import Data.Text.Read as T
 #endif
 
 type Win =
@@ -92,7 +97,7 @@ data Options = Options
 instance Default Options where
   def = Options False False
 
-data Feature e
+data Feature (ms :: [* -> *])
   = NullFeature
   | Attribute
     { _attr :: Txt
@@ -102,36 +107,36 @@ data Feature e
     { _prop :: Txt
     , _value :: Txt
     }
-  | Style
+  | StyleF
     { _stylePairs :: [(Txt,Txt)] }
-  | On
+  | OnE
     { _eventId :: Txt
     , _eventName :: Txt
     , _eventOptions :: Options
-    , _eventCreate :: IO () -> ENode -> Obj -> IO (Maybe e)
+    , _eventCreate :: IO () -> ENode -> Obj -> IO (Maybe (Code ms IO ()))
     , _eventListener :: Maybe (IO ())
     }
   | OnWin
     { _eventId :: Txt
     , _eventName :: Txt
     , _eventOptions :: Options
-    , _eventWinCreate :: IO () -> ENode -> Win -> Obj -> IO (Maybe e)
+    , _eventWinCreate :: IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ()))
     , _eventListener :: Maybe (IO ())
     }
   | OnDoc
     { _eventId :: Txt
     , _eventName :: Txt
     , _eventOptions :: Options
-    , _eventDocCreate :: IO () -> ENode -> Doc -> Obj -> IO (Maybe e)
+    , _eventDocCreate :: IO () -> ENode -> Doc -> Obj -> IO (Maybe (Code ms IO ()))
     , _eventListener :: Maybe (IO ())
     }
   | OnBuild
     { _eventId :: Txt
-    , _buildEvent :: e
+    , _buildEvent :: Code ms IO ()
     }
   | OnDestroy
     { _eventId :: Txt
-    , _destroyEvent :: e
+    , _destroyEvent :: Code ms IO ()
     }
   | OnWillMount
     { _eventId :: Txt
@@ -149,7 +154,7 @@ data Feature e
   | forall model. OnModel
     { _eventId :: Txt
     , _watchModel :: model
-    , _modelEvent :: model -> ENode -> e
+    , _modelEvent :: model -> ENode -> Code ms IO ()
     }
   | OnWillUnmount
     { _eventId :: Txt
@@ -159,11 +164,11 @@ data Feature e
     { _eventId :: Txt
     , _didUnmountEvent :: ENode -> IO ()
     }
-  | Link
+  | LinkTo
     { _link :: Txt
     , _eventListener :: Maybe (IO ())
     }
-  | SVGLink
+  | SVGLinkTo
     { _link :: Txt
     , _eventListener :: Maybe (IO ())
     }
@@ -172,9 +177,7 @@ data Feature e
     , _value :: Txt
     }
 
-deriving instance Functor Feature
-
-instance ToJSON (Feature e) where
+instance ToJSON (Feature ms) where
   toJSON f =
 #ifdef __GHCJS__
     objectValue $
@@ -184,13 +187,13 @@ instance ToJSON (Feature e) where
       go NullFeature = object [ "type" .= ("null" :: Txt)]
       go (Property k v) = object [ "type" .= ("prop" :: Txt), "prop" .= k, "val" .= v]
       go (Attribute k v) = object [ "type" .= ("attr" :: Txt), "attr" .= k, "val" .= v]
-      go (Style ss) = object [ "type" .= ("style" :: Txt), "styles" .= ss ]
-      go (Link e _) = object [ "type" .= ("link" :: Txt), "link" .= e]
-      go (SVGLink e _) = object [ "type" .= ("svglink" :: Txt), "link" .= e ]
+      go (StyleF ss) = object [ "type" .= ("style" :: Txt), "styles" .= ss ]
+      go (LinkTo e _) = object [ "type" .= ("link" :: Txt), "link" .= e]
+      go (SVGLinkTo e _) = object [ "type" .= ("svglink" :: Txt), "link" .= e ]
       go (XLink k v) = object [ "type" .= ("xlink" :: Txt), "key" .= k, "val" .= v]
       go _ = object []
 
-instance FromJSON (Feature e) where
+instance FromJSON (Feature ms) where
   parseJSON o0 = do
 #ifdef __GHCJS__
     flip (withObject "obj") o0 $ \o -> do
@@ -211,28 +214,28 @@ instance FromJSON (Feature e) where
           pure $ Property k v
         "style" -> do
           ss <- o .: "styles"
-          pure $ Style ss
+          pure $ StyleF ss
         "link" -> do
           l <- o .: "link"
-          pure $ Link l Nothing
+          pure $ LinkTo l Nothing
         "svglink" -> do
           l <- o .: "link"
-          pure $ SVGLink l Nothing
+          pure $ SVGLinkTo l Nothing
         "xlink" -> do
           k <- o .: "key"
           v <- o .: "val"
           pure $ XLink k v
         _ -> Ef.Base.empty
 
-instance Eq (Feature e) where
+instance Eq (Feature ms) where
   (==) NullFeature NullFeature = True
   (==) (Property p v) (Property p' v') =
     prettyUnsafeEq p p' && prettyUnsafeEq v v'
   (==) (Attribute a v) (Attribute a' v') =
     prettyUnsafeEq a a' && prettyUnsafeEq v v'
-  (==) (Style ss) (Style ss') =
+  (==) (StyleF ss) (StyleF ss') =
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
-  (==) (On en e os ev _) (On en' e' os' ev' _) =
+  (==) (OnE en e os ev _) (OnE en' e' os' ev' _) =
     prettyUnsafeEq en en' && prettyUnsafeEq e e' && prettyUnsafeEq os os'
   (==) (OnWin en e os ev _) (OnWin en' e' os' ev' _) =
     prettyUnsafeEq en en' && prettyUnsafeEq e e' && prettyUnsafeEq os os'
@@ -254,22 +257,22 @@ instance Eq (Feature e) where
     prettyUnsafeEq en en'
   (==) (OnDidUnmount en e) (OnDidUnmount en' e') =
     prettyUnsafeEq en en'
-  (==) (Link t _) (Link t' _) =
+  (==) (LinkTo t _) (LinkTo t' _) =
     prettyUnsafeEq t t'
-  (==) (SVGLink t _) (SVGLink t' _) =
+  (==) (SVGLinkTo t _) (SVGLinkTo t' _) =
     prettyUnsafeEq t t'
   (==) (XLink t _) (XLink t' _) =
     prettyUnsafeEq t t'
   (==) _ _ = False
 
-instance Cond (Feature e) where
+instance Cond (Feature ms) where
   nil = NullFeature
 
-instance IsString (Feature e) where
+instance IsString (Feature ms) where
   fromString = Attribute "class" . fromString
 
-instance GHC.Exts.IsList (Feature e) where
-  type Item (Feature e) = Txt
+instance GHC.Exts.IsList (Feature ms) where
+  type Item (Feature ms) = Txt
   fromList = fromTxt . T.intercalate " "
   toList (Attribute "class" cs) = T.words cs
   toList _ = []
@@ -283,169 +286,149 @@ instance GHC.Exts.IsList ([a] -> [a]) where
       go (x:xs) xs' = x:go xs xs'
   toList f = f []
 
-instance {-# OVERLAPS #-} IsString [Feature e] where
+instance {-# OVERLAPS #-} IsString [Feature ms] where
   fromString s = [fromString s]
 
-instance FromTxt (Feature e) where
+instance FromTxt (Feature ms) where
   fromTxt = Attribute "class" . fromTxt
 
-instance FromTxt [Feature e] where
+instance FromTxt [Feature ms] where
   fromTxt t = [fromTxt t]
 
-nullA :: Feature e
-nullA = NullFeature
+pattern Attr k v <- (Attribute k v) where
+  Attr k v = Attribute k v
 
-attribute :: Txt -> Txt -> Feature e
-attribute = Attribute
+pattern Prop k v <- (Property k v) where
+  Prop k v = Property k v
 
-boolAttribute :: Txt -> Feature e
-boolAttribute nm = Attribute nm ""
+checkNotNull p = if T.null p then (False,p) else (True,p)
 
-property :: Txt -> Txt -> Feature e
-property = Property
+pattern BoolProp k b <- (Property k (checkNotNull -> (b,_))) where
+  BoolProp k b = Property k (if b then "true" else "")
 
-boolProperty :: Txt -> Bool -> Feature e
-boolProperty nm b = property nm (if b then "true" else "") -- exploit the true/false nature of JS non-empty and empty strings, respectively
+on :: Txt -> Code ms IO () -> Feature ms
+on ev e = OnE "" ev def (\_ _ _ -> return (Just e)) Nothing
 
-on :: Txt -> e -> Feature e
-on ev e = On "" ev def (\_ _ _ -> return (Just e)) Nothing
+pattern On ev opts f <- (OnE _ ev opts f _) where
+  On ev opts f = OnE "" ev opts f Nothing
+-- on' :: Txt -> (IO () -> ENode -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
+-- on' = on_ ""
 
-on' :: Txt -> (IO () -> ENode -> Obj -> IO (Maybe e)) -> Feature e
-on' = on_ ""
+-- on_ :: Txt -> Txt -> (IO () -> ENode -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
+-- on_ en ev f = On en ev def f Nothing
 
-on_ :: Txt -> Txt -> (IO () -> ENode -> Obj -> IO (Maybe e)) -> Feature e
-on_ en ev f = On en ev def f Nothing
+pattern OnDocument ev opts f <- (OnDoc _ ev opts f _) where
+  OnDocument ev opts f = OnDoc "" ev opts f Nothing
 
-onDoc :: Txt -> e -> Feature e
-onDoc ev e = OnDoc "" ev def (\_ _ _ _ -> return (Just e)) Nothing
+-- onDoc' :: Txt -> (IO () -> ENode -> Doc -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
+-- onDoc' = onDoc_ ""
 
-onDoc' :: Txt -> (IO () -> ENode -> Doc -> Obj -> IO (Maybe e)) -> Feature e
-onDoc' = onDoc_ ""
+-- onDoc_ :: Txt -> Txt -> (IO () -> ENode -> Doc -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
+-- onDoc_ en ev f = OnDoc en ev def f Nothing
 
-onDoc_ :: Txt -> Txt -> (IO () -> ENode -> Doc -> Obj -> IO (Maybe e)) -> Feature e
-onDoc_ en ev f = OnDoc en ev def f Nothing
+pattern OnWindow ev opts f <- (OnWin _ ev opts f _) where
+  OnWindow ev opts f = OnWin "" ev opts f Nothing
 
-onWin :: Txt -> e -> Feature e
-onWin ev e = OnWin "" ev def (\_ _ _ _ -> return (Just e)) Nothing
+-- onWin' :: Txt -> (IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
+-- onWin' = onWin_ ""
 
-onWin' :: Txt -> (IO () -> ENode -> Win -> Obj -> IO (Maybe e)) -> Feature e
-onWin' = onWin_ ""
-
-onWin_ :: Txt -> Txt -> (IO () -> ENode -> Win -> Obj -> IO (Maybe e)) -> Feature e
-onWin_ en ev f = OnWin en ev def f Nothing
+-- onWin_ :: Txt -> Txt -> (IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
+-- onWin_ en ev f = OnWin en ev def f Nothing
 
 -- runs when the feature is created; top-down
 -- onBuild is guaranteed to run before onDestroy, but ordering w.r.t. mount/update/unmount is undetermined
-onBuild :: e -> Feature e
-onBuild = onBuild' ""
-
-onBuild' :: Txt -> e -> Feature e
-onBuild' = OnBuild
+pattern OnAdd f <- (OnBuild _ f) where
+  OnAdd f = OnBuild "" f
 
 -- runs when the feature is destroyed; top-down
 -- onDestroy is guaranteed to run after onBuild, but ordering w.r.t. mount/update/unmount is undetermined
-onDestroy :: e -> Feature e
-onDestroy = onDestroy' ""
+pattern OnRemove f <- (OnDestroy _ f) where
+  OnRemove f = OnDestroy "" f
 
-onDestroy' :: Txt -> e -> Feature e
-onDestroy' = OnDestroy
+pattern OnMounting f <- (OnWillMount _ f) where
+  OnMounting f = OnWillMount "" f
 
--- runs when the attribute is being set; top-down
-onWillMount :: (ENode -> IO ()) -> Feature e
-onWillMount = onWillMount' ""
-
-onWillMount' :: Txt -> (ENode -> IO ()) -> Feature e
-onWillMount' = OnWillMount
-
--- runs when the element is inserted into its parent, not after it is inserted into the DOM; bottom-up
--- not guaranteed to run
-onDidMount :: (ENode -> IO ()) -> Feature e
-onDidMount = onDidMount' ""
-
-onDidMount' :: Txt -> (ENode -> IO ()) -> Feature e
-onDidMount' = OnDidMount
+pattern OnMounted f <- (OnDidMount _ f) where
+  OnMounted f = OnDidMount "" f
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
 -- make sure the body of the function will not change; must be totally static modulo the model/enode!
-onModel :: model -> (model -> ENode -> e) -> Feature e
-onModel = onModel' ""
-
-onModel' :: Txt -> model -> (model -> ENode -> e) -> Feature e
-onModel' = OnModel
+pattern Watch mdl f <- (OnModel _ mdl f) where
+  Watch mdl f = OnModel "" mdl f
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
 -- make sure the body of the function will not change; must be totally static modulo the model/enode!
-onModelIO :: model -> (model -> ENode -> IO ()) -> Feature e
-onModelIO = onModelIO' ""
-
-onModelIO' :: Txt -> model -> (model -> ENode -> IO ()) -> Feature e
-onModelIO' = OnUpdate
+pattern WatchIO mdl f <- (OnUpdate _ mdl f) where
+  WatchIO mdl f = OnUpdate "" mdl f
 
 -- runs when the attribute is being cleaned up; top-down
-onWillUnmount :: (ENode -> IO ()) -> Feature e
-onWillUnmount = onWillUnmount' ""
-
-onWillUnmount' :: Txt -> (ENode -> IO ()) -> Feature e
-onWillUnmount' = OnWillUnmount
+pattern OnUnmounting f <- (OnWillUnmount _ f) where
+  OnUnmounting f = OnWillUnmount "" f
 
 -- runs when the element is remove()'d, not when it is removed from the DOM; bottom-up
-onDidUnmount :: (ENode -> IO ()) -> Feature e
-onDidUnmount = onDidUnmount' ""
+pattern OnUnmounted f <- (OnDidUnmount _ f) where
+  OnUnmounted f = OnDidUnmount "" f
 
-onDidUnmount' :: Txt -> (ENode -> IO ()) -> Feature e
-onDidUnmount' = OnDidUnmount
-
-preventDefault :: Feature e -> Feature e
-preventDefault (On en ev os f m) = On en ev (os { _preventDef = True }) f m
+preventDefault :: Feature ms -> Feature ms
+preventDefault (OnE en ev os f m) = OnE en ev (os { _preventDef = True }) f m
 preventDefault (OnDoc en ev os f m) = OnDoc en ev (os { _preventDef = True }) f m
 preventDefault (OnWin en ev os f m) = OnWin en ev (os { _preventDef = True }) f m
 preventDefault f = f
 
-stopPropagation :: Feature e -> Feature e
-stopPropagation (On en ev os f m) = On en ev (os { _stopProp = True }) f m
+stopPropagation :: Feature ms -> Feature ms
+stopPropagation (OnE en ev os f m) = OnE en ev (os { _stopProp = True }) f m
 stopPropagation (OnDoc en ev os f m) = OnDoc en ev (os { _stopProp = True }) f m
 stopPropagation (OnWin en ev os f m) = OnWin en ev (os { _stopProp = True }) f m
 stopPropagation f = f
 
-intercept :: Feature e -> Feature e
-intercept (On en ev os f m) = On en ev (os { _preventDef = True, _stopProp = True }) f m
+intercept :: Feature ms -> Feature ms
+intercept (OnE en ev os f m) = OnE en ev (os { _preventDef = True, _stopProp = True }) f m
 intercept (OnDoc en ev os f m) = OnDoc en ev (os { _preventDef = True, _stopProp = True }) f m
 intercept (OnWin en ev os f m) = OnWin en ev (os { _preventDef = True, _stopProp = True }) f m
 intercept f = f
 
-styleList :: [(Txt,Txt)] -> Feature e
-styleList = Style
+pattern Styles ss <- (StyleF ss) where
+  Styles ss = StyleF ss
 
-linkA :: Txt -> Feature e
-linkA = flip Link Nothing
+-- l for local
+pattern Lref l <- (LinkTo l _) where
+  Lref l = LinkTo l Nothing
 
-href :: Txt -> Feature e
-href = property "href"
+pattern Href v <- (Property "href" v) where
+  Href v = Property "href" v
 
-val :: Txt -> Feature e
-val jst = property "value" jst
+pattern Value v <- (Property "value" v) where
+  Value v = Property "value" v
 
-xlink :: Txt -> Txt -> Feature e
+xlink :: Txt -> Txt -> Feature ms
 xlink xl v = XLink xl v
 
-svgLink :: Txt -> Feature e
-svgLink = flip SVGLink Nothing
+pattern SVGLink l <- (SVGLinkTo l _) where
+  SVGLink l = SVGLinkTo l Nothing
 
 makePrisms ''Feature
 makeLenses ''Feature
 makePrisms ''Options
 makeLenses ''Options
 
-classA :: Txt -> Feature e
-classA = attribute "class"
+pattern Classes cs <- (Attribute "class" (T.splitOn " " -> cs)) where
+  Classes cs = Attribute "class" $ T.intercalate " " cs
 
-classes :: [(Txt,Bool)] -> Feature e
-classes = classA
-  . JSS.intercalate " "
-  . mapMaybe (\(s,b) -> if b then Just s else Nothing)
+toBool :: Txt -> Bool
+toBool t = if t == "" then False else True
+
+fromBool :: Bool -> Txt
+fromBool b = if b then "true" else ""
+
+readIntegerMaybe t =
+#ifdef __GHCJS__
+  T.readIntegerMaybe t
+#else
+  either (\_ -> Nothing) (Just . fst) (T.signed T.decimal t)
+#endif
 
 -- not a fan of the inefficiency
--- addClass :: Txt -> [Feature e] -> [Feature e]
+-- addClass :: Txt -> [Feature ms] -> [Feature ms]
 -- addClass c = go False
 --   where
 --     go False [] = [Attribute "class" c]
@@ -453,1174 +436,1149 @@ classes = classA
 --     go _ ((Attribute "class" cs):fs) = (Attribute "class" (c <> " " <> cs)) : go True fs
 --     go b (f:fs) = f:go b fs
 
-idA :: Txt -> Feature e
-idA = property "id"
+pattern Id p <- (Property "id" p) where
+  Id p = Property "id" p
 
-titleA :: Txt -> Feature e
-titleA = property "title"
+pattern TitleP p <- (Property "title" p) where
+  TitleP p = Property "title" p
 
-hiddenA :: Bool -> Feature e
-hiddenA = boolProperty "hidden"
+pattern Hidden b <- (Property "hidden" (toBool -> b)) where
+  Hidden b = Property "hidden" (fromBool b)
 
-typeA :: Txt -> Feature e
-typeA = property "type"
+pattern Type p <- (Property "type" p) where
+  Type p = Property "type" p
 
-roleA :: Txt -> Feature e
-roleA = attribute "role"
+pattern Role v <- (Attribute "role" v) where
+  Role v = Attribute "role" v
 
-defaultValue :: Txt -> Feature e
-defaultValue = attribute "default-value"
+pattern DefaultValue v <- (Attribute "default-value" v) where
+  DefaultValue v = Attribute "default-value" v
 
-checked :: Bool -> Feature e
-checked = boolProperty "checked"
+pattern Checked b <- (Property "checked" (toBool -> b)) where
+  Checked b = Property "checked" (fromBool b)
 
-defaultChecked :: Feature e
-defaultChecked = attribute "checked" "checked"
+pattern DefaultChecked <- (Attribute "checked" "checked") where
+  DefaultChecked = Attribute "checked" "checked"
 
-placeholder :: Txt -> Feature e
-placeholder = property "placeholder"
+pattern Placeholder p <- (Property "placeholder" p) where
+  Placeholder p = Property "placeholder" p
 
-selected :: Bool -> Feature e
-selected = boolProperty "selected"
+pattern Selected b <- (Property "selected" (toBool -> b)) where
+  Selected b = Property "selected" (fromBool b)
 
-accept :: Txt -> Feature e
-accept = property "accept"
+pattern Accept p <- (Property "accept" p) where
+  Accept p = Property "accept" p
 
-acceptCharset :: Txt -> Feature e
-acceptCharset = property "accept-charset"
+pattern AcceptCharset p <- (Property "accept-charset" p) where
+  AcceptCharset p = Property "accept-charset" p
 
-autocomplete :: Bool -> Feature e
-autocomplete = boolProperty "autocomplete"
+pattern Autocomplete b <- (Property "autocomplete" (toBool -> b)) where
+  Autocomplete b = Property "autocomplete" (fromBool b)
 
-autofocus :: Bool -> Feature e
-autofocus = boolProperty "autofocus"
+pattern Autofocus b <- (Property "autofocus" (toBool -> b)) where
+  Autofocus b = Property "autofocus" (fromBool b)
 
-disabled :: Bool -> Feature e
-disabled = boolProperty "disabled"
+pattern Disabled b <- (Property "disabled" (toBool -> b)) where
+  Disabled b = Property "disabled" (fromBool b)
 
-enctype :: Txt -> Feature e
-enctype = property "enctyp"
+pattern Enctyp p <- (Property "enctyp" p) where
+  Enctyp p = Property "enctyp" p
 
-formaction :: Txt -> Feature e
-formaction = attribute "formaction"
+pattern Formaction v <- (Attribute "formaction" v) where
+  Formaction v = Attribute "formaction" v
 
-listA :: Txt -> Feature e
-listA = attribute "list"
+pattern ListA v <- (Attribute "list" v) where
+  ListA v = Attribute "list" v
 
-maxlength :: Int -> Feature e
-maxlength = attribute "maxlength" . toTxt
+pattern Maxlength i <- (Attribute "maxlength" (readIntegerMaybe -> Just i)) where
+  Maxlength i = Attribute "maxlength" (toTxt i)
 
-minlength :: Int -> Feature e
-minlength = attribute "minlength" . toTxt
+pattern Minlength i <- (Attribute "minlength" (readIntegerMaybe -> Just i)) where
+  Minlength i = Attribute "minlength" (toTxt i)
 
-methodA :: Txt -> Feature e
-methodA = property "method"
+pattern Method p <- (Property "method" p) where
+  Method p = Property "method" p
 
-multiple :: Bool -> Feature e
-multiple b = property "multiple" (if b then "multiple" else "")
+pattern Multiple b <- (Property "multiple" (checkNotNull -> (b,_))) where
+  Multiple b = Property "multiple" (if b then "multiple" else "")
 
-muted :: Bool -> Feature e
-muted b = property "muted" (if b then "muted" else "")
+pattern Muted b <- (Property "muted" (checkNotNull -> (b,_))) where
+  Muted b = Property "muted" (if b then "muted" else "")
 
-name :: Txt -> Feature e
-name = property "name"
+pattern Name p <- (Property "name" p) where
+  Name p = Property "name" p
 
-novalidate :: Bool -> Feature e
-novalidate = boolProperty "novalidate"
+pattern Novalidate b <- (Property "novalidate" (toBool -> b)) where
+  Novalidate b = Property "novalidate" (fromBool b)
 
-patternA :: Txt -> Feature e
-patternA = property "pattern"
+pattern Pattern p <- (Property "pattern" p) where
+  Pattern p = Property "pattern" p
 
-readonly :: Bool -> Feature e
-readonly = boolProperty "readonly"
+pattern Readonly b <- (Property "readonly" (toBool -> b)) where
+  Readonly b = Property "readonly" (fromBool b)
 
-required :: Bool -> Feature e
-required = boolProperty "required"
+pattern Required b <- (Property "required" (toBool -> b)) where
+  Required b = Property "required" (fromBool b)
 
-size :: Int -> Feature e
-size = attribute "size" . toTxt
+pattern Size i <- (Attribute "size" (readIntegerMaybe -> Just i)) where
+  Size i = Attribute "size" (toTxt i)
 
-forA :: Txt -> Feature e
-forA = property "htmlFor"
+pattern HtmlFor p <- (Property "htmlFor" p) where
+  HtmlFor p = Property "htmlFor" p
 
-formA :: Txt -> Feature e
-formA = attribute "form"
+pattern FormA v <- (Attribute "form" v) where
+  FormA v = Attribute "form" v
 
-maxA :: Txt -> Feature e
-maxA = property "max"
+pattern Max p <- (Property "max" p) where
+  Max p = Property "max" p
 
-minA :: Txt -> Feature e
-minA = property "min"
+pattern Min p <- (Property "min" p) where
+  Min p = Property "min" p
 
-step :: Txt -> Feature e
-step = property "step"
+pattern Step p <- (Property "step" p) where
+  Step p = Property "step" p
 
-cols :: Int -> Feature e
-cols = attribute "cols" . toTxt
+pattern Cols i <- (Attribute "cols" (readIntegerMaybe -> Just i)) where
+  Cols i = Attribute "cols" (toTxt i)
 
-rows :: Int -> Feature e
-rows = attribute "rows" . toTxt
+pattern Rows i <- (Attribute "rows" (readIntegerMaybe -> Just i)) where
+  Rows i = Attribute "rows" (toTxt i)
 
-wrapA :: Txt -> Feature e
-wrapA = property "wrap"
+pattern Wrap p <- (Property "wrap" p) where
+  Wrap p = Property "wrap" p
 
--- href :: Txt -> Feature e
--- href = attribute "href"
+pattern Target p <- (Property "target" p) where
+  Target p = Property "target" p
 
-target :: Txt -> Feature e
-target = property "target"
+pattern Download b <- (Property "download" (toBool -> b)) where
+  Download b = Property "download" (fromBool b)
 
-download :: Bool -> Feature e
-download = boolProperty "download"
+pattern DownloadAs p <- (Property "download" (checkNotNull -> (True,p))) where
+  DownloadAs p = Property "download" p
 
-downloadAs :: Txt -> Feature e
-downloadAs = property "download"
+pattern Hreflang p <- (Property "hreflang" p) where
+  Hreflang p = Property "hreflang" p
 
-hreflang :: Txt -> Feature e
-hreflang = property "hreflang"
+pattern Media v <- (Attribute "media" v) where
+  Media v = Attribute "media" v
 
-media :: Txt -> Feature e
-media = attribute "media"
+pattern Rel v <- (Attribute "rel" v) where
+  Rel v = Attribute "rel" v
 
-rel :: Txt -> Feature e
-rel = attribute "rel"
+pattern Ismap b <- (Property "ismap" (toBool -> b)) where
+  Ismap b = Property "ismap" (fromBool b)
 
-ismap :: Bool -> Feature e
-ismap = boolProperty "ismap"
+pattern Usemap p <- (Property "usemap" p) where
+  Usemap p = Property "usemap" p
 
-usemap :: Txt -> Feature e
-usemap = property "usemap"
+pattern Shape p <- (Property "shape" p) where
+  Shape p = Property "shape" p
 
-shape :: Txt -> Feature e
-shape = property "shape"
+pattern Coords p <- (Property "coords" p) where
+  Coords p = Property "coords" p
 
-coords :: Txt -> Feature e
-coords = property "coords"
+pattern Keytype p <- (Property "keytype" p) where
+  Keytype p = Property "keytype" p
 
-keytype :: Txt -> Feature e
-keytype = property "keytype"
+pattern Src p <- (Property "src" p) where
+  Src p = Property "src" p
 
-src :: Txt -> Feature e
-src = property "src"
+pattern Height i <- (Attribute "height" (readIntegerMaybe -> Just i)) where
+  Height i = Attribute "height" (toTxt i)
 
-heightA :: ToTxt a => a -> Feature e
-heightA = attribute "height" . toTxt
+pattern Width i <- (Attribute "width" (readIntegerMaybe -> Just i)) where
+  Width i = Attribute "width" (toTxt i)
 
-widthA :: ToTxt a => a -> Feature e
-widthA = attribute "width" . toTxt
+pattern Alt p <- (Property "alt" p) where
+  Alt p = Property "alt" p
 
-alt :: Txt -> Feature e
-alt = property "alt"
+pattern Autoplay b <- (Property "autoplay" (toBool -> b)) where
+  Autoplay b = Property "autoplay" (fromBool b)
 
-autoplay :: Bool -> Feature e
-autoplay = boolProperty "autoplay"
+pattern Controls b <- (Property "controls" (toBool -> b)) where
+  Controls b = Property "controls" (fromBool b)
 
-controls :: Bool -> Feature e
-controls = boolProperty "controls"
+pattern Loop b <- (Property "loop" (toBool -> b)) where
+  Loop b = Property "loop" (fromBool b)
 
-loop :: Bool -> Feature e
-loop = boolProperty "loop"
+pattern Preload p <- (Property "preload" p) where
+  Preload p = Property "preload" p
 
-preload :: Txt -> Feature e
-preload = property "preload"
+pattern Poster p <- (Property "poster" p) where
+  Poster p = Property "poster" p
 
-poster :: Txt -> Feature e
-poster = property "poster"
+pattern Default b <- (Property "default" (toBool -> b)) where
+  Default b = Property "default" (fromBool b)
 
-defaultA :: Bool -> Feature e
-defaultA = boolProperty "default"
+pattern Kind p <- (Property "kind" p) where
+  Kind p = Property "kind" p
 
-kind :: Txt -> Feature e
-kind = property "kind"
+pattern Srclang p <- (Property "srclang" p) where
+  Srclang p = Property "srclang" p
 
-srclang :: Txt -> Feature e
-srclang = property "srclang"
+pattern Sandbox p <- (Property "sandbox" p) where
+  Sandbox p = Property "sandbox" p
 
-sandbox :: Txt -> Feature e
-sandbox = property "sandbox"
+pattern Seamless b <- (Property "seamless" (toBool -> b)) where
+  Seamless b = Property "seamless" (fromBool b)
 
-seamless :: Bool -> Feature e
-seamless = boolProperty "seamless"
+pattern Srcdoc p <- (Property "srcdoc" p) where
+  Srcdoc p = Property "srcdoc" p
 
-srcdoc :: Txt -> Feature e
-srcdoc = property "srcdoc"
+pattern Reversed b <- (Property "reversed" (toBool -> b)) where
+  Reversed b = Property "reversed" (fromBool b)
 
-reversedA :: Bool -> Feature e
-reversedA = boolProperty "reversed"
+pattern Start p <- (Property "start" p) where
+  Start p = Property "start" p
 
-start :: Int -> Feature e
-start = property "start" . toTxt
+pattern Align p <- (Property "align" p) where
+  Align p = Property "align" p
 
-align :: Txt -> Feature e
-align = property "align"
+pattern Colspan i <- (Attribute "colspan" (readIntegerMaybe -> Just i)) where
+  Colspan i = Attribute "colspan" (toTxt i)
 
-colspan :: Int -> Feature e
-colspan = attribute "colspan" . toTxt
+pattern Rowspan i <- (Attribute "rowspan" (readIntegerMaybe -> Just i)) where
+  Rowspan i = Attribute "rowspan" (toTxt i)
 
-rowspan :: Int -> Feature e
-rowspan = attribute "rowspan" . toTxt
+pattern Headers p <- (Property "headers" p) where
+  Headers p = Property "headers" p
 
-headers :: [Txt] -> Feature e
-headers = property "headers" . JSS.intercalate " "
+pattern Scope p <- (Property "scope" p) where
+  Scope p = Property "scope" p
 
-scope :: Txt -> Feature e
-scope = property "scope"
+pattern Async b <- (Property "async" (toBool -> b)) where
+  Async b = Property "async" (fromBool b)
 
-asyncA :: Bool -> Feature e
-asyncA = boolProperty "async"
+pattern Charset v <- (Attribute "charset" v) where
+  Charset v = Attribute "charset" v
 
-charset :: Txt -> Feature e
-charset = attribute "charset"
+pattern Content p <- (Property "content" p) where
+  Content p = Property "content" p
 
-contentA :: Txt -> Feature e
-contentA = property "content"
+pattern Defer b <- (Property "defer" (toBool -> b)) where
+  Defer b = Property "defer" (fromBool b)
 
-defer :: Bool -> Feature e
-defer = boolProperty "defer"
+pattern HttpEquiv p <- (Property "http-equiv" p) where
+  HttpEquiv p = Property "http-equiv" p
 
-httpEquiv :: Txt -> Feature e
-httpEquiv = property "http-equiv"
+pattern Language p <- (Property "language" p) where
+  Language p = Property "language" p
 
-languageA :: Txt -> Feature e
-languageA = property "language"
+pattern Scoped b <- (Property "scoped" (toBool -> b)) where
+  Scoped b = Property "scoped" (fromBool b)
 
-scopedA :: Bool -> Feature e
-scopedA = boolProperty "scoped"
+pattern Accesskey p <- (Property "accesskey" p) where
+  Accesskey p = Property "accesskey" p
 
-accesskey :: Char -> Feature e
-accesskey = property "accesskey" . JSS.singleton
+pattern Contenteditable b <- (Property "contenteditable" (toBool -> b)) where
+  Contenteditable b = Property "contenteditable" (fromBool b)
 
-contenteditable :: Bool -> Feature e
-contenteditable = boolProperty "contenteditable"
+pattern Contextmenu v <- (Attribute "contextmenu" v) where
+  Contextmenu v = Attribute "contextmenu" v
 
-contextmenu :: Txt -> Feature e
-contextmenu = attribute "contextmenu"
+pattern Dir p <- (Property "dir" p) where
+  Dir p = Property "dir" p
 
-dir :: Txt -> Feature e
-dir = property "dir"
+pattern Draggable b <- (Attribute "draggable" (checkNotNull -> (b,_))) where
+  Draggable b = Attribute "draggable" (if b then "true" else "false")
 
-draggable :: Bool -> Feature e
-draggable b = attribute "draggable" (if b then "true" else "false")
+pattern Dropzone p <- (Property "dropzone" p) where
+  Dropzone p = Property "dropzone" p
 
-dropzone :: Txt -> Feature e
-dropzone = property "dropzone"
+pattern Itemprop v <- (Attribute "itemprop" v) where
+  Itemprop v = Attribute "itemprop" v
 
-itemprop :: Txt -> Feature e
-itemprop = attribute "itemprop"
+pattern Lang p <- (Property "lang" p) where
+  Lang p = Property "lang" p
 
-lang :: Txt -> Feature e
-lang = property "lang"
+pattern Spellcheck b <- (Property "spellcheck" (toBool -> b)) where
+  Spellcheck b = Property "spellcheck" (fromBool b)
 
-spellcheck :: Bool -> Feature e
-spellcheck = boolProperty "spellcheck"
+pattern Tabindex i <- (Attribute "tabindex" (readIntegerMaybe -> Just i)) where
+  Tabindex i = Attribute "tabindex" (toTxt i)
 
-tabindex :: Int -> Feature e
-tabindex = attribute "tabindex" . toTxt
+pattern CiteA p <- (Property "cite" p) where
+  CiteA p = Property "cite" p
 
-citeA :: Txt -> Feature e
-citeA = property "cite"
+pattern Datetime v <- (Attribute "datetime" v) where
+  Datetime v = Attribute "datetime" v
 
-datetime :: Txt -> Feature e
-datetime = attribute "datetime"
-
-manifest :: Txt -> Feature e
-manifest = attribute "manifest"
+pattern Manifest v <- (Attribute "manifest" v) where
+  Manifest v = Attribute "manifest" v
 
 --------------------------------------------------------------------------------
 -- SVG Attributes
 
-svgAccentHeight :: Txt -> Feature e
-svgAccentHeight = attribute "accent-height"
+pattern AccentHeight v <- (Attribute "accent-height" v) where
+  AccentHeight v = Attribute "accent-height" v
 
-svgAccumulate :: Txt -> Feature e
-svgAccumulate = attribute "accumulate"
+pattern Accumulate v <- (Attribute "accumulate" v) where
+  Accumulate v = Attribute "accumulate" v
 
-svgAdditive :: Txt -> Feature e
-svgAdditive = attribute "additive"
+pattern Additive v <- (Attribute "additive" v) where
+  Additive v = Attribute "additive" v
 
-svgAlignmentBaseline :: Txt -> Feature e
-svgAlignmentBaseline = attribute "alignment-baseline"
+pattern AlignmentBaseline v <- (Attribute "alignment-baseline" v) where
+  AlignmentBaseline v = Attribute "alignment-baseline" v
 
-svgAllowReorder :: Txt -> Feature e
-svgAllowReorder = attribute "allowReorder"
+pattern AllowReorder v <- (Attribute "allowReorder" v) where
+  AllowReorder v = Attribute "allowReorder" v
 
-svgAlphabetic :: Txt -> Feature e
-svgAlphabetic = attribute "alphabetic"
+pattern Alphabetic v <- (Attribute "alphabetic" v) where
+  Alphabetic v = Attribute "alphabetic" v
 
-svgArabicForm :: Txt -> Feature e
-svgArabicForm = attribute "arabic-form"
+pattern ArabicForm v <- (Attribute "arabic-form" v) where
+  ArabicForm v = Attribute "arabic-form" v
 
-svgAscent :: Txt -> Feature e
-svgAscent = attribute "ascent"
+pattern Ascent v <- (Attribute "ascent" v) where
+  Ascent v = Attribute "ascent" v
 
-svgAttributeName :: Txt -> Feature e
-svgAttributeName = attribute "attributeName"
+pattern AttributeName v <- (Attribute "attributeName" v) where
+  AttributeName v = Attribute "attributeName" v
 
-svgAttributeType :: Txt -> Feature e
-svgAttributeType = attribute "attributeType"
+pattern AttributeType v <- (Attribute "attributeType" v) where
+  AttributeType v = Attribute "attributeType" v
 
-svgAutoReverse :: Txt -> Feature e
-svgAutoReverse = attribute "autoReverse"
+pattern AutoReverse v <- (Attribute "autoReverse" v) where
+  AutoReverse v = Attribute "autoReverse" v
 
-svgAzimuth :: Txt -> Feature e
-svgAzimuth = attribute "azimuth"
+pattern Azimuth v <- (Attribute "azimuth" v) where
+  Azimuth v = Attribute "azimuth" v
 
-svgBaseFrequency :: Txt -> Feature e
-svgBaseFrequency = attribute "baseFrequency"
+pattern BaseFrequency v <- (Attribute "baseFrequency" v) where
+  BaseFrequency v = Attribute "baseFrequency" v
 
-svgBaslineShift :: Txt -> Feature e
-svgBaslineShift = attribute "basline-shift"
+pattern BaslineShift v <- (Attribute "basline-shift" v) where
+  BaslineShift v = Attribute "basline-shift" v
 
-svgBaseProfile :: Txt -> Feature e
-svgBaseProfile = attribute "baseProfile"
+pattern BaseProfile v <- (Attribute "baseProfile" v) where
+  BaseProfile v = Attribute "baseProfile" v
 
-svgBbox :: Txt -> Feature e
-svgBbox = attribute "bbox"
+pattern Bbox v <- (Attribute "bbox" v) where
+  Bbox v = Attribute "bbox" v
 
-svgBegin :: Txt -> Feature e
-svgBegin = attribute "begin"
+pattern Begin v <- (Attribute "begin" v) where
+  Begin v = Attribute "begin" v
 
-svgBias :: Txt -> Feature e
-svgBias = attribute "bias"
+pattern Bias v <- (Attribute "bias" v) where
+  Bias v = Attribute "bias" v
 
-svgBy :: Txt -> Feature e
-svgBy = attribute "by"
+pattern By v <- (Attribute "by" v) where
+  By v = Attribute "by" v
 
-svgCalcMode :: Txt -> Feature e
-svgCalcMode = attribute "calcMode"
+pattern CalcMode v <- (Attribute "calcMode" v) where
+  CalcMode v = Attribute "calcMode" v
 
-svgCapHeight :: Txt -> Feature e
-svgCapHeight = attribute "cap-height"
+pattern CapHeight v <- (Attribute "cap-height" v) where
+  CapHeight v = Attribute "cap-height" v
 
-svgClass :: Txt -> Feature e
-svgClass = attribute "class"
+pattern Class v <- (Attribute "class" v) where
+  Class v = Attribute "class" v
 
-svgClip :: Txt -> Feature e
-svgClip = attribute "clip"
+pattern Clip v <- (Attribute "clip" v) where
+  Clip v = Attribute "clip" v
 
-svgClipPathUnits :: Txt -> Feature e
-svgClipPathUnits = attribute "clipPathUnits"
+pattern ClipPathUnits v <- (Attribute "clipPathUnits" v) where
+  ClipPathUnits v = Attribute "clipPathUnits" v
 
-svgClipPathA :: Txt -> Feature e
-svgClipPathA = attribute "clip-path"
+pattern ClipPath v <- (Attribute "clip-path" v) where
+  ClipPath v = Attribute "clip-path" v
 
-svgClipRule :: Txt -> Feature e
-svgClipRule = attribute "clip-rule"
+pattern ClipRule v <- (Attribute "clip-rule" v) where
+  ClipRule v = Attribute "clip-rule" v
 
-svgColor :: Txt -> Feature e
-svgColor = attribute "color"
+pattern Color v <- (Attribute "color" v) where
+  Color v = Attribute "color" v
 
-svgColorInterpolation :: Txt -> Feature e
-svgColorInterpolation = attribute "color-interpolation"
+pattern ColorInterpolation v <- (Attribute "color-interpolation" v) where
+  ColorInterpolation v = Attribute "color-interpolation" v
 
-svgColorInterpolationFilters :: Txt -> Feature e
-svgColorInterpolationFilters = attribute "color-interpolation-filters"
+pattern ColorInterpolationFilters v <- (Attribute "color-interpolation-filters" v) where
+  ColorInterpolationFilters v = Attribute "color-interpolation-filters" v
 
-svgColorProfileA :: Txt -> Feature e
-svgColorProfileA = attribute "color-profile"
+pattern ColorProfile v <- (Attribute "color-profile" v) where
+  ColorProfile v = Attribute "color-profile" v
 
-svgColorRendering :: Txt -> Feature e
-svgColorRendering = attribute "color-rendering"
+pattern ColorRendering v <- (Attribute "color-rendering" v) where
+  ColorRendering v = Attribute "color-rendering" v
 
-svgContentScriptType :: Txt -> Feature e
-svgContentScriptType = attribute "contentScriptType"
+pattern ContentScriptType v <- (Attribute "contentScriptType" v) where
+  ContentScriptType v = Attribute "contentScriptType" v
 
-svgContentStyleType :: Txt -> Feature e
-svgContentStyleType = attribute "contentStyleType"
+pattern ContentStyleType v <- (Attribute "contentStyleType" v) where
+  ContentStyleType v = Attribute "contentStyleType" v
 
-svgCursorA :: Txt -> Feature e
-svgCursorA = attribute "cursor"
+pattern Cursor v <- (Attribute "cursor" v) where
+  Cursor v = Attribute "cursor" v
 
-svgCx :: Txt -> Feature e
-svgCx = attribute "cx"
+pattern Cx v <- (Attribute "cx" v) where
+  Cx v = Attribute "cx" v
 
-svgCy :: Txt -> Feature e
-svgCy = attribute "cy"
+pattern Cy v <- (Attribute "cy" v) where
+  Cy v = Attribute "cy" v
 
-svgD :: Txt -> Feature e
-svgD = attribute "d"
+pattern D v <- (Attribute "d" v) where
+  D v = Attribute "d" v
 
-svgDecelerate :: Txt -> Feature e
-svgDecelerate = attribute "decelerate"
+pattern Decelerate v <- (Attribute "decelerate" v) where
+  Decelerate v = Attribute "decelerate" v
 
-svgDescent :: Txt -> Feature e
-svgDescent = attribute "descent"
+pattern Descent v <- (Attribute "descent" v) where
+  Descent v = Attribute "descent" v
 
-svgDiffuseConstant :: Txt -> Feature e
-svgDiffuseConstant = attribute "diffuseConstant"
+pattern DiffuseConstant v <- (Attribute "diffuseConstant" v) where
+  DiffuseConstant v = Attribute "diffuseConstant" v
 
-svgDirection :: Txt -> Feature e
-svgDirection = attribute "direction"
+pattern Direction v <- (Attribute "direction" v) where
+  Direction v = Attribute "direction" v
 
-svgDisplay :: Txt -> Feature e
-svgDisplay = attribute "display"
+pattern Display v <- (Attribute "display" v) where
+  Display v = Attribute "display" v
 
-svgDivisor :: Txt -> Feature e
-svgDivisor = attribute "divisor"
+pattern Divisor v <- (Attribute "divisor" v) where
+  Divisor v = Attribute "divisor" v
 
-svgDominantBaseline :: Txt -> Feature e
-svgDominantBaseline = attribute "dominant-baseline"
+pattern DominantBaseline v <- (Attribute "dominant-baseline" v) where
+  DominantBaseline v = Attribute "dominant-baseline" v
 
-svgDur :: Txt -> Feature e
-svgDur = attribute "dur"
+pattern Dur v <- (Attribute "dur" v) where
+  Dur v = Attribute "dur" v
 
-svgDx :: Txt -> Feature e
-svgDx = attribute "dx"
+pattern Dx v <- (Attribute "dx" v) where
+  Dx v = Attribute "dx" v
 
-svgDy :: Txt -> Feature e
-svgDy = attribute "dy"
+pattern Dy v <- (Attribute "dy" v) where
+  Dy v = Attribute "dy" v
 
-svgEdgeMode :: Txt -> Feature e
-svgEdgeMode = attribute "edgeMode"
+pattern EdgeMode v <- (Attribute "edgeMode" v) where
+  EdgeMode v = Attribute "edgeMode" v
 
-svgElevation :: Txt -> Feature e
-svgElevation = attribute "elevation"
+pattern Elevation v <- (Attribute "elevation" v) where
+  Elevation v = Attribute "elevation" v
 
-svgEnableBackground :: Txt -> Feature e
-svgEnableBackground = attribute "enable-background"
+pattern EnableBackground v <- (Attribute "enable-background" v) where
+  EnableBackground v = Attribute "enable-background" v
 
-svgEnd :: Txt -> Feature e
-svgEnd = attribute "end"
+pattern End v <- (Attribute "end" v) where
+  End v = Attribute "end" v
 
-svgExponent :: Txt -> Feature e
-svgExponent = attribute "exponent"
+pattern Exponent v <- (Attribute "exponent" v) where
+  Exponent v = Attribute "exponent" v
 
-svgExternalResourcesRequired :: Txt -> Feature e
-svgExternalResourcesRequired = attribute "externalResourcesRequired"
+pattern ExternalResourcesRequired v <- (Attribute "externalResourcesRequired" v) where
+  ExternalResourcesRequired v = Attribute "externalResourcesRequired" v
 
-svgFill :: Txt -> Feature e
-svgFill = attribute "fill"
+pattern Fill v <- (Attribute "fill" v) where
+  Fill v = Attribute "fill" v
 
-svgFillOpacity :: Txt -> Feature e
-svgFillOpacity = attribute "fill-opacity"
+pattern FillOpacity v <- (Attribute "fill-opacity" v) where
+  FillOpacity v = Attribute "fill-opacity" v
 
-svgFillRule :: Txt -> Feature e
-svgFillRule = attribute "fill-rule"
+pattern FillRule v <- (Attribute "fill-rule" v) where
+  FillRule v = Attribute "fill-rule" v
 
-svgFilterA :: Txt -> Feature e
-svgFilterA = attribute "filter"
+pattern Filter v <- (Attribute "filter" v) where
+  Filter v = Attribute "filter" v
 
-svgFilterRes :: Txt -> Feature e
-svgFilterRes = attribute "filterRes"
+pattern FilterRes v <- (Attribute "filterRes" v) where
+  FilterRes v = Attribute "filterRes" v
 
-svgFilterUnits :: Txt -> Feature e
-svgFilterUnits = attribute "filterUnits"
+pattern FilterUnits v <- (Attribute "filterUnits" v) where
+  FilterUnits v = Attribute "filterUnits" v
 
-svgFloodColor :: Txt -> Feature e
-svgFloodColor = attribute "flood-color"
+pattern FloodColor v <- (Attribute "flood-color" v) where
+  FloodColor v = Attribute "flood-color" v
 
-svgFontFamily :: Txt -> Feature e
-svgFontFamily = attribute "font-family"
+pattern FontFamily v <- (Attribute "font-family" v) where
+  FontFamily v = Attribute "font-family" v
 
-svgFontSize :: Txt -> Feature e
-svgFontSize = attribute "font-size"
+pattern FontSize v <- (Attribute "font-size" v) where
+  FontSize v = Attribute "font-size" v
 
-svgFontSizeAdjust :: Txt -> Feature e
-svgFontSizeAdjust = attribute "font-size-adjust"
+pattern FontSizeAdjust v <- (Attribute "font-size-adjust" v) where
+  FontSizeAdjust v = Attribute "font-size-adjust" v
 
-svgFontStretch :: Txt -> Feature e
-svgFontStretch = attribute "font-stretch"
+pattern FontStretch v <- (Attribute "font-stretch" v) where
+  FontStretch v = Attribute "font-stretch" v
 
-svgFontStyle :: Txt -> Feature e
-svgFontStyle = attribute "font-style"
+pattern FontStyle v <- (Attribute "font-style" v) where
+  FontStyle v = Attribute "font-style" v
 
-svgFontVariant :: Txt -> Feature e
-svgFontVariant = attribute "font-variant"
+pattern FontVariant v <- (Attribute "font-variant" v) where
+  FontVariant v = Attribute "font-variant" v
 
-svgFontWeight :: Txt -> Feature e
-svgFontWeight = attribute "font-weight"
+pattern FontWeight v <- (Attribute "font-weight" v) where
+  FontWeight v = Attribute "font-weight" v
 
-svgFormat :: Txt -> Feature e
-svgFormat = attribute "format"
+pattern Format v <- (Attribute "format" v) where
+  Format v = Attribute "format" v
 
-svgFrom :: Txt -> Feature e
-svgFrom = attribute "from"
+pattern From v <- (Attribute "from" v) where
+  From v = Attribute "from" v
 
-svgFx :: Txt -> Feature e
-svgFx = attribute "fx"
+pattern Fx v <- (Attribute "fx" v) where
+  Fx v = Attribute "fx" v
 
-svgFy :: Txt -> Feature e
-svgFy = attribute "fy"
+pattern Fy v <- (Attribute "fy" v) where
+  Fy v = Attribute "fy" v
 
-svgG1 :: Txt -> Feature e
-svgG1 = attribute "g1"
+pattern G1 v <- (Attribute "g1" v) where
+  G1 v = Attribute "g1" v
 
-svgG2 :: Txt -> Feature e
-svgG2 = attribute "g2"
+pattern G2 v <- (Attribute "g2" v) where
+  G2 v = Attribute "g2" v
 
-svgGlyphName :: Txt -> Feature e
-svgGlyphName = attribute "glyph-name"
+pattern GlyphName v <- (Attribute "glyph-name" v) where
+  GlyphName v = Attribute "glyph-name" v
 
-svgGlyphOrientationHorizontal :: Txt -> Feature e
-svgGlyphOrientationHorizontal = attribute "glyph-orientation-horizontal"
+pattern GlyphOrientationHorizontal v <- (Attribute "glyph-orientation-horizontal" v) where
+  GlyphOrientationHorizontal v = Attribute "glyph-orientation-horizontal" v
 
-svgGlyphOrientationVertical :: Txt -> Feature e
-svgGlyphOrientationVertical = attribute "glyph-orientation-vertical"
+pattern GlyphOrientationVertical v <- (Attribute "glyph-orientation-vertial" v) where
+  GlyphOrientationVertical v = Attribute "glyph-orientation-vertical" v
 
-svgGlyphRefA :: Txt -> Feature e
-svgGlyphRefA = attribute "glyphRef"
+pattern GlyphRef v <- (Attribute "glyphRef" v) where
+  GlyphRef v = Attribute "glyphRef" v
 
-svgGradientTransform :: Txt -> Feature e
-svgGradientTransform = attribute "gradientTransform"
+pattern GradientTransform v <- (Attribute "gradientTransform" v) where
+  GradientTransform v = Attribute "gradientTransform" v
 
-svgGradientUnits :: Txt -> Feature e
-svgGradientUnits = attribute "gradientUnits"
+pattern GradientUnits v <- (Attribute "gradientUnits" v) where
+  GradientUnits v = Attribute "gradientUnits" v
 
-svgHanging :: Txt -> Feature e
-svgHanging = attribute "hanging"
+pattern Hanging v <- (Attribute "hanging" v) where
+  Hanging v = Attribute "hanging" v
 
-svgHeight :: Txt -> Feature e
-svgHeight = attribute "height"
+pattern HorizAdvX v <- (Attribute "horiz-adv-x" v) where
+  HorizAdvX v = Attribute "horiz-adv-x" v
 
--- prefer svgLink for inter-organism links
-svgHref :: Txt -> Feature e
-svgHref = attribute "href"
+pattern HorizOriginX v <- (Attribute "horiz-origin-x" v) where
+  HorizOriginX v = Attribute "horiz-origin-x" v
 
-svgHorizAdvX :: Txt -> Feature e
-svgHorizAdvX = attribute "horiz-adv-x"
+pattern Ideographic v <- (Attribute "ideographic" v) where
+  Ideographic v = Attribute "ideographic" v
 
-svgHorizOriginX :: Txt -> Feature e
-svgHorizOriginX = attribute "horiz-origin-x"
+pattern ImageRendering v <- (Attribute "image-rendering" v) where
+  ImageRendering v = Attribute "image-rendering" v
 
-svgId :: Txt -> Feature e
-svgId = attribute "id"
+pattern In v <- (Attribute "in" v) where
+  In v = Attribute "in" v
 
-svgIdeographic :: Txt -> Feature e
-svgIdeographic = attribute "ideographic"
+pattern In2 v <- (Attribute "in2" v) where
+  In2 v = Attribute "in2" v
 
-svgImageRendering :: Txt -> Feature e
-svgImageRendering = attribute "image-rendering"
+pattern Intercept v <- (Attribute "intercept" v) where
+  Intercept v = Attribute "intercept" v
 
-svgIn :: Txt -> Feature e
-svgIn = attribute "in"
+pattern K v <- (Attribute "k" v) where
+  K v = Attribute "k" v
 
-svgIn2 :: Txt -> Feature e
-svgIn2 = attribute "in2"
+pattern K1 v <- (Attribute "k1" v) where
+  K1 v = Attribute "k1" v
 
-svgIntercept :: Txt -> Feature e
-svgIntercept = attribute "intercept"
+pattern K2 v <- (Attribute "k2" v) where
+  K2 v = Attribute "k2" v
 
-svgK :: Txt -> Feature e
-svgK = attribute "k"
+pattern K3 v <- (Attribute "k3" v) where
+  K3 v = Attribute "k3" v
 
-svgK1 :: Txt -> Feature e
-svgK1 = attribute "k1"
+pattern K4 v <- (Attribute "k4" v) where
+  K4 v = Attribute "k4" v
 
-svgK2 :: Txt -> Feature e
-svgK2 = attribute "k2"
+pattern KernelMatrix v <- (Attribute "kernelMatrix" v) where
+  KernelMatrix v = Attribute "kernelMatrix" v
 
-svgK3 :: Txt -> Feature e
-svgK3 = attribute "k3"
+pattern KernelUnitLength v <- (Attribute "kernelUnitLength" v) where
+  KernelUnitLength v = Attribute "kernelUnitLength" v
 
-svgK4 :: Txt -> Feature e
-svgK4 = attribute "k4"
+pattern Kerning v <- (Attribute "kerning" v) where
+  Kerning v = Attribute "kerning" v
 
-svgKernelMatrix :: Txt -> Feature e
-svgKernelMatrix = attribute "kernelMatrix"
+pattern KeyPoints v <- (Attribute "keyPoints" v) where
+  KeyPoints v = Attribute "keyPoints" v
 
-svgKernelUnitLength :: Txt -> Feature e
-svgKernelUnitLength = attribute "kernelUnitLength"
+pattern KeySplines v <- (Attribute "keySplines" v) where
+  KeySplines v = Attribute "keySplines" v
 
-svgKerning :: Txt -> Feature e
-svgKerning = attribute "kerning"
+pattern KeyTimes v <- (Attribute "keyTimes" v) where
+  KeyTimes v = Attribute "keyTimes" v
 
-svgKeyPoints :: Txt -> Feature e
-svgKeyPoints = attribute "keyPoints"
+pattern LengthAdjust v <- (Attribute "lengthAdjust" v) where
+  LengthAdjust v = Attribute "lengthAdjust" v
 
-svgKeySplines :: Txt -> Feature e
-svgKeySplines = attribute "keySplines"
+pattern LetterSpacing v <- (Attribute "letter-spacing" v) where
+  LetterSpacing v = Attribute "letter-spacing" v
 
-svgKeyTimes :: Txt -> Feature e
-svgKeyTimes = attribute "keyTimes"
+pattern LightingColor v <- (Attribute "lighting-color" v) where
+  LightingColor v = Attribute "lighting-color" v
 
-svgLang :: Txt -> Feature e
-svgLang = attribute "lang"
+pattern LimitingConeAngle v <- (Attribute "limitingConeAngle" v) where
+  LimitingConeAngle v = Attribute "limitingConeAngle" v
 
-svgLengthAdjust :: Txt -> Feature e
-svgLengthAdjust = attribute "lengthAdjust"
+pattern Local v <- (Attribute "local" v) where
+  Local v = Attribute "local" v
 
-svgLetterSpacing :: Txt -> Feature e
-svgLetterSpacing = attribute "letter-spacing"
+pattern MarkerEnd v <- (Attribute "marker-end" v) where
+  MarkerEnd v = Attribute "marker-end" v
 
-svgLightingColor :: Txt -> Feature e
-svgLightingColor = attribute "lighting-color"
+pattern MarkerMid v <- (Attribute "marker-mid" v) where
+  MarkerMid v = Attribute "marker-mid" v
 
-svgLimitingConeAngle :: Txt -> Feature e
-svgLimitingConeAngle = attribute "limitingConeAngle"
+pattern MarkerStart v <- (Attribute "marker-start" v) where
+  MarkerStart v = Attribute "marker-start" v
 
-svgLocal :: Txt -> Feature e
-svgLocal = attribute "local"
+pattern MarkerHeight v <- (Attribute "markerHeight" v) where
+  MarkerHeight v = Attribute "markerHeight" v
 
-svgMarkerEnd :: Txt -> Feature e
-svgMarkerEnd = attribute "marker-end"
+pattern MarkerUnits v <- (Attribute "markerUnits" v) where
+  MarkerUnits v = Attribute "markerUnits" v
 
-svgMarkerMid :: Txt -> Feature e
-svgMarkerMid = attribute "marker-mid"
+pattern MarkerWidth v <- (Attribute "markerWidth" v) where
+  MarkerWidth v = Attribute "markerWidth" v
 
-svgMarkerStart :: Txt -> Feature e
-svgMarkerStart = attribute "marker-start"
+pattern MaskA v <- (Attribute "maskA" v) where
+  MaskA v = Attribute "maskA" v
 
-svgMarkerHeight :: Txt -> Feature e
-svgMarkerHeight = attribute "markerHeight"
+pattern MaskContentUnits v <- (Attribute "maskContentUnits" v) where
+  MaskContentUnits v = Attribute "maskContentUnits" v
 
-svgMarkerUnits :: Txt -> Feature e
-svgMarkerUnits = attribute "markerUnits"
+pattern MaskUnits v <- (Attribute "maskUnits" v) where
+  MaskUnits v = Attribute "maskUnits" v
 
-svgMarkerWidth :: Txt -> Feature e
-svgMarkerWidth = attribute "markerWidth"
+pattern Mathematical v <- (Attribute "mathematical" v) where
+  Mathematical v = Attribute "mathematical" v
 
-svgMaskA :: Txt -> Feature e
-svgMaskA = attribute "maskA"
+pattern Mode v <- (Attribute "mode" v) where
+  Mode v = Attribute "mode" v
 
-svgMaskContentUnits :: Txt -> Feature e
-svgMaskContentUnits = attribute "maskContentUnits"
+pattern NumOctaves v <- (Attribute "numOctaves" v) where
+  NumOctaves v = Attribute "numOctaves" v
 
-svgMaskUnits :: Txt -> Feature e
-svgMaskUnits = attribute "maskUnits"
+pattern Offset v <- (Attribute "offset" v) where
+  Offset v = Attribute "offset" v
 
-svgMathematical :: Txt -> Feature e
-svgMathematical = attribute "mathematical"
+pattern Onabort v <- (Attribute "onabort" v) where
+  Onabort v = Attribute "onabort" v
 
-svgMax :: Txt -> Feature e
-svgMax = attribute "max"
+pattern Onactivate v <- (Attribute "onactivate" v) where
+  Onactivate v = Attribute "onactivate" v
 
-svgMedia :: Txt -> Feature e
-svgMedia = attribute "media"
+pattern Onbegin v <- (Attribute "onbegin" v) where
+  Onbegin v = Attribute "onbegin" v
 
-svgMethod :: Txt -> Feature e
-svgMethod = attribute "method"
+pattern Onclick v <- (Attribute "onclick" v) where
+  Onclick v = Attribute "onclick" v
 
-svgMin :: Txt -> Feature e
-svgMin = attribute "min"
+pattern Onend v <- (Attribute "onend" v) where
+  Onend v = Attribute "onend" v
 
-svgMode :: Txt -> Feature e
-svgMode = attribute "mode"
+pattern Onerror v <- (Attribute "onerror" v) where
+  Onerror v = Attribute "onerror" v
 
-svgName :: Txt -> Feature e
-svgName = attribute "name"
+pattern Onfocusin v <- (Attribute "onfocusin" v) where
+  Onfocusin v = Attribute "onfocusin" v
 
-svgNumOctaves :: Txt -> Feature e
-svgNumOctaves = attribute "numOctaves"
+pattern Onfocusout v <- (Attribute "onfocusout" v) where
+  Onfocusout v = Attribute "onfocusout" v
 
-svgOffset :: Txt -> Feature e
-svgOffset = attribute "offset"
+pattern Onload v <- (Attribute "onload" v) where
+  Onload v = Attribute "onload" v
 
-svgOnabort :: Txt -> Feature e
-svgOnabort = attribute "onabort"
+pattern Onmousedown v <- (Attribute "onmousedown" v) where
+  Onmousedown v = Attribute "onmousedown" v
 
-svgOnactivate :: Txt -> Feature e
-svgOnactivate = attribute "onactivate"
+pattern Onmousemove v <- (Attribute "onmousemove" v) where
+  Onmousemove v = Attribute "onmousemove" v
 
-svgOnbegin :: Txt -> Feature e
-svgOnbegin = attribute "onbegin"
+pattern Onmouseout v <- (Attribute "onmouseout" v) where
+  Onmouseout v = Attribute "onmouseout" v
 
-svgOnclick :: Txt -> Feature e
-svgOnclick = attribute "onclick"
+pattern Onmouseover v <- (Attribute "onmouseover" v) where
+  Onmouseover v = Attribute "onmouseover" v
 
-svgOnend :: Txt -> Feature e
-svgOnend = attribute "onend"
+pattern Onmouseup v <- (Attribute "onmouseup" v) where
+  Onmouseup v = Attribute "onmouseup" v
 
-svgOnerror :: Txt -> Feature e
-svgOnerror = attribute "onerror"
+pattern Onrepeat v <- (Attribute "onrepeat" v) where
+  Onrepeat v = Attribute "onrepeat" v
 
-svgOnfocusin :: Txt -> Feature e
-svgOnfocusin = attribute "onfocusin"
+pattern Onresize v <- (Attribute "onresize" v) where
+  Onresize v = Attribute "onresize" v
 
-svgOnfocusout :: Txt -> Feature e
-svgOnfocusout = attribute "onfocusout"
+pattern Onscroll v <- (Attribute "onscroll" v) where
+  Onscroll v = Attribute "onscroll" v
 
-svgOnload :: Txt -> Feature e
-svgOnload = attribute "onload"
+pattern Onunload v <- (Attribute "onunload" v) where
+  Onunload v = Attribute "onunload" v
 
-svgOnmousedown :: Txt -> Feature e
-svgOnmousedown = attribute "onmousedown"
+pattern Onzoom v <- (Attribute "onzoom" v) where
+  Onzoom v = Attribute "onzoom" v
 
-svgOnmousemove :: Txt -> Feature e
-svgOnmousemove = attribute "onmousemove"
+pattern Opacity v <- (Attribute "opacity" v) where
+  Opacity v = Attribute "opacity" v
 
-svgOnmouseout :: Txt -> Feature e
-svgOnmouseout = attribute "onmouseout"
+pattern Operator v <- (Attribute "operator" v) where
+  Operator v = Attribute "operator" v
 
-svgOnmouseover :: Txt -> Feature e
-svgOnmouseover = attribute "onmouseover"
+pattern Order v <- (Attribute "order" v) where
+  Order v = Attribute "order" v
 
-svgOnmouseup :: Txt -> Feature e
-svgOnmouseup = attribute "onmouseup"
+pattern Orient v <- (Attribute "orient" v) where
+  Orient v = Attribute "orient" v
 
-svgOnrepeat :: Txt -> Feature e
-svgOnrepeat = attribute "onrepeat"
+pattern Orientation v <- (Attribute "orientation" v) where
+  Orientation v = Attribute "orientation" v
 
-svgOnresize :: Txt -> Feature e
-svgOnresize = attribute "onresize"
+pattern Origin v <- (Attribute "origin" v) where
+  Origin v = Attribute "origin" v
 
-svgOnscroll :: Txt -> Feature e
-svgOnscroll = attribute "onscroll"
+pattern Overflow v <- (Attribute "overflow" v) where
+  Overflow v = Attribute "overflow" v
 
-svgOnunload :: Txt -> Feature e
-svgOnunload = attribute "onunload"
+pattern OverlinePosition v <- (Attribute "overline-position" v) where
+  OverlinePosition v = Attribute "overline-position" v
 
-svgOnzoom :: Txt -> Feature e
-svgOnzoom = attribute "onzoom"
+pattern OverlineThickness v <- (Attribute "overline-thickness" v) where
+  OverlineThickness v = Attribute "overline-thickness" v
 
-svgOpacity :: Txt -> Feature e
-svgOpacity = attribute "opacity"
+pattern Panose1 v <- (Attribute "panose-1" v) where
+  Panose1 v = Attribute "panose-1" v
 
-svgOperator :: Txt -> Feature e
-svgOperator = attribute "operator"
+pattern PaintOrder v <- (Attribute "paint-order" v) where
+  PaintOrder v = Attribute "paint-order" v
 
-svgOrder :: Txt -> Feature e
-svgOrder = attribute "order"
+pattern PathLength v <- (Attribute "pathLength" v) where
+  PathLength v = Attribute "pathLength" v
 
-svgOrient :: Txt -> Feature e
-svgOrient = attribute "orient"
+pattern PatternContentUnits v <- (Attribute "patternContentUnits" v) where
+  PatternContentUnits v = Attribute "patternContentUnits" v
 
-svgOrientation :: Txt -> Feature e
-svgOrientation = attribute "orientation"
+pattern PatternTransform v <- (Attribute "patternTransform" v) where
+  PatternTransform v = Attribute "patternTransform" v
 
-svgOrigin :: Txt -> Feature e
-svgOrigin = attribute "origin"
+pattern PatternUnits v <- (Attribute "patternUnits" v) where
+  PatternUnits v = Attribute "patternUnits" v
 
-svgOverflow :: Txt -> Feature e
-svgOverflow = attribute "overflow"
+pattern PointerEvents v <- (Attribute "pointer-events" v) where
+  PointerEvents v = Attribute "pointer-events" v
 
-svgOverlinePosition :: Txt -> Feature e
-svgOverlinePosition = attribute "overline-position"
+pattern Points v <- (Attribute "points" v) where
+  Points v = Attribute "points" v
 
-svgOverlineThickness :: Txt -> Feature e
-svgOverlineThickness = attribute "overline-thickness"
+pattern PointsAtX v <- (Attribute "pointsAtX" v) where
+  PointsAtX v = Attribute "pointsAtX" v
 
-svgPanose1 :: Txt -> Feature e
-svgPanose1 = attribute "panose-1"
+pattern PointsAtY v <- (Attribute "pointsAtY" v) where
+  PointsAtY v = Attribute "pointsAtY" v
 
-svgPaintOrder :: Txt -> Feature e
-svgPaintOrder = attribute "paint-order"
+pattern PointsAtZ v <- (Attribute "pointsAtZ" v) where
+  PointsAtZ v = Attribute "pointsAtZ" v
 
-svgPathLength :: Txt -> Feature e
-svgPathLength = attribute "pathLength"
+pattern PreserveAlpha v <- (Attribute "preserveAlpha" v) where
+  PreserveAlpha v = Attribute "preserveAlpha" v
 
-svgPatternContentUnits :: Txt -> Feature e
-svgPatternContentUnits = attribute "patternContentUnits"
+pattern PreserveAspectRatio v <- (Attribute "preserveAspectRatio" v) where
+  PreserveAspectRatio v = Attribute "preserveAspectRatio" v
 
-svgPatternTransform :: Txt -> Feature e
-svgPatternTransform = attribute "patternTransform"
+pattern PrimitiveUnits v <- (Attribute "primitiveUnits" v) where
+  PrimitiveUnits v = Attribute "primitiveUnits" v
 
-svgPatternUnits :: Txt -> Feature e
-svgPatternUnits = attribute "patternUnits"
+pattern R v <- (Attribute "r" v) where
+  R v = Attribute "r" v
 
-svgPointerEvents :: Txt -> Feature e
-svgPointerEvents = attribute "pointer-events"
+pattern Radius v <- (Attribute "radius" v) where
+  Radius v = Attribute "radius" v
 
-svgPoints :: Txt -> Feature e
-svgPoints = attribute "points"
+pattern RefX v <- (Attribute "refX" v) where
+  RefX v = Attribute "refX" v
 
-svgPointsAtX :: Txt -> Feature e
-svgPointsAtX = attribute "pointsAtX"
+pattern RefY v <- (Attribute "refY" v) where
+  RefY v = Attribute "refY" v
 
-svgPointsAtY :: Txt -> Feature e
-svgPointsAtY = attribute "pointsAtY"
+pattern RenderingIntent v <- (Attribute "rendering-intent" v) where
+  RenderingIntent v = Attribute "rendering-intent" v
 
-svgPointsAtZ :: Txt -> Feature e
-svgPointsAtZ = attribute "pointsAtZ"
+pattern RepeatCount v <- (Attribute "repeatCount" v) where
+  RepeatCount v = Attribute "repeatCount" v
 
-svgPreserveAlpha :: Txt -> Feature e
-svgPreserveAlpha = attribute "preserveAlpha"
+pattern RepeatDur v <- (Attribute "repeatDur" v) where
+  RepeatDur v = Attribute "repeatDur" v
 
-svgPreserveAspectRatio :: Txt -> Feature e
-svgPreserveAspectRatio = attribute "preserveAspectRatio"
+pattern RequiredExtensions v <- (Attribute "requiredExtensions" v) where
+  RequiredExtensions v = Attribute "requiredExtensions" v
 
-svgPrimitiveUnits :: Txt -> Feature e
-svgPrimitiveUnits = attribute "primitiveUnits"
+pattern RequiredFeatures v <- (Attribute "requiredFeatures" v) where
+  RequiredFeatures v = Attribute "requiredFeatures" v
 
-svgR :: Txt -> Feature e
-svgR = attribute "r"
+pattern Restart v <- (Attribute "restart" v) where
+  Restart v = Attribute "restart" v
 
-svgRadius :: Txt -> Feature e
-svgRadius = attribute "radius"
+pattern Result v <- (Attribute "result" v) where
+  Result v = Attribute "result" v
 
-svgRefX :: Txt -> Feature e
-svgRefX = attribute "refX"
+pattern Rotate v <- (Attribute "rotate" v) where
+  Rotate v = Attribute "rotate" v
 
-svgRefY :: Txt -> Feature e
-svgRefY = attribute "refY"
+pattern Rx v <- (Attribute "rx" v) where
+  Rx v = Attribute "rx" v
 
-svgRenderingIntent :: Txt -> Feature e
-svgRenderingIntent = attribute "rendering-intent"
+pattern Ry v <- (Attribute "ry" v) where
+  Ry v = Attribute "ry" v
 
-svgRepeatCount :: Txt -> Feature e
-svgRepeatCount = attribute "repeatCount"
+pattern Scale v <- (Attribute "scale" v) where
+  Scale v = Attribute "scale" v
 
-svgRepeatDur :: Txt -> Feature e
-svgRepeatDur = attribute "repeatDur"
+pattern Seed v <- (Attribute "seed" v) where
+  Seed v = Attribute "seed" v
 
-svgRequiredExtensions :: Txt -> Feature e
-svgRequiredExtensions = attribute "requiredExtensions"
+pattern ShapeRendering v <- (Attribute "shape-rendering" v) where
+  ShapeRendering v = Attribute "shape-rendering" v
 
-svgRequiredFeatures :: Txt -> Feature e
-svgRequiredFeatures = attribute "requiredFeatures"
+pattern Slope v <- (Attribute "slope" v) where
+  Slope v = Attribute "slope" v
 
-svgRestart :: Txt -> Feature e
-svgRestart = attribute "restart"
+pattern Spacing v <- (Attribute "spacing" v) where
+  Spacing v = Attribute "spacing" v
 
-svgResult :: Txt -> Feature e
-svgResult = attribute "result"
+pattern SpecularConstant v <- (Attribute "specularConstant" v) where
+  SpecularConstant v = Attribute "specularConstant" v
 
-svgRotate :: Txt -> Feature e
-svgRotate = attribute "rotate"
+pattern SpecularExponent v <- (Attribute "specularExponent" v) where
+  SpecularExponent v = Attribute "specularExponent" v
 
-svgRx :: Txt -> Feature e
-svgRx = attribute "rx"
+pattern Speed v <- (Attribute "speed" v) where
+  Speed v = Attribute "speed" v
 
-svgRy :: Txt -> Feature e
-svgRy = attribute "ry"
+pattern SpreadMethod v <- (Attribute "spreadMethod" v) where
+  SpreadMethod v = Attribute "spreadMethod" v
 
-svgScale :: Txt -> Feature e
-svgScale = attribute "scale"
+pattern StartOffset v <- (Attribute "startOffset" v) where
+  StartOffset v = Attribute "startOffset" v
 
-svgSeed :: Txt -> Feature e
-svgSeed = attribute "seed"
+pattern StdDeviationA v <- (Attribute "stdDeviationA" v) where
+  StdDeviationA v = Attribute "stdDeviationA" v
 
-svgShapeRendering :: Txt -> Feature e
-svgShapeRendering = attribute "shape-rendering"
+pattern Stemh v <- (Attribute "stemh" v) where
+  Stemh v = Attribute "stemh" v
 
-svgSlope :: Txt -> Feature e
-svgSlope = attribute "slope"
+pattern Stemv v <- (Attribute "stemv" v) where
+  Stemv v = Attribute "stemv" v
 
-svgSpacing :: Txt -> Feature e
-svgSpacing = attribute "spacing"
+pattern StitchTiles v <- (Attribute "stitchTiles" v) where
+  StitchTiles v = Attribute "stitchTiles" v
 
-svgSpecularConstant :: Txt -> Feature e
-svgSpecularConstant = attribute "specularConstant"
+pattern StopColor v <- (Attribute "stop-color" v) where
+  StopColor v = Attribute "stop-color" v
 
-svgSpecularExponent :: Txt -> Feature e
-svgSpecularExponent = attribute "specularExponent"
+pattern StopOpacity v <- (Attribute "stop-opacity" v) where
+  StopOpacity v = Attribute "stop-opacity" v
 
-svgSpeed :: Txt -> Feature e
-svgSpeed = attribute "speed"
+pattern StrikethroughPosition v <- (Attribute "strikethrough-position" v) where
+  StrikethroughPosition v = Attribute "strikethrough-position" v
 
-svgSpreadMethod :: Txt -> Feature e
-svgSpreadMethod = attribute "spreadMethod"
+pattern StrikethroughThickness v <- (Attribute "strikethrough-thickness" v) where
+  StrikethroughThickness v = Attribute "strikethrough-thickness" v
 
-svgStartOffset :: Txt -> Feature e
-svgStartOffset = attribute "startOffset"
+pattern StringA v <- (Attribute "string" v) where
+  StringA v = Attribute "string" v
 
-svgStdDeviationA :: Txt -> Feature e
-svgStdDeviationA = attribute "stdDeviationA"
+pattern Stroke v <- (Attribute "stroke" v) where
+  Stroke v = Attribute "stroke" v
 
-svgStemh :: Txt -> Feature e
-svgStemh = attribute "stemh"
+pattern StrokeDasharray v <- (Attribute "stroke-dasharray" v) where
+  StrokeDasharray v = Attribute "stroke-dasharray" v
 
-svgStemv :: Txt -> Feature e
-svgStemv = attribute "stemv"
+pattern StrokeDashoffset v <- (Attribute "stroke-dashoffset" v) where
+  StrokeDashoffset v = Attribute "stroke-dashoffset" v
 
-svgStitchTiles :: Txt -> Feature e
-svgStitchTiles = attribute "stitchTiles"
+pattern StrokeLinecap v <- (Attribute "stroke-linecap" v) where
+  StrokeLinecap v = Attribute "stroke-linecap" v
 
-svgStopColor :: Txt -> Feature e
-svgStopColor = attribute "stop-color"
+pattern StrokeLinejoin v <- (Attribute "stroke-linejoin" v) where
+  StrokeLinejoin v = Attribute "stroke-linejoin" v
 
-svgStopOpacity :: Txt -> Feature e
-svgStopOpacity = attribute "stop-opacity"
+pattern StrokeMiterlimit v <- (Attribute "stroke-miterlimit" v) where
+  StrokeMiterlimit v = Attribute "stroke-miterlimit" v
 
-svgStrikethroughPosition :: Txt -> Feature e
-svgStrikethroughPosition = attribute "strikethrough-position"
+pattern StrokeOpacity v <- (Attribute "stroke-opacity" v) where
+  StrokeOpacity v = Attribute "stroke-opacity" v
 
-svgStrikethroughThickness :: Txt -> Feature e
-svgStrikethroughThickness = attribute "strikethrough-thickness"
+pattern StrokeWidth v <- (Attribute "stroke-width" v) where
+  StrokeWidth v = Attribute "stroke-width" v
 
-svgString :: Txt -> Feature e
-svgString = attribute "string"
+pattern SurfaceScale v <- (Attribute "surfaceScale" v) where
+  SurfaceScale v = Attribute "surfaceScale" v
 
-svgStroke :: Txt -> Feature e
-svgStroke = attribute "stroke"
+pattern SystemLanguage v <- (Attribute "systemLanguage" v) where
+  SystemLanguage v = Attribute "systemLanguage" v
 
-svgStrokeDasharray :: Txt -> Feature e
-svgStrokeDasharray = attribute "stroke-dasharray"
+pattern TableValues v <- (Attribute "tableValues" v) where
+  TableValues v = Attribute "tableValues" v
 
-svgStrokeDashoffset :: Txt -> Feature e
-svgStrokeDashoffset = attribute "stroke-dashoffset"
+pattern TargetX v <- (Attribute "targetX" v) where
+  TargetX v = Attribute "targetX" v
 
-svgStrokeLinecap :: Txt -> Feature e
-svgStrokeLinecap = attribute "stroke-linecap"
+pattern TargetY v <- (Attribute "targetY" v) where
+  TargetY v = Attribute "targetY" v
 
-svgStrokeLinejoin :: Txt -> Feature e
-svgStrokeLinejoin = attribute "stroke-linejoin"
+pattern TextAnchor v <- (Attribute "text-anchor" v) where
+  TextAnchor v = Attribute "text-anchor" v
 
-svgStrokeMiterlimit :: Txt -> Feature e
-svgStrokeMiterlimit = attribute "stroke-miterlimit"
+pattern TextDecoration v <- (Attribute "text-decoration" v) where
+  TextDecoration v = Attribute "text-decoration" v
 
-svgStrokeOpacity :: Txt -> Feature e
-svgStrokeOpacity = attribute "stroke-opacity"
+pattern TextRendering v <- (Attribute "text-rendering" v) where
+  TextRendering v = Attribute "text-rendering" v
 
-svgStrokeWidth :: Txt -> Feature e
-svgStrokeWidth = attribute "stroke-width"
+pattern TextLength v <- (Attribute "textLength" v) where
+  TextLength v = Attribute "textLength" v
 
-svgStyleA :: Txt -> Feature e
-svgStyleA = attribute "style"
+pattern To v <- (Attribute "to" v) where
+  To v = Attribute "to" v
 
-svgSurfaceScale :: Txt -> Feature e
-svgSurfaceScale = attribute "surfaceScale"
+pattern Transform v <- (Attribute "transform" v) where
+  Transform v = Attribute "transform" v
 
-svgSystemLanguage :: Txt -> Feature e
-svgSystemLanguage = attribute "systemLanguage"
+pattern U1 v <- (Attribute "u1" v) where
+  U1 v = Attribute "u1" v
 
-svgTabindex :: Txt -> Feature e
-svgTabindex = attribute "tabindex"
+pattern U2 v <- (Attribute "u2" v) where
+  U2 v = Attribute "u2" v
 
-svgTableValues :: Txt -> Feature e
-svgTableValues = attribute "tableValues"
+pattern UnerlinePosition v <- (Attribute "unerline-position" v) where
+  UnerlinePosition v = Attribute "unerline-position" v
 
-svgTarget :: Txt -> Feature e
-svgTarget = attribute "target"
+pattern UnderlineThickness v <- (Attribute "underline-thickness" v) where
+  UnderlineThickness v = Attribute "underline-thickness" v
 
-svgTargetX :: Txt -> Feature e
-svgTargetX = attribute "targetX"
+pattern Unicode v <- (Attribute "unicode" v) where
+  Unicode v = Attribute "unicode" v
 
-svgTargetY :: Txt -> Feature e
-svgTargetY = attribute "targetY"
+pattern UnicodeBidi v <- (Attribute "unicode-bidi" v) where
+  UnicodeBidi v = Attribute "unicode-bidi" v
 
-svgTextAnchor :: Txt -> Feature e
-svgTextAnchor = attribute "text-anchor"
+pattern UnicodeRange v <- (Attribute "unicode-range" v) where
+  UnicodeRange v = Attribute "unicode-range" v
 
-svgTextDecoration :: Txt -> Feature e
-svgTextDecoration = attribute "text-decoration"
+pattern UnitsPerEm v <- (Attribute "units-per-em" v) where
+  UnitsPerEm v = Attribute "units-per-em" v
 
-svgTextRendering :: Txt -> Feature e
-svgTextRendering = attribute "text-rendering"
+pattern VAlphabetic v <- (Attribute "v-alphabetic" v) where
+  VAlphabetic v = Attribute "v-alphabetic" v
 
-svgTextLength :: Txt -> Feature e
-svgTextLength = attribute "textLength"
+pattern VHanging v <- (Attribute "v-hanging" v) where
+  VHanging v = Attribute "v-hanging" v
 
-svgTo :: Txt -> Feature e
-svgTo = attribute "to"
+pattern VIdeographic v <- (Attribute "v-ideographic" v) where
+  VIdeographic v = Attribute "v-ideographic" v
 
-svgTransform :: Txt -> Feature e
-svgTransform = attribute "transform"
+pattern VMathematical v <- (Attribute "v-mathematical" v) where
+  VMathematical v = Attribute "v-mathematical" v
 
-svgType :: Txt -> Feature e
-svgType = attribute "type"
+pattern Values v <- (Attribute "values" v) where
+  Values v = Attribute "values" v
 
-svgU1 :: Txt -> Feature e
-svgU1 = attribute "u1"
+pattern Version v <- (Attribute "version" v) where
+  Version v = Attribute "version" v
 
-svgU2 :: Txt -> Feature e
-svgU2 = attribute "u2"
+pattern VertAdvY v <- (Attribute "vert-adv-y" v) where
+  VertAdvY v = Attribute "vert-adv-y" v
 
-svgUnerlinePosition :: Txt -> Feature e
-svgUnerlinePosition = attribute "unerline-position"
+pattern VertOriginX v <- (Attribute "vert-origin-x" v) where
+  VertOriginX v = Attribute "vert-origin-x" v
 
-svgUnderlineThickness :: Txt -> Feature e
-svgUnderlineThickness = attribute "underline-thickness"
+pattern VerOriginY v <- (Attribute "ver-origin-y" v) where
+  VerOriginY v = Attribute "ver-origin-y" v
 
-svgUnicode :: Txt -> Feature e
-svgUnicode = attribute "unicode"
+pattern ViewBox v <- (Attribute "viewBox" v) where
+  ViewBox v = Attribute "viewBox" v
 
-svgUnicodeBidi :: Txt -> Feature e
-svgUnicodeBidi = attribute "unicode-bidi"
+pattern ViewTarget v <- (Attribute "viewTarget" v) where
+  ViewTarget v = Attribute "viewTarget" v
 
-svgUnicodeRange :: Txt -> Feature e
-svgUnicodeRange = attribute "unicode-range"
+pattern Visibility v <- (Attribute "visibility" v) where
+  Visibility v = Attribute "visibility" v
 
-svgUnitsPerEm :: Txt -> Feature e
-svgUnitsPerEm = attribute "units-per-em"
+pattern Widths v <- (Attribute "widths" v) where
+  Widths v = Attribute "widths" v
 
-svgVAlphabetic :: Txt -> Feature e
-svgVAlphabetic = attribute "v-alphabetic"
+pattern WordSpacing v <- (Attribute "word-spacing" v) where
+  WordSpacing v = Attribute "word-spacing" v
 
-svgVHanging :: Txt -> Feature e
-svgVHanging = attribute "v-hanging"
+pattern WritingMode v <- (Attribute "writing-mode" v) where
+  WritingMode v = Attribute "writing-mode" v
 
-svgVIdeographic :: Txt -> Feature e
-svgVIdeographic = attribute "v-ideographic"
+pattern X v <- (Attribute "x" v) where
+  X v = Attribute "X" v
 
-svgVMathematical :: Txt -> Feature e
-svgVMathematical = attribute "v-mathematical"
+pattern XHeight v <- (Attribute "xHeight" v) where
+  XHeight v = Attribute "xHeight" v
 
-svgValues :: Txt -> Feature e
-svgValues = attribute "values"
+pattern X1 v <- (Attribute "x1" v) where
+  X1 v = Attribute "x1" v
 
-svgVersion :: Txt -> Feature e
-svgVersion = attribute "version"
+pattern X2 v <- (Attribute "x2" v) where
+  X2 v = Attribute "x2" v
 
-svgVertAdvY :: Txt -> Feature e
-svgVertAdvY = attribute "vert-adv-y"
+pattern XChannelSelector v <- (Attribute "xChannelSelector" v) where
+  XChannelSelector v = Attribute "xChannelSelector" v
 
-svgVertOriginX :: Txt -> Feature e
-svgVertOriginX = attribute "vert-origin-x"
+pattern XLinkActuate v <- (XLink "xlink:actuate" v) where
+  XLinkActuate v = XLink "xlink:actuate" v
 
-svgVerOriginY :: Txt -> Feature e
-svgVerOriginY = attribute "ver-origin-y"
+pattern XLinkArcrole v <- (XLink "xlink:arcrole" v) where
+  XLinkArcrole v = XLink "xlink:arcrole" v
 
-svgViewBox :: Txt -> Feature e
-svgViewBox = attribute "viewBox"
+pattern XLinkHref v <- (XLink "xlink:href" v) where
+  XLinkHref v = XLink "xlink:href" v
 
-svgViewTarget :: Txt -> Feature e
-svgViewTarget = attribute "viewTarget"
+pattern XLinkRole v <- (XLink "xlink:role" v) where
+  XLinkRole v = XLink "xlink:role" v
 
-svgVisibility :: Txt -> Feature e
-svgVisibility = attribute "visibility"
+pattern XLinkShow v <- (XLink "xlink:show" v) where
+  XLinkShow v = XLink "xlink:show" v
 
-svgWidth :: Txt -> Feature e
-svgWidth = attribute "width"
+pattern XLinkTitle v <- (XLink "xlink:title" v) where
+  XLinkTitle v = XLink "xlink:title" v
 
-svgWidths :: Txt -> Feature e
-svgWidths = attribute "widths"
+pattern XLinkType v <- (XLink "xlink:type" v) where
+  XLinkType v = XLink "xlink:type" v
 
-svgWordSpacing :: Txt -> Feature e
-svgWordSpacing = attribute "word-spacing"
+pattern XMLBase v <- (Attribute "xml:base" v) where
+  XMLBase v = Attribute "xml:base" v
 
-svgWritingMode :: Txt -> Feature e
-svgWritingMode = attribute "writing-mode"
+pattern XMLLang v <- (Attribute "xml:lang" v) where
+  XMLLang v = Attribute "xml:lang" v
 
-svgX :: Txt -> Feature e
-svgX = attribute "x"
+pattern XMLSpace v <- (Attribute "xml:space" v) where
+  XMLSpace v = Attribute "xml:space" v
 
-svgXHeight :: Txt -> Feature e
-svgXHeight = attribute "xHeight"
+pattern Y v <- (Attribute "y" v) where
+  Y v = Attribute "y" v
 
-svgX1 :: Txt -> Feature e
-svgX1 = attribute "x1"
+pattern Y1 v <- (Attribute "y1" v) where
+  Y1 v = Attribute "y1" v
 
-svgX2 :: Txt -> Feature e
-svgX2 = attribute "x2"
+pattern Y2 v <- (Attribute "y2" v) where
+  Y2 v = Attribute "y2" v
 
-svgXChannelSelector :: Txt -> Feature e
-svgXChannelSelector = attribute "xChannelSelector"
+pattern YChannelSelector v <- (Attribute "yChannelSelector" v) where
+  YChannelSelector v = Attribute "yChannelSelector" v
 
-svgXlinkactuate :: Txt -> Feature e
-svgXlinkactuate = xlink "xlink:actuate"
+pattern Z v <- (Attribute "z" v) where
+  Z v = Attribute "z" v
 
-svgXlinkarcrole :: Txt -> Feature e
-svgXlinkarcrole = xlink "xlink:arcrole"
-
-svgXlinkhref :: Txt -> Feature e
-svgXlinkhref = xlink "xlink:href"
-
-svgXlinkrole :: Txt -> Feature e
-svgXlinkrole = xlink "xlink:role"
-
-svgXlinkshow :: Txt -> Feature e
-svgXlinkshow = xlink "xlink:show"
-
-svgXlinktitle :: Txt -> Feature e
-svgXlinktitle = xlink "xlink:title"
-
-svgXlinktype :: Txt -> Feature e
-svgXlinktype = xlink "xlink:type"
-
-svgXmlbase :: Txt -> Feature e
-svgXmlbase = attribute "xml:base"
-
-svgXmllang :: Txt -> Feature e
-svgXmllang = attribute "xml:lang"
-
-svgXmlspace :: Txt -> Feature e
-svgXmlspace = attribute "xml:space"
-
-svgY :: Txt -> Feature e
-svgY = attribute "y"
-
-svgY1 :: Txt -> Feature e
-svgY1 = attribute "y1"
-
-svgY2 :: Txt -> Feature e
-svgY2 = attribute "y2"
-
-svgYChannelSelector :: Txt -> Feature e
-svgYChannelSelector = attribute "yChannelSelector"
-
-svgZ :: Txt -> Feature e
-svgZ = attribute "z"
-
-svgZoomAndPan :: Txt -> Feature e
-svgZoomAndPan = attribute "zoomAndPan"
-
-clipPathUrl :: Txt -> Feature e
-clipPathUrl = attribute "clip-path" . (\x -> "url(#" <> x <> ")")
+pattern ZoomAndPan v <- (Attribute "zoomAndPan" v) where
+  ZoomAndPan v = Attribute "zoomAndPan" v
 
 --------------------------------------------------------------------------------
 -- Event listener 'Attribute's
 
-onClick :: e -> Feature e
-onClick = on "click"
+pattern OnClick opts f <- (OnE _ "click" opts f _) where
+  OnClick opts f = OnE "" "click" opts f Nothing
 
-onDoubleClick :: e -> Feature e
-onDoubleClick = on "dblclick"
+pattern OnDoubleClick opts f <- (OnE _ "dblclick" opts f _) where
+  OnDoubleClick opts f = OnE "" "dblclick" opts f Nothing
 
-onMouseDown :: e -> Feature e
-onMouseDown = on "mousedown"
+pattern OnMouseDown opts f <- (OnE _ "mousedown" opts f _) where
+  OnMouseDown opts f = OnE "" "mousedown" opts f Nothing
 
-onMouseUp :: e -> Feature e
-onMouseUp = on "mouseup"
+pattern OnMouseUp opts f <- (OnE _ "mouseup" opts f _) where
+  OnMouseUp opts f = OnE "" "mouseup" opts f Nothing
 
-onTouchStart :: e -> Feature e
-onTouchStart = on "touchstart"
+pattern OnTouchStart opts f <- (OnE _ "touchstart" opts f _) where
+  OnTouchStart opts f = OnE "" "touchstart" opts f Nothing
 
-onTouchEnd :: e -> Feature e
-onTouchEnd = on "touchend"
+pattern OnTouchEnd opts f <- (OnE _ "touchend" opts f _) where
+  OnTouchEnd opts f = OnE "" "touchend" opts f Nothing
 
-onMouseEnter :: e -> Feature e
-onMouseEnter = on "mouseenter"
+pattern OnMouseEnter opts f <- (OnE _ "mouseenter" opts f _) where
+  OnMouseEnter opts f = OnE "" "mouseenter" opts f Nothing
 
-onMouseLeave :: e -> Feature e
-onMouseLeave = on "mouseleave"
+pattern OnMouseLeave opts f <- (OnE _ "mouseleave" opts f _) where
+  OnMouseLeave opts f = OnE "" "mouseleave" opts f Nothing
 
-onMouseOver :: e -> Feature e
-onMouseOver = on "mouseover"
+pattern OnMouseOver opts f <- (OnE _ "mouseover" opts f _) where
+  OnMouseOver opts f = OnE "" "mouseover" opts f Nothing
 
-onMouseOut :: e -> Feature e
-onMouseOut = on "mouseout"
+pattern OnMouseOut opts f <- (OnE _ "mouseout" opts f _) where
+  OnMouseOut opts f = OnE "" "mouseout" opts f Nothing
 
-onMouseMove :: e -> Feature e
-onMouseMove = on "mousemove"
+pattern OnMouseMove opts f <- (OnE _ "mousemove" opts f _) where
+  OnMouseMove opts f = OnE "" "mousemove" opts f Nothing
 
-onTouchMove :: e -> Feature e
-onTouchMove = on "touchmove"
+pattern OnTouchMove opts f <- (OnE _ "touchmove" opts f _)  where
+  OnTouchMove opts f = OnE "" "touchmove" opts f Nothing
 
-onTouchCancel :: e -> Feature e
-onTouchCancel = on "touchcancel"
+pattern OnTouchCancel opts f <- (OnE _ "touchcancel" opts f _) where
+  OnTouchCancel opts f = OnE "" "touchcancel" opts f Nothing
 
-onInput :: (Txt -> e) -> Feature e
-onInput f = on' "input" $ \_ _ -> fmap return $ flip parse $ \o -> do
-  target <- o .: "target"
-  value <- target .: "value"
-  pure $ f value
+pattern OnInput opts f <- (OnE _ "input" opts f _) where
+  OnInput opts f = OnE "" "input" opts f Nothing
 
-onInputChange :: (Txt -> e) -> Feature e
-onInputChange f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
-  target <- o .: "target"
-  value <- target .: "value"
-  pure $ f value
+pattern OnChange opts f <- (OnE _ "change" opts f _) where
+  OnChange opts f = OnE "" "change" opts f Nothing
 
-onCheck :: (Bool -> e) -> Feature e
-onCheck f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
-  target <- o .: "target"
-  checked <- target .: "checked"
-  pure $ f checked
+pattern OnSubmit opts f <- (OnE _ "submit" opts f _) where
+  OnSubmit opts f = OnE "" "submit" opts f Nothing
 
-onSubmit :: e -> Feature e
-onSubmit e = intercept $ on' "submit" $ \_ _ _ -> return $ Just e
+pattern OnBlur opts f <- (OnE _ "blur" opts f _) where
+  OnBlur opts f = OnE "" "blur" opts f Nothing
 
-onBlur :: e -> Feature e
-onBlur = on "blur"
+pattern OnFocus opts f <- (OnE _ "focus" opts f _) where
+  OnFocus opts f = OnE "" "focus" opts f Nothing
 
-onFocus :: e -> Feature e
-onFocus = on "focus"
+pattern OnKeyUp opts f <- (OnE _ "keyup" opts f _) where
+  OnKeyUp opts f = OnE "" "keyup" opts f Nothing
 
-onKeyUp :: (Int -> e) -> Feature e
-onKeyUp f = on' "keyup" $ \_ _ -> fmap return $ flip parse $ \o -> do
-  key <- o .: "keyCode"
-  pure $ f key
+pattern OnKeyDown opts f <- (OnE _ "keydown" opts f _) where
+  OnKeyDown opts f = OnE "" "keydown" opts f Nothing
+
+pattern OnKeyPress opts f <- (OnE _ "keypress" opts f _) where
+  OnKeyPress opts f = OnE "" "keypress" opts f Nothing
+
+-- onInput :: (Txt -> Code ms IO ()) -> Feature ms
+-- onInput f = on' "input" $ \_ _ -> fmap return $ flip parse $ \o -> do
+--   target <- o .: "target"
+--   value <- target .: "value"
+--   pure $ f value
+
+-- onInputChange :: (Txt -> Code ms IO ()) -> Feature ms
+-- onInputChange f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
+--   target <- o .: "target"
+--   value <- target .: "value"
+--   pure $ f value
+
+-- onCheck :: (Bool -> Code ms IO ()) -> Feature ms
+-- onCheck f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
+--   target <- o .: "target"
+--   checked <- target .: "checked"
+--   pure $ f checked
+
+-- onSubmit :: Code ms IO () -> Feature ms
+-- onSubmit e = intercept $ on' "submit" $ \_ _ _ -> return $ Just e
+
+-- onBlur :: Code ms IO () -> Feature ms
+-- onBlur = on "blur"
+
+-- onFocus :: Code ms IO () -> Feature ms
+-- onFocus = on "focus"
+
+-- onKeyUp :: (Int -> Code ms IO ()) -> Feature ms
+-- onKeyUp f = on' "keyup" $ \_ _ -> fmap return $ flip parse $ \o -> do
+--   key <- o .: "keyCode"
+--   pure $ f key
 
 
-onKeyDown :: (Int -> e) -> Feature e
-onKeyDown f = on' "keydown" $ \_ _ -> fmap return $ flip parse $ \o -> do
-  key <- o .: "keyCode"
-  pure $ f key
+-- onKeyDown :: (Int -> Code ms IO ()) -> Feature ms
+-- onKeyDown f = on' "keydown" $ \_ _ -> fmap return $ flip parse $ \o -> do
+--   key <- o .: "keyCode"
+--   pure $ f key
 
-onKeyPress :: (Int -> e) -> Feature e
-onKeyPress f = on' "keypress" $ \_ _ -> fmap return $ flip parse $ \o -> do
-  key <- o .: "keyCode"
-  pure $ f key
+-- onKeyPress :: (Int -> Code ms IO ()) -> Feature ms
+-- onKeyPress f = on' "keypress" $ \_ _ -> fmap return $ flip parse $ \o -> do
+--   key <- o .: "keyCode"
+--   pure $ f key
 
-ignoreClick :: Feature e
-ignoreClick = intercept $ on' "click" $ \_ _ _ -> return Nothing
+-- ignoreClick :: Feature ms
+-- ignoreClick = intercept $ on' "click" $ \_ _ _ -> return Nothing

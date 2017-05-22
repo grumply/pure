@@ -79,7 +79,7 @@ renderStyles b = go
           : go r
 
 styled :: Styles -> Feature ms
-styled ss = Style $! go ss
+styled ss = StyleF $! go ss
   where
     go (Return _) = []
     go (Lift s) = go (runIdentity s)

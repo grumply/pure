@@ -1,4 +1,6 @@
 {-# language UndecidableInstances #-}
+{-# language PatternSynonyms #-}
+{-# language ViewPatterns #-}
 module Atomic.Cond where
 
 import Control.Lens.Empty
@@ -60,3 +62,6 @@ instance Cond Float where
 
 instance Cond (a -> a) where
   nil = id
+
+pattern Nil <- (isNil -> True) where
+  Nil = nil

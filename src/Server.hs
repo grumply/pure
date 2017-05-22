@@ -4,10 +4,10 @@
 {-# language CPP #-}
 module Server (module Server, module Export) where
 
-import Ef.Base as Export hiding (As,Index,watch,transform,construct,uncons,distribute,embed,observe)
+import Ef.Base as Export hiding (As,Index,watch,transform,construct,uncons,distribute,embed,observe,End,Nat(..),maps)
 import qualified Ef.Event
 import qualified Ef.Base
-import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
+import Prelude as Export hiding (all,exponent,tan,lookup,reverse)
 
 import Atomic as Export hiding (accept)
 

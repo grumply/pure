@@ -1,4 +1,6 @@
 {-# language OverloadedStrings #-}
+{-# language PatternSynonyms #-}
+{-# language ViewPatterns #-}
 module Atomic.HTML where
 
 import Ef.Base
@@ -10,638 +12,635 @@ import Data.Typeable
 import Atomic.Attribute
 import Atomic.Component
 
-abbr :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-abbr = mkAtom "abbr"
+pattern Abbr fs cs <- (fromAtom -> Just (HTML mn "abbr" fs cs)) where
+  Abbr fs cs = mkAtom "abbr" fs cs
 
-address :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-address = mkAtom "address"
+pattern Address fs cs <- (fromAtom -> Just (HTML mn "address" fs cs)) where
+  Address fs cs = mkAtom "address" fs cs
 
-area :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-area = mkAtom "area"
+pattern Area fs cs <- (fromAtom -> Just (HTML mn "area" fs cs)) where
+  Area fs cs = mkAtom "area" fs cs
 
-a :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-a = mkAtom "a"
+pattern A fs cs <- (fromAtom -> Just (HTML mn "a" fs cs)) where
+  A fs cs = mkAtom "a" fs cs
 
-article :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-article = mkAtom "article"
+pattern Article fs cs <- (fromAtom -> Just (HTML mn "article" fs cs)) where
+  Article fs cs = mkAtom "article" fs cs
 
-asideE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-asideE = mkAtom "aside"
+pattern Aside fs cs <- (fromAtom -> Just (HTML mn "aside" fs cs)) where
+  Aside fs cs = mkAtom "aside" fs cs
 
-audio :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-audio = mkAtom "audio"
+pattern Audio fs cs <- (fromAtom -> Just (HTML mn "audio" fs cs)) where
+  Audio fs cs = mkAtom "audio" fs cs
 
-base :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-base = mkAtom "base"
+pattern Base fs cs <- (fromAtom -> Just (HTML mn "base" fs cs)) where
+  Base fs cs = mkAtom "base" fs cs
 
-bdi :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-bdi = mkAtom "bdi"
+pattern Bdi fs cs <- (fromAtom -> Just (HTML mn "bdi" fs cs)) where
+  Bdi fs cs = mkAtom "bdi" fs cs
 
-bdo :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-bdo = mkAtom "bdo"
+pattern Bdo fs cs <- (fromAtom -> Just (HTML mn "bdo" fs cs)) where
+  Bdo fs cs = mkAtom "bdo" fs cs
 
-big :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-big = mkAtom "big"
+pattern Big fs cs <- (fromAtom -> Just (HTML mn "big" fs cs)) where
+  Big fs cs = mkAtom "big" fs cs
 
-blockquote :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-blockquote = mkAtom "blockquote"
+pattern Blockquote fs cs <- (fromAtom -> Just (HTML mn "blockquote" fs cs)) where
+  Blockquote fs cs = mkAtom "blockquote" fs cs
 
-body :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-body = mkAtom "body"
+pattern Body fs cs <- (fromAtom -> Just (HTML mn "body" fs cs)) where
+  Body fs cs = mkAtom "body" fs cs
 
-b :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-b = mkAtom "b"
+pattern B fs cs <- (fromAtom -> Just (HTML mn "b" fs cs)) where
+  B fs cs = mkAtom "b" fs cs
 
-br :: Typeable e => SomeAtom e
-br = mkAtom "br" [] []
+pattern Br fs cs <- (fromAtom -> Just (HTML mn "br" fs cs)) where
+  Br fs cs = mkAtom "br" fs cs
 
-button :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-button = mkAtom "button"
+pattern Button fs cs <- (fromAtom -> Just (HTML mn "button" fs cs)) where
+  Button fs cs = mkAtom "button" fs cs
 
-canvas :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-canvas = mkAtom "canvas"
+pattern Canvas fs cs <- (fromAtom -> Just (HTML mn "canvas" fs cs)) where
+  Canvas fs cs = mkAtom "canvas" fs cs
 
-caption :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-caption = mkAtom "caption"
+pattern Caption fs cs <- (fromAtom -> Just (HTML mn "caption" fs cs)) where
+  Caption fs cs = mkAtom "caption" fs cs
 
-cite :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-cite = mkAtom "cite"
+pattern Cite fs cs <- (fromAtom -> Just (HTML mn "cite" fs cs)) where
+  Cite fs cs = mkAtom "cite" fs cs
 
-code :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-code = mkAtom "code"
+pattern Code fs cs <- (fromAtom -> Just (HTML mn "code" fs cs)) where
+  Code fs cs = mkAtom "code" fs cs
 
-col :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-col = mkAtom "col"
+pattern Col fs cs <- (fromAtom -> Just (HTML mn "col" fs cs)) where
+  Col fs cs = mkAtom "col" fs cs
 
-colgroup :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-colgroup = mkAtom "colgroup"
+pattern Colgroup fs cs <- (fromAtom -> Just (HTML mn "colgroup" fs cs)) where
+  Colgroup fs cs = mkAtom "colgroup" fs cs
 
-dataE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-dataE = mkAtom "data"
+pattern Data fs cs <- (fromAtom -> Just (HTML mn "data" fs cs)) where
+  Data fs cs = mkAtom "data" fs cs
 
-datalist :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-datalist = mkAtom "datalist"
+pattern Datalist fs cs <- (fromAtom -> Just (HTML mn "datalist" fs cs)) where
+  Datalist fs cs = mkAtom "datalist" fs cs
 
-dd :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-dd = mkAtom "dd"
+pattern Dd fs cs <- (fromAtom -> Just (HTML mn "dd" fs cs)) where
+  Dd fs cs = mkAtom "dd" fs cs
 
-description :: Typeable e => Txt -> SomeAtom e
-description d = meta [ name "description", contentA d ] []
+pattern Description fs cs <- (fromAtom -> Just (HTML mn "description" fs cs)) where
+  Description fs cs = mkAtom "description" fs cs
 
-dl :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-dl = mkAtom "dl"
+pattern Dl fs cs <- (fromAtom -> Just (HTML mn "dl" fs cs)) where
+  Dl fs cs = mkAtom "dl" fs cs
 
-dt :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-dt = mkAtom "dt"
+pattern Dt fs cs <- (fromAtom -> Just (HTML mn "dt" fs cs)) where
+  Dt fs cs = mkAtom "dt" fs cs
 
-del :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-del = mkAtom "del"
+pattern Del fs cs <- (fromAtom -> Just (HTML mn "del" fs cs)) where
+  Del fs cs = mkAtom "del" fs cs
 
-details :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-details = mkAtom "details"
+pattern Details fs cs <- (fromAtom -> Just (HTML mn "details" fs cs)) where
+  Details fs cs = mkAtom "details" fs cs
 
-dfn :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-dfn = mkAtom "dfn"
+pattern Dfn fs cs <- (fromAtom -> Just (HTML mn "dfn" fs cs)) where
+  Dfn fs cs = mkAtom "dfn" fs cs
 
-dialog :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-dialog = mkAtom "dialog"
+pattern Dialog fs cs <- (fromAtom -> Just (HTML mn "dialog" fs cs)) where
+  Dialog fs cs = mkAtom "dialog" fs cs
 
-div :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-div = mkAtom "div"
+pattern Div fs cs <- (fromAtom -> Just (HTML mn "div" fs cs)) where
+  Div fs cs = mkAtom "div" fs cs
 
-em :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-em = mkAtom "em"
+pattern Em fs cs <- (fromAtom -> Just (HTML mn "em" fs cs)) where
+  Em fs cs = mkAtom "em" fs cs
 
-embed :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-embed = mkAtom "embed"
+pattern Embed fs cs <- (fromAtom -> Just (HTML mn "embed" fs cs)) where
+  Embed fs cs = mkAtom "embed" fs cs
 
-fieldset :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-fieldset = mkAtom "fieldset"
+pattern Fieldset fs cs <- (fromAtom -> Just (HTML mn "fieldset" fs cs)) where
+  Fieldset fs cs = mkAtom "fieldset" fs cs
 
-figcaption :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-figcaption = mkAtom "figcaption"
+pattern Figcaption fs cs <- (fromAtom -> Just (HTML mn "figcaption" fs cs)) where
+  Figcaption fs cs = mkAtom "figcaption" fs cs
 
-figure :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-figure = mkAtom "figure"
+pattern Figure fs cs <- (fromAtom -> Just (HTML mn "figure" fs cs)) where
+  Figure fs cs = mkAtom "figure" fs cs
 
-footer :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-footer = mkAtom "footer"
+pattern Footer fs cs <- (fromAtom -> Just (HTML mn "footer" fs cs)) where
+  Footer fs cs = mkAtom "footer" fs cs
 
-form :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-form = mkAtom "form"
+pattern Form fs cs <- (fromAtom -> Just (HTML mn "form" fs cs)) where
+  Form fs cs = mkAtom "form" fs cs
 
-frame :: Typeable e => [Feature e] -> SomeAtom e
-frame fs = mkAtom "frame" fs []
+pattern Frame fs cs <- (fromAtom -> Just (HTML mn "frame" fs cs)) where
+  Frame fs cs = mkAtom "frame" fs cs
 
-head :: Typeable e => [SomeAtom e] -> SomeAtom e
-head = mkAtom "head" []
+pattern Head fs cs <- (fromAtom -> Just (HTML mn "head" fs cs)) where
+  Head fs cs = mkAtom "head" fs cs
 
-header :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-header = mkAtom "header"
+pattern Header fs cs <- (fromAtom -> Just (HTML mn "header" fs cs)) where
+  Header fs cs = mkAtom "header" fs cs
 
-h1 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-h1 = mkAtom "h1"
+pattern H1 fs cs <- (fromAtom -> Just (HTML mn "h1" fs cs)) where
+  H1 fs cs = mkAtom "h1" fs cs
 
-h2 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-h2 = mkAtom "h2"
+pattern H2 fs cs <- (fromAtom -> Just (HTML mn "h2" fs cs)) where
+  H2 fs cs = mkAtom "h2" fs cs
 
-h3 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-h3 = mkAtom "h3"
+pattern H3 fs cs <- (fromAtom -> Just (HTML mn "h3" fs cs)) where
+  H3 fs cs = mkAtom "h3" fs cs
 
-h4 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-h4 = mkAtom "h4"
+pattern H4 fs cs <- (fromAtom -> Just (HTML mn "h4" fs cs)) where
+  H4 fs cs = mkAtom "h4" fs cs
 
-h5 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-h5 = mkAtom "h5"
+pattern H5 fs cs <- (fromAtom -> Just (HTML mn "h5" fs cs)) where
+  H5 fs cs = mkAtom "h5" fs cs
 
-h6 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-h6 = mkAtom "h6"
+pattern H6 fs cs <- (fromAtom -> Just (HTML mn "h6" fs cs)) where
+  H6 fs cs = mkAtom "h6" fs cs
 
-hgroup :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-hgroup = mkAtom "hgroup"
+pattern Hgroup fs cs <- (fromAtom -> Just (HTML mn "hgroup" fs cs)) where
+  Hgroup fs cs = mkAtom "hgroup" fs cs
 
-hr :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-hr = mkAtom "hr"
+pattern Hr fs cs <- (fromAtom -> Just (HTML mn "hr" fs cs)) where
+  Hr fs cs = mkAtom "hr" fs cs
 
-htmlE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-htmlE = mkAtom "html"
+pattern Html fs cs <- (fromAtom -> Just (HTML mn "html" fs cs)) where
+  Html fs cs = mkAtom "html" fs cs
 
-iframe :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-iframe = mkAtom "iframe"
+pattern Iframe fs cs <- (fromAtom -> Just (HTML mn "iframe" fs cs)) where
+  Iframe fs cs = mkAtom "iframe" fs cs
 
-img :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-img = mkAtom "img"
+pattern Img fs cs <- (fromAtom -> Just (HTML mn "img" fs cs)) where
+  Img fs cs = mkAtom "img" fs cs
 
-input :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-input = mkAtom "input"
+pattern Input fs cs <- (fromAtom -> Just (HTML mn "input" fs cs)) where
+  Input fs cs = mkAtom "input" fs cs
 
-textInput :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-textInput fs = mkAtom "input" (typeA "text":fs)
+pattern Ins fs cs <- (fromAtom -> Just (HTML mn "ins" fs cs)) where
+  Ins fs cs = mkAtom "ins" fs cs
 
-ins :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-ins = mkAtom "ins"
+pattern I fs cs <- (fromAtom -> Just (HTML mn "i" fs cs)) where
+  I fs cs = mkAtom "i" fs cs
 
-iE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-iE = mkAtom "i"
+pattern Kbd fs cs <- (fromAtom -> Just (HTML mn "kbd" fs cs)) where
+  Kbd fs cs = mkAtom "kbd" fs cs
 
-kbd :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-kbd = mkAtom "kbd"
+pattern Keygen fs cs <- (fromAtom -> Just (HTML mn "keygen" fs cs)) where
+  Keygen fs cs = mkAtom "keygen" fs cs
 
-keygen :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-keygen = mkAtom "keygen"
+pattern Label fs cs <- (fromAtom -> Just (HTML mn "label" fs cs)) where
+  Label fs cs = mkAtom "label" fs cs
 
-label :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-label = mkAtom "label"
+pattern Legend fs cs <- (fromAtom -> Just (HTML mn "legend" fs cs)) where
+  Legend fs cs = mkAtom "legend" fs cs
 
-legend :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-legend = mkAtom "legend"
+pattern Li fs cs <- (fromAtom -> Just (HTML mn "li" fs cs)) where
+  Li fs cs = mkAtom "li" fs cs
 
-li :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-li = mkAtom "li"
+pattern Link fs cs <- (fromAtom -> Just (HTML mn "link" fs cs)) where
+  Link fs cs = mkAtom "link" fs cs
 
-linkE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-linkE = mkAtom "link"
+pattern Main fs cs <- (fromAtom -> Just (HTML mn "main" fs cs)) where
+  Main fs cs = mkAtom "main" fs cs
 
-mainE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-mainE = mkAtom "main"
+pattern Map fs cs <- (fromAtom -> Just (HTML mn "map" fs cs)) where
+  Map fs cs = mkAtom "map" fs cs
 
-mapE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-mapE = mkAtom "map"
+pattern Mark fs cs <- (fromAtom -> Just (HTML mn "mark" fs cs)) where
+  Mark fs cs = mkAtom "mark" fs cs
 
-mark :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-mark = mkAtom "mark"
+pattern Menu fs cs <- (fromAtom -> Just (HTML mn "menu" fs cs)) where
+  Menu fs cs = mkAtom "menu" fs cs
 
-menu :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-menu = mkAtom "menu"
+pattern Menuitem fs cs <- (fromAtom -> Just (HTML mn "menuitem" fs cs)) where
+  Menuitem fs cs = mkAtom "menuitem" fs cs
 
-menuitem :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-menuitem = mkAtom "menuitem"
+pattern Meta fs cs <- (fromAtom -> Just (HTML mn "meta" fs cs)) where
+  Meta fs cs = mkAtom "meta" fs cs
 
-meta :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-meta = mkAtom "meta"
+pattern Meter fs cs <- (fromAtom -> Just (HTML mn "meter" fs cs)) where
+  Meter fs cs = mkAtom "meter" fs cs
 
-meter :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-meter = mkAtom "meter"
+pattern Nav fs cs <- (fromAtom -> Just (HTML mn "nav" fs cs)) where
+  Nav fs cs = mkAtom "nav" fs cs
 
-nav :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-nav = mkAtom "nav"
+pattern Noscript fs cs <- (fromAtom -> Just (HTML mn "noscript" fs cs)) where
+  Noscript fs cs = mkAtom "noscript" fs cs
 
-noscript :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-noscript = mkAtom "noscript"
+pattern Obj fs cs <- (fromAtom -> Just (HTML mn "object" fs cs)) where
+  Obj fs cs = mkAtom "object" fs cs
 
-objectE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-objectE = mkAtom "object"
+pattern Optgroup fs cs <- (fromAtom -> Just (HTML mn "optgroup" fs cs)) where
+  Optgroup fs cs = mkAtom "optgroup" fs cs
 
-optgroup :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-optgroup = mkAtom "optgroup"
+pattern Option fs cs <- (fromAtom -> Just (HTML mn "option" fs cs)) where
+  Option fs cs = mkAtom "option" fs cs
 
-option :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-option = mkAtom "option"
+pattern Ol fs cs <- (fromAtom -> Just (HTML mn "ol" fs cs)) where
+  Ol fs cs = mkAtom "ol" fs cs
 
-ol :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-ol = mkAtom "ol"
+pattern Output fs cs <- (fromAtom -> Just (HTML mn "output" fs cs)) where
+  Output fs cs = mkAtom "output" fs cs
 
-output :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-output = mkAtom "output"
+pattern P fs cs <- (fromAtom -> Just (HTML mn "p" fs cs)) where
+  P fs cs = mkAtom "p" fs cs
 
-p :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-p = mkAtom "p"
+pattern Param fs cs <- (fromAtom -> Just (HTML mn "param" fs cs)) where
+  Param fs cs = mkAtom "param" fs cs
 
-param :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-param = mkAtom "param"
+pattern Picture fs cs <- (fromAtom -> Just (HTML mn "picture" fs cs)) where
+  Picture fs cs = mkAtom "picture" fs cs
 
-picture :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-picture = mkAtom "picture"
+pattern Pre fs cs <- (fromAtom -> Just (HTML mn "pre" fs cs)) where
+  Pre fs cs = mkAtom "pre" fs cs
 
-preE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-preE = mkAtom "pre"
+pattern Progress fs cs <- (fromAtom -> Just (HTML mn "progress" fs cs)) where
+  Progress fs cs = mkAtom "progress" fs cs
 
-progress :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-progress = mkAtom "progress"
+pattern Q fs cs <- (fromAtom -> Just (HTML mn "q" fs cs)) where
+  Q fs cs = mkAtom "q" fs cs
 
-q :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-q = mkAtom "q"
+pattern Rp fs cs <- (fromAtom -> Just (HTML mn "rp" fs cs)) where
+  Rp fs cs = mkAtom "rp" fs cs
 
-rp :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-rp = mkAtom "rp"
+pattern Rt fs cs <- (fromAtom -> Just (HTML mn "rt" fs cs)) where
+  Rt fs cs = mkAtom "rt" fs cs
 
-rt :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-rt = mkAtom "rt"
+pattern Ruby fs cs <- (fromAtom -> Just (HTML mn "ruby" fs cs)) where
+  Ruby fs cs = mkAtom "ruby" fs cs
 
-ruby :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-ruby = mkAtom "ruby"
+pattern Samp fs cs <- (fromAtom -> Just (HTML mn "samp" fs cs)) where
+  Samp fs cs = mkAtom "samp" fs cs
 
-samp :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-samp = mkAtom "samp"
+pattern Script fs cs <- (fromAtom -> Just (HTML mn "script" fs cs)) where
+  Script fs cs = mkAtom "script" fs cs
 
-script :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-script = mkAtom "script"
+pattern S fs cs <- (fromAtom -> Just (HTML mn "s" fs cs)) where
+  S fs cs = mkAtom "s" fs cs
 
-s :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-s = mkAtom "s"
+pattern Section fs cs <- (fromAtom -> Just (HTML mn "section" fs cs)) where
+  Section fs cs = mkAtom "section" fs cs
 
-section :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-section = mkAtom "section"
+pattern Select fs cs <- (fromAtom -> Just (HTML mn "select" fs cs)) where
+  Select fs cs = mkAtom "select" fs cs
 
-selectE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-selectE = mkAtom "select"
+pattern Small fs cs <- (fromAtom -> Just (HTML mn "small" fs cs)) where
+  Small fs cs = mkAtom "small" fs cs
 
-small :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-small = mkAtom "small"
+pattern Source fs cs <- (fromAtom -> Just (HTML mn "source" fs cs)) where
+  Source fs cs = mkAtom "source" fs cs
 
-source :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-source = mkAtom "source"
+pattern Span fs cs <- (fromAtom -> Just (HTML mn "span" fs cs)) where
+  Span fs cs = mkAtom "span" fs cs
 
-span :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-span = mkAtom "span"
+pattern Strong fs cs <- (fromAtom -> Just (HTML mn "strong" fs cs)) where
+  Strong fs cs = mkAtom "strong" fs cs
 
-strong :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-strong = mkAtom "strong"
+pattern Style fs cs <- (fromAtom -> Just (HTML mn "style" fs cs)) where
+  Style fs cs = mkAtom "style" fs cs
 
-style :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-style = mkAtom "style"
+pattern Sub fs cs <- (fromAtom -> Just (HTML mn "sub" fs cs)) where
+  Sub fs cs = mkAtom "sub" fs cs
 
-sub :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-sub = mkAtom "sub"
+pattern Summary fs cs <- (fromAtom -> Just (HTML mn "summary" fs cs)) where
+  Summary fs cs = mkAtom "summary" fs cs
 
-summary :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-summary = mkAtom "summary"
+pattern Sup fs cs <- (fromAtom -> Just (HTML mn "sup" fs cs)) where
+  Sup fs cs = mkAtom "sup" fs cs
 
-sup :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-sup = mkAtom "sup"
+pattern Table fs cs <- (fromAtom -> Just (HTML mn "table" fs cs)) where
+  Table fs cs = mkAtom "table" fs cs
 
-table :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-table = mkAtom "table"
+pattern Tbody fs cs <- (fromAtom -> Just (HTML mn "tbody" fs cs)) where
+  Tbody fs cs = mkAtom "tbody" fs cs
 
-tbody :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-tbody = mkAtom "tbody"
+pattern Td fs cs <- (fromAtom -> Just (HTML mn "td" fs cs)) where
+  Td fs cs = mkAtom "td" fs cs
 
-td :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-td = mkAtom "td"
+pattern Textarea fs cs <- (fromAtom -> Just (HTML mn "textarea" fs cs)) where
+  Textarea fs cs = mkAtom "textarea" fs cs
 
-textarea :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-textarea = mkAtom "textarea"
+pattern Tfoot fs cs <- (fromAtom -> Just (HTML mn "tfoot" fs cs)) where
+  Tfoot fs cs = mkAtom "tfoot" fs cs
 
-tfoot :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-tfoot = mkAtom "tfoot"
+pattern Th fs cs <- (fromAtom -> Just (HTML mn "th" fs cs)) where
+  Th fs cs = mkAtom "th" fs cs
 
-th :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-th = mkAtom "th"
+pattern Thead fs cs <- (fromAtom -> Just (HTML mn "thead" fs cs)) where
+  Thead fs cs = mkAtom "thead" fs cs
 
-thead :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-thead = mkAtom "thead"
+pattern Time fs cs <- (fromAtom -> Just (HTML mn "time" fs cs)) where
+  Time fs cs = mkAtom "time" fs cs
 
-time :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-time = mkAtom "time"
+pattern Title fs cs <- (fromAtom -> Just (HTML mn "title" fs cs)) where
+  Title fs cs = mkAtom "title" fs cs
 
-title :: Typeable e => Txt -> SomeAtom e
-title jst = mkAtom "title" [] [ text jst ]
+pattern Tr fs cs <- (fromAtom -> Just (HTML mn "tr" fs cs)) where
+  Tr fs cs = mkAtom "tr" fs cs
 
-tr :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-tr = mkAtom "tr"
+pattern Track fs cs <- (fromAtom -> Just (HTML mn "track" fs cs)) where
+  Track fs cs = mkAtom "track" fs cs
 
-track :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-track = mkAtom "track"
+pattern U fs cs <- (fromAtom -> Just (HTML mn "u" fs cs)) where
+  U fs cs = mkAtom "u" fs cs
 
-u :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-u = mkAtom "u"
+pattern Ul fs cs <- (fromAtom -> Just (HTML mn "ul" fs cs)) where
+  Ul fs cs = mkAtom "ul" fs cs
 
-ul :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-ul = mkAtom "ul"
+pattern Var fs cs <- (fromAtom -> Just (HTML mn "var" fs cs)) where
+  Var fs cs = mkAtom "var" fs cs
 
-varE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-varE = mkAtom "var"
+pattern Video fs cs <- (fromAtom -> Just (HTML mn "video" fs cs)) where
+  Video fs cs = mkAtom "video" fs cs
 
-video :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-video = mkAtom "video"
+pattern Viewport fs cs <- (fromAtom -> Just (HTML mn "viewport" fs cs)) where
+  Viewport fs cs = mkAtom "viewport" fs cs
 
-viewport :: Typeable e => Txt -> SomeAtom e
-viewport jst = mkAtom "meta" [ name "viewport", contentA jst ] []
-
-wbr :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-wbr = mkAtom "wbr"
+pattern Wbr fs cs <- (fromAtom -> Just (HTML mn "wbr" fs cs)) where
+  Wbr fs cs = mkAtom "wbr" fs cs
 
 --------------------------------------------------------------------------------
 -- SVG
 
-svgA :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgA = mkSVGAtom "a"
+pattern SVGA fs cs <- (fromAtom -> Just (SVGHTML mn "a" fs cs)) where
+  SVGA fs cs = mkSVGAtom "a" fs cs
 
-svgAudio :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgAudio = mkSVGAtom "audio"
+pattern SVGAudio fs cs <- (fromAtom -> Just (SVGHTML mn "audio" fs cs)) where
+  SVGAudio fs cs = mkSVGAtom "audio" fs cs
 
-svgAltGlyph :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgAltGlyph = mkSVGAtom "altGlyph"
+pattern SVGAltGlyph fs cs <- (fromAtom -> Just (SVGHTML mn "altGlyph" fs cs)) where
+  SVGAltGlyph fs cs = mkSVGAtom "altGlyph" fs cs
 
-svgAltGlyphDef :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgAltGlyphDef = mkSVGAtom "altGlyphDef"
+pattern SVGAltGlyphDef fs cs <- (fromAtom -> Just (SVGHTML mn "altGlyphDef" fs cs)) where
+  SVGAltGlyphDef fs cs = mkSVGAtom "altGlyphDef" fs cs
 
-svgAltGlyphItem :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgAltGlyphItem = mkSVGAtom "altGlyphItem"
+pattern SVGAltGlyphItem fs cs <- (fromAtom -> Just (SVGHTML mn "altGlyphItem" fs cs)) where
+  SVGAltGlyphItem fs cs = mkSVGAtom "altGlyphItem" fs cs
 
-svgAnimate :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgAnimate = mkSVGAtom "animate"
+pattern SVGAnimate fs cs <- (fromAtom -> Just (SVGHTML mn "animate" fs cs)) where
+  SVGAnimate fs cs = mkSVGAtom "animate" fs cs
 
-svgAnimateColor :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgAnimateColor = mkSVGAtom "animateColor"
+pattern SVGAnimateColor fs cs <- (fromAtom -> Just (SVGHTML mn "animateColor" fs cs)) where
+  SVGAnimateColor fs cs = mkSVGAtom "animateColor" fs cs
 
-svgAnimateMotion :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgAnimateMotion = mkSVGAtom "animateMotion"
+pattern SVGAnimateMotion fs cs <- (fromAtom -> Just (SVGHTML mn "animateMotion" fs cs)) where
+  SVGAnimateMotion fs cs = mkSVGAtom "animateMotion" fs cs
 
-svgAnimateTransform :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgAnimateTransform = mkSVGAtom "animateTransform"
+pattern SVGAnimateTransform fs cs <- (fromAtom -> Just (SVGHTML mn "animateTransform" fs cs)) where
+  SVGAnimateTransform fs cs = mkSVGAtom "animateTransform" fs cs
 
-svgCanvas :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgCanvas = mkSVGAtom "canvas"
+pattern SVGCanvas fs cs <- (fromAtom -> Just (SVGHTML mn "canvas" fs cs)) where
+  SVGCanvas fs cs = mkSVGAtom "canvas" fs cs
 
-svgCircle :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgCircle = mkSVGAtom "circle"
+pattern SVGCircle fs cs <- (fromAtom -> Just (SVGHTML mn "circle" fs cs)) where
+  SVGCircle fs cs = mkSVGAtom "circle" fs cs
 
-svgClipPath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgClipPath = mkSVGAtom "clipPath"
+pattern SVGClipPath fs cs <- (fromAtom -> Just (SVGHTML mn "clipPath" fs cs)) where
+  SVGClipPath fs cs = mkSVGAtom "clipPath" fs cs
 
-svgColorProfile :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgColorProfile = mkSVGAtom "color-profile"
+pattern SVGColorProfile fs cs <- (fromAtom -> Just (SVGHTML mn "color-profile" fs cs)) where
+  SVGColorProfile fs cs = mkSVGAtom "color-profile" fs cs
 
-svgCursor :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgCursor = mkSVGAtom "cursor"
+pattern SVGCursor fs cs <- (fromAtom -> Just (SVGHTML mn "cursor" fs cs)) where
+  SVGCursor fs cs = mkSVGAtom "cursor" fs cs
 
-svgDefs :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgDefs = mkSVGAtom "defs"
+pattern SVGDefs fs cs <- (fromAtom -> Just (SVGHTML mn "defs" fs cs)) where
+  SVGDefs fs cs = mkSVGAtom "defs" fs cs
 
-svgDesc :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgDesc = mkSVGAtom "desc"
+pattern SVGDesc fs cs <- (fromAtom -> Just (SVGHTML mn "desc" fs cs)) where
+  SVGDesc fs cs = mkSVGAtom "desc" fs cs
 
-svgDiscard :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgDiscard = mkSVGAtom "discard"
+pattern SVGDiscard fs cs <- (fromAtom -> Just (SVGHTML mn "discard" fs cs)) where
+  SVGDiscard fs cs = mkSVGAtom "discard" fs cs
 
-svgEllipse :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgEllipse = mkSVGAtom "ellipse"
+pattern SVGEllipse fs cs <- (fromAtom -> Just (SVGHTML mn "ellipse" fs cs)) where
+  SVGEllipse fs cs = mkSVGAtom "ellipse" fs cs
 
-svgFeBlend :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeBlend = mkSVGAtom "feBlend"
+pattern SVGFeBlend fs cs <- (fromAtom -> Just (SVGHTML mn "feBlend" fs cs)) where
+  SVGFeBlend fs cs = mkSVGAtom "feBlend" fs cs
 
-svgFeColorMatrix :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeColorMatrix = mkSVGAtom "feColorMatrix"
+pattern SVGFeColorMatrix fs cs <- (fromAtom -> Just (SVGHTML mn "feColorMatrix" fs cs)) where
+  SVGFeColorMatrix fs cs = mkSVGAtom "feColorMatrix" fs cs
 
-svgFeComponentTransfer :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeComponentTransfer = mkSVGAtom "feComponentTransfer"
+pattern SVGFeComponentTransfer fs cs <- (fromAtom -> Just (SVGHTML mn "feComponentTransfer" fs cs)) where
+  SVGFeComponentTransfer fs cs = mkSVGAtom "feComponentTransfer" fs cs
 
-svgFeComposite :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeComposite = mkSVGAtom "feComposite"
+pattern SVGFeComposite fs cs <- (fromAtom -> Just (SVGHTML mn "feComposite" fs cs)) where
+  SVGFeComposite fs cs = mkSVGAtom "feComposite" fs cs
 
-svgFeConvolveMatrix :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeConvolveMatrix = mkSVGAtom "feConvolveMatrix"
+pattern SVGFeConvolveMatrix fs cs <- (fromAtom -> Just (SVGHTML mn "feConvolveMatrix" fs cs)) where
+  SVGFeConvolveMatrix fs cs = mkSVGAtom "feConvolveMatrix" fs cs
 
-svgFeDiffuseLighting :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeDiffuseLighting = mkSVGAtom "feDiffuseLighting"
+pattern SVGFeDiffuseLighting fs cs <- (fromAtom -> Just (SVGHTML mn "feDiffuseLighting" fs cs)) where
+  SVGFeDiffuseLighting fs cs = mkSVGAtom "feDiffuseLighting" fs cs
 
-svgFeDisplacementMap :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeDisplacementMap = mkSVGAtom "feDisplacementMap"
+pattern SVGFeDisplacementMap fs cs <- (fromAtom -> Just (SVGHTML mn "feDisplacementMap" fs cs)) where
+  SVGFeDisplacementMap fs cs = mkSVGAtom "feDisplacementMap" fs cs
 
-svgFeDistantLight :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeDistantLight = mkSVGAtom "feDistantLight"
+pattern SVGFeDistantLight fs cs <- (fromAtom -> Just (SVGHTML mn "feDistantLight" fs cs)) where
+  SVGFeDistantLight fs cs = mkSVGAtom "feDistantLight" fs cs
 
-svgFeDropShadow :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeDropShadow = mkSVGAtom "feDropShadow"
+pattern SVGFeDropShadow fs cs <- (fromAtom -> Just (SVGHTML mn "feDropShadow" fs cs)) where
+  SVGFeDropShadow fs cs = mkSVGAtom "feDropShadow" fs cs
 
-svgFeFlood :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeFlood = mkSVGAtom "feFlood"
+pattern SVGFeFlood fs cs <- (fromAtom -> Just (SVGHTML mn "feFlood" fs cs)) where
+  SVGFeFlood fs cs = mkSVGAtom "feFlood" fs cs
 
-svgFeFuncA :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeFuncA = mkSVGAtom "feFuncA"
+pattern SVGFeFuncA fs cs <- (fromAtom -> Just (SVGHTML mn "feFuncA" fs cs)) where
+  SVGFeFuncA fs cs = mkSVGAtom "feFuncA" fs cs
 
-svgFeFuncB :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeFuncB = mkSVGAtom "feFuncB"
+pattern SVGFeFuncB fs cs <- (fromAtom -> Just (SVGHTML mn "feFuncB" fs cs)) where
+  SVGFeFuncB fs cs = mkSVGAtom "feFuncB" fs cs
 
-svgFeFuncG :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeFuncG = mkSVGAtom "feFuncG"
+pattern SVGFeFuncG fs cs <- (fromAtom -> Just (SVGHTML mn "feFuncG" fs cs)) where
+  SVGFeFuncG fs cs = mkSVGAtom "feFuncG" fs cs
 
-svgFeFuncR :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeFuncR = mkSVGAtom "feFuncR"
+pattern SVGFeFuncR fs cs <- (fromAtom -> Just (SVGHTML mn "feFuncR" fs cs)) where
+  SVGFeFuncR fs cs = mkSVGAtom "feFuncR" fs cs
 
-svgFeGaussianBlur :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeGaussianBlur = mkSVGAtom "feGaussianBlur"
+pattern SVGFeGaussianBlur fs cs <- (fromAtom -> Just (SVGHTML mn "feGaussianBlur" fs cs)) where
+  SVGFeGaussianBlur fs cs = mkSVGAtom "feGaussianBlur" fs cs
 
-svgFeImage :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeImage = mkSVGAtom "feImage"
+pattern SVGFeImage fs cs <- (fromAtom -> Just (SVGHTML mn "feImage" fs cs)) where
+  SVGFeImage fs cs = mkSVGAtom "feImage" fs cs
 
-svgFeMerge :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeMerge = mkSVGAtom "feMerge"
+pattern SVGFeMerge fs cs <- (fromAtom -> Just (SVGHTML mn "feMerge" fs cs)) where
+  SVGFeMerge fs cs = mkSVGAtom "feMerge" fs cs
 
-svgFeMergeNode :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeMergeNode = mkSVGAtom "feMergeNode"
+pattern SVGFeMergeNode fs cs <- (fromAtom -> Just (SVGHTML mn "feMergeNode" fs cs)) where
+  SVGFeMergeNode fs cs = mkSVGAtom "feMergeNode" fs cs
 
-svgFeMorphology :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeMorphology = mkSVGAtom "feMorphology"
+pattern SVGFeMorphology fs cs <- (fromAtom -> Just (SVGHTML mn "feMorphology" fs cs)) where
+  SVGFeMorphology fs cs = mkSVGAtom "feMorphology" fs cs
 
-svgFeOffset :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeOffset = mkSVGAtom "feOffset"
+pattern SVGFeOffset fs cs <- (fromAtom -> Just (SVGHTML mn "feOffset" fs cs)) where
+  SVGFeOffset fs cs = mkSVGAtom "feOffset" fs cs
 
-svgFePointLight :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFePointLight = mkSVGAtom "fePointLight"
+pattern SVGFePointLight fs cs <- (fromAtom -> Just (SVGHTML mn "fePointLight" fs cs)) where
+  SVGFePointLight fs cs = mkSVGAtom "fePointLight" fs cs
 
-svgFeSpecularLighting :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeSpecularLighting = mkSVGAtom "feSpecularLighting"
+pattern SVGFeSpecularLighting fs cs <- (fromAtom -> Just (SVGHTML mn "feSpecularLighting" fs cs)) where
+  SVGFeSpecularLighting fs cs = mkSVGAtom "feSpecularLighting" fs cs
 
-svgFeSpotLight :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeSpotLight = mkSVGAtom "feSpotLight"
+pattern SVGFeSpotLight fs cs <- (fromAtom -> Just (SVGHTML mn "feSpotLight" fs cs)) where
+  SVGFeSpotLight fs cs = mkSVGAtom "feSpotLight" fs cs
 
-svgFeTile :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeTile = mkSVGAtom "feTile"
+pattern SVGFeTile fs cs <- (fromAtom -> Just (SVGHTML mn "feTile" fs cs)) where
+  SVGFeTile fs cs = mkSVGAtom "feTile" fs cs
 
-svgFeTurbulence :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFeTurbulence = mkSVGAtom "feTurbulence"
+pattern SVGFeTurbulence fs cs <- (fromAtom -> Just (SVGHTML mn "feTurbulence" fs cs)) where
+  SVGFeTurbulence fs cs = mkSVGAtom "feTurbulence" fs cs
 
-svgFilter :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFilter = mkSVGAtom "filter"
+pattern SVGFilter fs cs <- (fromAtom -> Just (SVGHTML mn "filter" fs cs)) where
+  SVGFilter fs cs = mkSVGAtom "filter" fs cs
 
-svgFont :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFont = mkSVGAtom "font"
+pattern SVGFont fs cs <- (fromAtom -> Just (SVGHTML mn "font" fs cs)) where
+  SVGFont fs cs = mkSVGAtom "font" fs cs
 
-svgFontFace :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFontFace = mkSVGAtom "font-face"
+pattern SVGFontFace fs cs <- (fromAtom -> Just (SVGHTML mn "font-face" fs cs)) where
+  SVGFontFace fs cs = mkSVGAtom "font-face" fs cs
 
-svgFontFaceFormat :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFontFaceFormat = mkSVGAtom "font-face-format"
+pattern SVGFontFaceFormat fs cs <- (fromAtom -> Just (SVGHTML mn "font-face-format" fs cs)) where
+  SVGFontFaceFormat fs cs = mkSVGAtom "font-face-format" fs cs
 
-svgFontFaceName :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFontFaceName = mkSVGAtom "font-face-name"
+pattern SVGFontFaceName fs cs <- (fromAtom -> Just (SVGHTML mn "font-face-name" fs cs)) where
+  SVGFontFaceName fs cs = mkSVGAtom "font-face-name" fs cs
 
-svgFontFaceSrc :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFontFaceSrc = mkSVGAtom "font-face-src"
+pattern SVGFontFaceSrc fs cs <- (fromAtom -> Just (SVGHTML mn "font-face-src" fs cs)) where
+  SVGFontFaceSrc fs cs = mkSVGAtom "font-face-src" fs cs
 
-svgFontFaceUri :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgFontFaceUri = mkSVGAtom "font-face-uri"
+pattern SVGFontFaceURI fs cs <- (fromAtom -> Just (SVGHTML mn "font-face-uri" fs cs)) where
+  SVGFontFaceURI fs cs = mkSVGAtom "font-face-uri" fs cs
 
-svgForeignObject :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgForeignObject = mkSVGAtom "foreignObject"
+pattern SVGForeignObject fs cs <- (fromAtom -> Just (SVGHTML mn "foreignObject" fs cs)) where
+  SVGForeignObject fs cs = mkSVGAtom "foreignObject" fs cs
 
-svgG :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgG = mkSVGAtom "g"
+pattern SVGG fs cs <- (fromAtom -> Just (SVGHTML mn "g" fs cs)) where
+  SVGG fs cs = mkSVGAtom "g" fs cs
 
-svgGlyph :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgGlyph = mkSVGAtom "glyph"
+pattern SVGGlyph fs cs <- (fromAtom -> Just (SVGHTML mn "glyph" fs cs)) where
+  SVGGlyph fs cs = mkSVGAtom "glyph" fs cs
 
-svgGlyphRef :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgGlyphRef = mkSVGAtom "glyphRef"
+pattern SVGGlyphRef fs cs <- (fromAtom -> Just (SVGHTML mn "glyphRef" fs cs)) where
+  SVGGlyphRef fs cs = mkSVGAtom "glyphRef" fs cs
 
-svgHatch :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgHatch = mkSVGAtom "hatch"
+pattern SVGHatch fs cs <- (fromAtom -> Just (SVGHTML mn "hatch" fs cs)) where
+  SVGHatch fs cs = mkSVGAtom "hatch" fs cs
 
-svgHatchpath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgHatchpath = mkSVGAtom "hatchpath"
+pattern SVGHatchpath fs cs <- (fromAtom -> Just (SVGHTML mn "hatchpath" fs cs)) where
+  SVGHatchpath fs cs = mkSVGAtom "hatchpath" fs cs
 
-svgHkern :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgHkern = mkSVGAtom "hkern"
+pattern SVGHkern fs cs <- (fromAtom -> Just (SVGHTML mn "hkern" fs cs)) where
+  SVGHkern fs cs = mkSVGAtom "hkern" fs cs
 
-svgIframe :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgIframe = mkSVGAtom "iframe"
+pattern SVGIframe fs cs <- (fromAtom -> Just (SVGHTML mn "iframe" fs cs)) where
+  SVGIframe fs cs = mkSVGAtom "iframe" fs cs
 
-svgImage :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgImage = mkSVGAtom "image"
+pattern SVGImage fs cs <- (fromAtom -> Just (SVGHTML mn "image" fs cs)) where
+  SVGImage fs cs = mkSVGAtom "image" fs cs
 
-svgLine :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgLine = mkSVGAtom "line"
+pattern SVGLine fs cs <- (fromAtom -> Just (SVGHTML mn "line" fs cs)) where
+  SVGLine fs cs = mkSVGAtom "line" fs cs
 
-svgLinearGradient :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgLinearGradient = mkSVGAtom "linearGradient"
+pattern SVGLinearGradient fs cs <- (fromAtom -> Just (SVGHTML mn "linearGradient" fs cs)) where
+  SVGLinearGradient fs cs = mkSVGAtom "linearGradient" fs cs
 
-svgMarker :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMarker = mkSVGAtom "marker"
+pattern SVGMarker fs cs <- (fromAtom -> Just (SVGHTML mn "marker" fs cs)) where
+  SVGMarker fs cs = mkSVGAtom "marker" fs cs
 
-svgMask :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMask = mkSVGAtom "mask"
+pattern SVGMask fs cs <- (fromAtom -> Just (SVGHTML mn "mask" fs cs)) where
+  SVGMask fs cs = mkSVGAtom "mask" fs cs
 
-svgMesh :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMesh = mkSVGAtom "mesh"
+pattern SVGMesh fs cs <- (fromAtom -> Just (SVGHTML mn "mesh" fs cs)) where
+  SVGMesh fs cs = mkSVGAtom "mesh" fs cs
 
-svgMeshgradient :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMeshgradient = mkSVGAtom "meshgradient"
+pattern SVGMeshgradient fs cs <- (fromAtom -> Just (SVGHTML mn "meshgradient" fs cs)) where
+  SVGMeshgradient fs cs = mkSVGAtom "meshgradient" fs cs
 
-svgMeshpatch :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMeshpatch = mkSVGAtom "meshpatch"
+pattern SVGMeshpatch fs cs <- (fromAtom -> Just (SVGHTML mn "meshpatch" fs cs)) where
+  SVGMeshpatch fs cs = mkSVGAtom "meshpatch" fs cs
 
-svgMeshrow :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMeshrow = mkSVGAtom "meshrow"
+pattern SVGMeshrow fs cs <- (fromAtom -> Just (SVGHTML mn "meshrow" fs cs)) where
+  SVGMeshrow fs cs = mkSVGAtom "meshrow" fs cs
 
-svgMetadata :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMetadata = mkSVGAtom "metadata"
+pattern SVGMetadata fs cs <- (fromAtom -> Just (SVGHTML mn "metadata" fs cs)) where
+  SVGMetadata fs cs = mkSVGAtom "metadata" fs cs
 
-svgMissingGlyph :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMissingGlyph = mkSVGAtom "missing-glyph"
+pattern SVGMissingGlyph fs cs <- (fromAtom -> Just (SVGHTML mn "missing-glyph" fs cs)) where
+  SVGMissingGlyph fs cs = mkSVGAtom "missing-glyph" fs cs
 
-svgMpath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgMpath = mkSVGAtom "mpath"
+pattern SVGMpath fs cs <- (fromAtom -> Just (SVGHTML mn "mpath" fs cs)) where
+  SVGMpath fs cs = mkSVGAtom "mpath" fs cs
 
-svgPath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgPath = mkSVGAtom "path"
+pattern SVGPath fs cs <- (fromAtom -> Just (SVGHTML mn "path" fs cs)) where
+  SVGPath fs cs = mkSVGAtom "path" fs cs
 
-svgPattern :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgPattern = mkSVGAtom "pattern"
+pattern SVGPattern fs cs <- (fromAtom -> Just (SVGHTML mn "pattern" fs cs)) where
+  SVGPattern fs cs = mkSVGAtom "pattern" fs cs
 
-svgPolygon :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgPolygon = mkSVGAtom "polygon"
+pattern SVGPolygon fs cs <- (fromAtom -> Just (SVGHTML mn "polygon" fs cs)) where
+  SVGPolygon fs cs = mkSVGAtom "polygon" fs cs
 
-svgPolyline :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgPolyline = mkSVGAtom "polyline"
+pattern SVGPolyline fs cs <- (fromAtom -> Just (SVGHTML mn "polyline" fs cs)) where
+  SVGPolyline fs cs = mkSVGAtom "polyline" fs cs
 
-svgRadialGradient :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgRadialGradient = mkSVGAtom "radialGradient"
+pattern SVGRadialGradient fs cs <- (fromAtom -> Just (SVGHTML mn "radialGradient" fs cs)) where
+  SVGRadialGradient fs cs = mkSVGAtom "radialGradient" fs cs
 
-svgRect :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgRect = mkSVGAtom "rect"
+pattern SVGRect fs cs <- (fromAtom -> Just (SVGHTML mn "rect" fs cs)) where
+  SVGRect fs cs = mkSVGAtom "rect" fs cs
 
-svgScript :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgScript = mkSVGAtom "script"
+pattern SVGScript fs cs <- (fromAtom -> Just (SVGHTML mn "script" fs cs)) where
+  SVGScript fs cs = mkSVGAtom "script" fs cs
 
-svgSet :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgSet = mkSVGAtom "set"
+pattern SVGSet fs cs <- (fromAtom -> Just (SVGHTML mn "set" fs cs)) where
+  SVGSet fs cs = mkSVGAtom "set" fs cs
 
-svgSolidcolor :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgSolidcolor = mkSVGAtom "solidcolor"
+pattern SVGSolidcolor fs cs <- (fromAtom -> Just (SVGHTML mn "solidcolor" fs cs)) where
+  SVGSolidcolor fs cs = mkSVGAtom "solidcolor" fs cs
 
-svgStop :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgStop = mkSVGAtom "stop"
+pattern SVGStop fs cs <- (fromAtom -> Just (SVGHTML mn "stop" fs cs)) where
+  SVGStop fs cs = mkSVGAtom "stop" fs cs
 
-svgStyle :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgStyle = mkSVGAtom "style"
+pattern SVGStyle fs cs <- (fromAtom -> Just (SVGHTML mn "style" fs cs)) where
+  SVGStyle fs cs = mkSVGAtom "style" fs cs
 
-svgSvg :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgSvg = mkSVGAtom "svg"
+pattern SVGSvg fs cs <- (fromAtom -> Just (SVGHTML mn "svg" fs cs)) where
+  SVGSvg fs cs = mkSVGAtom "svg" fs cs
 
-svgSwitch :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgSwitch = mkSVGAtom "switch"
+pattern SVGSwitch fs cs <- (fromAtom -> Just (SVGHTML mn "switch" fs cs)) where
+  SVGSwitch fs cs = mkSVGAtom "switch" fs cs
 
-svgSymbol :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgSymbol = mkSVGAtom "symbol"
+pattern SVGSymbol fs cs <- (fromAtom -> Just (SVGHTML mn "symbol" fs cs)) where
+  SVGSymbol fs cs = mkSVGAtom "symbol" fs cs
 
-svgText :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgText = mkSVGAtom "text"
+pattern SVGText fs cs <- (fromAtom -> Just (SVGHTML mn "text" fs cs)) where
+  SVGText fs cs = mkSVGAtom "text" fs cs
 
-svgTextPath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgTextPath = mkSVGAtom "textPath"
+pattern SVGTextPath fs cs <- (fromAtom -> Just (SVGHTML mn "textPath" fs cs)) where
+  SVGTextPath fs cs = mkSVGAtom "textPath" fs cs
 
-svgTitle :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgTitle = mkSVGAtom "title"
+pattern SVGTitle fs cs <- (fromAtom -> Just (SVGHTML mn "title" fs cs)) where
+  SVGTitle fs cs = mkSVGAtom "title" fs cs
 
-svgTref :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgTref = mkSVGAtom "tref"
+pattern SVGTref fs cs <- (fromAtom -> Just (SVGHTML mn "tref" fs cs)) where
+  SVGTref fs cs = mkSVGAtom "tref" fs cs
 
-svgTspan :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgTspan = mkSVGAtom "tspan"
+pattern SVGTspan fs cs <- (fromAtom -> Just (SVGHTML mn "tspan" fs cs)) where
+  SVGTspan fs cs = mkSVGAtom "tspan" fs cs
 
-svgUnknown :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgUnknown = mkSVGAtom "unknown"
+pattern SVGUnknown fs cs <- (fromAtom -> Just (SVGHTML mn "unknown" fs cs)) where
+  SVGUnknown fs cs = mkSVGAtom "unknown" fs cs
 
-svgUse :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgUse = mkSVGAtom "use"
+pattern SVGUse fs cs <- (fromAtom -> Just (SVGHTML mn "use" fs cs)) where
+  SVGUse fs cs = mkSVGAtom "use" fs cs
 
-svgVideo :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgVideo = mkSVGAtom "video"
+pattern SVGVideo fs cs <- (fromAtom -> Just (SVGHTML mn "video" fs cs)) where
+  SVGVideo fs cs = mkSVGAtom "video" fs cs
 
-svgView :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgView = mkSVGAtom "view"
+pattern SVGView fs cs <- (fromAtom -> Just (SVGHTML mn "view" fs cs)) where
+  SVGView fs cs = mkSVGAtom "view" fs cs
 
-svgVkern :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
-svgVkern = mkSVGAtom "vkern"
+pattern SVGVkern fs cs <- (fromAtom -> Just (SVGHTML mn "vkern" fs cs)) where
+  SVGVkern fs cs = mkSVGAtom "vkern" fs cs

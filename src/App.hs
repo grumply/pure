@@ -4,7 +4,7 @@
 {-# language CPP #-}
 module App (module App,module Export) where
 
-import Ef.Base as Export hiding (As,Index,transform,watch,construct,uncons,distribute,embed,observe)
+import Ef.Base as Export hiding (As,Index,transform,watch,construct,uncons,distribute,embed,observe,End,Nat(..))
 import qualified Ef.Base
 import Ef.Reflect as Export
 import Prelude as Export hiding (all,exponent,div,head,span,tan,lookup,reverse)
@@ -113,7 +113,7 @@ onRoute fus rf = do
     )
   return stopper
 
-data Carrier where Carrier :: IORef (ComponentView ms m) -> Carrier
+data Carrier where Carrier :: IORef (ContextView ms m) -> Carrier
 
 run :: forall ts ms c r.
        IsApp' ts ms c r
@@ -125,15 +125,10 @@ run app@App {..} = do
   ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
-  rt'     <- liftIO $ newIORef (ComponentView (toAtom (NullAtom (Just ph) :: Atom (Code ('[ State () (ComponentState (Const ()))
-                                                                                          , State () ComponentHooks
-                                                                                          , State () Shutdown
-                                                                                          , Revent
-                                                                                          ]) IO ()))
-                                              )
-                                              (NullAtom $ Just ph)
-                                              (Const ())
-                                              True
+  rt'     <- liftIO $ newIORef (ContextView (toAtom (NullHTML (Just ph) :: HTML '[]))
+                                            (NullHTML $ Just ph)
+                                            (Const ())
+                                            True
                                )
   nw :: Syndicate r   <- syndicate
   sdn :: Syndicate () <- syndicate
@@ -168,20 +163,20 @@ run app@App {..} = do
     go first ort doc (Carrier rt) p = do
       go' p
       where
-        go' (Subsystem b'@(Component' b)) = do
+        go' (Subsystem b'@(Context' b)) = do
           b <- liftIO $ do
-            mb_ <- lookupComponent (Component.key b)
+            mb_ <- lookupContext (Component.key b)
             case mb_ of
               Nothing -> do
-                ComponentView _ old _ _ <- readIORef rt
+                ContextView _ old _ _ <- readIORef rt
                 iob <- if first then
-                         mkComponent (ClearAndAppend ort) b
+                         mkContext (ClearAndAppend ort) b
                        else
-                         mkComponent (Replace old) b
+                         mkContext (Replace old) b
                 return (Carrier $ crView iob)
-              Just ComponentRecord {..} -> do
-                ComponentView _ old _ _ <- readIORef rt
-                ComponentView _ new _ _ <- readIORef crView
+              Just ContextRecord {..} -> do
+                ContextView _ old _ _ <- readIORef rt
+                ContextView _ new _ _ <- readIORef crView
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))
@@ -194,9 +189,9 @@ run app@App {..} = do
             pg <- lift $ pages r
             go False ort doc b pg
 
-        go' (System hc'@(Component' hc) b'@(Component' b)) = do
+        go' (System hc'@(Context' hc) b'@(Context' b)) = do
           b <- liftIO $ do
-            mh_ <- lookupComponent (Component.key hc)
+            mh_ <- lookupContext (Component.key hc)
             case mh_ of
               Nothing -> void $ do
 #ifdef __GHCJS__
@@ -205,29 +200,29 @@ run app@App {..} = do
 #else
                 let h = ()
 #endif
-                mkComponent (Replace (NullAtom (Just h))) hc
-              Just ComponentRecord {..} -> do
+                mkContext (Replace (NullHTML (Just h))) hc
+              Just ContextRecord {..} -> do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
                 let h = T.castToElement h_
 #else
                 let h = ()
 #endif
-                ComponentView _ new _ _ <- readIORef crView
+                ContextView _ new _ _ <- readIORef crView
                 rebuild new
-                replace (NullAtom $ Just h) new
-            mb_ <- lookupComponent (Component.key b)
+                replace (NullHTML $ Just h) new
+            mb_ <- lookupContext (Component.key b)
             case mb_ of
               Nothing -> do
-                ComponentView _ old _ _ <- readIORef rt
+                ContextView _ old _ _ <- readIORef rt
                 cr <- if first then
-                        mkComponent (ClearAndAppend ort) b
+                        mkContext (ClearAndAppend ort) b
                       else
-                        mkComponent (Replace old) b
+                        mkContext (Replace old) b
                 return (Carrier $ crView cr)
-              Just ComponentRecord {..} -> do
-                ComponentView _ old _ _ <- readIORef rt
-                ComponentView _ new _ _ <- readIORef crView
+              Just ContextRecord {..} -> do
+                ContextView _ old _ _ <- readIORef rt
+                ContextView _ new _ _ <- readIORef crView
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))

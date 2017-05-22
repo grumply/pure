@@ -24,7 +24,7 @@ scrollTo :: ( MonadIO c
             )
          => Ease
          -> Double
-         -> Atom (Code ms' IO ())
+         -> HTML ms'
          -> Code ms c (Maybe (IO ()))
 scrollTo ease duration {- milliseconds -} to = do
   me <- liftIO $ getElement to
