@@ -5,643 +5,643 @@ import Ef.Base
 
 import Data.Txt (Txt)
 
+import Data.Typeable
+
 import Atomic.Attribute
 import Atomic.Component
 
-import Control.Lens
-
-abbr :: [Feature e] -> [Atom e] -> Atom e
+abbr :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 abbr = mkAtom "abbr"
 
-address :: [Feature e] -> [Atom e] -> Atom e
+address :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 address = mkAtom "address"
 
-area :: [Feature e] -> [Atom e] -> Atom e
+area :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 area = mkAtom "area"
 
-a :: [Feature e] -> [Atom e] -> Atom e
+a :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 a = mkAtom "a"
 
-article :: [Feature e] -> [Atom e] -> Atom e
+article :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 article = mkAtom "article"
 
-asideE :: [Feature e] -> [Atom e] -> Atom e
+asideE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 asideE = mkAtom "aside"
 
-audio :: [Feature e] -> [Atom e] -> Atom e
+audio :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 audio = mkAtom "audio"
 
-base :: [Feature e] -> [Atom e] -> Atom e
+base :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 base = mkAtom "base"
 
-bdi :: [Feature e] -> [Atom e] -> Atom e
+bdi :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 bdi = mkAtom "bdi"
 
-bdo :: [Feature e] -> [Atom e] -> Atom e
+bdo :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 bdo = mkAtom "bdo"
 
-big :: [Feature e] -> [Atom e] -> Atom e
+big :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 big = mkAtom "big"
 
-blockquote :: [Feature e] -> [Atom e] -> Atom e
+blockquote :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 blockquote = mkAtom "blockquote"
 
-body :: [Feature e] -> [Atom e] -> Atom e
+body :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 body = mkAtom "body"
 
-b :: [Feature e] -> [Atom e] -> Atom e
+b :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 b = mkAtom "b"
 
-br :: Atom e
+br :: Typeable e => SomeAtom e
 br = mkAtom "br" [] []
 
-button :: [Feature e] -> [Atom e] -> Atom e
+button :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 button = mkAtom "button"
 
-canvas :: [Feature e] -> [Atom e] -> Atom e
+canvas :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 canvas = mkAtom "canvas"
 
-caption :: [Feature e] -> [Atom e] -> Atom e
+caption :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 caption = mkAtom "caption"
 
-cite :: [Feature e] -> [Atom e] -> Atom e
+cite :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 cite = mkAtom "cite"
 
-code :: [Feature e] -> [Atom e] -> Atom e
+code :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 code = mkAtom "code"
 
-col :: [Feature e] -> [Atom e] -> Atom e
+col :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 col = mkAtom "col"
 
-colgroup :: [Feature e] -> [Atom e] -> Atom e
+colgroup :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 colgroup = mkAtom "colgroup"
 
-dataE :: [Feature e] -> [Atom e] -> Atom e
+dataE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 dataE = mkAtom "data"
 
-datalist :: [Feature e] -> [Atom e] -> Atom e
+datalist :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 datalist = mkAtom "datalist"
 
-dd :: [Feature e] -> [Atom e] -> Atom e
+dd :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 dd = mkAtom "dd"
 
-description :: Txt -> Atom e
+description :: Typeable e => Txt -> SomeAtom e
 description d = meta [ name "description", contentA d ] []
 
-dl :: [Feature e] -> [Atom e] -> Atom e
+dl :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 dl = mkAtom "dl"
 
-dt :: [Feature e] -> [Atom e] -> Atom e
+dt :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 dt = mkAtom "dt"
 
-del :: [Feature e] -> [Atom e] -> Atom e
+del :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 del = mkAtom "del"
 
-details :: [Feature e] -> [Atom e] -> Atom e
+details :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 details = mkAtom "details"
 
-dfn :: [Feature e] -> [Atom e] -> Atom e
+dfn :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 dfn = mkAtom "dfn"
 
-dialog :: [Feature e] -> [Atom e] -> Atom e
+dialog :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 dialog = mkAtom "dialog"
 
-div :: [Feature e] -> [Atom e] -> Atom e
+div :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 div = mkAtom "div"
 
-em :: [Feature e] -> [Atom e] -> Atom e
+em :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 em = mkAtom "em"
 
-embed :: [Feature e] -> [Atom e] -> Atom e
+embed :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 embed = mkAtom "embed"
 
-fieldset :: [Feature e] -> [Atom e] -> Atom e
+fieldset :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 fieldset = mkAtom "fieldset"
 
-figcaption :: [Feature e] -> [Atom e] -> Atom e
+figcaption :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 figcaption = mkAtom "figcaption"
 
-figure :: [Feature e] -> [Atom e] -> Atom e
+figure :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 figure = mkAtom "figure"
 
-footer :: [Feature e] -> [Atom e] -> Atom e
+footer :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 footer = mkAtom "footer"
 
-form :: [Feature e] -> [Atom e] -> Atom e
+form :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 form = mkAtom "form"
 
-frame :: [Feature e] ->Atom e
+frame :: Typeable e => [Feature e] -> SomeAtom e
 frame fs = mkAtom "frame" fs []
 
-head :: [Atom e] -> Atom e
+head :: Typeable e => [SomeAtom e] -> SomeAtom e
 head = mkAtom "head" []
 
-header :: [Feature e] -> [Atom e] -> Atom e
+header :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 header = mkAtom "header"
 
-h1 :: [Feature e] -> [Atom e] -> Atom e
+h1 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 h1 = mkAtom "h1"
 
-h2 :: [Feature e] -> [Atom e] -> Atom e
+h2 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 h2 = mkAtom "h2"
 
-h3 :: [Feature e] -> [Atom e] -> Atom e
+h3 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 h3 = mkAtom "h3"
 
-h4 :: [Feature e] -> [Atom e] -> Atom e
+h4 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 h4 = mkAtom "h4"
 
-h5 :: [Feature e] -> [Atom e] -> Atom e
+h5 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 h5 = mkAtom "h5"
 
-h6 :: [Feature e] -> [Atom e] -> Atom e
+h6 :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 h6 = mkAtom "h6"
 
-hgroup :: [Feature e] -> [Atom e] -> Atom e
+hgroup :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 hgroup = mkAtom "hgroup"
 
-hr :: [Feature e] -> [Atom e] -> Atom e
+hr :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 hr = mkAtom "hr"
 
-htmlE :: [Feature e] -> [Atom e] -> Atom e
+htmlE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 htmlE = mkAtom "html"
 
-iframe :: [Feature e] -> [Atom e] -> Atom e
+iframe :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 iframe = mkAtom "iframe"
 
-img :: [Feature e] -> [Atom e] -> Atom e
+img :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 img = mkAtom "img"
 
-input :: [Feature e] -> [Atom e] -> Atom e
+input :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 input = mkAtom "input"
 
-textInput :: [Feature e] -> [Atom e] -> Atom e
+textInput :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 textInput fs = mkAtom "input" (typeA "text":fs)
 
-ins :: [Feature e] -> [Atom e] -> Atom e
+ins :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 ins = mkAtom "ins"
 
-iE :: [Feature e] -> [Atom e] -> Atom e
+iE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 iE = mkAtom "i"
 
-kbd :: [Feature e] -> [Atom e] -> Atom e
+kbd :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 kbd = mkAtom "kbd"
 
-keygen :: [Feature e] -> [Atom e] -> Atom e
+keygen :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 keygen = mkAtom "keygen"
 
-label :: [Feature e] -> [Atom e] -> Atom e
+label :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 label = mkAtom "label"
 
-legend :: [Feature e] -> [Atom e] -> Atom e
+legend :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 legend = mkAtom "legend"
 
-li :: [Feature e] -> [Atom e] -> Atom e
+li :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 li = mkAtom "li"
 
-linkE :: [Feature e] -> [Atom e] -> Atom e
+linkE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 linkE = mkAtom "link"
 
-mainE :: [Feature e] -> [Atom e] -> Atom e
+mainE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 mainE = mkAtom "main"
 
-mapE :: [Feature e] -> [Atom e] -> Atom e
+mapE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 mapE = mkAtom "map"
 
-mark :: [Feature e] -> [Atom e] -> Atom e
+mark :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 mark = mkAtom "mark"
 
-menu :: [Feature e] -> [Atom e] -> Atom e
+menu :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 menu = mkAtom "menu"
 
-menuitem :: [Feature e] -> [Atom e] -> Atom e
+menuitem :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 menuitem = mkAtom "menuitem"
 
-meta :: [Feature e] -> [Atom e] -> Atom e
+meta :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 meta = mkAtom "meta"
 
-meter :: [Feature e] -> [Atom e] -> Atom e
+meter :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 meter = mkAtom "meter"
 
-nav :: [Feature e] -> [Atom e] -> Atom e
+nav :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 nav = mkAtom "nav"
 
-noscript :: [Feature e] -> [Atom e] -> Atom e
+noscript :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 noscript = mkAtom "noscript"
 
-objectE :: [Feature e] -> [Atom e] -> Atom e
+objectE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 objectE = mkAtom "object"
 
-optgroup :: [Feature e] -> [Atom e] -> Atom e
+optgroup :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 optgroup = mkAtom "optgroup"
 
-option :: [Feature e] -> [Atom e] -> Atom e
+option :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 option = mkAtom "option"
 
-ol :: [Feature e] -> [Atom e] -> Atom e
+ol :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 ol = mkAtom "ol"
 
-output :: [Feature e] -> [Atom e] -> Atom e
+output :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 output = mkAtom "output"
 
-p :: [Feature e] -> [Atom e] -> Atom e
+p :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 p = mkAtom "p"
 
-param :: [Feature e] -> [Atom e] -> Atom e
+param :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 param = mkAtom "param"
 
-picture :: [Feature e] -> [Atom e] -> Atom e
+picture :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 picture = mkAtom "picture"
 
-preE :: [Feature e] -> [Atom e] -> Atom e
+preE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 preE = mkAtom "pre"
 
-progress :: [Feature e] -> [Atom e] -> Atom e
+progress :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 progress = mkAtom "progress"
 
-q :: [Feature e] -> [Atom e] -> Atom e
+q :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 q = mkAtom "q"
 
-rp :: [Feature e] -> [Atom e] -> Atom e
+rp :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 rp = mkAtom "rp"
 
-rt :: [Feature e] -> [Atom e] -> Atom e
+rt :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 rt = mkAtom "rt"
 
-ruby :: [Feature e] -> [Atom e] -> Atom e
+ruby :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 ruby = mkAtom "ruby"
 
-samp :: [Feature e] -> [Atom e] -> Atom e
+samp :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 samp = mkAtom "samp"
 
-script :: [Feature e] -> [Atom e] -> Atom e
+script :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 script = mkAtom "script"
 
-s :: [Feature e] -> [Atom e] -> Atom e
+s :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 s = mkAtom "s"
 
-section :: [Feature e] -> [Atom e] -> Atom e
+section :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 section = mkAtom "section"
 
-selectE :: [Feature e] -> [Atom e] -> Atom e
+selectE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 selectE = mkAtom "select"
 
-small :: [Feature e] -> [Atom e] -> Atom e
+small :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 small = mkAtom "small"
 
-source :: [Feature e] -> [Atom e] -> Atom e
+source :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 source = mkAtom "source"
 
-span :: [Feature e] -> [Atom e] -> Atom e
+span :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 span = mkAtom "span"
 
-strong :: [Feature e] -> [Atom e] -> Atom e
+strong :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 strong = mkAtom "strong"
 
-style :: [Feature e] -> [Atom e] -> Atom e
+style :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 style = mkAtom "style"
 
-sub :: [Feature e] -> [Atom e] -> Atom e
+sub :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 sub = mkAtom "sub"
 
-summary :: [Feature e] -> [Atom e] -> Atom e
+summary :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 summary = mkAtom "summary"
 
-sup :: [Feature e] -> [Atom e] -> Atom e
+sup :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 sup = mkAtom "sup"
 
-table :: [Feature e] -> [Atom e] -> Atom e
+table :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 table = mkAtom "table"
 
-tbody :: [Feature e] -> [Atom e] -> Atom e
+tbody :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 tbody = mkAtom "tbody"
 
-td :: [Feature e] -> [Atom e] -> Atom e
+td :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 td = mkAtom "td"
 
-textarea :: [Feature e] -> [Atom e] -> Atom e
+textarea :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 textarea = mkAtom "textarea"
 
-tfoot :: [Feature e] -> [Atom e] -> Atom e
+tfoot :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 tfoot = mkAtom "tfoot"
 
-th :: [Feature e] -> [Atom e] -> Atom e
+th :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 th = mkAtom "th"
 
-thead :: [Feature e] -> [Atom e] -> Atom e
+thead :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 thead = mkAtom "thead"
 
-time :: [Feature e] -> [Atom e] -> Atom e
+time :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 time = mkAtom "time"
 
-title :: Txt -> Atom e
+title :: Typeable e => Txt -> SomeAtom e
 title jst = mkAtom "title" [] [ text jst ]
 
-tr :: [Feature e] -> [Atom e] -> Atom e
+tr :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 tr = mkAtom "tr"
 
-track :: [Feature e] -> [Atom e] -> Atom e
+track :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 track = mkAtom "track"
 
-u :: [Feature e] -> [Atom e] -> Atom e
+u :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 u = mkAtom "u"
 
-ul :: [Feature e] -> [Atom e] -> Atom e
+ul :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 ul = mkAtom "ul"
 
-varE :: [Feature e] -> [Atom e] -> Atom e
+varE :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 varE = mkAtom "var"
 
-video :: [Feature e] -> [Atom e] -> Atom e
+video :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 video = mkAtom "video"
 
-viewport :: Txt -> Atom e
+viewport :: Typeable e => Txt -> SomeAtom e
 viewport jst = mkAtom "meta" [ name "viewport", contentA jst ] []
 
-wbr :: [Feature e] -> [Atom e] -> Atom e
+wbr :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 wbr = mkAtom "wbr"
 
 --------------------------------------------------------------------------------
 -- SVG
 
-svgA :: [Feature e] -> [Atom e] -> Atom e
+svgA :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgA = mkSVGAtom "a"
 
-svgAudio :: [Feature e] -> [Atom e] -> Atom e
+svgAudio :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgAudio = mkSVGAtom "audio"
 
-svgAltGlyph :: [Feature e] -> [Atom e] -> Atom e
+svgAltGlyph :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgAltGlyph = mkSVGAtom "altGlyph"
 
-svgAltGlyphDef :: [Feature e] -> [Atom e] -> Atom e
+svgAltGlyphDef :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgAltGlyphDef = mkSVGAtom "altGlyphDef"
 
-svgAltGlyphItem :: [Feature e] -> [Atom e] -> Atom e
+svgAltGlyphItem :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgAltGlyphItem = mkSVGAtom "altGlyphItem"
 
-svgAnimate :: [Feature e] -> [Atom e] -> Atom e
+svgAnimate :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgAnimate = mkSVGAtom "animate"
 
-svgAnimateColor :: [Feature e] -> [Atom e] -> Atom e
+svgAnimateColor :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgAnimateColor = mkSVGAtom "animateColor"
 
-svgAnimateMotion :: [Feature e] -> [Atom e] -> Atom e
+svgAnimateMotion :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgAnimateMotion = mkSVGAtom "animateMotion"
 
-svgAnimateTransform :: [Feature e] -> [Atom e] -> Atom e
+svgAnimateTransform :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgAnimateTransform = mkSVGAtom "animateTransform"
 
-svgCanvas :: [Feature e] -> [Atom e] -> Atom e
+svgCanvas :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgCanvas = mkSVGAtom "canvas"
 
-svgCircle :: [Feature e] -> [Atom e] -> Atom e
+svgCircle :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgCircle = mkSVGAtom "circle"
 
-svgClipPath :: [Feature e] -> [Atom e] -> Atom e
+svgClipPath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgClipPath = mkSVGAtom "clipPath"
 
-svgColorProfile :: [Feature e] -> [Atom e] -> Atom e
+svgColorProfile :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgColorProfile = mkSVGAtom "color-profile"
 
-svgCursor :: [Feature e] -> [Atom e] -> Atom e
+svgCursor :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgCursor = mkSVGAtom "cursor"
 
-svgDefs :: [Feature e] -> [Atom e] -> Atom e
+svgDefs :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgDefs = mkSVGAtom "defs"
 
-svgDesc :: [Feature e] -> [Atom e] -> Atom e
+svgDesc :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgDesc = mkSVGAtom "desc"
 
-svgDiscard :: [Feature e] -> [Atom e] -> Atom e
+svgDiscard :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgDiscard = mkSVGAtom "discard"
 
-svgEllipse :: [Feature e] -> [Atom e] -> Atom e
+svgEllipse :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgEllipse = mkSVGAtom "ellipse"
 
-svgFeBlend :: [Feature e] -> [Atom e] -> Atom e
+svgFeBlend :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeBlend = mkSVGAtom "feBlend"
 
-svgFeColorMatrix :: [Feature e] -> [Atom e] -> Atom e
+svgFeColorMatrix :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeColorMatrix = mkSVGAtom "feColorMatrix"
 
-svgFeComponentTransfer :: [Feature e] -> [Atom e] -> Atom e
+svgFeComponentTransfer :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeComponentTransfer = mkSVGAtom "feComponentTransfer"
 
-svgFeComposite :: [Feature e] -> [Atom e] -> Atom e
+svgFeComposite :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeComposite = mkSVGAtom "feComposite"
 
-svgFeConvolveMatrix :: [Feature e] -> [Atom e] -> Atom e
+svgFeConvolveMatrix :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeConvolveMatrix = mkSVGAtom "feConvolveMatrix"
 
-svgFeDiffuseLighting :: [Feature e] -> [Atom e] -> Atom e
+svgFeDiffuseLighting :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeDiffuseLighting = mkSVGAtom "feDiffuseLighting"
 
-svgFeDisplacementMap :: [Feature e] -> [Atom e] -> Atom e
+svgFeDisplacementMap :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeDisplacementMap = mkSVGAtom "feDisplacementMap"
 
-svgFeDistantLight :: [Feature e] -> [Atom e] -> Atom e
+svgFeDistantLight :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeDistantLight = mkSVGAtom "feDistantLight"
 
-svgFeDropShadow :: [Feature e] -> [Atom e] -> Atom e
+svgFeDropShadow :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeDropShadow = mkSVGAtom "feDropShadow"
 
-svgFeFlood :: [Feature e] -> [Atom e] -> Atom e
+svgFeFlood :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeFlood = mkSVGAtom "feFlood"
 
-svgFeFuncA :: [Feature e] -> [Atom e] -> Atom e
+svgFeFuncA :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeFuncA = mkSVGAtom "feFuncA"
 
-svgFeFuncB :: [Feature e] -> [Atom e] -> Atom e
+svgFeFuncB :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeFuncB = mkSVGAtom "feFuncB"
 
-svgFeFuncG :: [Feature e] -> [Atom e] -> Atom e
+svgFeFuncG :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeFuncG = mkSVGAtom "feFuncG"
 
-svgFeFuncR :: [Feature e] -> [Atom e] -> Atom e
+svgFeFuncR :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeFuncR = mkSVGAtom "feFuncR"
 
-svgFeGaussianBlur :: [Feature e] -> [Atom e] -> Atom e
+svgFeGaussianBlur :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeGaussianBlur = mkSVGAtom "feGaussianBlur"
 
-svgFeImage :: [Feature e] -> [Atom e] -> Atom e
+svgFeImage :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeImage = mkSVGAtom "feImage"
 
-svgFeMerge :: [Feature e] -> [Atom e] -> Atom e
+svgFeMerge :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeMerge = mkSVGAtom "feMerge"
 
-svgFeMergeNode :: [Feature e] -> [Atom e] -> Atom e
+svgFeMergeNode :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeMergeNode = mkSVGAtom "feMergeNode"
 
-svgFeMorphology :: [Feature e] -> [Atom e] -> Atom e
+svgFeMorphology :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeMorphology = mkSVGAtom "feMorphology"
 
-svgFeOffset :: [Feature e] -> [Atom e] -> Atom e
+svgFeOffset :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeOffset = mkSVGAtom "feOffset"
 
-svgFePointLight :: [Feature e] -> [Atom e] -> Atom e
+svgFePointLight :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFePointLight = mkSVGAtom "fePointLight"
 
-svgFeSpecularLighting :: [Feature e] -> [Atom e] -> Atom e
+svgFeSpecularLighting :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeSpecularLighting = mkSVGAtom "feSpecularLighting"
 
-svgFeSpotLight :: [Feature e] -> [Atom e] -> Atom e
+svgFeSpotLight :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeSpotLight = mkSVGAtom "feSpotLight"
 
-svgFeTile :: [Feature e] -> [Atom e] -> Atom e
+svgFeTile :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeTile = mkSVGAtom "feTile"
 
-svgFeTurbulence :: [Feature e] -> [Atom e] -> Atom e
+svgFeTurbulence :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFeTurbulence = mkSVGAtom "feTurbulence"
 
-svgFilter :: [Feature e] -> [Atom e] -> Atom e
+svgFilter :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFilter = mkSVGAtom "filter"
 
-svgFont :: [Feature e] -> [Atom e] -> Atom e
+svgFont :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFont = mkSVGAtom "font"
 
-svgFontFace :: [Feature e] -> [Atom e] -> Atom e
+svgFontFace :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFontFace = mkSVGAtom "font-face"
 
-svgFontFaceFormat :: [Feature e] -> [Atom e] -> Atom e
+svgFontFaceFormat :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFontFaceFormat = mkSVGAtom "font-face-format"
 
-svgFontFaceName :: [Feature e] -> [Atom e] -> Atom e
+svgFontFaceName :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFontFaceName = mkSVGAtom "font-face-name"
 
-svgFontFaceSrc :: [Feature e] -> [Atom e] -> Atom e
+svgFontFaceSrc :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFontFaceSrc = mkSVGAtom "font-face-src"
 
-svgFontFaceUri :: [Feature e] -> [Atom e] -> Atom e
+svgFontFaceUri :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgFontFaceUri = mkSVGAtom "font-face-uri"
 
-svgForeignObject :: [Feature e] -> [Atom e] -> Atom e
+svgForeignObject :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgForeignObject = mkSVGAtom "foreignObject"
 
-svgG :: [Feature e] -> [Atom e] -> Atom e
+svgG :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgG = mkSVGAtom "g"
 
-svgGlyph :: [Feature e] -> [Atom e] -> Atom e
+svgGlyph :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgGlyph = mkSVGAtom "glyph"
 
-svgGlyphRef :: [Feature e] -> [Atom e] -> Atom e
+svgGlyphRef :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgGlyphRef = mkSVGAtom "glyphRef"
 
-svgHatch :: [Feature e] -> [Atom e] -> Atom e
+svgHatch :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgHatch = mkSVGAtom "hatch"
 
-svgHatchpath :: [Feature e] -> [Atom e] -> Atom e
+svgHatchpath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgHatchpath = mkSVGAtom "hatchpath"
 
-svgHkern :: [Feature e] -> [Atom e] -> Atom e
+svgHkern :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgHkern = mkSVGAtom "hkern"
 
-svgIframe :: [Feature e] -> [Atom e] -> Atom e
+svgIframe :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgIframe = mkSVGAtom "iframe"
 
-svgImage :: [Feature e] -> [Atom e] -> Atom e
+svgImage :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgImage = mkSVGAtom "image"
 
-svgLine :: [Feature e] -> [Atom e] -> Atom e
+svgLine :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgLine = mkSVGAtom "line"
 
-svgLinearGradient :: [Feature e] -> [Atom e] -> Atom e
+svgLinearGradient :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgLinearGradient = mkSVGAtom "linearGradient"
 
-svgMarker :: [Feature e] -> [Atom e] -> Atom e
+svgMarker :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMarker = mkSVGAtom "marker"
 
-svgMask :: [Feature e] -> [Atom e] -> Atom e
+svgMask :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMask = mkSVGAtom "mask"
 
-svgMesh :: [Feature e] -> [Atom e] -> Atom e
+svgMesh :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMesh = mkSVGAtom "mesh"
 
-svgMeshgradient :: [Feature e] -> [Atom e] -> Atom e
+svgMeshgradient :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMeshgradient = mkSVGAtom "meshgradient"
 
-svgMeshpatch :: [Feature e] -> [Atom e] -> Atom e
+svgMeshpatch :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMeshpatch = mkSVGAtom "meshpatch"
 
-svgMeshrow :: [Feature e] -> [Atom e] -> Atom e
+svgMeshrow :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMeshrow = mkSVGAtom "meshrow"
 
-svgMetadata :: [Feature e] -> [Atom e] -> Atom e
+svgMetadata :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMetadata = mkSVGAtom "metadata"
 
-svgMissingGlyph :: [Feature e] -> [Atom e] -> Atom e
+svgMissingGlyph :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMissingGlyph = mkSVGAtom "missing-glyph"
 
-svgMpath :: [Feature e] -> [Atom e] -> Atom e
+svgMpath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgMpath = mkSVGAtom "mpath"
 
-svgPath :: [Feature e] -> [Atom e] -> Atom e
+svgPath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgPath = mkSVGAtom "path"
 
-svgPattern :: [Feature e] -> [Atom e] -> Atom e
+svgPattern :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgPattern = mkSVGAtom "pattern"
 
-svgPolygon :: [Feature e] -> [Atom e] -> Atom e
+svgPolygon :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgPolygon = mkSVGAtom "polygon"
 
-svgPolyline :: [Feature e] -> [Atom e] -> Atom e
+svgPolyline :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgPolyline = mkSVGAtom "polyline"
 
-svgRadialGradient :: [Feature e] -> [Atom e] -> Atom e
+svgRadialGradient :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgRadialGradient = mkSVGAtom "radialGradient"
 
-svgRect :: [Feature e] -> [Atom e] -> Atom e
+svgRect :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgRect = mkSVGAtom "rect"
 
-svgScript :: [Feature e] -> [Atom e] -> Atom e
+svgScript :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgScript = mkSVGAtom "script"
 
-svgSet :: [Feature e] -> [Atom e] -> Atom e
+svgSet :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgSet = mkSVGAtom "set"
 
-svgSolidcolor :: [Feature e] -> [Atom e] -> Atom e
+svgSolidcolor :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgSolidcolor = mkSVGAtom "solidcolor"
 
-svgStop :: [Feature e] -> [Atom e] -> Atom e
+svgStop :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgStop = mkSVGAtom "stop"
 
-svgStyle :: [Feature e] -> [Atom e] -> Atom e
+svgStyle :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgStyle = mkSVGAtom "style"
 
-svgSvg :: [Feature e] -> [Atom e] -> Atom e
+svgSvg :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgSvg = mkSVGAtom "svg"
 
-svgSwitch :: [Feature e] -> [Atom e] -> Atom e
+svgSwitch :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgSwitch = mkSVGAtom "switch"
 
-svgSymbol :: [Feature e] -> [Atom e] -> Atom e
+svgSymbol :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgSymbol = mkSVGAtom "symbol"
 
-svgText :: [Feature e] -> [Atom e] -> Atom e
+svgText :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgText = mkSVGAtom "text"
 
-svgTextPath :: [Feature e] -> [Atom e] -> Atom e
+svgTextPath :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgTextPath = mkSVGAtom "textPath"
 
-svgTitle :: [Feature e] -> [Atom e] -> Atom e
+svgTitle :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgTitle = mkSVGAtom "title"
 
-svgTref :: [Feature e] -> [Atom e] -> Atom e
+svgTref :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgTref = mkSVGAtom "tref"
 
-svgTspan :: [Feature e] -> [Atom e] -> Atom e
+svgTspan :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgTspan = mkSVGAtom "tspan"
 
-svgUnknown :: [Feature e] -> [Atom e] -> Atom e
+svgUnknown :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgUnknown = mkSVGAtom "unknown"
 
-svgUse :: [Feature e] -> [Atom e] -> Atom e
+svgUse :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgUse = mkSVGAtom "use"
 
-svgVideo :: [Feature e] -> [Atom e] -> Atom e
+svgVideo :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgVideo = mkSVGAtom "video"
 
-svgView :: [Feature e] -> [Atom e] -> Atom e
+svgView :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgView = mkSVGAtom "view"
 
-svgVkern :: [Feature e] -> [Atom e] -> Atom e
+svgVkern :: Typeable e => [Feature e] -> [SomeAtom e] -> SomeAtom e
 svgVkern = mkSVGAtom "vkern"

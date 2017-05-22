@@ -125,7 +125,16 @@ run app@App {..} = do
   ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
-  rt'     <- liftIO $ newIORef (ComponentView (NullAtom $ Just ph) (NullAtom $ Just ph) () True)
+  rt'     <- liftIO $ newIORef (ComponentView (toAtom (NullAtom (Just ph) :: Atom (Code ('[ State () (ComponentState (Const ()))
+                                                                                          , State () ComponentHooks
+                                                                                          , State () Shutdown
+                                                                                          , Revent
+                                                                                          ]) IO ()))
+                                              )
+                                              (NullAtom $ Just ph)
+                                              (Const ())
+                                              True
+                               )
   nw :: Syndicate r   <- syndicate
   sdn :: Syndicate () <- syndicate
   built      <- build $ mkRouter nw routes

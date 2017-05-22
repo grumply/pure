@@ -8,7 +8,7 @@
 module Atomic
   ( module Atomic
   , module Export
-  , Atom(..)
+  , Atom(..), SomeAtom, Atomic(..), Constructable(..)
   , mkAtom, mkSVGAtom, text, unindent, raw, keyed, hashed, component, st
   , css, css', scss, scss', styles
   , diff, setManualDiff, setEagerDiff
@@ -264,7 +264,7 @@ dash = Txt.map (\x -> if x == '.' then '-' else x)
 
 -- Look up an optional `Atom` from the `Dict`, on failure try to get a `Txt`
 -- value and call `fromTxt` on it. If that fails, return a nil node.
-(?^|) :: Typeable a => Dict -> Txt -> Atom a
+(?^|) :: Typeable a => Dict -> Txt -> SomeAtom a
 (?^|) (Dict st _) k =
   -- the stored value is optional; avoid the tracing in (?|)
   case Map.lookup k st of
@@ -290,26 +290,27 @@ dash = Txt.map (\x -> if x == '.' then '-' else x)
     _            -> Null
 #endif
 
-type Controller m = Component '[] m
+newtype Controlling m e = Controlling m
+type Controller m = Component '[] (Controlling m)
 -- controller :: ComponentKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
-controller :: Typeable m => ComponentKey '[] m -> m -> (m -> Atom (Code (Base m) IO ())) -> Controller m
+controller :: Typeable m => ComponentKey '[] (Controlling m) -> m -> (m -> SomeAtom (Code (Base (Controlling m)) IO ())) -> Controller m
 controller key0 model0 render0 = Component {..}
   where
     key = key0
     build = return
     prime = return ()
-    model = model0
-    render = render0
+    model = Controlling model0
+    render (Controlling m) = render0 m
 
-type Static = Component '[] ()
+type Static = Component '[] (Const ())
 -- static :: ComponentKey '[] () -> HTML [] () -> Static
-static :: ComponentKey '[] () -> Atom (Code (Base ()) IO ()) -> Static
+static :: ComponentKey '[] (Const ()) -> SomeAtom (Code (Base (Const ())) IO ()) -> Static
 static key0 render0 = Component {..}
   where
     key = key0
     build = return
     prime = return ()
-    model = ()
+    model = Const ()
     render _ = render0
 
 type Observatory m = Service '[Observable m]
@@ -321,33 +322,40 @@ observatory key initial = Service {..}
       return (o *:* base)
     prime = return ()
 
-looks :: MonadIO c => Observatory m -> c m
+looks :: (MonadIO c, Typeable m) => Observatory m -> c m
 looks o = do
   Right r <- demand =<< with o getO
   return r
 
-change :: MonadIO c => Observatory m -> m -> c ()
+change :: (MonadIO c, Typeable m) => Observatory m -> m -> c ()
 change o m = void $ with o (setO m)
 
-type Observer m = Component '[] (Maybe m)
+newtype Observing m e = Observing (Maybe m)
+type Observer m = Component '[] (Observing m)
 -- observer :: Observatory m -> ComponentKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
-observer :: forall m ms w. (Typeable m, With w (Code ms IO) (Code (Base (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
-         => w -> ComponentKey '[] (Maybe m) -> (m -> Atom (Code (Base (Maybe m)) IO ())) -> Observer m
+observer :: forall m ms a w.
+            ( Typeable m
+            , With w (Code ms IO) (Code (Base (Observing m)) IO)
+            , With w (Code ms IO) IO
+            , '[Observable m] <: ms
+            , Atomic a (Code (Base (Observing m)) IO ())
+            )
+         => w -> ComponentKey '[] (Observing m) -> (m -> a) -> Observer m
 observer s key0 render0 = Component {..}
   where
     key = key0
     build = return
-    prime = void $ observe' s $ \(m :: m) -> putModel (Just m)
-    model = Nothing
-    render Nothing = nil
-    render (Just m) = render0 m
+    prime = void $ observe' s $ \(m :: m) -> putModel (Observing $ Just m)
+    model = Observing Nothing
+    render (Observing Nothing) = nil :: Atom (Code (Base (Observing m)) IO ())
+    render (Observing (Just m)) = construct $ render0 m
 
 -- specialized to Observatory to avoid inline type signatures
-observes :: (MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
+observes :: (Typeable m, MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
 observes o f = observe o (Export.lift . f)
 
 -- specialized to Observatory to avoid inline type signatures
-observes' :: (MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
+observes' :: (Typeable m, MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
 observes' = observe'
 
 newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)
@@ -364,7 +372,7 @@ instance Lift StaticHTML where
 staticHTML :: Atom e -> StaticHTML
 staticHTML = fromTxt . toTxt
 
-shtml :: Txt -> [Feature e] -> StaticHTML -> Atom e
+shtml :: Typeable e => Txt -> [Feature e] -> StaticHTML -> SomeAtom e
 shtml _tag _attributes = raw (mkAtom _tag) _attributes . toTxt
 
 {-
@@ -407,36 +415,36 @@ instance ToTxt (Atom e) where
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map (toTxt . construct . snd) _keyed) <> "</" <> _tag <> ">"
 
   toTxt Atom {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map toTxt _atoms) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map (toTxt . construct) _atoms) <> "</" <> _tag <> ">"
 
-  toTxt STAtom {..} = toTxt (_stview _ststate (\_ _ -> return ()))
+  toTxt STAtom {..} = toTxt $ construct (_stview _ststate (\_ _ -> return ()))
 
   toTxt SVGAtom {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map toTxt _atoms) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map (toTxt . construct) _atoms) <> "</" <> _tag <> ">"
 
   toTxt KSVGAtom {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map (toTxt . snd) _keyed) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map (toTxt . construct . snd) _keyed) <> "</" <> _tag <> ">"
 
   toTxt Managed {..} =
     case _constr of
       Component' Component {..} ->
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
-          ">"  <> toTxt (construct $ toAtom $ render model) <> "</" <> _tag <> ">"
+          ">"  <> toTxt (construct $ render model) <> "</" <> _tag <> ">"
 
 instance ToTxt [Atom e] where
   toTxt = mconcat . map toTxt
@@ -469,63 +477,79 @@ renderSystem (System h c) =
   "<!DOCTYPE html>" <>
     case h of
       Component' Component {..} ->
-        toTxt $
+        let htm :: SomeAtom ()
+            htm =
+              htmlE []
+                [ unsafeCoerce $ toAtom $ construct $ render model
+                , body []
+                    [ case c of
+                        Component' a@Component {} -> component div [ idA "atomic" ] a
+                    ]
+                ]
+        in
+          toTxt (construct htm)
+renderSystem (Subsystem c) =
+  ("<!DOCTYPE html>" <>) $
+    let htm :: SomeAtom ()
+        htm =
           htmlE []
-            [ construct $ toAtom $ render model
+            [ head []
             , body []
                 [ case c of
                     Component' a@Component {} -> component div [ idA "atomic" ] a
                 ]
             ]
-renderSystem (Subsystem c) =
-  ("<!DOCTYPE html>" <>) $
-    toTxt $
-      htmlE []
-        [ head []
-        , body []
-            [ case c of
-                Component' a@Component {} -> component div [ idA "atomic" ] a
-            ]
-        ]
+    in
+      toTxt (construct htm)
 
 renderSystemBootstrap :: System -> Txt -> Txt
 renderSystemBootstrap (System h c) mainScript =
   "<!DOCTYPE html>" <>
     case h of
       Component' Component {..} ->
-        toTxt $
-          htmlE []
-            [ head []
-            , body []
-                [ case c of
-                    Component' a@Component {} -> component div [ idA "atomic" ] a
-                , script [ src mainScript, defer True ] []
+        let htm :: SomeAtom ()
+            htm =
+              htmlE []
+                [ head []
+                , body []
+                    [ case c of
+                        Component' a@Component {} -> component div [ idA "atomic" ] a
+                    , script [ src mainScript, defer True ] []
+                    ]
                 ]
-            ]
+        in
+          toTxt (construct htm)
 renderSystemBootstrap (Subsystem c) mainScript =
   "<!DOCTYPE html>" <>
     case c of
       Component' a@Component {} ->
-        toTxt $
-          htmlE []
-            [ head []
-            , body []
-                [ component div [ idA "atomic" ] a
-                , script [ src mainScript, defer True ] []
+        let htm :: SomeAtom ()
+            htm =
+              htmlE []
+                [ head []
+                , body []
+                    [ component div [ idA "atomic" ] a
+                    , script [ src mainScript, defer True ] []
+                    ]
                 ]
-            ]
+        in
+          toTxt (construct htm)
 
 renderDynamicSystem :: System -> IO Txt
 renderDynamicSystem (System (Component' h) (Component' c)) = do
   let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentView h
   head_html <- renderDynamicHTML h_
-  body_html <- renderDynamicHTML (body [] [ component div [ idA "atomic" ] c])
+  let bdy :: SomeAtom ()
+      bdy = body [] [ component div [ idA "atomic" ] c]
+  body_html <- renderDynamicHTML (construct bdy)
   return $ dt <> head_html <> body_html <> "</html>"
 renderDynamicSystem (Subsystem (Component' c)) = do
   let dt = "<!DOCTYPE html><head></head>"
   Just c_ <- demandMaybe =<< currentView c
-  body_html <- renderDynamicHTML (body [] [ component div [ idA "atomic" ] c ])
+  let bdy :: SomeAtom ()
+      bdy = body [] [ component div [ idA "atomic" ] c ]
+  body_html <- renderDynamicHTML (construct bdy)
   return $ dt <> body_html <> "</html>"
 
 renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
@@ -533,14 +557,18 @@ renderDynamicSystemBootstrap (System (Component' h) (Component' c)) mainScript =
   let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentView h
   head_html <- renderDynamicHTML h_
-  body_html <- renderDynamicHTML (body [] [ component div [ idA "atomic" ] c, script [ src mainScript, defer True ] [] ])
+  let bdy :: SomeAtom ()
+      bdy = body [] [ component div [ idA "atomic" ] c, script [ src mainScript, defer True ] [] ]
+  body_html <- renderDynamicHTML (construct bdy)
   return $ dt <> head_html <> body_html <> "</html>"
 renderDynamicSystemBootstrap (Subsystem (Component' c)) mainScript = do
   let dt = "<!DOCTYPE html><html><head></head>"
-  body_html <- renderDynamicHTML (body [] [ component div [ idA "atomic" ] c, script [ src mainScript, defer True ] [] ])
+  let bdy :: SomeAtom ()
+      bdy = body [] [ component div [ idA "atomic" ] c, script [ src mainScript, defer True ] [] ]
+  body_html <- renderDynamicHTML (construct bdy)
   return $ dt <> body_html <> "</html>"
 
-renderDynamicHTML :: Atom e -> IO Txt
+renderDynamicHTML :: forall e. Typeable e => Atom e -> IO Txt
 renderDynamicHTML h =
   case h of
     NullAtom {} -> return mempty
@@ -553,7 +581,7 @@ renderDynamicHTML h =
           <> ">"<> _content <> "</" <> _tag <> ">"
 
     KAtom {..} -> do
-      cs <- mapM (\(_,c) -> renderDynamicHTML c) _keyed
+      cs <- mapM (\(_,c) -> renderDynamicHTML (fromJust $ fromAtom c)) _keyed
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -562,7 +590,7 @@ renderDynamicHTML h =
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     Atom {..} -> do
-      cs <- mapM renderDynamicHTML _atoms
+      cs <- mapM renderDynamicHTML (map (fromJust . fromAtom ) _atoms)
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -572,13 +600,14 @@ renderDynamicHTML h =
 
     STAtom {..} -> do
       case _strecord of
-        Nothing -> return $ toTxt (_stview _ststate (\_ _ -> return ()))
+        Nothing ->
+          return $ toTxt $ construct $ _stview _ststate (\_ _ -> return ())
         Just str -> do
-          (_,_,AnAtom a,_) <- readIORef str
-          renderDynamicHTML a
+          (_,_,a,_) <- readIORef str
+          renderDynamicHTML (unsafeCoerce a :: Atom e)
 
     SVGAtom {..} -> do
-      cs <- mapM renderDynamicHTML _atoms
+      cs <- mapM renderDynamicHTML (map (fromJust . fromAtom) _atoms)
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -587,7 +616,7 @@ renderDynamicHTML h =
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     KSVGAtom {..} -> do
-      cs <- mapM (\(_,c) -> renderDynamicHTML c) _keyed
+      cs <- mapM (\(_,c) -> renderDynamicHTML (fromJust $ fromAtom c)) _keyed
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
