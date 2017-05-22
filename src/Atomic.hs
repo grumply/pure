@@ -20,7 +20,7 @@ module Atomic
   , LazyByteString
   ) where
 
-import Ef.Base as Export hiding (As,Index,transform,observe,uncons,distribute,embed)
+import Ef.Base as Export hiding (As,Index,transform,observe,uncons,distribute,embed,construct)
 
 #if MIN_VERSION_hashable(1,2,5)
 import Data.Hashable as Export hiding (hashed)
@@ -292,7 +292,7 @@ dash = Txt.map (\x -> if x == '.' then '-' else x)
 
 type Controller m = Component '[] m
 -- controller :: ComponentKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
-controller :: ComponentKey '[] m -> m -> (m -> Atom (Code (Base m) IO ())) -> Controller m
+controller :: Typeable m => ComponentKey '[] m -> m -> (m -> Atom (Code (Base m) IO ())) -> Controller m
 controller key0 model0 render0 = Component {..}
   where
     key = key0
@@ -331,7 +331,7 @@ change o m = void $ with o (setO m)
 
 type Observer m = Component '[] (Maybe m)
 -- observer :: Observatory m -> ComponentKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
-observer :: forall m ms w. (Eq m, With w (Code ms IO) (Code (Base (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
+observer :: forall m ms w. (Typeable m, With w (Code ms IO) (Code (Base (Maybe m)) IO), With w (Code ms IO) IO, '[Observable m] <: ms)
          => w -> ComponentKey '[] (Maybe m) -> (m -> Atom (Code (Base (Maybe m)) IO ())) -> Observer m
 observer s key0 render0 = Component {..}
   where
@@ -436,7 +436,7 @@ instance ToTxt (Atom e) where
     case _constr of
       Component' Component {..} ->
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
-          ">"  <> toTxt (render model) <> "</" <> _tag <> ">"
+          ">"  <> toTxt (construct $ toAtom $ render model) <> "</" <> _tag <> ">"
 
 instance ToTxt [Atom e] where
   toTxt = mconcat . map toTxt
@@ -471,7 +471,7 @@ renderSystem (System h c) =
       Component' Component {..} ->
         toTxt $
           htmlE []
-            [ render model
+            [ construct $ toAtom $ render model
             , body []
                 [ case c of
                     Component' a@Component {} -> component div [ idA "atomic" ] a
@@ -574,7 +574,7 @@ renderDynamicHTML h =
       case _strecord of
         Nothing -> return $ toTxt (_stview _ststate (\_ _ -> return ()))
         Just str -> do
-          (_,_,SomeAtom a,_) <- readIORef str
+          (_,_,AnAtom a,_) <- readIORef str
           renderDynamicHTML a
 
     SVGAtom {..} -> do

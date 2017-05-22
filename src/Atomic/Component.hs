@@ -1,4 +1,5 @@
 {-# language UndecidableInstances #-}
+{-# language FunctionalDependencies #-}
 {-# language DeriveDataTypeable #-}
 {-# language StandaloneDeriving #-}
 {-# language OverloadedStrings #-}
@@ -152,10 +153,10 @@ foreign import javascript unsafe
   "$1[$2] = $3" set_property_js :: E.Element -> Txt -> Txt -> IO ()
 #endif
 
-data SomeAtom = SomeAtom (forall e. Atom e)
+data AnAtom = AnAtom (forall e. Atom e)
 
-data SomeView st where
-  SomeView :: (st -> ((st -> st) -> IO () -> IO ()) -> Atom e) -> SomeView st
+data AView st where
+  AView :: (st -> ((st -> st) -> IO () -> IO ()) -> Atom e) -> AView st
 
 data Atom e where
   -- NullAtom must have a presence on the page for proper diffing
@@ -192,7 +193,7 @@ data Atom e where
     :: { _stmodel  :: !(model)
        , _stid     :: !Int
        , _ststate  :: !st
-       , _strecord :: !(Maybe (IORef (st,SomeView st,SomeAtom,SomeAtom)))
+       , _strecord :: !(Maybe (IORef (st,AView st,AnAtom,AnAtom)))
        , _stview   :: !(st -> ((st -> st) -> IO () -> IO ()) -> Atom e)
        , _stupdate :: !((st -> st) -> IO () -> IO ())
        } -> Atom e
@@ -220,6 +221,29 @@ data Atom e where
         } -> Atom e
 
 deriving instance Functor Atom
+
+class Constructable a e | a -> e where
+  construct :: a -> Atom e
+
+instance Constructable (Atom e) e where
+  construct = id
+
+instance Constructable (SomeAtom e) e where
+  construct (SomeAtom a) = construct a
+
+data SomeAtom e = forall a. (Typeable a, Typeable e, Constructable a e, Atomic a e) => SomeAtom a
+
+class (Typeable a, Typeable e, Constructable a e) => Atomic a e where
+  toAtom :: a -> SomeAtom e
+  toAtom = SomeAtom
+  fromAtom :: SomeAtom e -> Maybe a
+  fromAtom (SomeAtom a) = cast a
+
+instance Typeable e => Atomic (SomeAtom e) e where
+  toAtom = id
+  fromAtom = Just
+
+instance Typeable e => Atomic (Atom e) e
 
 instance Default (Atom a) where
   def = nil
@@ -608,7 +632,7 @@ rebuild h =
   where
     go STAtom {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,SomeAtom e,_) <- readIORef ref
+        (_,_,AnAtom e,_) <- readIORef ref
         rebuild e
     go Atom {..}    = mapM_ go _atoms
     go SVGAtom {..} = mapM_ go _atoms
@@ -642,7 +666,7 @@ triggerBackground = go
 
     go STAtom {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,SomeAtom e,_) <- liftIO $ readIORef ref
+        (_,_,AnAtom e,_) <- liftIO $ readIORef ref
         go (unsafeCoerce e)
     go Atom {..}    = mapM_ go _atoms
     go SVGAtom {..} = mapM_ go _atoms
@@ -666,7 +690,7 @@ triggerForeground = go
 
     go STAtom {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,SomeAtom e,_) <- liftIO $ readIORef ref
+        (_,_,AnAtom e,_) <- liftIO $ readIORef ref
         go (unsafeCoerce e)
     go Atom {..}    = mapM_ go _atoms
     go SVGAtom {..} = mapM_ go _atoms
@@ -708,7 +732,8 @@ reflect c =
 data DiffStrategy = Eager | Manual deriving (Eq)
 
 type Differ ms m =
-       (m -> Atom (Code ms IO ()))
+    forall a. Atomic a (Code ms IO ()) => 
+       (m -> a)
     -> IO ()
     -> (Code ms IO () -> IO ())
     -> ComponentState m
@@ -719,15 +744,16 @@ data AState m = AState
   , as_model :: m
   }
 
-data ComponentPatch m where
-  APatch ::
+data ComponentPatch m =
+  forall ms a. Atomic a (Code ms IO ()) =>
+  APatch
       -- only modify ap_AState with atomicModifyIORef
     { ap_send         :: Code ms IO () -> IO ()
     , ap_AState       :: IORef (Maybe (AState m),Bool) -- an AState record for manipulation; nullable by component to stop a patch.
-    , ap_patchView    :: (m -> Atom (Code ms IO ()))
+    , ap_patchView    :: (m -> a)
     , ap_viewTrigger  :: IO ()
     , ap_hooks        :: ComponentHooks
-    } -> ComponentPatch m
+    }
 
 type IsComponent' ts ms m = (Base m <: ms, Base m <. ts, Delta (Modules ts) (Messages ms))
 type IsComponent ms m = IsComponent' ms ms m
@@ -814,12 +840,12 @@ type ComponentBuilder ts m = Modules (Base m) (Action (Appended ts (Base m)) IO)
 type ComponentPrimer ms m = Code (Appended ms (Base m)) IO ()
 
 data Component' ts ms m
-  = Component
+  = forall a. Atomic a (Code ms IO ()) => Component
       { key       :: !(Key (ComponentRecord ms m))
       , build     :: !(Modules (Base m) (Action ts IO) -> IO (Modules ts (Action ts IO)))
       , prime     :: !(Code ms IO ())
       , model     :: !(m)
-      , render    :: !(m -> Atom (Code ms IO ()))
+      , render    :: !(m -> a)
       }
 type Component ms m = Component' (Appended ms (Base m)) (Appended ms (Base m)) m
 
@@ -907,7 +933,7 @@ mkComponent :: forall ms ts m.
        -> IO (ComponentRecord ms m)
 mkComponent mkComponentAction c@Component {..} = do
   let !m = model
-      !raw = render m
+      !raw = construct $ toAtom $ render m
   doc <- getDocument
   buf <- newEvQueue
   ch  <- ComponentHooks <$> syndicate <*> syndicate <*> syndicate
@@ -1227,7 +1253,7 @@ swapContent t e =
 embed_ :: ENode -> Atom e -> IO ()
 embed_ parent STAtom {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a,_) <- readIORef ref
+    (_,_,AnAtom a,_) <- readIORef ref
     embed_ parent a
 embed_ parent Text {..} =
   forM_ _tnode $ \node -> do
@@ -1288,18 +1314,18 @@ buildAndEmbedMaybe f doc ch isFG = go
       return $ Atom _node _tag _attributes _atoms
 
     go mparent STAtom {..} = do
-      strec <- newIORef (_ststate,SomeView (unsafeCoerce _stview),SomeAtom nil,SomeAtom nil)
+      strec <- newIORef (_ststate,AView (unsafeCoerce _stview),AnAtom nil,AnAtom nil)
       let upd g cb = void $ do
             -- this won't work properly on GHC; look into using onFPS or something to
             -- replicate the rAF approach
 #ifdef __GHCJS__
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
 #endif
-              (st,SomeView sv,SomeAtom old,SomeAtom mid) <- readIORef strec
+              (st,AView sv,AnAtom old,AnAtom mid) <- readIORef strec
               let st' = g st
                   new_mid = unsafeCoerce $ sv st' upd
               new <- diffHelper f doc ch isFG old mid new_mid
-              writeIORef strec (st',SomeView sv,SomeAtom (unsafeCoerce new),SomeAtom (unsafeCoerce new_mid))
+              writeIORef strec (st',AView sv,AnAtom (unsafeCoerce new),AnAtom (unsafeCoerce new_mid))
               cb
 #ifdef __GHCJS__
             win <- getWindow
@@ -1307,7 +1333,7 @@ buildAndEmbedMaybe f doc ch isFG = go
 #endif
       let mid = _stview _ststate upd
       new <- go mparent mid
-      writeIORef strec (_ststate,SomeView (unsafeCoerce _stview),SomeAtom (unsafeCoerce new),SomeAtom (unsafeCoerce mid))
+      writeIORef strec (_ststate,AView (unsafeCoerce _stview),AnAtom (unsafeCoerce new),AnAtom (unsafeCoerce mid))
       return $ STAtom _stmodel _stid _ststate (Just strec) _stview upd
 
     go mparent SVGAtom {..} = do
@@ -1394,7 +1420,7 @@ getElement STAtom {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,SomeAtom a,_) <- readIORef ref
+      (_,_,AnAtom a,_) <- readIORef ref
       getElement a
 getElement n = return $ _node n
 
@@ -1403,7 +1429,7 @@ getNode STAtom {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,SomeAtom a,_) <- readIORef ref
+      (_,_,AnAtom a,_) <- readIORef ref
       getNode a
 getNode n = return $ fmap toNode $ _node n
 
@@ -1421,7 +1447,7 @@ diff_ APatch {..} = do
       Just (AState as_live !as_model) -> do
         doc <- getDocument
         ComponentView !raw_html !live_html live_m isFG <- readIORef as_live
-        let !new_html = ap_patchView as_model
+        let !new_html = construct $ toAtom $ ap_patchView as_model
         new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
         writeIORef as_live $ ComponentView new_html new_live_html as_model isFG
         ap_viewTrigger
@@ -1436,7 +1462,7 @@ diff_ APatch {..} = do
     Just (AState as_live !as_model) -> do
       doc <- getDocument
       ComponentView !raw_html !live_html live_m isFG <- readIORef as_live
-      let !new_html = ap_patchView as_model
+      let !new_html = construct $ toAtom $ ap_patchView as_model
       new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
       writeIORef as_live $ ComponentView new_html new_live_html as_model isFG
       ap_viewTrigger
@@ -1450,8 +1476,8 @@ replace _ _ = return ()
 replace old@STAtom {} new@STAtom {} =
   case (old,new) of
     (STAtom _ _ _ (Just r) _ _,STAtom _ _ _ (Just r') _ _) -> do
-      (_,_,SomeAtom a,_) <- readIORef r
-      (_,_,SomeAtom b,_) <- readIORef r'
+      (_,_,AnAtom a,_) <- readIORef r
+      (_,_,AnAtom b,_) <- readIORef r'
       replace a b
     _ -> return ()
 
@@ -1459,14 +1485,14 @@ replace STAtom {..} new = do
   case _strecord of
     Nothing -> return ()
     Just ref -> do
-      (_,_,SomeAtom a,_) <- readIORef ref
+      (_,_,AnAtom a,_) <- readIORef ref
       replace a new
 
 replace old STAtom {..} = do
   case _strecord of
     Nothing -> return ()
     Just ref -> do
-      (_,_,SomeAtom a,_) <- readIORef ref
+      (_,_,AnAtom a,_) <- readIORef ref
       replace old a
 
 replace old@Text {} new@Text {} = do
@@ -1499,7 +1525,7 @@ delete STAtom {..} = do
   case _strecord of
     Nothing -> return ()
     Just ref -> do
-      (_,_,SomeAtom a,_) <- readIORef ref
+      (_,_,AnAtom a,_) <- readIORef ref
       delete a
 delete Text {..} = forM_ _tnode (delete_js . toNode)
 delete n = forM_ (_node n) (delete_js . toNode)
@@ -1517,7 +1543,7 @@ cleanup f = go (return ())
       didUnmount' <- case _strecord of
                        Nothing -> return (return ())
                        Just ref -> do
-                         (_,_,SomeAtom a,_) <- readIORef ref
+                         (_,_,AnAtom a,_) <- readIORef ref
                          cleanup f [a]
       go (didUnmount' >> didUnmount) rest
     go didUnmount (NullAtom{}:rest) = go didUnmount rest
@@ -1571,7 +1597,7 @@ insertAt _ _ _ = return ()
 #else
 insertAt parent ind STAtom {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a,_) <- readIORef ref
+    (_,_,AnAtom a,_) <- readIORef ref
     insertAt parent ind a
 insertAt parent ind Text {..} = forM_ _tnode $ insert_at_js parent ind . toNode
 insertAt parent ind n = forM_ (_node n) $ insert_at_js parent ind . toNode
@@ -1585,17 +1611,17 @@ insertBefore_ _ _ _ = return ()
 insertBefore_ parent child@(STAtom{}) new@(STAtom{}) = do
   case (child,new) of
     (STAtom _ _ _ (Just r) _ _, STAtom _ _ _ (Just r') _ _) -> do
-      (_,_,SomeAtom a,_) <- readIORef r
-      (_,_,SomeAtom b,_) <- readIORef r'
+      (_,_,AnAtom a,_) <- readIORef r
+      (_,_,AnAtom b,_) <- readIORef r'
       insertBefore_ parent a b
     _ -> return ()
 insertBefore_ parent STAtom {..} new = do
   forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a,_) <- readIORef ref
+    (_,_,AnAtom a,_) <- readIORef ref
     insertBefore_ parent a new
 insertBefore_ parent child STAtom {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,SomeAtom a,_) <- readIORef ref
+    (_,_,AnAtom a,_) <- readIORef ref
     insertBefore_ parent child a
 insertBefore_ parent child@(Text {}) new@(Text{}) = void $ N.insertBefore parent (_tnode new) (_tnode child)
 insertBefore_ parent child new@(Text{}) = void $ N.insertBefore parent (_tnode new) (_node child)
@@ -1667,11 +1693,11 @@ diffHelper f doc ch isFG =
               return old
             else do
               (st,sv,old,mid) <- readIORef r
-              writeIORef r (st,SomeView (unsafeCoerce v'),old,mid)
+              writeIORef r (st,AView (unsafeCoerce v'),old,mid)
               u (const (unsafeCoerce s')) (return ())
               return $ STAtom m' k' s' (Just $ unsafeCoerce r) v' (unsafeCoerce u)
           else do
-            (_,_,SomeAtom a,_) <- readIORef r
+            (_,_,AnAtom a,_) <- readIORef r
             new' <- buildHTML doc ch isFG f new
             replace a new'
             didUnmount <- cleanup f [a]
