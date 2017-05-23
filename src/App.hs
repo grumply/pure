@@ -113,7 +113,7 @@ onRoute fus rf = do
     )
   return stopper
 
-data Carrier where Carrier :: IORef (ContextView ms m) -> Carrier
+data Carrier where Carrier :: IORef (ControllerView ms m) -> Carrier
 
 run :: forall ts ms c r.
        IsApp' ts ms c r
@@ -125,7 +125,7 @@ run app@App {..} = do
   ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
-  rt'     <- liftIO $ newIORef (ContextView (toAtom (NullHTML (Just ph) :: HTML '[]))
+  rt'     <- liftIO $ newIORef (ControllerView (toView (NullHTML (Just ph) :: HTML '[]))
                                             (NullHTML $ Just ph)
                                             (Const ())
                                             True
@@ -163,20 +163,20 @@ run app@App {..} = do
     go first ort doc (Carrier rt) p = do
       go' p
       where
-        go' (Subsystem b'@(Context' b)) = do
+        go' (Subsystem b'@(Controller' b)) = do
           b <- liftIO $ do
-            mb_ <- lookupContext (Component.key b)
+            mb_ <- lookupController (Component.key b)
             case mb_ of
               Nothing -> do
-                ContextView _ old _ _ <- readIORef rt
+                ControllerView _ old _ _ <- readIORef rt
                 iob <- if first then
-                         mkContext (ClearAndAppend ort) b
+                         mkController (ClearAndAppend ort) b
                        else
-                         mkContext (Replace old) b
+                         mkController (Replace old) b
                 return (Carrier $ crView iob)
-              Just ContextRecord {..} -> do
-                ContextView _ old _ _ <- readIORef rt
-                ContextView _ new _ _ <- readIORef crView
+              Just ControllerRecord {..} -> do
+                ControllerView _ old _ _ <- readIORef rt
+                ControllerView _ new _ _ <- readIORef crView
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))
@@ -189,9 +189,9 @@ run app@App {..} = do
             pg <- lift $ pages r
             go False ort doc b pg
 
-        go' (System hc'@(Context' hc) b'@(Context' b)) = do
+        go' (System hc'@(Controller' hc) b'@(Controller' b)) = do
           b <- liftIO $ do
-            mh_ <- lookupContext (Component.key hc)
+            mh_ <- lookupController (Component.key hc)
             case mh_ of
               Nothing -> void $ do
 #ifdef __GHCJS__
@@ -200,29 +200,29 @@ run app@App {..} = do
 #else
                 let h = ()
 #endif
-                mkContext (Replace (NullHTML (Just h))) hc
-              Just ContextRecord {..} -> do
+                mkController (Replace (NullHTML (Just h))) hc
+              Just ControllerRecord {..} -> do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
                 let h = T.castToElement h_
 #else
                 let h = ()
 #endif
-                ContextView _ new _ _ <- readIORef crView
+                ControllerView _ new _ _ <- readIORef crView
                 rebuild new
                 replace (NullHTML $ Just h) new
-            mb_ <- lookupContext (Component.key b)
+            mb_ <- lookupController (Component.key b)
             case mb_ of
               Nothing -> do
-                ContextView _ old _ _ <- readIORef rt
+                ControllerView _ old _ _ <- readIORef rt
                 cr <- if first then
-                        mkContext (ClearAndAppend ort) b
+                        mkController (ClearAndAppend ort) b
                       else
-                        mkContext (Replace old) b
+                        mkController (Replace old) b
                 return (Carrier $ crView cr)
-              Just ContextRecord {..} -> do
-                ContextView _ old _ _ <- readIORef rt
-                ContextView _ new _ _ <- readIORef crView
+              Just ControllerRecord {..} -> do
+                ControllerView _ old _ _ <- readIORef rt
+                ControllerView _ new _ _ <- readIORef crView
                 rebuild new
                 if first then do
                   clearNode (Just (toNode ort))

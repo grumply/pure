@@ -22,14 +22,11 @@ infix 9 ?&
 (?&) :: (Cond x, Eq x) => x -> a -> a -> a
 (?&) x t e = x ? e $ t
 
-cond :: (Cond x, Eq x, Cond a) => x -> a -> a
-cond b t = b ? t $ nil
-
 may :: Cond a => (b -> a) -> Maybe b -> a
 may = maybe nil
 
-ncond :: (Cond x, Eq x, Cond a) => x -> a -> a
-ncond b = cond (notNil b)
+cond :: (Cond x, Eq x, Cond a) => x -> a -> a
+cond b t = b ? t $ nil
 
 isNil :: (Cond a, Eq a) => a -> Bool
 isNil = (== nil)

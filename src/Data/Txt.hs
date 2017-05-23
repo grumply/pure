@@ -2,7 +2,7 @@
 {-# language TemplateHaskell #-}
 {-# language ViewPatterns #-}
 module Data.Txt (module Data.Txt, module Export) where
-import Data.Monoid as Export
+import Data.Monoid as Export hiding (Alt)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 #ifdef __GHCJS__

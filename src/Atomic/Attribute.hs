@@ -9,7 +9,7 @@ module Atomic.Attribute where
 
 import Ef.Base hiding (Object,object)
 
-import Data.Txt as T hiding (readIntegerMaybe)
+import Data.Txt as T hiding (readIntMaybe)
 import qualified Data.Txt as T
 import Data.JSON hiding (Options)
 
@@ -120,7 +120,7 @@ data Feature (ms :: [* -> *])
     { _eventId :: Txt
     , _eventName :: Txt
     , _eventOptions :: Options
-    , _eventWinCreate :: IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ()))
+    , _eventWinCreate :: !(IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ())))
     , _eventListener :: Maybe (IO ())
     }
   | OnDoc
@@ -420,9 +420,10 @@ toBool t = if t == "" then False else True
 fromBool :: Bool -> Txt
 fromBool b = if b then "true" else ""
 
-readIntegerMaybe t =
+readIntMaybe :: Txt -> Maybe Int
+readIntMaybe t =
 #ifdef __GHCJS__
-  T.readIntegerMaybe t
+  T.readIntMaybe t
 #else
   either (\_ -> Nothing) (Just . fst) (T.signed T.decimal t)
 #endif
@@ -490,10 +491,10 @@ pattern Formaction v <- (Attribute "formaction" v) where
 pattern ListA v <- (Attribute "list" v) where
   ListA v = Attribute "list" v
 
-pattern Maxlength i <- (Attribute "maxlength" (readIntegerMaybe -> Just i)) where
+pattern Maxlength i <- (Attribute "maxlength" (readIntMaybe -> Just i)) where
   Maxlength i = Attribute "maxlength" (toTxt i)
 
-pattern Minlength i <- (Attribute "minlength" (readIntegerMaybe -> Just i)) where
+pattern Minlength i <- (Attribute "minlength" (readIntMaybe -> Just i)) where
   Minlength i = Attribute "minlength" (toTxt i)
 
 pattern Method p <- (Property "method" p) where
@@ -520,7 +521,7 @@ pattern Readonly b <- (Property "readonly" (toBool -> b)) where
 pattern Required b <- (Property "required" (toBool -> b)) where
   Required b = Property "required" (fromBool b)
 
-pattern Size i <- (Attribute "size" (readIntegerMaybe -> Just i)) where
+pattern Size i <- (Attribute "size" (readIntMaybe -> Just i)) where
   Size i = Attribute "size" (toTxt i)
 
 pattern HtmlFor p <- (Property "htmlFor" p) where
@@ -538,10 +539,10 @@ pattern Min p <- (Property "min" p) where
 pattern Step p <- (Property "step" p) where
   Step p = Property "step" p
 
-pattern Cols i <- (Attribute "cols" (readIntegerMaybe -> Just i)) where
+pattern Cols i <- (Attribute "cols" (readIntMaybe -> Just i)) where
   Cols i = Attribute "cols" (toTxt i)
 
-pattern Rows i <- (Attribute "rows" (readIntegerMaybe -> Just i)) where
+pattern Rows i <- (Attribute "rows" (readIntMaybe -> Just i)) where
   Rows i = Attribute "rows" (toTxt i)
 
 pattern Wrap p <- (Property "wrap" p) where
@@ -583,10 +584,10 @@ pattern Keytype p <- (Property "keytype" p) where
 pattern Src p <- (Property "src" p) where
   Src p = Property "src" p
 
-pattern Height i <- (Attribute "height" (readIntegerMaybe -> Just i)) where
+pattern Height i <- (Attribute "height" (readIntMaybe -> Just i)) where
   Height i = Attribute "height" (toTxt i)
 
-pattern Width i <- (Attribute "width" (readIntegerMaybe -> Just i)) where
+pattern Width i <- (Attribute "width" (readIntMaybe -> Just i)) where
   Width i = Attribute "width" (toTxt i)
 
 pattern Alt p <- (Property "alt" p) where
@@ -634,10 +635,10 @@ pattern Start p <- (Property "start" p) where
 pattern Align p <- (Property "align" p) where
   Align p = Property "align" p
 
-pattern Colspan i <- (Attribute "colspan" (readIntegerMaybe -> Just i)) where
+pattern Colspan i <- (Attribute "colspan" (readIntMaybe -> Just i)) where
   Colspan i = Attribute "colspan" (toTxt i)
 
-pattern Rowspan i <- (Attribute "rowspan" (readIntegerMaybe -> Just i)) where
+pattern Rowspan i <- (Attribute "rowspan" (readIntMaybe -> Just i)) where
   Rowspan i = Attribute "rowspan" (toTxt i)
 
 pattern Headers p <- (Property "headers" p) where
@@ -694,7 +695,7 @@ pattern Lang p <- (Property "lang" p) where
 pattern Spellcheck b <- (Property "spellcheck" (toBool -> b)) where
   Spellcheck b = Property "spellcheck" (fromBool b)
 
-pattern Tabindex i <- (Attribute "tabindex" (readIntegerMaybe -> Just i)) where
+pattern Tabindex i <- (Attribute "tabindex" (readIntMaybe -> Just i)) where
   Tabindex i = Attribute "tabindex" (toTxt i)
 
 pattern CiteA p <- (Property "cite" p) where

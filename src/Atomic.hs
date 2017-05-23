@@ -9,22 +9,25 @@ module Atomic
   ( module Atomic
   , module Export
   , HTML(..)
-  , html
-  , Atom
-  , mkAtom, mkSVGAtom, text, unindent, raw, keyed, hashed, st
+  , list, hashed
   , Component(..)
-  , component
+  , View
+  , html
+  , Controller(..)
+  , controller
+  , viewController, constant
+  , unindent
   , css, css', scss, scss', styles
   , diff, setManualDiff, setEagerDiff
   , getModel, putModel, modifyModel
-  , onModelChange, onOwnModelChange, onOwnModelChangeByProxy, ownView, currentView
-  , ContextHooks(..)
-  , ContextRecord(..)
-  , ContextView(..)
+  , onModelChange, onOwnModelChange, onOwnModelChangeByProxy, ownHTML, currentHTML
+  , ControllerHooks(..)
+  , ControllerRecord(..)
+  , ControllerView(..)
   , LazyByteString
   ) where
 
-import Ef.Base as Export hiding (As,Index,transform,observe,uncons,distribute,embed,construct,Nat(..),End)
+import Ef.Base as Export hiding (As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End)
 
 #if MIN_VERSION_hashable(1,2,5)
 import Data.Hashable as Export hiding (hashed)
@@ -43,7 +46,8 @@ import Atomic.Component
 import Atomic.Service hiding (Base)
 
 import Control.Lens as Export hiding
-  (lazy,Empty,none,(<~),(.=),(<.>),Context,Context',Reversed)
+  (lazy,Empty,none,(<~),(.=),(<.>),Controller,Controller',Reversed,view)
+import qualified Control.Lens
 import Control.Lens.Extras as Export
 
 import Data.Function as Export hiding (on)
@@ -53,7 +57,7 @@ import Data.Maybe as Export
 import Data.Void as Export
 
 import qualified Data.Txt as Export (Txt(..))
-import Data.JSON         as Export hiding (defaultOptions,Options,(!),Alt)
+import Data.JSON         as Export hiding (defaultOptions,Options,(!),Alt,String,Null)
 import Data.Millis       as Export
 import Data.Micros       as Export
 import Atomic.API        as Export hiding (Index)
@@ -215,7 +219,7 @@ type JSON as = Constrain '[ToJSON,FromJSON,Typeable] as
 -- > via txt
 --
 -- to go through a textual intermediary to produce a result, like when
--- turning some identifier (w) witnessing ToTxt into a Key for a context:
+-- turning some identifier (w) witnessing ToTxt into a Key for a controller:
 --
 -- > key = w ^. via txt
 via :: (Functor f, Profunctor p, Contravariant f) => Iso s a i i -> Optic' p f s a
@@ -239,7 +243,7 @@ renamed = named . translated
 txt :: (FromTxt t, ToTxt a) => Iso a t Txt Txt
 txt = iso toTxt fromTxt
 
-pattern Txt a <- (view txt -> a) where
+pattern Txt a <- (Control.Lens.view txt -> a) where
   Txt a = review txt a
 
 scoped :: (FromTxt x) => (?scope :: Txt) => Txt -> x
@@ -268,7 +272,7 @@ dash = Txt.map (\x -> if x == '.' then '-' else x)
 
 -- Look up an optional `HTML` from the `Dict`, on failure try to get a `Txt`
 -- value and call `fromTxt` on it. If that fails, return a nil node.
-(?^|) :: Typeable a => Dict -> Txt -> Atom a
+(?^|) :: Typeable a => Dict -> Txt -> View a
 (?^|) (Dict st _) k =
   -- the stored value is optional; avoid the tracing in (?|)
   case Map.lookup k st of
@@ -294,28 +298,16 @@ dash = Txt.map (\x -> if x == '.' then '-' else x)
     _            -> Null
 #endif
 
-newtype Controlling m e = Controlling m
-type Controller m = Context '[] (Controlling m)
--- controller :: ContextKey '[] m -> m -> (m -> HTML '[] m) -> Controller m
-controller :: Typeable m => ContextKey '[] (Controlling m) -> m -> (m -> Atom (Base (Controlling m))) -> Controller m
-controller key0 model0 render0 = Context {..}
-  where
-    key = key0
-    build = return
-    prime = return ()
-    model = Controlling model0
-    render (Controlling m) = render0 m
-
-type Static = Context '[] (Const ())
--- static :: ContextKey '[] () -> HTML [] () -> Static
-static :: ContextKey '[] (Const ()) -> Atom (Base (Const ())) -> Static
-static key0 render0 = Context {..}
+type Static = Controller '[] (Const ())
+-- static :: ControllerKey '[] () -> HTML [] () -> Static
+static :: ControllerKey '[] (Const ()) -> View (Base (Const ())) -> Static
+static key0 view0 = Controller {..}
   where
     key = key0
     build = return
     prime = return ()
     model = Const ()
-    render _ = render0
+    view _ = view0
 
 type Observatory m = Service '[Observable m]
 observatory :: ServiceKey '[Observable m] -> m -> Observatory m
@@ -335,8 +327,8 @@ change :: (MonadIO c, Typeable m) => Observatory m -> m -> c ()
 change o m = void $ with o (setO m)
 
 newtype Observing m e = Observing (Maybe m)
-type Observer m = Context '[] (Observing m)
--- observer :: Observatory m -> ContextKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
+type Observer m = Controller '[] (Observing m)
+-- observer :: Observatory m -> ControllerKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
 observer :: forall m ms a w.
             ( Typeable m
             , With w (Code ms IO) (Code (Base (Observing m)) IO)
@@ -344,15 +336,15 @@ observer :: forall m ms a w.
             , '[Observable m] <: ms
             , Component a (Base (Observing m))
             )
-         => w -> ContextKey '[] (Observing m) -> (m -> a (Base (Observing m))) -> Observer m
-observer s key0 render0 = Context {..}
+         => w -> ControllerKey '[] (Observing m) -> (m -> a (Base (Observing m))) -> Observer m
+observer s key0 view0 = Controller {..}
   where
     key = key0
     build = return
     prime = void $ observe' s $ \(m :: m) -> putModel (Observing $ Just m)
     model = Observing Nothing
-    render (Observing Nothing) = nil :: HTML (Base (Observing m))
-    render (Observing (Just m)) = construct $ render0 m
+    view (Observing Nothing) = nil :: HTML (Base (Observing m))
+    view (Observing (Just m)) = render $ view0 m
 
 -- specialized to Observatory to avoid inline type signatures
 observes :: (Typeable m, MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
@@ -376,8 +368,8 @@ instance Lift StaticHTML where
 staticHTML :: Typeable e => HTML e -> StaticHTML
 staticHTML = fromTxt . toTxt
 
-shtml :: Typeable e => Txt -> [Feature e] -> StaticHTML -> Atom e
-shtml _tag _attributes = raw (mkAtom _tag) _attributes . toTxt
+shtml :: Typeable e => Txt -> [Feature e] -> StaticHTML -> View e
+shtml _tag _attributes = raw (mkHTML _tag) _attributes . toTxt
 
 selfClosing tag = tag `elem` selfclosing
   where
@@ -401,36 +393,36 @@ instance Typeable e => ToTxt (HTML e) where
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map (toTxt . construct . snd) _keyed) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map (toTxt . render . snd) _keyed) <> "</" <> _tag <> ">"
 
   toTxt HTML {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map (toTxt . construct) _atoms) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map (toTxt . render) _atoms) <> "</" <> _tag <> ">"
 
-  toTxt STHTML {..} = toTxt $ construct (_stview _ststate (\_ _ -> return ()))
+  toTxt STHTML {..} = toTxt $ render (_stview _ststate (\_ _ -> return ()))
 
   toTxt SVGHTML {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map (toTxt . construct) _atoms) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map (toTxt . render) _atoms) <> "</" <> _tag <> ">"
 
   toTxt KSVGHTML {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
-        ">" <> Txt.concat (map (toTxt . construct . snd) _keyed) <> "</" <> _tag <> ">"
+        ">" <> Txt.concat (map (toTxt . render . snd) _keyed) <> "</" <> _tag <> ">"
 
   toTxt Managed {..} =
     case _constr of
-      Context' Context {..} ->
+      Controller' Controller {..} ->
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
-          ">"  <> toTxt (construct $ render model) <> "</" <> _tag <> ">"
+          ">"  <> toTxt (render $ view model) <> "</" <> _tag <> ">"
 
 instance Typeable e => ToTxt [HTML e] where
   toTxt = mconcat . map toTxt
@@ -445,113 +437,113 @@ data System
     }
   deriving Eq
 
-page :: ( IsContext' ts ms m
-        , IsContext' ts' ms' m'
+page :: ( IsController' ts ms m
+        , IsController' ts' ms' m'
         )
-     => Context' ts ms m
-     -> Context' ts' ms' m'
+     => Controller' ts ms m
+     -> Controller' ts' ms' m'
      -> System
-page h b = System (Context' h) (Context' b)
+page h b = System (Controller' h) (Controller' b)
 
-partial :: IsContext' ts ms m
-        => Context' ts ms m
+partial :: IsController' ts ms m
+        => Controller' ts ms m
         -> System
-partial = Subsystem . Context'
+partial = Subsystem . Controller'
 
 renderSystem :: System -> Txt
 renderSystem (System h c) =
   "<!DOCTYPE html>" <>
     case h of
-      Context' Context {..} ->
-        let htm :: Atom '[]
+      Controller' Controller {..} ->
+        let htm :: View '[]
             htm =
               Html []
-                [ unsafeCoerce $ toAtom $ construct $ render model
+                [ unsafeCoerce $ toView $ render $ view model
                 , Body []
                     [ case c of
-                        Context' a@Context {} -> context Div [ Id "atomic" ] a
+                        Controller' a@Controller {} -> controller Div [ Id "atomic" ] a
                     ]
                 ]
         in
-          toTxt (construct htm)
+          toTxt (render htm)
 renderSystem (Subsystem c) =
   ("<!DOCTYPE html>" <>) $
-    let htm :: Atom '[]
+    let htm :: View '[]
         htm =
           Html []
             [ Head [] []
             , Body []
                 [ case c of
-                    Context' a@Context {} -> context Div [ Id "atomic" ] a
+                    Controller' a@Controller {} -> controller Div [ Id "atomic" ] a
                 ]
             ]
     in
-      toTxt (construct htm)
+      toTxt (render htm)
 
 renderSystemBootstrap :: System -> Txt -> Txt
 renderSystemBootstrap (System h c) mainScript =
   "<!DOCTYPE html>" <>
     case h of
-      Context' Context {..} ->
-        let htm :: Atom '[]
+      Controller' Controller {..} ->
+        let htm :: View '[]
             htm =
               Html []
                 [ Head [] []
                 , Body []
                     [ case c of
-                        Context' a@Context {} -> context Div [ Id "atomic" ] a
+                        Controller' a@Controller {} -> controller Div [ Id "atomic" ] a
                     , Script [ Src mainScript, Defer True ] []
                     ]
                 ]
         in
-          toTxt (construct htm)
+          toTxt (render htm)
 renderSystemBootstrap (Subsystem c) mainScript =
   "<!DOCTYPE html>" <>
     case c of
-      Context' a@Context {} ->
-        let htm :: Atom '[]
+      Controller' a@Controller {} ->
+        let htm :: View '[]
             htm =
               Html []
                 [ Head [] []
                 , Body []
-                    [ context Div [ Id "atomic" ] a
+                    [ controller Div [ Id "atomic" ] a
                     , Script [ Src mainScript, Defer True ] []
                     ]
                 ]
         in
-          toTxt (construct htm)
+          toTxt (render htm)
 
 renderDynamicSystem :: System -> IO Txt
-renderDynamicSystem (System (Context' h) (Context' c)) = do
+renderDynamicSystem (System (Controller' h) (Controller' c)) = do
   let dt = "<!DOCTYPE html><html>"
-  Just h_ <- demandMaybe =<< currentView h
+  Just h_ <- demandMaybe =<< currentHTML h
   head_html <- renderDynamicHTML h_
-  let bdy :: Atom '[]
-      bdy = Body [] [ context Div [ Id "atomic" ] c]
-  body_html <- renderDynamicHTML (construct bdy)
+  let bdy :: View '[]
+      bdy = Body [] [ controller Div [ Id "atomic" ] c]
+  body_html <- renderDynamicHTML (render bdy)
   return $ dt <> head_html <> body_html <> "</html>"
-renderDynamicSystem (Subsystem (Context' c)) = do
+renderDynamicSystem (Subsystem (Controller' c)) = do
   let dt = "<!DOCTYPE html><head></head>"
-  Just c_ <- demandMaybe =<< currentView c
-  let bdy :: Atom '[]
-      bdy = Body [] [ context Div [ Id "atomic" ] c ]
-  body_html <- renderDynamicHTML (construct bdy)
+  Just c_ <- demandMaybe =<< currentHTML c
+  let bdy :: View '[]
+      bdy = Body [] [ controller Div [ Id "atomic" ] c ]
+  body_html <- renderDynamicHTML (render bdy)
   return $ dt <> body_html <> "</html>"
 
 renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
-renderDynamicSystemBootstrap (System (Context' h) (Context' c)) mainScript = do
+renderDynamicSystemBootstrap (System (Controller' h) (Controller' c)) mainScript = do
   let dt = "<!DOCTYPE html><html>"
-  Just h_ <- demandMaybe =<< currentView h
+  Just h_ <- demandMaybe =<< currentHTML h
   head_html <- renderDynamicHTML h_
-  let bdy :: Atom '[]
-      bdy = Body [] [ context Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
-  body_html <- renderDynamicHTML (construct bdy)
+  let bdy :: View '[]
+      bdy = Body [] [ controller Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
+  body_html <- renderDynamicHTML (render bdy)
   return $ dt <> head_html <> body_html <> "</html>"
-renderDynamicSystemBootstrap (Subsystem (Context' c)) mainScript = do
+renderDynamicSystemBootstrap (Subsystem (Controller' c)) mainScript = do
   let dt = "<!DOCTYPE html><html><head></head>"
-  let bdy :: Atom '[]
-      bdy = Body [] [ context Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
-  body_html <- renderDynamicHTML (construct bdy)
+  let bdy :: View '[]
+      bdy = Body [] [ controller Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
+  body_html <- renderDynamicHTML (render bdy)
   return $ dt <> body_html <> "</html>"
 
 renderDynamicHTML :: forall e. Typeable e => HTML e -> IO Txt
@@ -567,7 +559,7 @@ renderDynamicHTML h =
           <> ">"<> _content <> "</" <> _tag <> ">"
 
     KHTML {..} -> do
-      cs <- mapM (\(_,c) -> renderDynamicHTML (fromJust $ fromAtom c)) _keyed
+      cs <- mapM (\(_,c) -> renderDynamicHTML (fromJust $ fromView c)) _keyed
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -576,7 +568,7 @@ renderDynamicHTML h =
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     HTML {..} -> do
-      cs <- mapM renderDynamicHTML (map (fromJust . fromAtom ) _atoms)
+      cs <- mapM renderDynamicHTML (map (fromJust . fromView ) _atoms)
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -587,13 +579,13 @@ renderDynamicHTML h =
     STHTML {..} -> do
       case _strecord of
         Nothing ->
-          return $ toTxt $ construct $ _stview _ststate (\_ _ -> return ())
+          return $ toTxt $ render $ _stview _ststate (\_ _ -> return ())
         Just str -> do
           (_,_,a,_) <- readIORef str
           renderDynamicHTML (unsafeCoerce a :: HTML e)
 
     SVGHTML {..} -> do
-      cs <- mapM renderDynamicHTML (map (fromJust . fromAtom) _atoms)
+      cs <- mapM renderDynamicHTML (map (fromJust . fromView) _atoms)
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -602,7 +594,7 @@ renderDynamicHTML h =
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     KSVGHTML {..} -> do
-      cs <- mapM (\(_,c) -> renderDynamicHTML (fromJust $ fromAtom c)) _keyed
+      cs <- mapM (\(_,c) -> renderDynamicHTML (fromJust $ fromView c)) _keyed
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -614,8 +606,8 @@ renderDynamicHTML h =
 
     Managed {..} ->
       case _constr of
-        Context' a@Context {..} -> do
-          Just v <- demandMaybe =<< currentView a
+        Controller' a@Controller {..} -> do
+          Just v <- demandMaybe =<< currentHTML a
           inner <- renderDynamicHTML v
           return $
             "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
