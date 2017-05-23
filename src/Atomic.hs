@@ -390,9 +390,9 @@ selfClosing tag = tag `elem` selfclosing
 instance Typeable e => ToTxt (HTML e) where
   toTxt NullHTML {} = mempty
 
-  toTxt Text {..} = _content
+  toTxt TextHTML {..} = _content
 
-  toTxt Raw {..} =
+  toTxt RawHTML {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       ">" <> _content <> "</" <> _tag <> ">"
 
@@ -559,9 +559,9 @@ renderDynamicHTML h =
   case h of
     NullHTML {} -> return mempty
 
-    Text {..} -> return _content
+    TextHTML {..} -> return _content
 
-    Raw {..} ->
+    RawHTML {..} ->
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> ">"<> _content <> "</" <> _tag <> ">"

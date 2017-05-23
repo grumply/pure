@@ -162,12 +162,12 @@ data HTML (e :: [* -> *]) where
     :: { _node :: !(Maybe ENode)
        } -> HTML e
 
-  Text
+  TextHTML
     ::  { _tnode      :: !(Maybe TNode)
         , _content    :: !Txt
         } -> HTML e
 
-  Raw
+  RawHTML
     :: { _node        :: !(Maybe ENode)
        , _tag         :: !Txt
        , _attributes  :: ![Feature e]
@@ -244,6 +244,18 @@ maps a mappings = Prelude.foldr tryMap a mappings
         Just a -> toAtom $ m a
         Nothing -> res
 
+forceToFromTxt :: (ToTxt t, FromTxt t) => Txt -> t
+forceToFromTxt = fromTxt
+
+pattern Raw t fs c <- (RawHTML _ t fs c) where
+  Raw t fs c = RawHTML Nothing t fs c
+
+pattern Text t <- (TextHTML _ (forceToFromTxt -> t)) where
+  Text t = TextHTML Nothing (toTxt t)
+
+pattern ST mdl i st v <- (STHTML mdl i st _ v _) where
+  ST mdl i st v = STHTML mdl i st Nothing v (\_ _ -> return ())
+
 data Atom (ms :: [* -> *]) = forall a. (Typeable (a ms), Typeable ms, Component a ms) => Atom (a ms)
 
 class (Typeable a, Typeable ms) => Component (a :: [* -> *] -> *) ms where
@@ -314,8 +326,8 @@ instance Typeable e => ToJSON (HTML e) where
         case iorec of
           Nothing -> go $ construct $ (unsafeCoerce :: forall x. x -> Atom e) $ v st (\_ _ -> return ())
           Just ref -> go $ construct $ (unsafeCoerce :: forall x. x -> Atom e) $ v ((\(a,_,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ _ -> return ())
-      go (Text _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
-      go (Raw _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
+      go (TextHTML _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
+      go (RawHTML _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
       go (KHTML _ t as ks) = object [ "type" .= ("keyed" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap construct) ks) ]
       go (HTML _ t as cs) = object [ "type" .= ("atom" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map construct cs) ]
       go (KSVGHTML _ t as ks) = object [ "type" .= ("keyedsvg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap construct) ks)]
@@ -333,12 +345,12 @@ instance Typeable e => FromJSON (HTML e) where
       case t :: Txt of
         "text" -> do
           c <- o .: "content"
-          pure $ Text Nothing c
+          pure $ TextHTML Nothing c
         "raw" -> do
           t <- o .: "tag"
           as <- o .: "attrs"
           c <- o .: "content"
-          pure $ Raw Nothing t as c
+          pure $ RawHTML Nothing t as c
         "keyed" -> do
           t <- o .: "tag"
           as <- o .: "attrs"
@@ -366,10 +378,10 @@ instance Eq (HTML e) where
   (==) (NullHTML _) (NullHTML _) =
     True
 
-  (==) (Text _ t) (Text _ t') =
+  (==) (TextHTML _ t) (TextHTML _ t') =
     prettyUnsafeEq t t'
 
-  (==) (Raw _ t fs c) (Raw _ t' fs' c') =
+  (==) (RawHTML _ t fs c) (RawHTML _ t' fs' c') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq c c'
 
   (==) (KHTML _ t fs ks) (KHTML _ t' fs' ks') =
@@ -517,17 +529,17 @@ mkSVGAtom _tag _attributes _atoms =
 text :: Typeable e => Txt -> Atom e
 text _content =
   let _tnode = Nothing
-  in toAtom Text {..}
+  in toAtom TextHTML {..}
 
 raw :: Typeable e => ([Feature e] -> [Atom e] -> Atom e) -> [Feature e] -> Txt -> Atom e
 raw x _attributes _content =
   case fromAtom $ x [] [] of
     Just (HTML _ _tag _ _) ->
       let _node = Nothing
-      in toAtom Raw {..}
+      in toAtom RawHTML {..}
     Just (SVGHTML _ _tag _ _) ->
       let _node = Nothing
-      in toAtom Raw {..}
+      in toAtom RawHTML {..}
     _ -> error "HTMLic.Context.raw: raw atoms may only be built from HTMLs and SVGHTMLs"
 
 list :: Typeable e => ([Feature e] -> [Atom e] -> Atom e) -> [Feature e] -> [(Int,Atom e)] -> Atom e
@@ -1283,7 +1295,7 @@ embed_ parent STHTML {..} = do
   forM_ _strecord $ \ref -> do
     (_,_,a,_) <- readIORef ref
     embed_ parent (unsafeCoerce a :: HTML e)
-embed_ parent Text {..} =
+embed_ parent TextHTML {..} =
   forM_ _tnode $ \node -> do
     ae <- isAlreadyEmbeddedText node parent
     unless ae (void $ appendChild parent node)
@@ -1326,13 +1338,13 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . construct
       forM_ mparent (flip appendChild el)
       return $ NullHTML _cond
 
-    go mparent Raw {..} = do
+    go mparent RawHTML {..} = do
       _node@(Just el) <- createElement doc _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       setInnerHTML el _content
       didMount
       forM_ mparent $ \parent -> appendChild parent el
-      return $ Raw _node _tag _attributes _content
+      return $ RawHTML _node _tag _attributes _content
 
     go mparent HTML {..} = do
       _node@(Just el) <- createElement doc _tag
@@ -1389,10 +1401,10 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . construct
       forM_ mparent $ \parent -> appendChild parent el
       return $ KSVGHTML _node _tag _attributes _keyed
 
-    go mparent Text {..} = do
+    go mparent TextHTML {..} = do
       _tnode@(Just el) <- createTextNode doc _content
       forM_ mparent (flip appendChild el)
-      return $ Text _tnode _content
+      return $ TextHTML _tnode _content
 
     go mparent m@Managed {..} =
       case _constr of
@@ -1445,7 +1457,7 @@ buildHTML :: (Typeable e, Component a e) => Doc -> ContextHooks -> Bool -> (Code
 buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing . toAtom
 
 getElement :: forall e. HTML e -> IO (Maybe ENode)
-getElement Text {} = return Nothing
+getElement TextHTML {} = return Nothing
 getElement STHTML {..} =
   case _strecord of
     Nothing -> return Nothing
@@ -1455,7 +1467,7 @@ getElement STHTML {..} =
 getElement n = return $ _node n
 
 getNode :: forall e. HTML e -> IO (Maybe NNode)
-getNode Text {..} = return $ fmap toNode _tnode
+getNode TextHTML {..} = return $ fmap toNode _tnode
 getNode STHTML {..} =
   case _strecord of
     Nothing -> return Nothing
@@ -1526,17 +1538,17 @@ replace old STHTML {..} = do
       (_,_,a,_) <- readIORef ref
       replace old a
 
-replace old@Text {} new@Text {} = do
+replace old@TextHTML {} new@TextHTML {} = do
   forM_ (_tnode old) $ \o ->
     forM_ (_tnode new) $ \n ->
       swap_js (toNode o) (toNode n)
 
-replace old Text {..} = do
+replace old TextHTML {..} = do
   forM_ (_node old) $ \o ->
     forM_ _tnode $ \n ->
       swap_js (toNode o) (toNode n)
 
-replace Text {..} new = do
+replace TextHTML {..} new = do
   forM_ _tnode $ \o ->
     forM_ (_node new) $ \n ->
       swap_js (toNode o) (toNode n)
@@ -1558,7 +1570,7 @@ delete STHTML {..} = do
     Just ref -> do
       (_,_,a,_) <- readIORef ref
       delete a
-delete Text {..} = forM_ _tnode (delete_js . toNode)
+delete TextHTML {..} = forM_ _tnode (delete_js . toNode)
 delete n = forM_ (_node n) (delete_js . toNode)
 #endif
 
@@ -1578,7 +1590,7 @@ cleanup f = go (return ())
                          cleanup f [unsafeCoerce a]
       go (didUnmount' >> didUnmount) rest
     go didUnmount (NullHTML{}:rest) = go didUnmount rest
-    go didUnmount (r@Raw {..}:rest) = do
+    go didUnmount (r@RawHTML {..}:rest) = do
       en <- getElement r
       du <- case en of
               Nothing -> return (return ())
@@ -1630,7 +1642,7 @@ insertAt parent ind STHTML {..} = do
   forM_ _strecord $ \ref -> do
     (_,_,a,_) <- readIORef ref
     insertAt parent ind a
-insertAt parent ind Text {..} = forM_ _tnode $ insert_at_js parent ind . toNode
+insertAt parent ind TextHTML {..} = forM_ _tnode $ insert_at_js parent ind . toNode
 insertAt parent ind n = forM_ (_node n) $ insert_at_js parent ind . toNode
 #endif
 
@@ -1654,9 +1666,9 @@ insertBefore_ parent child STHTML {..} = do
   forM_ _strecord $ \ref -> do
     (_,_,a,_) <- readIORef ref
     insertBefore_ parent child (unsafeCoerce a :: HTML e)
-insertBefore_ parent child@(Text {}) new@(Text{}) = void $ N.insertBefore parent (_tnode new) (_tnode child)
-insertBefore_ parent child new@(Text{}) = void $ N.insertBefore parent (_tnode new) (_node child)
-insertBefore_ parent child@(Text {}) new = void $ N.insertBefore parent (_node new) (_tnode child)
+insertBefore_ parent child@(TextHTML {}) new@(TextHTML{}) = void $ N.insertBefore parent (_tnode new) (_tnode child)
+insertBefore_ parent child new@(TextHTML{}) = void $ N.insertBefore parent (_tnode new) (_node child)
+insertBefore_ parent child@(TextHTML {}) new = void $ N.insertBefore parent (_node new) (_tnode child)
 insertBefore_ parent child new = void $ N.insertBefore parent (_node new) (_node child)
 #endif
 
@@ -1804,14 +1816,14 @@ diffHelper f doc ch isFG =
               didUnmount
               return new'
 
-    go' txt@(Text (Just t) cnt) (construct -> mid@(Text _ mcnt)) (construct -> new@(Text _ cnt')) =
+    go' txt@(TextHTML (Just t) cnt) (construct -> mid@(TextHTML _ mcnt)) (construct -> new@(TextHTML _ cnt')) =
       if prettyUnsafeEq mcnt cnt' then do
         return txt
       else do
         changeText t cnt'
-        return $ Text (Just t) cnt'
+        return $ TextHTML (Just t) cnt'
 
-    go' old@(Raw {}) (construct -> mid@(Raw {})) (construct -> new@(Raw {})) =
+    go' old@(RawHTML {}) (construct -> mid@(RawHTML {})) (construct -> new@(RawHTML {})) =
       if prettyUnsafeEq (_tag old) (_tag new) then do
         let Just n = _node old
         (a',didMount) <-
@@ -1821,11 +1833,11 @@ diffHelper f doc ch isFG =
                   runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
         if prettyUnsafeEq (_content mid) (_content new) then do
           didMount
-          return $ Raw (_node old) (_tag old) a' (_content old)
+          return $ RawHTML (_node old) (_tag old) a' (_content old)
         else do
           setInnerHTML n (_content new)
           didMount
-          return $ Raw (_node old) (_tag old) a' (_content new)
+          return $ RawHTML (_node old) (_tag old) a' (_content new)
       else do new' <- buildHTML doc ch isFG f new
               replace old new'
               didUnmount <- cleanup f [old]
@@ -1858,7 +1870,7 @@ diffHelper f doc ch isFG =
     go' old _ n = do
       n' <- buildAndEmbedMaybe f doc ch isFG Nothing n
       case old of
-        t@(Text (Just o) _) ->
+        t@(TextHTML (Just o) _) ->
           forM_ (_node n') (swapContent o)
         _ -> do
           replace old n'
