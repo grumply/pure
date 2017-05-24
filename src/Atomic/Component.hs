@@ -219,6 +219,9 @@ data HTML e where
         , _constr     :: !Constr
         } -> HTML e
 
+  Component
+    :: Component a e => { renderable :: a e } -> HTML e
+
 data View (ms :: [* -> *]) = forall a. (Typeable a, Typeable ms, Component a ms) => View (a ms)
 
 class (Typeable a, Typeable ms) => Component (a :: [* -> *] -> *) ms where
@@ -234,7 +237,8 @@ instance Typeable ms => Component View ms where
   render (View a) = render a
 
 instance Typeable ms => Component HTML ms where
-  render = id
+  render (Component c) = render c
+  render h = h
 
 mapComponent :: (Component a ms, Component a' ms) => (a ms -> a' ms) -> View ms -> View ms
 mapComponent f sa =
@@ -248,11 +252,11 @@ mappingComponent f as = map (mapComponent f) as
 mappedComponent :: (Component a ms, Component a' ms) => Setter (View ms) (View ms) (a ms) (a' ms)
 mappedComponent = sets mapComponent
 
-component :: Component a ms => Prism' (View ms) (a ms)
-component = prism' toView fromView
+-- component :: Component a ms => Prism' (View ms) (a ms)
+-- component = prism' toView fromView
 
-pattern Match a <- (preview component -> Just a) where
-  Match a = review component a
+pattern Match a <- (preview (prism' toView fromView) -> Just a) where
+  Match a = review (prism' toView fromView) a
 
 data Mapping ms = forall a a'. (Component a ms, Component a' ms) => Mapping (a ms -> a' ms)
 
@@ -345,6 +349,7 @@ instance Typeable e => ToJSON (HTML e) where
       go (HTML _ t as cs) = object [ "type" .= ("atom" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map render cs) ]
       go (KSVGHTML _ t as ks) = object [ "type" .= ("keyedsvg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks)]
       go (SVGHTML _ t as cs) = object [ "type" .= ("svg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map render cs) ]
+      go (Component r) = go (render r)
       go _ = object [ "type" .= ("null" :: Txt) ]
 
 instance Typeable e => FromJSON (HTML e) where
@@ -414,6 +419,9 @@ instance Eq (HTML e) where
 
   (==) (Managed _ t fs c) (Managed _ t' fs' c') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq c c'
+
+  (==) (Component r) (Component r') =
+    reallyVeryUnsafeEq r r'
 
   (==) _ _ =
     False
@@ -1345,6 +1353,8 @@ buildAndEmbedMaybe :: forall e. Typeable e => (Code e IO () -> IO ()) -> Doc -> 
 buildAndEmbedMaybe f doc ch isFG mn = go mn . render
   where
     go :: Maybe ENode -> HTML e -> IO (HTML e)
+    go mparent (Component c) = go mparent (render c)
+
     go mparent nn@NullHTML {..} = do
       _cond@(Just el) <- createElement doc "template"
       forM_ mparent (flip appendChild el)
@@ -1469,6 +1479,7 @@ buildHTML :: (Typeable e, Component a e) => Doc -> ControllerHooks -> Bool -> (C
 buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing . toView
 
 getElement :: forall e. HTML e -> IO (Maybe ENode)
+getElement (Component _) = return Nothing
 getElement TextHTML {} = return Nothing
 getElement STHTML {..} =
   case _strecord of
@@ -1479,6 +1490,7 @@ getElement STHTML {..} =
 getElement n = return $ _node n
 
 getNode :: forall e. HTML e -> IO (Maybe NNode)
+getNode (Component _) = return Nothing
 getNode TextHTML {..} = return $ fmap toNode _tnode
 getNode STHTML {..} =
   case _strecord of
@@ -1488,6 +1500,26 @@ getNode STHTML {..} =
       getNode (unsafeCoerce a :: HTML e)
 getNode n = return $ fmap toNode $ _node n
 
+getAttributes :: HTML e -> [Feature e]
+getAttributes (Component _) = []
+getAttributes TextHTML {} = []
+getAttributes STHTML {} = []
+getAttributes n = _attributes n
+
+getChildren :: forall e. Typeable e => HTML e -> IO [View e]
+getChildren (Component _) = return []
+getChildren TextHTML {} = return []
+getChildren STHTML {..} = do
+  case _strecord of
+    Nothing -> return []
+    Just ref -> do
+      (_,_,a,_) <- readIORef ref
+      return [toView (unsafeCoerce a :: HTML e)]
+getChildren HTML {..} = return _atoms
+getChildren SVGHTML {..} = return _atoms
+getChildren KHTML {..} = return $ map snd _keyed
+getChildren KSVGHTML {..} = return $ map snd _keyed
+getChildren Managed {} = return []
 
 diff_ :: ControllerPatch m -> IO ()
 diff_ APatch {..} = do
@@ -1528,47 +1560,12 @@ replace :: HTML e -> HTML e' -> IO ()
 #ifndef __GHCJS__
 replace _ _ = return ()
 #else
-replace old@STHTML {} new@STHTML {} =
-  case (old,new) of
-    (STHTML _ _ _ (Just r) _ _,STHTML _ _ _ (Just r') _ _) -> do
-      (_,_,a,_) <- readIORef r
-      (_,_,b,_) <- readIORef r'
-      replace a b
-    _ -> return ()
-
-replace STHTML {..} new = do
-  case _strecord of
-    Nothing -> return ()
-    Just ref -> do
-      (_,_,a,_) <- readIORef ref
-      replace a new
-
-replace old STHTML {..} = do
-  case _strecord of
-    Nothing -> return ()
-    Just ref -> do
-      (_,_,a,_) <- readIORef ref
-      replace old a
-
-replace old@TextHTML {} new@TextHTML {} = do
-  forM_ (_tnode old) $ \o ->
-    forM_ (_tnode new) $ \n ->
-      swap_js (toNode o) (toNode n)
-
-replace old TextHTML {..} = do
-  forM_ (_node old) $ \o ->
-    forM_ _tnode $ \n ->
-      swap_js (toNode o) (toNode n)
-
-replace TextHTML {..} new = do
-  forM_ _tnode $ \o ->
-    forM_ (_node new) $ \n ->
-      swap_js (toNode o) (toNode n)
-
 replace old new = do
-  forM_ (_node old) $ \o ->
-    forM_ (_node new) $ \n ->
-      swap_js (toNode o) (toNode n)
+  mon <- getNode old
+  mnn <- getNode new
+  forM_ mon $ \on ->
+    forM_ mnn $ \nn ->
+      swap_js on nn
 #endif
 
 {-# NOINLINE delete #-}
@@ -1576,17 +1573,11 @@ delete :: HTML e -> IO ()
 #ifndef __GHCJS__
 delete _ = return ()
 #else
-delete STHTML {..} = do
-  case _strecord of
-    Nothing -> return ()
-    Just ref -> do
-      (_,_,a,_) <- readIORef ref
-      delete a
-delete TextHTML {..} = forM_ _tnode (delete_js . toNode)
-delete n = forM_ (_node n) (delete_js . toNode)
+delete o = do
+  mn <- getNode o
+  forM_ mn delete_js
 #endif
 
--- f node feature io -> io
 {-# NOINLINE cleanup #-}
 cleanup :: Typeable e => (Code e IO () -> IO ()) -> [HTML e] -> IO (IO ())
 #ifndef __GHCJS__
@@ -1594,55 +1585,14 @@ cleanup _ _ = return (return ())
 #else
 cleanup f = go (return ())
   where
-    go didUnmount (STHTML{..}:rest) = do
-      didUnmount' <- case _strecord of
-                       Nothing -> return (return ())
-                       Just ref -> do
-                         (_,_,a,_) <- readIORef ref
-                         cleanup f [unsafeCoerce a]
-      go (didUnmount' >> didUnmount) rest
-    go didUnmount (NullHTML{}:rest) = go didUnmount rest
-    go didUnmount (r@RawHTML {..}:rest) = do
-      en <- getElement r
-      du <- case en of
+    go didUnmount [] = return didUnmount
+    go didUnmount (r:rest) = do
+      me <- getElement r
+      du <- case me of
               Nothing -> return (return ())
-              Just n  -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
-      go (du >> didUnmount) rest
-    go didUnmount (a@HTML {..}:rest) = do
-      en <- getElement a
-      du <- case en of
-              Nothing -> return (return ())
-              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
-      unmounts' <- cleanup f (map (fromJust . fromView) _atoms)
+              Just e  -> foldM (flip (cleanupAttr f e)) (return ()) (getAttributes r)
+      unmounts' <- cleanup f . mapMaybe fromView =<< getChildren r
       go (unmounts' >> du >> didUnmount) rest
-    go didUnmount (a@SVGHTML {..}:rest) = do
-      en <- getElement a
-      du <- case en of
-              Nothing -> return (return ())
-              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
-      unmounts' <- cleanup f (map (fromJust . fromView) _atoms)
-      go (unmounts' >> du >> didUnmount) rest
-    go didUnmount (a@KHTML {..}:rest) = do
-      en <- getElement a
-      du <- case en of
-              Nothing -> return (return ())
-              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
-      unmounts' <- cleanup f (map (fromJust . fromView . snd) _keyed)
-      go (unmounts' >> du >> didUnmount) rest
-    go didUnmount (a@KSVGHTML {..}:rest) = do
-      en <- getElement a
-      du <- case en of
-              Nothing -> return (return ())
-              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
-      unmounts' <- cleanup f (map (fromJust . fromView . snd) _keyed)
-      go (unmounts' >> du >> didUnmount) rest
-    go didUnmount (a@Managed {..}:rest) = do
-      en <- getElement a
-      du <- case en of
-              Nothing -> return (return ())
-              Just n -> foldM (flip (cleanupAttr f n)) (return ()) _attributes
-      go (du >> didUnmount) rest
-    go didUnmount _ = return didUnmount
 #endif
 
 {-# NOINLINE insertAt #-}
@@ -1650,12 +1600,7 @@ insertAt :: ENode -> Int -> HTML e -> IO ()
 #ifndef __GHCJS__
 insertAt _ _ _ = return ()
 #else
-insertAt parent ind STHTML {..} = do
-  forM_ _strecord $ \ref -> do
-    (_,_,a,_) <- readIORef ref
-    insertAt parent ind a
-insertAt parent ind TextHTML {..} = forM_ _tnode $ insert_at_js parent ind . toNode
-insertAt parent ind n = forM_ (_node n) $ insert_at_js parent ind . toNode
+insertAt parent ind n = getNode n >>= \mn -> forM_ mn $ insert_at_js parent ind
 #endif
 
 {-# NOINLINE insertBefore_ #-}
@@ -1663,25 +1608,10 @@ insertBefore_ :: forall e. ENode -> HTML e -> HTML e -> IO ()
 #ifndef __GHCJS__
 insertBefore_ _ _ _ = return ()
 #else
-insertBefore_ parent child@(STHTML{}) new@(STHTML{}) = do
-  case (child,new) of
-    (STHTML _ _ _ (Just r) _ _, STHTML _ _ _ (Just r') _ _) -> do
-      (_,_,a,_) <- readIORef r
-      (_,_,b,_) <- readIORef r'
-      insertBefore_ parent (unsafeCoerce a :: HTML e) (unsafeCoerce b :: HTML e)
-    _ -> return ()
-insertBefore_ parent STHTML {..} new = do
-  forM_ _strecord $ \ref -> do
-    (_,_,a,_) <- readIORef ref
-    insertBefore_ parent (unsafeCoerce a :: HTML e) new
-insertBefore_ parent child STHTML {..} = do
-  forM_ _strecord $ \ref -> do
-    (_,_,a,_) <- readIORef ref
-    insertBefore_ parent child (unsafeCoerce a :: HTML e)
-insertBefore_ parent child@(TextHTML {}) new@(TextHTML{}) = void $ N.insertBefore parent (_tnode new) (_tnode child)
-insertBefore_ parent child new@(TextHTML{}) = void $ N.insertBefore parent (_tnode new) (_node child)
-insertBefore_ parent child@(TextHTML {}) new = void $ N.insertBefore parent (_node new) (_tnode child)
-insertBefore_ parent child new = void $ N.insertBefore parent (_node new) (_node child)
+insertBefore_ parent child new = do
+  mcn <- getNode child
+  mnn <- getNode new
+  void $ N.insertBefore parent mnn mcn
 #endif
 
 diffHelper :: forall e. Typeable e => (Code e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> HTML e -> View e -> View e -> IO (HTML e)
@@ -1719,6 +1649,13 @@ diffHelper f doc ch isFG =
       delete old
       didUnmount
       return new'
+
+    go' old (render -> mid@(Component _)) (render -> new@(Component _)) =
+      go old (toView mid) (toView new)
+
+    -- dubious
+    go' old mid (render -> new@(Component _)) =
+      go' old mid (toView new)
 
     go' old@HTML {} (render -> mid@HTML {}) (render -> new@HTML {}) =
       if prettyUnsafeEq (_tag old) (_tag new)

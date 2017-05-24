@@ -424,6 +424,8 @@ instance Typeable e => ToTxt (HTML e) where
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
           ">"  <> toTxt (render $ view model) <> "</" <> _tag <> ">"
 
+  toTxt (Component c) = toTxt (render c)
+
 instance Typeable e => ToTxt [HTML e] where
   toTxt = mconcat . map toTxt
 
@@ -602,8 +604,6 @@ renderDynamicHTML h =
              else
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
-
-
     Managed {..} ->
       case _constr of
         Controller' a@Controller {..} -> do
@@ -612,3 +612,6 @@ renderDynamicHTML h =
           return $
             "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
               <> ">"  <> inner <> "</" <> _tag <> ">"
+
+    Component c ->
+      renderDynamicHTML (render c)
