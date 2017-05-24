@@ -9,7 +9,7 @@ Atomic:
 * Has first-class, type-safe, composable websocket APIs and API implementations.
 * Uses the same context abstractions (services, modules, etc...) on client and server; learn once, write anywhere.
 * Uses and exposes a set of reactive-oriented programming primitives like signals, behaviors, promises and evented contexts.
-* Implements *an extensible dynamically-typed hierarchy of views* a la [Marlow '06 (PDF)](http://simonmar.github.io/bib/papers/ext-exceptions.pdf) with a style of shallow (weak head) model rendering.
+* Implements *an extensible dynamically-typed hierarchy of views* a la [Marlow '06 (PDF)](http://simonmar.github.io/bib/papers/ext-exceptions.pdf).
 
 *Documentation is OUT OF DATE as of the latest framework updates. Updates forthcoming.*
 
