@@ -8,14 +8,12 @@
 module Atomic
   ( module Atomic
   , module Export
-  , HTML(..)
+  , View
   , list, hashed
   , Component(..)
-  , View
-  , html
   , Controller(..)
   , controller
-  , viewController, constant
+  , viewManager, constant
   , unindent
   , css, css', scss, scss', styles
   , diff, setManualDiff, setEagerDiff
@@ -343,15 +341,15 @@ observer s key0 view0 = Controller {..}
     build = return
     prime = void $ observe' s $ \(m :: m) -> putModel (Observing $ Just m)
     model = Observing Nothing
-    view (Observing Nothing) = nil :: HTML (Base (Observing m))
+    view (Observing Nothing) = nil :: View (Base (Observing m))
     view (Observing (Just m)) = render $ view0 m
 
 -- specialized to Observatory to avoid inline type signatures
-observes :: (Typeable m, MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
+observes :: (Typeable m, MonadIO c, '[Evented] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
 observes o f = observe o (Export.lift . f)
 
 -- specialized to Observatory to avoid inline type signatures
-observes' :: (Typeable m, MonadIO c, '[Revent] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
+observes' :: (Typeable m, MonadIO c, '[Evented] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
 observes' = observe'
 
 newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)
@@ -365,7 +363,7 @@ instance Monoid StaticHTML where
 instance Lift StaticHTML where
   lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
 
-staticHTML :: Typeable e => HTML e -> StaticHTML
+staticHTML :: Typeable e => View e -> StaticHTML
 staticHTML = fromTxt . toTxt
 
 shtml :: Typeable e => Txt -> [Feature e] -> StaticHTML -> View e
@@ -379,7 +377,7 @@ selfClosing tag = tag `elem` selfclosing
       ,"meta","param","source","track","wbr"
       ]
 
-instance Typeable e => ToTxt (HTML e) where
+instance ToTxt (View e) where
   toTxt NullHTML {} = mempty
 
   toTxt TextHTML {..} = _content
@@ -424,9 +422,9 @@ instance Typeable e => ToTxt (HTML e) where
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
           ">"  <> toTxt (render $ view model) <> "</" <> _tag <> ">"
 
-  toTxt (Component c) = toTxt (render c)
+  toTxt (View c) = toTxt (render c)
 
-instance Typeable e => ToTxt [HTML e] where
+instance Typeable e => ToTxt [View e] where
   toTxt = mconcat . map toTxt
 
 data System
@@ -460,7 +458,7 @@ renderSystem (System h c) =
         let htm :: View '[]
             htm =
               Html []
-                [ unsafeCoerce $ toView $ render $ view model
+                [ unsafeCoerce $ render $ view model
                 , Body []
                     [ case c of
                         Controller' a@Controller {} -> controller Div [ Id "atomic" ] a
@@ -548,7 +546,7 @@ renderDynamicSystemBootstrap (Subsystem (Controller' c)) mainScript = do
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> body_html <> "</html>"
 
-renderDynamicHTML :: forall e. Typeable e => HTML e -> IO Txt
+renderDynamicHTML :: forall e. Typeable e => View e -> IO Txt
 renderDynamicHTML h =
   case h of
     NullHTML {} -> return mempty
@@ -561,7 +559,7 @@ renderDynamicHTML h =
           <> ">"<> _content <> "</" <> _tag <> ">"
 
     KHTML {..} -> do
-      cs <- mapM (\(_,c) -> renderDynamicHTML (fromJust $ fromView c)) _keyed
+      cs <- mapM (\(_,c) -> renderDynamicHTML c) _keyed
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -570,7 +568,7 @@ renderDynamicHTML h =
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     HTML {..} -> do
-      cs <- mapM renderDynamicHTML (map (fromJust . fromView ) _atoms)
+      cs <- mapM renderDynamicHTML _atoms
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -584,10 +582,10 @@ renderDynamicHTML h =
           return $ toTxt $ render $ _stview _ststate (\_ _ -> return ())
         Just str -> do
           (_,_,a,_) <- readIORef str
-          renderDynamicHTML (unsafeCoerce a :: HTML e)
+          renderDynamicHTML (unsafeCoerce a :: View e)
 
     SVGHTML {..} -> do
-      cs <- mapM renderDynamicHTML (map (fromJust . fromView) _atoms)
+      cs <- mapM renderDynamicHTML _atoms
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -596,7 +594,7 @@ renderDynamicHTML h =
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
     KSVGHTML {..} -> do
-      cs <- mapM (\(_,c) -> renderDynamicHTML (fromJust $ fromView c)) _keyed
+      cs <- mapM (\(_,c) -> renderDynamicHTML c) _keyed
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> if selfClosing _tag then
@@ -613,5 +611,5 @@ renderDynamicHTML h =
             "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
               <> ">"  <> inner <> "</" <> _tag <> ">"
 
-    Component c ->
+    View c ->
       renderDynamicHTML (render c)

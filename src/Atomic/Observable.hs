@@ -34,7 +34,7 @@ getO = do
 observe :: ( MonadIO c
            , MonadIO c'
            , With w (Code ms c) IO
-           , '[Revent] <: ms'
+           , '[Evented] <: ms'
            , '[Observable m] <: ms
            )
         => w
@@ -53,7 +53,7 @@ observe c f = do
 observe' :: ( MonadIO c
             , MonadIO c'
             , With w (Code ms c) IO
-            , '[Revent] <: ms'
+            , '[Evented] <: ms'
             , '[Observable m] <: ms
             )
         => w

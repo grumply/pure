@@ -47,7 +47,7 @@ getFrameSyndicate =
 
 onFrame :: forall ms c.
            ( MonadIO c
-           , '[Revent] <: ms
+           , '[Evented] <: ms
            )
         => (IO () -> Code ms c ())
         -> Code ms c (IO ())
@@ -63,7 +63,7 @@ onFrame f = do
   return stopper
 
 onFPS :: forall ms c.
-         (MonadIO c, '[Revent] <: ms)
+         (MonadIO c, '[Evented] <: ms)
       => Double
       -> (IO () -> Code ms c ())
       -> Code ms c (IO ())
@@ -93,7 +93,7 @@ onFPS n f = do
             become (go newTimestamp)
 
 onFrameWithTime :: ( MonadIO c
-                   , '[Revent] <: ms
+                   , '[Evented] <: ms
                    )
                 => (IO () -> Double -> Code '[Event Double] (Code ms c) ())
                 -> Code ms c (IO ())
@@ -120,7 +120,7 @@ rAF win callback = do
   return 0
 #endif
 
-createFrameLoop :: ('[State () FrameState,Revent] <: ms) => Code ms IO ()
+createFrameLoop :: ('[State () FrameState,Evented] <: ms) => Code ms IO ()
 createFrameLoop = do
   FrameState {..} <- get
   win <- getWindow
@@ -148,7 +148,7 @@ createFrameLoop = do
   put $ FrameState frames True
   return ()
 
-ease :: (MonadIO c, '[Revent] <: ms)
+ease :: (MonadIO c, '[Evented] <: ms)
      => Ease -> Double -> Double -> Code ms c Double -> (Double -> Code ms c ()) -> Code ms c ()
 ease ease durationSec final getter setter = do
   current <- getter
@@ -172,7 +172,7 @@ ease ease durationSec final getter setter = do
             lift $ setter n
             become go'
 
-ease2 :: (MonadIO c, '[Revent] <: ms)
+ease2 :: (MonadIO c, '[Evented] <: ms)
      => Ease -> Double -> (Double,Double) -> Code ms c (Double,Double) -> ((Double,Double) -> Code ms c ()) -> Code ms c ()
 ease2 ease durationSec (final1,final2) getter setter = do
   (current1,current2) <- getter

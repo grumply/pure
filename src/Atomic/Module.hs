@@ -19,7 +19,7 @@ import Data.HashMap.Strict as Map hiding ((!))
 
 import Unsafe.Coerce
 
-type ModuleBase = '[Revent, State () Vault, State () Shutdown]
+type ModuleBase = '[Evented, State () Vault, State () Shutdown]
 
 type IsModule' ts ms = (ModuleBase <: ms, ModuleBase <. ts, Delta (Modules ts) (Messages ms))
 type IsModule ms = IsModule' ms ms

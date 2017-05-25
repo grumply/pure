@@ -155,7 +155,7 @@ atKeyframes nm kfs = Send (CSS3_ "@keyframes " nm (Just kfs) (Return ()))
 -- data CSSError = InvalidCSSSyntax Txt deriving (Show)
 -- instance Exception CSSError
 
-newtype StaticCSS = StaticCSS { cssText :: Txt } deriving (Eq,Ord)
+data StaticCSS = StaticCSS { cssText :: {-# UNPACK #-} !Txt } deriving (Eq,Ord)
 instance ToTxt StaticCSS where
   toTxt (StaticCSS csst) = csst
 instance FromTxt StaticCSS where

@@ -177,7 +177,7 @@ windowS = Service {..}
             publish windowHeightN newHeight
             writeIORef height_ newHeight
 
-onScrollX :: (MonadIO c, '[Revent] <: ms)
+onScrollX :: (MonadIO c, '[Evented] <: ms)
           => (Int -> Code ms c ())
           -> Code ms c (IO ())
 onScrollX f = do
@@ -188,7 +188,7 @@ onScrollX f = do
     )
   return stopper
 
-onScrollY :: (MonadIO c, '[Revent] <: ms)
+onScrollY :: (MonadIO c, '[Evented] <: ms)
           => (Int -> Code ms c ())
           -> Code ms c (IO ())
 onScrollY f = do
@@ -199,7 +199,7 @@ onScrollY f = do
     )
   return stopper
 
-onScrollPosition :: (MonadIO c, '[Revent] <: ms)
+onScrollPosition :: (MonadIO c, '[Evented] <: ms)
                  => (ScrollPosition -> Code ms c ())
                  -> Code ms c (IO ())
 onScrollPosition f = do
@@ -210,7 +210,7 @@ onScrollPosition f = do
     )
   return stopper
 
-onWindowHeight :: (MonadIO c, '[Revent] <: ms)
+onWindowHeight :: (MonadIO c, '[Evented] <: ms)
                => (Int -> Code ms c ())
                -> Code ms c (IO ())
 onWindowHeight f = do
@@ -221,7 +221,7 @@ onWindowHeight f = do
     )
   return stopper
 
-onWindowWidth :: (MonadIO c, '[Revent] <: ms)
+onWindowWidth :: (MonadIO c, '[Evented] <: ms)
               => (Int -> Code ms c ())
               -> Code ms c (IO ())
 onWindowWidth f = do
@@ -232,7 +232,7 @@ onWindowWidth f = do
     )
   return stopper
 
-onWindowDimensions :: (MonadIO c, '[Revent] <: ms)
+onWindowDimensions :: (MonadIO c, '[Evented] <: ms)
                    => (WindowDimensions -> Code ms c ())
                    -> Code ms c (IO ())
 onWindowDimensions f = do

@@ -156,183 +156,144 @@ foreign import javascript unsafe
   "$1[$2] = $3" set_property_js :: E.Element -> Txt -> Txt -> IO ()
 #endif
 
-data HTML e where
+data View e where
   -- NullHTML must have a presence on the page for proper diffing
   NullHTML
-    :: { _node :: !(Maybe ENode)
-       } -> HTML e
+    :: { _node :: (Maybe ENode)
+       } -> View e
 
   TextHTML
-    ::  { _tnode      :: !(Maybe TNode)
-        , _content    :: !Txt
-        } -> HTML e
+    ::  { _tnode      :: (Maybe TNode)
+        , _content    :: Txt
+        } -> View e
 
   RawHTML
-    :: { _node        :: !(Maybe ENode)
-       , _tag         :: !Txt
-       , _attributes  :: ![Feature e]
-       , _content     :: !Txt
-       } -> HTML e
+    :: { _node        :: (Maybe ENode)
+       , _tag         :: Txt
+       , _attributes  :: [Feature e]
+       , _content     :: Txt
+       } -> View e
 
   HTML
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: !Txt
-        , _attributes :: ![Feature e]
-        , _atoms      :: ![View e]
-        } -> HTML e
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _atoms      :: [View e]
+        } -> View e
   KHTML
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: !Txt
-        , _attributes :: ![Feature e]
-        , _keyed      :: ![(Int,View e)]
-        } -> HTML e
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _keyed      :: [(Int,View e)]
+        } -> View e
 
   STHTML
-    :: Typeable x =>
-       { _stmodel  :: !(model)
-       , _stid     :: !Int
-       , _ststate  :: !st
-       , _strecord :: !(Maybe (IORef (st,st -> ((st -> st) -> IO () -> IO ()) -> View x,HTML x,View x)))
-       , _stview   :: !(st -> ((st -> st) -> IO () -> IO ()) -> View x)
-       , _stupdate :: !((st -> st) -> IO () -> IO ())
-       } -> HTML e
+    :: { _stmodel  :: (model)
+       , _stid     :: Int
+       , _ststate  :: st
+       , _strecord :: (Maybe (IORef (st,st -> ((st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
+       , _stview   :: (st -> ((st -> st) -> IO () -> IO ()) -> View x)
+       , _stupdate :: ((st -> st) -> IO () -> IO ())
+       } -> View e
 
-  -- TODO: SVG keyed node
   SVGHTML
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: !Txt
-        , _attributes :: ![Feature e]
-        , _atoms      :: ![View e]
-        } -> HTML e
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _atoms      :: [View e]
+        } -> View e
 
   KSVGHTML
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: !Txt
-        , _attributes :: ![Feature e]
-        , _keyed      :: ![(Int,View e)]
-        } -> HTML e
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _keyed      :: [(Int,View e)]
+        } -> View e
 
   Managed
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: !Txt
-        , _attributes :: ![Feature e]
-        , _constr     :: !Constr
-        } -> HTML e
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _constr     :: Constr
+        } -> View e
 
-  Component
-    :: Component a e => { renderable :: a e } -> HTML e
+  View
+    :: (Component a e, Typeable a, Typeable e) => { renderable :: a e } -> View e
 
-data View (ms :: [* -> *]) = forall a. (Typeable a, Typeable ms, Component a ms) => View (a ms)
+pattern Component :: (Component a e, Typeable a, Typeable e) => a e -> View e
+pattern Component ams <- (View (cast -> Just ams)) where
+  Component ams = View ams
 
-class (Typeable a, Typeable ms) => Component (a :: [* -> *] -> *) ms where
-  toView :: a ms -> View ms
-  toView = View
-  fromView :: View ms -> Maybe (a ms)
-  fromView (View a) = cast a
-  render :: a ms -> HTML ms
+class Component (a :: [* -> *] -> *) ms where
+  render :: a ms -> View ms
 
-instance Typeable ms => Component View ms where
-  toView = id
-  fromView = Just
+instance Component View ms where
   render (View a) = render a
+  render a = a
 
-instance Typeable ms => Component HTML ms where
-  render (Component c) = render c
-  render h = h
-
-mapComponent :: (Component a ms, Component a' ms) => (a ms -> a' ms) -> View ms -> View ms
+mapComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms) => (a ms -> a' ms) -> View ms -> View ms
 mapComponent f sa =
-  case fromView sa of
-    Just a  -> toView (f a)
-    Nothing -> sa
+  case sa of
+    Component a -> Component (f a)
+    _ -> sa
 
-mappingComponent :: (Component a ms, Component a' ms) => (a ms -> a' ms) -> [View ms] -> [View ms]
-mappingComponent f as = map (mapComponent f) as
+forComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+             => View ms -> (a ms -> a' ms) -> View ms
+forComponent = flip mapComponent
 
-mappedComponent :: (Component a ms, Component a' ms) => Setter (View ms) (View ms) (a ms) (a' ms)
+mapComponents :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+              => (a ms -> a' ms) -> [View ms] -> [View ms]
+mapComponents f as = map (mapComponent f) as
+
+forComponents :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+              => [View ms] -> (a ms -> a' ms) -> [View ms]
+forComponents = flip mapComponents
+
+mappedComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+                => Setter (View ms) (View ms) (a ms) (a' ms)
 mappedComponent = sets mapComponent
 
--- component :: Component a ms => Prism' (View ms) (a ms)
--- component = prism' toView fromView
-
-pattern Match a <- (preview (prism' toView fromView) -> Just a) where
-  Match a = review (prism' toView fromView) a
-
-data Mapping ms = forall a a'. (Component a ms, Component a' ms) => Mapping (a ms -> a' ms)
+data Mapping ms = forall a a'. (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+                => Mapping (a ms -> a' ms)
 
 maps :: View ms -> [Mapping ms] -> View ms
 maps a mappings = Prelude.foldr tryMap a mappings
   where
     tryMap (Mapping m) res =
-      case fromView a of
-        Just a -> toView $ m a
-        Nothing -> res
+      case a of
+        Component a -> Component (m a)
+        _ -> res
 
 forceToFromTxt :: (ToTxt t, FromTxt t) => Txt -> t
 forceToFromTxt = fromTxt
 
 pattern Null :: Typeable ms => View ms
-pattern Null <- (fromView -> Just (NullHTML _)) where
-  Null = toView (NullHTML Nothing)
+pattern Null <- (NullHTML _) where
+  Null = NullHTML Nothing
 
 pattern Raw :: (Typeable ms) => Txt -> [Feature ms] -> Txt -> View ms
-pattern Raw t fs c <- (fromView -> Just (RawHTML _ t fs c)) where
-  Raw t fs c = toView (RawHTML Nothing t fs c)
+pattern Raw t fs c <- (RawHTML _ t fs c) where
+  Raw t fs c = RawHTML Nothing t fs c
 
-pattern Text :: (Typeable ms, FromTxt t, ToTxt t) => t -> View ms
-pattern Text t <- (fromView -> Just (TextHTML _ (forceToFromTxt -> t))) where
-  Text t = toView (TextHTML Nothing (toTxt t))
+-- pattern Text :: (Typeable ms, FromTxt t, ToTxt t) => t -> View ms
+-- pattern Text t <- (fromView -> Just (TextHTML _ (forceToFromTxt -> t))) where
+--   Text t = toView (TextHTML Nothing (toTxt t))
+
+pattern Text :: (FromTxt f, ToTxt f) => f -> Txt
+pattern Text f <- (fromTxt -> f) where
+  Text t = toTxt t
 
 pattern String :: Typeable ms => Txt -> View ms
-pattern String s <- (fromView -> Just (TextHTML _ s)) where
-  String s = toView (TextHTML Nothing s)
+pattern String s <- (TextHTML _ s) where
+  String s = TextHTML Nothing s
 
-pattern ST mdl i st v <- (fromView -> Just (STHTML mdl i st _ v _)) where
-  ST mdl i st v = toView (STHTML mdl i st Nothing v (\_ _ -> return ()))
+pattern ST mdl i st v <- STHTML mdl i st _ v _ where
+  ST mdl i st v = STHTML mdl i st Nothing v (\_ _ -> return ())
 
-instance Typeable ms => Default (View ms) where
-  def = toView (nil :: HTML ms)
+instance Default (View ms) where
+  def = nil
 
-instance Typeable ms => Cond (View ms) where
-  nil = toView (nil :: HTML ms)
-
-html :: Typeable ms => View ms -> HTML ms
-html = fromMaybe nil . fromView
-
--- instance Plated (HTML e) where
---   plate f (STHTML _ _ st iorec v _) =
---     case iorec of
---       Nothing -> plate f $ v st (\_ _ -> return ())
---       Just ref -> plate f $ v ((\(a,_,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ _ -> return ())
---   plate f (KHTML n t as ks) = KHTML n t as <$> traverse (\(i,k) -> fmap (\k' -> (i,k')) (f k)) ks
---   plate f (HTML n t as cs) = HTML n t as <$> traverse f cs
---   plate f (SVGHTML n t as cs) = SVGHTML n t as <$> traverse f cs
---   plate f (KSVGHTML n t as ks) = KSVGHTML n t as <$> traverse (\(i,k) -> fmap (\k' -> (i,k')) (f k)) ks
---   plate _ a = pure a -- ? :(
-
--- type instance Index (HTML e) = Int
--- type instance IxValue (HTML e) = HTML e
-
--- instance Ixed (HTML e) where
---   ix k f (STHTML _ _ st iorec v _) =
---     case iorec of
---       Nothing -> ix k f $ v st (\_ _ -> return ())
---       Just ref -> ix k f $ v ((\(a,_,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ _ -> return ())
---   ix k f (HTML n t as cs) = HTML n t as <$> ix k f cs
---   ix k f (KHTML n t as ks) = KHTML n t as <$> go ks k
---     where
---       go [] _ = pure []
---       go ((i,a):ias) 0 = fmap (:ias) (fmap (\a' -> (i,a')) (f a))
---       go (ia:ias) n = (ia:) <$> (go ias $! n - 1)
---   ix k f (SVGHTML n t as cs) = SVGHTML n t as <$> ix k f cs
---   ix k f (KSVGHTML n t as ks) = KSVGHTML n t as <$> go ks k
---     where
---       go [] _ = pure []
---       go ((i,a):ias) 0 = fmap (:ias) (fmap (\a' -> (i,a')) (f a))
---       go (ia:ias) n = (ia:) <$> (go ias $! n - 1)
---   ix k f a = f a -- ? :(
-
-instance Typeable e => ToJSON (HTML e) where
+instance Typeable e => ToJSON (View e) where
   toJSON a =
 #ifdef __GHCJS__
     objectValue $
@@ -349,10 +310,10 @@ instance Typeable e => ToJSON (HTML e) where
       go (HTML _ t as cs) = object [ "type" .= ("atom" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map render cs) ]
       go (KSVGHTML _ t as ks) = object [ "type" .= ("keyedsvg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks)]
       go (SVGHTML _ t as cs) = object [ "type" .= ("svg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map render cs) ]
-      go (Component r) = go (render r)
+      -- go (Component r) = go (render r)
       go _ = object [ "type" .= ("null" :: Txt) ]
 
-instance Typeable e => FromJSON (HTML e) where
+instance Typeable e => FromJSON (View e) where
   parseJSON o0 = do
 #ifdef __GHCJS__
     flip (withObject "obj") o0 $ \o -> do
@@ -373,26 +334,26 @@ instance Typeable e => FromJSON (HTML e) where
           t <- o .: "tag"
           as <- o .: "attrs"
           ks <- o .: "keyed"
-          pure $ KHTML Nothing t as (map (fmap (toView :: HTML e -> View e)) ks)
+          pure $ KHTML Nothing t as ks
         "atom" -> do
           t <- o .: "tag"
           as <- o .: "attrs"
           cs <- o .: "children"
-          pure $ HTML Nothing t as (map (toView :: HTML e -> View e) cs)
+          pure $ HTML Nothing t as cs
         "keyedsvg" -> do
           t <- o .: "tag"
           as <- o .: "attrs"
           ks <- o .: "keyed"
-          pure $ KSVGHTML Nothing t as (map (fmap (toView :: HTML e -> View e)) ks)
+          pure $ KSVGHTML Nothing t as ks
         "svg" -> do
           t <- o .: "tag"
           as <- o .: "attrs"
           cs <- o .: "children"
-          pure $ SVGHTML Nothing t as (map (toView :: HTML e -> View e) cs)
+          pure $ SVGHTML Nothing t as cs
         "null" -> pure $ NullHTML Nothing
         _ -> Ef.Base.empty
 
-instance Eq (HTML e) where
+instance Eq (View e) where
   (==) (NullHTML _) (NullHTML _) =
     True
 
@@ -420,13 +381,13 @@ instance Eq (HTML e) where
   (==) (Managed _ t fs c) (Managed _ t' fs' c') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq c c'
 
-  (==) (Component r) (Component r') =
-    reallyVeryUnsafeEq r r'
+  -- (==) (Component r) (Component r') =
+  --   reallyVeryUnsafeEq r r'
 
   (==) _ _ =
     False
 
-instance Cond (HTML e) where
+instance Cond (View e) where
   nil = NullHTML Nothing
 
 instance Typeable e => IsString (View e) where
@@ -537,45 +498,45 @@ instance Typeable e => FromTxt [View e] where
 --         Managed _ t _ _ ->
 --           Managed Nothing t fs c
 
-mkHTML :: Typeable e => Txt -> [Feature e] -> [View e] -> View e
+mkHTML :: Txt -> [Feature e] -> [View e] -> View e
 mkHTML _tag _attributes _atoms =
   let _node = Nothing
-  in toView HTML {..}
+  in HTML {..}
 
-mkSVG :: Typeable e => Txt -> [Feature e] -> [View e] -> View e
+mkSVG :: Txt -> [Feature e] -> [View e] -> View e
 mkSVG _tag _attributes _atoms =
   let _node = Nothing
-  in toView SVGHTML {..}
+  in SVGHTML {..}
 
-text :: Typeable e => Txt -> View e
+text :: Txt -> View e
 text _content =
   let _tnode = Nothing
-  in toView TextHTML {..}
+  in TextHTML {..}
 
-raw :: Typeable e => ([Feature e] -> [View e] -> View e) -> [Feature e] -> Txt -> View e
+raw :: ([Feature e] -> [View e] -> View e) -> [Feature e] -> Txt -> View e
 raw x _attributes _content =
-  case fromView $ x [] [] of
-    Just (HTML _ _tag _ _) ->
+  case x [] [] of
+    HTML _ _tag _ _ ->
       let _node = Nothing
-      in toView RawHTML {..}
-    Just (SVGHTML _ _tag _ _) ->
+      in RawHTML {..}
+    SVGHTML _ _tag _ _ ->
       let _node = Nothing
-      in toView RawHTML {..}
+      in RawHTML {..}
     _ -> error "HTMLic.Controller.raw: raw atoms may only be built from HTMLs and SVGHTMLs"
 
-list :: Typeable e => ([Feature e] -> [View e] -> View e) -> [Feature e] -> [(Int,View e)] -> View e
+list :: ([Feature e] -> [View e] -> View e) -> [Feature e] -> [(Int,View e)] -> View e
 list x _attributes _keyed =
-  case fromView $ x [] [] of
-    Just (HTML _ _tag _ _) ->
+  case x [] [] of
+    HTML _ _tag _ _ ->
       let
         _node = Nothing
       in
-        toView KHTML {..}
-    Just (SVGHTML _ _tag _ _) ->
+        KHTML {..}
+    SVGHTML _ _tag _ _ ->
       let
         _node = Nothing
       in
-        toView KSVGHTML {..}
+        KSVGHTML {..}
     _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGHTMLs"
 
 -- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
@@ -597,27 +558,26 @@ list x _attributes _keyed =
 --               length list of children is required, either careful placement for the st element,
 --               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
 --               this problem.
-viewController :: forall model st e. Typeable e => Int -> model -> st -> (st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
-viewController k watch_model initial_st view = toView $ STHTML watch_model k initial_st Nothing view (\_ _ -> return ())
+viewManager :: forall model st e. Int -> model -> st -> (st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
+viewManager k watch_model initial_st view = STHTML watch_model k initial_st Nothing view (\_ _ -> return ())
 
-constant :: Typeable e => View e -> View e
-constant a = viewController 0 () () $ \_ _ -> a
+constant :: View e -> View e
+constant a = viewManager 0 () () $ \_ _ -> a
 
-controller :: (Typeable e)
-          => ([Feature e] -> [View e] -> View e)
-          -> (forall ts' ms' m. (Typeable ms', IsController' ts' ms' m) => [Feature e] -> Controller' ts' ms' m -> View e)
+controller :: ([Feature e] -> [View e] -> View e)
+           -> (forall ts' ms' m. (IsController' ts' ms' m) => [Feature e] -> Controller' ts' ms' m -> View e)
 controller f = \as c ->
-  case fromView $ f [] [] of
-    Just (HTML _ t _ _) -> toView $ Managed Nothing t as (Controller' c)
+  case f [] [] of
+    HTML _ t _ _ -> Managed Nothing t as (Controller' c)
     _ -> error "Incorrect usage of construct; Controllers may only be embedded in plain html HTMLs."
 
-hashed :: Typeable e => Hashable a => ([Feature e] -> [View e] -> View e) -> [Feature e] -> [(a,View e)] -> View e
+hashed :: Hashable a => ([Feature e] -> [View e] -> View e) -> [Feature e] -> [(a,View e)] -> View e
 hashed x _attributes _keyed0 = list x _attributes (map (first hash) _keyed0)
 
-css :: Typeable e => CSS -> View e
+css :: CSS -> View e
 css = css' False
 
-css' :: forall e. Typeable e => Bool -> CSS -> View e
+css' :: forall e. Bool -> CSS -> View e
 css' b = mkHTML "style" [ Property "type" "text/css", Property "scoped" (if b then "true" else "") ] . ((text "\n"):) . go False
   where
     go :: Bool -> CSS -> [View e]
@@ -647,13 +607,13 @@ css' b = mkHTML "style" [ Property "type" "text/css", Property "scoped" (if b th
           )
         _ -> []
 
-scss :: Typeable e => StaticCSS -> View e
+scss :: StaticCSS -> View e
 scss = scss' False
 
-scss' :: Typeable e => Bool -> StaticCSS -> View e
+scss' :: Bool -> StaticCSS -> View e
 scss' b = raw (mkHTML "style") [ Property "type" "text/css", Property "scoped" (if b then "true" else "") ] . cssText
 
-styles :: Typeable e => CSS -> View e
+styles :: CSS -> View e
 styles = css' True . classify
   where
     classify (Return r) = Return r
@@ -678,22 +638,22 @@ styles = css' True . classify
 
 -- rebuild finds managed nodes and re-embeds them in case they were
 -- removed for other uses
-rebuild :: forall e. Typeable e => HTML e -> IO ()
+rebuild :: forall e. View e -> IO ()
 rebuild h =
 #ifndef __GHCJS__
     return ()
 #else
     go h
   where
-    go :: HTML e -> IO ()
+    go :: View e -> IO ()
     go STHTML {..}  =
       forM_ _strecord $ \ref -> do
         (_,_,a,_) <- readIORef ref
-        rebuild (unsafeCoerce a :: HTML e)
-    go HTML {..}    = mapM_ (go . fromJust . fromView) _atoms
-    go SVGHTML {..} = mapM_ (go . fromJust . fromView) _atoms
-    go KHTML {..}   = mapM_ (go . fromJust . fromView . snd) _keyed
-    go KSVGHTML {..}  = mapM_ (go . fromJust . fromView . snd) _keyed
+        rebuild (unsafeCoerce a :: View e)
+    go HTML {..}    = mapM_ go _atoms
+    go SVGHTML {..} = mapM_ go _atoms
+    go KHTML {..}   = mapM_ (go . snd) _keyed
+    go KSVGHTML {..}  = mapM_ (go . snd) _keyed
     go m@Managed {..} =
       case _constr of
         Controller' c -> do
@@ -708,7 +668,7 @@ rebuild h =
 #endif
 
 
-triggerBackground :: forall m e. (MonadIO m, Typeable e) => HTML e -> m ()
+triggerBackground :: forall m e. (MonadIO m) => View e -> m ()
 triggerBackground = go
   where
     bg Controller {..} = do
@@ -721,19 +681,19 @@ triggerBackground = go
           ControllerView {..} <- liftIO $ readIORef crView
           go $ unsafeCoerce cvCurrentLive
 
-    go :: HTML e -> m ()
+    go :: View e -> m ()
     go STHTML {..}  =
       forM_ _strecord $ \ref -> do
         (_,_,a,_) <- liftIO $ readIORef ref
         go (unsafeCoerce a)
-    go HTML {..}    = mapM_ (go . fromJust . fromView) _atoms
-    go SVGHTML {..} = mapM_ (go . fromJust . fromView) _atoms
-    go KHTML {..}   = mapM_ (go . fromJust . fromView . snd) _keyed
-    go KSVGHTML {..} = mapM_ (go . fromJust . fromView . snd) _keyed
+    go HTML {..}    = mapM_ go _atoms
+    go SVGHTML {..} = mapM_ go _atoms
+    go KHTML {..}   = mapM_ (go . snd) _keyed
+    go KSVGHTML {..} = mapM_ (go . snd) _keyed
     go m@Managed {..} = case _constr of Controller' c -> bg (unsafeCoerce c)
     go _ = return ()
 
-triggerForeground :: forall m e. (MonadIO m, Typeable e) => HTML e -> m ()
+triggerForeground :: forall m e. (MonadIO m) => View e -> m ()
 triggerForeground = go
   where
     fg Controller {..} = do
@@ -746,20 +706,20 @@ triggerForeground = go
           ControllerView {..} <- liftIO $ readIORef crView
           go (unsafeCoerce cvCurrentLive)
 
-    go :: HTML e -> m ()
+    go :: View e -> m ()
     go STHTML {..}  =
       forM_ _strecord $ \ref -> do
         (_,_,a,_) <- liftIO $ readIORef ref
         go (unsafeCoerce a)
-    go HTML {..}    = mapM_ (go . fromJust . fromView) _atoms
-    go SVGHTML {..} = mapM_ (go . fromJust . fromView) _atoms
-    go KHTML {..}   = mapM_ (go . fromJust . fromView . snd) _keyed
-    go KSVGHTML {..} = mapM_ (go . fromJust . fromView . snd) _keyed
+    go HTML {..}    = mapM_ go _atoms
+    go SVGHTML {..} = mapM_ go _atoms
+    go KHTML {..}   = mapM_ (go . snd) _keyed
+    go KSVGHTML {..} = mapM_ (go . snd) _keyed
     go m@Managed {..} = case _constr of Controller' c -> fg (unsafeCoerce c)
     go _ = return ()
 
 onForeground :: ( MonadIO c, MonadIO c'
-                , '[Revent] <: ms
+                , '[Evented] <: ms
                 , '[State () ControllerHooks] <: ms'
                 , With w (Narrative (Messages ms') c') IO
                 )
@@ -768,7 +728,7 @@ onForeground c f = do
   connectWith c (get >>= \(ControllerHooks _ _ fg) -> return fg) $ \_ -> f
 
 onBackground :: ( MonadIO c, MonadIO c'
-                , '[Revent] <: ms
+                , '[Evented] <: ms
                 , '[State () ControllerHooks] <: ms'
                 , With w (Narrative (Messages ms') c') IO
                 )
@@ -781,7 +741,7 @@ reflect :: forall ts ms m c.
            , MonadIO c
            )
         => Controller' ts ms m
-        -> c (Promise (HTML ms))
+        -> c (Promise (View ms))
 reflect c =
   with c $ do
     ControllerState {..} :: ControllerState m <- get
@@ -815,7 +775,7 @@ data ControllerPatch m =
     , ap_hooks        :: ControllerHooks
     }
 
-type IsController' ts ms m = (Typeable ms, Base m <: ms, Base m <. ts, Delta (Modules ts) (Messages ms))
+type IsController' ts ms m = (Base m <: ms, Base m <. ts, Delta (Modules ts) (Messages ms))
 type IsController ms m = IsController' ms ms m
 
 data ControllerHooks = ControllerHooks
@@ -826,7 +786,7 @@ data ControllerHooks = ControllerHooks
 
 data ControllerView ms m = ControllerView
   { cvCurrent     :: View ms
-  , cvCurrentLive :: HTML ms
+  , cvCurrentLive :: View ms
   , cvModel       :: m ms
   , cvForeground  :: Bool
   }
@@ -847,15 +807,18 @@ data ControllerState (m :: [* -> *] -> *) where
     , asLive         :: IORef (ControllerView ms m)
     } -> ControllerState m
 
+type MVC m ms = (Base m <: ms)
+type VC ms = ('[State () ControllerHooks, State () Shutdown, Evented] <: ms)
+
 type Base (m :: [* -> *] -> *)
   = '[ State () (ControllerState m)
      , State () ControllerHooks
      , State () Shutdown
-     , Revent
+     , Evented
      ]
 
 data Constr where
-  Controller' :: (IsController' ts ms m, Typeable ms) => Controller' ts ms m -> Constr
+  Controller' :: (IsController' ts ms m) => Controller' ts ms m -> Constr
 instance Eq Constr where
  (==) (Controller' c) (Controller' c') =
   let Key k1 :: Key GHC.Prim.Any = unsafeCoerce (key c)
@@ -979,7 +942,7 @@ deleteController = vaultDelete constructVault__
 
 data MkControllerAction
   = ClearAndAppend ENode
-  | forall e. Replace (HTML e)
+  | forall e. Replace (View e)
   | Append ENode
   | BuildOnly
 
@@ -992,7 +955,7 @@ mkController :: forall ms ts m.
        -> IO (ControllerRecord ms m)
 mkController mkControllerAction c@Controller {..} = do
   let !m = model
-      !raw = toView $ view m
+      !raw = render $ view m
   doc <- getDocument
   buf <- newEvQueue
   ch  <- ControllerHooks <$> syndicate <*> syndicate <*> syndicate
@@ -1066,7 +1029,7 @@ currentHTML :: forall ts ms c m.
                , MonadIO c
                )
             => Controller' ts ms m
-            -> c (Promise (HTML ms))
+            -> c (Promise (View ms))
 currentHTML c = with c $ ownHTML c
 
 ownHTML :: forall ts ms c m.
@@ -1075,7 +1038,7 @@ ownHTML :: forall ts ms c m.
            , Base m <: ms
            )
         => Controller' ts ms m
-        -> Code ms c (HTML ms)
+        -> Code ms c (View ms)
 ownHTML _ = do
   ControllerState {..} :: ControllerState m <- get
   ControllerView {..} <- liftIO $ readIORef asLive
@@ -1085,7 +1048,7 @@ onModelChange :: forall ts ms ms' m c.
                 ( IsController' ts ms m
                 , MonadIO c
                 , Base m <: ms
-                , '[Revent] <: ms'
+                , '[Evented] <: ms'
                 )
               => Controller' ts ms m
               -> (m ms -> Code '[Event (m ms)] (Code ms' c) ())
@@ -1129,13 +1092,11 @@ onOwnModelChangeByProxy _ f = do
   bhv <- listen sub f
   return (stop bhv >> leaveSyndicate (unsafeCoerce asUpdates) sub)
 
-{-# INLINE getModel #-}
 getModel :: forall m ms. ('[State () (ControllerState m)] <: ms) => Code ms IO (m ms)
 getModel = do
   ControllerState {..} :: ControllerState m <- get
   return $ unsafeCoerce asModel
 
-{-# INLINE putModel #-}
 putModel :: forall ms m.
         ( Base m <: ms
         )
@@ -1159,7 +1120,6 @@ putModel !new = do
   d cmp'
 #endif
 
-{-# INLINE modifyModel #-}
 modifyModel :: forall e ms m.
            ( Base m <: ms
            , e ~ Code ms IO ()
@@ -1309,12 +1269,11 @@ swapContent t e =
   return ()
 #endif
 
-{-# NOINLINE embed_ #-}
-embed_ :: forall e. ENode -> HTML e -> IO ()
+embed_ :: forall e. ENode -> View e -> IO ()
 embed_ parent STHTML {..} = do
   forM_ _strecord $ \ref -> do
     (_,_,a,_) <- readIORef ref
-    embed_ parent (unsafeCoerce a :: HTML e)
+    embed_ parent (unsafeCoerce a :: View e)
 embed_ parent TextHTML {..} =
   forM_ _tnode $ \node -> do
     ae <- isAlreadyEmbeddedText node parent
@@ -1324,7 +1283,6 @@ embed_ parent n =
     ae <- isAlreadyEmbedded node parent
     unless ae (void $ appendChild parent node)
 
-{-# NOINLINE embedMany_ #-}
 embedMany_ parent children = do
   forM_ children $ \child -> do
     embed_ parent child
@@ -1348,12 +1306,15 @@ setAttributes as f diffing el = do
   return (as,return ())
 #endif
 
-{-# NOINLINE buildAndEmbedMaybe #-}
-buildAndEmbedMaybe :: forall e. Typeable e => (Code e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (HTML e)
+-- consider this: https://github.com/spicyj/innerhtml-vs-createelement-vs-clonenode
+-- and this: https://stackoverflow.com/questions/8913419/is-chromes-appendchild-really-that-slow
+-- Would a bottom-up, display='none' -> display='' solution work globally?
+-- Does the fact that this runs in a rAF resolve any of this a priori?
+buildAndEmbedMaybe :: forall e. (Code e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (View e)
 buildAndEmbedMaybe f doc ch isFG mn = go mn . render
   where
-    go :: Maybe ENode -> HTML e -> IO (HTML e)
-    go mparent (Component c) = go mparent (render c)
+    go :: Maybe ENode -> View e -> IO (View e)
+    go mparent (View c) = go mparent (render c)
 
     go mparent nn@NullHTML {..} = do
       _cond@(Just el) <- createElement doc "template"
@@ -1371,7 +1332,7 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
     go mparent HTML {..} = do
       _node@(Just el) <- createElement doc _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
-      _atoms <- mapM (fmap toView . go (Just el) . render) _atoms
+      _atoms <- mapM (go (Just el)) _atoms
       didMount
       forM_ mparent $ \parent -> appendChild parent el
       return $ HTML _node _tag _attributes _atoms
@@ -1402,7 +1363,7 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
     go mparent SVGHTML {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
-      _atoms <- mapM (fmap toView . go (Just el) . render) _atoms
+      _atoms <- mapM (go (Just el)) _atoms
       didMount
       forM_ mparent $ \parent -> appendChild parent el
       return $ SVGHTML _node _tag _attributes _atoms
@@ -1410,7 +1371,7 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
     go mparent KHTML {..} = do
       _node@(Just el) <- createElement doc _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
-      _keyed <- mapM (\(k,x) -> go (Just el) (render x) >>= \y -> return (k,toView y)) _keyed
+      _keyed <- mapM (\(k,x) -> go (Just el) (render x) >>= \y -> return (k,y)) _keyed
       didMount
       forM_ mparent $ \parent -> appendChild parent el
       return $ KHTML _node _tag _attributes _keyed
@@ -1418,7 +1379,7 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
     go mparent KSVGHTML {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
-      _keyed <- mapM (\(k,x) -> go (Just el) (render x) >>= \y -> return (k,toView y)) _keyed
+      _keyed <- mapM (\(k,x) -> go (Just el) (render x) >>= \y -> return (k,y)) _keyed
       didMount
       forM_ mparent $ \parent -> appendChild parent el
       return $ KSVGHTML _node _tag _attributes _keyed
@@ -1474,47 +1435,46 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
                   embed_ e cvCurrentLive
                   return m
 
-{-# NOINLINE buildHTML #-}
-buildHTML :: (Typeable e, Component a e) => Doc -> ControllerHooks -> Bool -> (Code e IO () -> IO ()) -> a e -> IO (HTML e)
-buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing . toView
+buildHTML :: Doc -> ControllerHooks -> Bool -> (Code e IO () -> IO ()) -> View e -> IO (View e)
+buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing
 
-getElement :: forall e. HTML e -> IO (Maybe ENode)
-getElement (Component _) = return Nothing
+getElement :: forall e. View e -> IO (Maybe ENode)
+-- getElement (Component _) = return Nothing
 getElement TextHTML {} = return Nothing
 getElement STHTML {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
       (_,_,a,_) <- readIORef ref
-      getElement (unsafeCoerce a :: HTML e)
+      getElement (unsafeCoerce a :: View e)
 getElement n = return $ _node n
 
-getNode :: forall e. HTML e -> IO (Maybe NNode)
-getNode (Component _) = return Nothing
+getNode :: forall e. View e -> IO (Maybe NNode)
+-- getNode (Component _) = return Nothing
 getNode TextHTML {..} = return $ fmap toNode _tnode
 getNode STHTML {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
       (_,_,a,_) <- readIORef ref
-      getNode (unsafeCoerce a :: HTML e)
+      getNode (unsafeCoerce a :: View e)
 getNode n = return $ fmap toNode $ _node n
 
-getAttributes :: HTML e -> [Feature e]
-getAttributes (Component _) = []
+getAttributes :: View e -> [Feature e]
+-- getAttributes (Component _) = []
 getAttributes TextHTML {} = []
 getAttributes STHTML {} = []
 getAttributes n = _attributes n
 
-getChildren :: forall e. Typeable e => HTML e -> IO [View e]
-getChildren (Component _) = return []
+getChildren :: forall e. View e -> IO [View e]
+-- getChildren (Component _) = return []
 getChildren TextHTML {} = return []
 getChildren STHTML {..} = do
   case _strecord of
     Nothing -> return []
     Just ref -> do
       (_,_,a,_) <- readIORef ref
-      return [toView (unsafeCoerce a :: HTML e)]
+      return [unsafeCoerce a :: View e]
 getChildren HTML {..} = return _atoms
 getChildren SVGHTML {..} = return _atoms
 getChildren KHTML {..} = return $ map snd _keyed
@@ -1534,7 +1494,7 @@ diff_ APatch {..} = do
       Just (AState as_live !as_model) -> do
         doc <- getDocument
         ControllerView !raw_html !live_html live_m isFG <- readIORef as_live
-        let !new_html = toView $ ap_patchComponent $ unsafeCoerce as_model
+        let !new_html = render $ ap_patchComponent $ unsafeCoerce as_model
         new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
         writeIORef as_live $ ControllerView new_html new_live_html as_model isFG
         ap_viewTrigger
@@ -1549,14 +1509,13 @@ diff_ APatch {..} = do
     Just (AState as_live !as_model) -> do
       doc <- getDocument
       ControllerView !raw_html !live_html live_m isFG <- readIORef as_live
-      let !new_html = toView $ ap_patchComponent as_model
+      let !new_html = render $ ap_patchComponent as_model
       new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
       writeIORef as_live $ ControllerView new_html new_live_html as_model isFG
       ap_viewTrigger
 #endif
 
-{-# NOINLINE replace #-}
-replace :: HTML e -> HTML e' -> IO ()
+replace :: View e -> View e' -> IO ()
 #ifndef __GHCJS__
 replace _ _ = return ()
 #else
@@ -1568,8 +1527,7 @@ replace old new = do
       swap_js on nn
 #endif
 
-{-# NOINLINE delete #-}
-delete :: HTML e -> IO ()
+delete :: View e -> IO ()
 #ifndef __GHCJS__
 delete _ = return ()
 #else
@@ -1578,8 +1536,7 @@ delete o = do
   forM_ mn delete_js
 #endif
 
-{-# NOINLINE cleanup #-}
-cleanup :: Typeable e => (Code e IO () -> IO ()) -> [HTML e] -> IO (IO ())
+cleanup :: (Code e IO () -> IO ()) -> [View e] -> IO (IO ())
 #ifndef __GHCJS__
 cleanup _ _ = return (return ())
 #else
@@ -1591,20 +1548,18 @@ cleanup f = go (return ())
       du <- case me of
               Nothing -> return (return ())
               Just e  -> foldM (flip (cleanupAttr f e)) (return ()) (getAttributes r)
-      unmounts' <- cleanup f . mapMaybe fromView =<< getChildren r
+      unmounts' <- cleanup f =<< getChildren r
       go (unmounts' >> du >> didUnmount) rest
 #endif
 
-{-# NOINLINE insertAt #-}
-insertAt :: ENode -> Int -> HTML e -> IO ()
+insertAt :: ENode -> Int -> View e -> IO ()
 #ifndef __GHCJS__
 insertAt _ _ _ = return ()
 #else
 insertAt parent ind n = getNode n >>= \mn -> forM_ mn $ insert_at_js parent ind
 #endif
 
-{-# NOINLINE insertBefore_ #-}
-insertBefore_ :: forall e. ENode -> HTML e -> HTML e -> IO ()
+insertBefore_ :: forall e. ENode -> View e -> View e -> IO ()
 #ifndef __GHCJS__
 insertBefore_ _ _ _ = return ()
 #else
@@ -1614,7 +1569,7 @@ insertBefore_ parent child new = do
   void $ N.insertBefore parent mnn mcn
 #endif
 
-diffHelper :: forall e. Typeable e => (Code e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> HTML e -> View e -> View e -> IO (HTML e)
+diffHelper :: forall e. (Code e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> View e -> View e -> View e -> IO (View e)
 diffHelper f doc ch isFG =
 #ifdef __GHCJS__
     go
@@ -1623,14 +1578,14 @@ diffHelper f doc ch isFG =
 #endif
   where
 
-    go :: HTML e -> View e -> View e -> IO (HTML e)
+    go :: View e -> View e -> View e -> IO (View e)
     go old mid new =
       if reallyUnsafeEq mid new then do
         return old
       else
         go' old mid new
 
-    go' :: HTML e -> View e -> View e -> IO (HTML e)
+    go' :: View e -> View e -> View e -> IO (View e)
     go' old@NullHTML{} _ new = do
       case render new of
         NullHTML _ -> return old
@@ -1650,12 +1605,12 @@ diffHelper f doc ch isFG =
       didUnmount
       return new'
 
-    go' old (render -> mid@(Component _)) (render -> new@(Component _)) =
-      go old (toView mid) (toView new)
+    -- go' old (render -> mid@(Component _)) (render -> new@(Component _)) =
+    --  go old (toView mid) (toView new)
 
     -- dubious
-    go' old mid (render -> new@(Component _)) =
-      go' old mid (toView new)
+    -- go' old mid (render -> new@(Component _)) =
+    --  go' old mid (toView new)
 
     go' old@HTML {} (render -> mid@HTML {}) (render -> new@HTML {}) =
       if prettyUnsafeEq (_tag old) (_tag new)
@@ -1669,7 +1624,7 @@ diffHelper f doc ch isFG =
         c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
                 return (_atoms old)
               else
-                diffChildren n (map (fromJust . fromView) $ _atoms old) (_atoms mid) (_atoms new)
+                diffChildren n (_atoms old) (_atoms mid) (_atoms new)
         didMount
         return $ HTML (_node old) (_tag old) a' c'
       else do new' <- buildHTML doc ch isFG f new
@@ -1711,7 +1666,7 @@ diffHelper f doc ch isFG =
         c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
                 return (_atoms old)
               else do
-                diffChildren n (map (fromJust . fromView) $ _atoms old) (_atoms mid) (_atoms new)
+                diffChildren n (_atoms old) (_atoms mid) (_atoms new)
         didMount
         return $ SVGHTML (_node old) (_tag old) a' c'
       else do new' <- buildHTML doc ch isFG f new
@@ -1733,7 +1688,7 @@ diffHelper f doc ch isFG =
               else
                 runElementDiff f n old_attributes midAattributes new_attributes
         c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
-                diffKeyedChildren n (map (fmap (fromJust . fromView)) old_keyed) midAkeyed new_keyed
+                diffKeyedChildren n old_keyed midAkeyed new_keyed
         didMount
         return $ KHTML old_node old_tag a' c'
       else do new' <- buildHTML doc ch isFG f new
@@ -1755,7 +1710,7 @@ diffHelper f doc ch isFG =
               else
                 runElementDiff f n old_attributes midAattributes new_attributes
         c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
-                diffKeyedChildren n (map (fmap (fromJust . fromView)) old_keyed) midAkeyed new_keyed
+                diffKeyedChildren n old_keyed midAkeyed new_keyed
         didMount
         return $ KSVGHTML old_node old_tag a' c'
       else do new' <- buildHTML doc ch isFG f new
@@ -1828,18 +1783,18 @@ diffHelper f doc ch isFG =
           didUnmount
       return n'
 
-    diffChildren :: ENode -> [HTML e] -> [View e] -> [View e] -> IO [View e]
+    diffChildren :: ENode -> [View e] -> [View e] -> [View e] -> IO [View e]
     diffChildren n olds mids news = do
       withLatest olds mids news
       where
 
-        withLatest :: [HTML e] -> [View e] -> [View e] -> IO [View e]
+        withLatest :: [View e] -> [View e] -> [View e] -> IO [View e]
         withLatest = go_
           where
 
-            go_ :: [HTML e] -> [View e] -> [View e] -> IO [View e]
+            go_ :: [View e] -> [View e] -> [View e] -> IO [View e]
             go_ [] _ news =
-              mapM (fmap toView . buildAndEmbedMaybe f doc ch isFG (Just n)) news
+              mapM (buildAndEmbedMaybe f doc ch isFG (Just n)) news
 
             go_ olds _ [] = do
               didUnmount <- cleanup f olds
@@ -1854,12 +1809,12 @@ diffHelper f doc ch isFG =
                   delete old
                   didUnmount
 
-                continue :: HTML e -> IO [View e]
+                continue :: View e -> IO [View e]
                 continue up = do
                   upds <-
-                    if reallyUnsafeEq mids news then return (map toView olds) else
+                    if reallyUnsafeEq mids news then return olds else
                       withLatest olds mids news
-                  return ((toView up):upds)
+                  return (up:upds)
 
               in
                 if reallyUnsafeEq mid new then continue old else
@@ -1888,23 +1843,23 @@ diffHelper f doc ch isFG =
                       continue new
 
     -- note that keyed nodes are filtered for NullHTMLs during construction
-    diffKeyedChildren :: ENode -> [(Int,HTML e)] -> [(Int,View e)] -> [(Int,View e)] -> IO [(Int,View e)]
+    diffKeyedChildren :: ENode -> [(Int,View e)] -> [(Int,View e)] -> [(Int,View e)] -> IO [(Int,View e)]
     diffKeyedChildren n = go_ 0
       where
 
-        go_ :: Int -> [(Int,HTML e)] -> [(Int,View e)] -> [(Int,View e)] -> IO [(Int,View e)]
+        go_ :: Int -> [(Int,View e)] -> [(Int,View e)] -> [(Int,View e)] -> IO [(Int,View e)]
         go_ i a m b = do
           if reallyUnsafeEq m b then do
-            return (fmap (fmap toView) a)
+            return a
           else
             go__ i a m b
           where
 
-            go__ :: Int -> [(Int,HTML e)] -> [(Int,View e)] -> [(Int,View e)] -> IO [(Int,View e)]
+            go__ :: Int -> [(Int,View e)] -> [(Int,View e)] -> [(Int,View e)] -> IO [(Int,View e)]
             go__ _ [] _ news = do
               forM news $ \(bkey,b) -> do
                 new <- buildAndEmbedMaybe f doc ch isFG (Just n) b
-                return (bkey,toView new)
+                return (bkey,new)
 
             go__ _ olds _ [] = do
               forM_ olds $ \(_,a) -> do
@@ -1918,7 +1873,7 @@ diffHelper f doc ch isFG =
                   new <- go' a m b
                   let !i' = i + 1
                   rest <- go_ i' as ms bs
-                  return $ (akey,toView new):rest
+                  return $ (akey,new):rest
 
               | otherwise =
                   case (as,ms,bs) of
@@ -1929,7 +1884,7 @@ diffHelper f doc ch isFG =
                           new2 <- go' a' m' b
                           let !i' = i + 2
                           rest <- go_ i' as' ms' bs'
-                          return $ (akey',toView new1):(akey,toView new2):rest
+                          return $ (akey',new1):(akey,new2):rest
 
                       -- insert
                       | prettyUnsafeEq akey bkey' -> do
@@ -1937,7 +1892,7 @@ diffHelper f doc ch isFG =
                           insertAt n i new
                           let !i' = i + 1
                           rest <- go_ i' old mid bs
-                          return $ (bkey,toView new):rest
+                          return $ (bkey,new):rest
 
                       -- delete
                       | otherwise -> do
@@ -1952,13 +1907,13 @@ diffHelper f doc ch isFG =
                             insertAt n i new
                             let !i' = i + 1
                             rest <- go_ i' as ms bs
-                            return $ (bkey,toView new):rest
+                            return $ (bkey,new):rest
 
                     _ | prettyUnsafeEq akey bkey -> do
                           new <- go a m b
                           let !i' = i + 1
                           rest <- go_ i' as ms bs
-                          return $ (akey,toView new):rest
+                          return $ (akey,new):rest
 
                       | otherwise ->
                           case (old,new) of
@@ -1968,7 +1923,7 @@ diffHelper f doc ch isFG =
                                 insertAt n i new
                                 let !i' = i + 1
                                 rest <- go_ i' old mid bs
-                                return $ (bkey,toView new):rest
+                                return $ (bkey,new):rest
                               else do
                                 didUnmount <- cleanup f [a]
                                 delete a
@@ -1980,7 +1935,6 @@ diffHelper f doc ch isFG =
                               didUnmount
                               go_ i as ms ((bkey,b):bs)
 
-{-# NOINLINE applyStyleDiffs #-}
 applyStyleDiffs :: ENode -> [(Txt,Txt)] -> [(Txt,Txt)] -> IO [(Txt,Txt)]
 applyStyleDiffs el olds0 news0 = do
 #ifndef __GHCJS__
@@ -2032,7 +1986,6 @@ applyStyleDiffs el olds0 news0 = do
                 replace
 #endif
 
-{-# NOINLINE runElementDiff #-}
 runElementDiff :: (Code e IO () -> IO ()) -> ENode -> [Feature e] -> [Feature e] -> [Feature e] -> IO ([Feature e],IO ())
 runElementDiff f el os0 ms0 ns0 = do
 #ifndef __GHCJS__
@@ -2218,7 +2171,6 @@ runElementDiff f el os0 ms0 ns0 = do
               replace
 #endif
 
-{-# NOINLINE removeAttribute_ #-}
 removeAttribute_ :: ENode -> Feature e -> IO ()
 removeAttribute_ element attr =
 #ifndef __GHCJS__
@@ -2271,7 +2223,6 @@ onRaw el nm os f = do
   writeIORef stopper stopListener
   return stopListener
 
-{-# NOINLINE setAttribute_ #-}
 setAttribute_ :: (Code e IO () -> IO ()) -> Bool -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())
 setAttribute_ c diffing element attr didMount =
 #ifndef __GHCJS__
@@ -2391,7 +2342,6 @@ setAttribute_ c diffing element attr didMount =
     _ -> return (attr,didMount)
 #endif
 
-{-# NOINLINE cleanupAttr #-}
 cleanupAttr :: (Code e IO () -> IO ()) -> ENode -> Feature e -> IO () -> IO (IO ())
 cleanupAttr f element attr didUnmount =
 #ifndef __GHCJS__
@@ -2480,5 +2430,5 @@ redirect redir = do
   return loc
 #endif
 
-makePrisms ''HTML
-makeLenses ''HTML
+makePrisms ''View
+makeLenses ''View

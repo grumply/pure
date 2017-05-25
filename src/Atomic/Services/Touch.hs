@@ -59,7 +59,7 @@ touchS = Service {..}
 
       win <- getWindow
 
-      rb <- getReventBuffer
+      rb <- getEventQueue
 
       void $ onWindowNetwork touchMove $ \o -> do
         let mxy = flip parseMaybe o $ \obj -> do
@@ -101,10 +101,10 @@ getTouchY = with touchS $ do
   TouchState {..} <- get
   liftIO $ readIORef touchYRef
 
-onTouchX :: (MonadIO c, '[Revent] <: ms)
+onTouchX :: (MonadIO c, '[Evented] <: ms)
          => (Int -> Code ms c ()) -> Code ms c (IO ())
 onTouchX f = do
-  buf <- getReventBuffer
+  buf <- getEventQueue
   p <- periodical
   Just s <- subscribe p (lift . f)
   Just leaveNW <- demandMaybe =<< with touchS (do
@@ -113,10 +113,10 @@ onTouchX f = do
     return (leaveNetwork touchXN p))
   return (stop s >> leaveNW)
 
-onTouchY :: (MonadIO c, '[Revent] <: ms)
+onTouchY :: (MonadIO c, '[Evented] <: ms)
          => (Int -> Code ms c ()) -> Code ms c (IO ())
 onTouchY f = do
-  buf <- getReventBuffer
+  buf <- getEventQueue
   p <- periodical
   Just s <- subscribe p (lift . f)
   Just leaveNW <- demandMaybe =<< with touchS (do
@@ -125,11 +125,11 @@ onTouchY f = do
     return (leaveNetwork touchYN p))
   return (stop s >> leaveNW)
 
-onTouchPosition :: (MonadIO c, '[Revent] <: ms)
+onTouchPosition :: (MonadIO c, '[Evented] <: ms)
                 => (TouchPosition -> Code ms c ())
                 -> Code ms c (IO ())
 onTouchPosition f = do
-  buf <- getReventBuffer
+  buf <- getEventQueue
   p <- periodical
   Just s <- subscribe p (lift . f)
   Just leaveNW <- demandMaybe =<< with touchS (do

@@ -63,7 +63,7 @@ instance (IsService' ts ms, MonadIO c) =>
 type IsService' ts ms = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms))
 type IsService ms = IsService' (Appended Base ms) (Appended Base ms)
 
-type Base = '[Revent,State () Vault,State () Shutdown]
+type Base = '[Evented,State () Vault,State () Shutdown]
 
 type ServiceKey ms = Key (As (Code (Appended ms Base) IO))
 type ServiceBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))

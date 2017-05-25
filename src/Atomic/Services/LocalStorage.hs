@@ -134,7 +134,7 @@ clearLocalStorage = do
 
 -- This needs a home; it captures both localstorage events and sessionstorage events.
 onStorage :: ( MonadIO c
-             , '[Revent] <: ms
+             , '[Evented] <: ms
              )
           => (Obj -> Code '[Event Obj] (Code ms c) ())
           -> Code ms c (IO ())
@@ -209,7 +209,7 @@ onLocalMessage :: forall ms c msg message messageType.
                   , M messageType ~ message
                   , FromJSON message
                   , FromBS message
-                  , '[Revent] <: ms
+                  , '[Evented] <: ms
                   )
                => Proxy messageType
                -> (message -> Code ms c ())

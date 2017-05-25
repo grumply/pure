@@ -20,11 +20,11 @@ import qualified GHCJS.DOM.Element as E
 -- Move this functionality into Frame or some animation library.
 
 scrollTo :: ( MonadIO c
-            , '[Revent] <: ms
+            , '[Evented] <: ms
             )
          => Ease
          -> Double
-         -> HTML ms'
+         -> View ms'
          -> Code ms c (Maybe (IO ()))
 scrollTo ease duration {- milliseconds -} to = do
   me <- liftIO $ getElement to

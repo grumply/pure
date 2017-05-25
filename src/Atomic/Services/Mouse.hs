@@ -108,7 +108,7 @@ getMouseY = with mouseS $ do
   MouseState {..} <- get
   liftIO $ readIORef mouseYRef
 
-onMouseX :: (MonadIO c, '[Revent] <: ms)
+onMouseX :: (MonadIO c, '[Evented] <: ms)
          => (Int -> Code ms c ()) -> Code ms c (IO ())
 onMouseX f = do
   buf <- get
@@ -118,7 +118,7 @@ onMouseX f = do
     )
   return stopper
 
-onMouseY :: (MonadIO c, '[Revent] <: ms)
+onMouseY :: (MonadIO c, '[Evented] <: ms)
          => (Int -> Code ms c ()) -> Code ms c (IO ())
 onMouseY f = do
   buf <- get
@@ -128,7 +128,7 @@ onMouseY f = do
     )
   return stopper
 
-onMousePosition :: (MonadIO c, '[Revent] <: ms)
+onMousePosition :: (MonadIO c, '[Evented] <: ms)
                 => (MousePosition -> Code ms c ())
                 -> Code ms c (IO ())
 onMousePosition f = do

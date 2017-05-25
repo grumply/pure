@@ -67,7 +67,7 @@ hashWithStartTime x = hash (__startTime__,x)
 type IsApp' ts ms c r = (Base r <: ms, Base r <. ts, Delta (Modules ts) (Messages ms), Eq r, MonadIO c)
 type IsApp ms r = IsApp' ms ms IO r
 
-type Base r = '[ State () (Router r), Revent, State () Shutdown ]
+type Base r = '[ State () (Router r), Evented, State () Shutdown ]
 
 type AppKey ms r = Key (Ef.Base.As (Code (Appended ms (Base r)) IO))
 type AppBuilder ts r = Modules (Base r) (Action (Appended ts (Base r)) IO) -> IO (Modules (Appended ts (Base r)) (Action (Appended ts (Base r)) IO))
@@ -100,7 +100,7 @@ simpleApp = App "main" return (return ()) Nothing
 onRoute :: ( IsApp' ts ms IO r
            , Monad c',  MonadIO c'
            , With (App' ts ms IO r) (Code ms IO) IO
-           , '[Revent] <: ms'
+           , '[Evented] <: ms'
            )
          => App' ts ms IO r
          -> (r -> Code '[Event r] (Code ms' c') ())
@@ -125,7 +125,7 @@ run app@App {..} = do
   ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
-  rt'     <- liftIO $ newIORef (ControllerView (toView (NullHTML (Just ph) :: HTML '[]))
+  rt'     <- liftIO $ newIORef (ControllerView (NullHTML (Just ph) :: View '[])
                                             (NullHTML $ Just ph)
                                             (Const ())
                                             True
@@ -295,7 +295,7 @@ deleteApp :: (MonadIO c)
 deleteApp = vaultDelete organismVault__
 
 setupRouter :: forall ms c routeType.
-               (Eq routeType, MonadIO c, '[Revent,State () (Router routeType)] <: ms)
+               (Eq routeType, MonadIO c, '[Evented,State () (Router routeType)] <: ms)
             => Proxy routeType
             -> Code ms c (IO (),Promise (IO ()))
 setupRouter _ = do
@@ -330,7 +330,7 @@ setupRouter _ = do
 goto :: ( MonadIO c
         , With (App' ts ms IO r) (Code ms IO) IO
         , '[State () (Router r)] <: ms
-        , '[Revent] <: ms'
+        , '[Evented] <: ms'
         )
      => App' ts ms IO r -> Txt -> r -> Code ms' c (Promise ())
 goto f rts rt = do

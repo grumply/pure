@@ -394,8 +394,8 @@ pattern Styles ss <- (StyleF ss) where
 pattern Lref l <- (LinkTo l _) where
   Lref l = LinkTo l Nothing
 
-pattern Href v <- (Property "href" v) where
-  Href v = Property "href" v
+pattern Href v <- (Attribute "href" v) where
+  Href v = Attribute "href" v
 
 pattern Value v <- (Property "value" v) where
   Value v = Property "value" v

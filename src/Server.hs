@@ -80,7 +80,7 @@ type ServerConnection pms ms = Ef.Base.As (Code (Appended ms Base) IO) -> Connec
 
 newtype Connections = Connections (Syndicate (SockAddr,Socket,EvQueue))
 
-type Base = '[Revent,State () Connections,State () Vault,State () Shutdown]
+type Base = '[Evented,State () Connections,State () Vault,State () Shutdown]
 
 data Server' ts ms c pts pms
   =

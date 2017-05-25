@@ -83,7 +83,7 @@ triggerWindowEvent ev e = do
 
 onWindowSyndicate :: ( IsEv e
                    , MonadIO c
-                   , '[Revent] <: ms
+                   , '[Evented] <: ms
                    )
                 => EVName Win e
                 -> (e -> Code '[Event e] (Code ms c) ())
@@ -132,7 +132,7 @@ getDocumentSyndicate
 
 onDocumentSyndicate :: ( IsEv e
                      , MonadIO c
-                     , '[Revent] <: ms
+                     , '[Evented] <: ms
                      )
                   => EVName Doc e
                   -> (e -> Code '[Event e] (Code ms c) ())
@@ -178,7 +178,7 @@ getWindowSyndicatePreventDefault
 
 onWindowSyndicatePreventDefault :: ( IsEv e
                                  , MonadIO c
-                                 , '[Revent] <: ms
+                                 , '[Evented] <: ms
                                  )
                               => EVName Win e
                               -> (e -> Code '[Event e] (Code ms c) ())

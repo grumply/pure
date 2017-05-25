@@ -86,7 +86,7 @@ type LazyByteString = BSL.ByteString
 --   2. there is a split between secure (SSL) and insecure websockets.
 --   3. there is a split between streaming and non-streaming send because the current websocket library does not support streaming.
 -- This interface is very generic and thus the type signatures are somewhat daunting. If you understand what Dispatch implements,
--- what With implements, what Eventer implements, and what Revent implements (and thus how Services, Components, Clients and Servers
+-- what With implements, what Eventer implements, and what Evented implements (and thus how Services, Components, Clients and Servers
 -- work), you'll see how this fits together.
 
 data WSCloseReason
@@ -157,7 +157,7 @@ data RequestHandler ms c rqTy
   where
     RequestHandler
       :: ( MonadIO c
-         , '[Revent,State () WebSocket] <: ms
+         , '[Evented,State () WebSocket] <: ms
 
          , Request rqTy
 
@@ -177,7 +177,7 @@ data RequestHandler ms c rqTy
       -> RequestHandler ms c rqTy
 
 responds :: ( MonadIO c
-            , '[Revent,State () WebSocket] <: ms
+            , '[Evented,State () WebSocket] <: ms
 
             , Request rqTy
 
@@ -203,7 +203,7 @@ data MessageHandler ms c mTy
   where
     MessageHandler
       :: ( MonadIO c
-         , '[Revent,State () WebSocket] <: ms
+         , '[Evented,State () WebSocket] <: ms
          , Message mTy
          , M mTy ~ msg
          , ToJSON msg
@@ -213,7 +213,7 @@ data MessageHandler ms c mTy
       -> MessageHandler ms c mTy
 
 accepts :: ( MonadIO c
-           , '[Revent,State () WebSocket] <: ms
+           , '[Evented,State () WebSocket] <: ms
            , Message mTy
            , M mTy ~ msg
            , ToJSON msg
@@ -333,14 +333,14 @@ setMsgsPerMinute n = do
   liftIO $ writeIORef (msgsPerMinute $ snd wsThroughputLimits) n
   put ws { wsThroughputLimits = ((fst wsThroughputLimits) { messagesPerMinute = n},snd wsThroughputLimits) }
 
-onWSStatus :: ('[State () WebSocket, Revent] <: ms,MonadIO c)
+onWSStatus :: ('[State () WebSocket, Evented] <: ms,MonadIO c)
         => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
         -> Code ms c (IO ())
 onWSStatus f = do
   WebSocket {..} <- get
   connect wsStatusSyndicate f
 
-onWSClose :: ('[State () WebSocket, Revent] <: ms,MonadIO c)
+onWSClose :: ('[State () WebSocket, Evented] <: ms,MonadIO c)
         => (WSCloseReason -> Code '[Event WSStatus] (Code ms c) ())
         -> Code ms c (IO ())
 onWSClose f = onWSStatus (\wss -> case wss of { WSClosed wscr -> f wscr; _ -> return () } )
@@ -367,7 +367,7 @@ getWSInfo = do
     _ -> return Nothing
 
 onWSCloseSimplyShutdown :: forall ms c.
-                         ('[State () WebSocket, Revent, State () Shutdown] <: ms, MonadIO c)
+                         ('[State () WebSocket, Evented, State () Shutdown] <: ms, MonadIO c)
                       => Code ms c (IO ())
 onWSCloseSimplyShutdown = do
   onWSClose $ \closeReason -> lift $ do
@@ -449,7 +449,7 @@ serverWS q sock tp = liftIO $ do
 -- conditionally connected or connected on some delay.
 initializeClientWS :: forall ms c ts.
                       ( MonadIO c
-                      , '[Revent,State () WebSocket] <: ms
+                      , '[Evented,State () WebSocket] <: ms
                       )
                    => String
                    -> Int
@@ -553,7 +553,7 @@ serverWSS q sock ssl tp = liftIO $ do
 
 initializeClientWSS :: forall ms c ts.
                        ( MonadIO c
-                       , '[Revent,State () WebSocket] <: ms
+                       , '[Evented,State () WebSocket] <: ms
                        )
                     => String
                     -> Int
@@ -1031,7 +1031,7 @@ requestWith :: ( MonadIO c
 
                , '[State () WebSocket] <: ms'
 
-               , '[Revent] <: ms
+               , '[Evented] <: ms
 
                , Request rqTy
 
@@ -1099,7 +1099,7 @@ apiRequestWith :: forall w ms c ms' c' rqTy request rqI msgs rqs response.
 
                   , '[State () WebSocket] <: ms'
 
-                  , '[Revent] <: ms
+                  , '[Evented] <: ms
 
                   , Request rqTy
 
@@ -1124,7 +1124,7 @@ apiRequestWith _ = requestWith
 request :: forall c ms rqTy request rqI rsp.
             ( MonadIO c
 
-            , '[Revent,State () WebSocket] <: ms
+            , '[Evented,State () WebSocket] <: ms
 
             , Request rqTy
 
@@ -1175,7 +1175,7 @@ request rqty_proxy req f = do
 apiRequest :: forall c ms rqTy request rqI response rqs msgs.
               ( MonadIO c
 
-              , '[State () WebSocket,Revent] <: ms
+              , '[State () WebSocket,Evented] <: ms
 
               , Request rqTy
 
@@ -1201,7 +1201,7 @@ respondWith :: ( MonadIO c
 
                , With w (Code ms' c') IO
 
-               , '[Revent] <: ms
+               , '[Evented] <: ms
 
                , '[State () WebSocket] <: ms'
 
@@ -1269,7 +1269,7 @@ respondWith srv rqty_proxy rr = do
 
 respond :: ( MonadIO c
 
-           , '[Revent,State () WebSocket] <: ms
+           , '[Evented,State () WebSocket] <: ms
 
            , Request rqTy
 
@@ -1388,7 +1388,7 @@ apiMessage _ mty_proxy m =
 onMessageWith :: ( MonadIO c
                  , MonadIO c'
                  , '[State () WebSocket] <: ms'
-                 , '[Revent] <: ms
+                 , '[Evented] <: ms
                  , With w (Code ms' c') IO
                  , Message mTy
                  , M mTy ~ msg
@@ -1439,7 +1439,7 @@ onMessageWith s mty_proxy f = do
   return pr
 
 onMessage :: ( MonadIO c
-             , '[Revent,State () WebSocket] <: ms
+             , '[Evented,State () WebSocket] <: ms
              , Message mTy
              , M mTy ~ msg
              , FromJSON msg
@@ -1631,7 +1631,7 @@ data RequestHandler ms c rqTy
   where
     RequestHandler
       :: ( MonadIO c
-         , '[Revent,WebSocket] <: ms
+         , '[Evented,WebSocket] <: ms
 
          , Request rqTy
 
@@ -1648,7 +1648,7 @@ data RequestHandler ms c rqTy
       -> RequestHandler ms c rqTy
 
 responds :: ( MonadIO c
-            , '[Revent,WebSocket] <: ms
+            , '[Evented,WebSocket] <: ms
 
             , Request rqTy
 
@@ -1671,7 +1671,7 @@ data MessageHandler ms c mTy
   where
     MessageHandler
       :: ( MonadIO c
-         , '[Revent,WebSocket] <: ms
+         , '[Evented,WebSocket] <: ms
          , Message mTy
          , M mTy ~ message
          , ToJSON message
@@ -1681,7 +1681,7 @@ data MessageHandler ms c mTy
       -> MessageHandler ms c mTy
 
 accepts :: ( MonadIO c
-           , '[Revent,WebSocket] <: ms
+           , '[Evented,WebSocket] <: ms
            , Message mTy
            , M mTy ~ message
            , ToJSON message
@@ -1978,12 +1978,12 @@ putWSMsgHandlers :: forall ms c.
 putWSMsgHandlers hm = Send (SetWebSocketMsgHandlers hm (Return ()))
 
 wsSetup :: forall ms c.
-           (MonadIO c, '[Revent,WebSocket] <: ms)
+           (MonadIO c, '[Evented,WebSocket] <: ms)
         => Code ms c ()
 wsSetup = Send (InitializeWebSocket (Return ()))
 
 wsInitialize :: forall ms c.
-                (MonadIO c, '[Revent,WebSocket] <: ms)
+                (MonadIO c, '[Evented,WebSocket] <: ms)
              => Code ms c WSStatus
 wsInitialize = do
   wsSetup
@@ -1998,7 +1998,7 @@ wsInitialize = do
   wsConnect
 
 wsConnect :: forall ms c.
-             (MonadIO c, '[Revent,WebSocket] <: ms)
+             (MonadIO c, '[Evented,WebSocket] <: ms)
           => Code ms c WSStatus
 wsConnect = do
   sig <- get
@@ -2016,7 +2016,7 @@ wsDisconnect = do
 
 
 send' :: forall ms c.
-        (MonadIO c, '[Revent,WebSocket] <: ms)
+        (MonadIO c, '[Evented,WebSocket] <: ms)
      => Either LazyByteString Dispatch -> Code ms c (Either WSException SendStatus)
 send' m = go True
   where
@@ -2095,7 +2095,7 @@ unsubscribe :: forall ms c.
 unsubscribe = stop
 
 onWSStatus :: forall ms c.
-           (MonadIO c, '[Revent,WebSocket] <: ms)
+           (MonadIO c, '[Evented,WebSocket] <: ms)
         => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
         -> Code ms c (IO ())
 onWSStatus bhvr = do
@@ -2103,7 +2103,7 @@ onWSStatus bhvr = do
   connect wsn bhvr
 
 onWSClose :: forall ms c.
-            (MonadIO c, '[Revent,WebSocket] <: ms)
+            (MonadIO c, '[Evented,WebSocket] <: ms)
         => (WSCloseReason -> Code '[Event WSStatus] (Code ms c) ())
         -> Code ms c (IO ())
 onWSClose f = onWSStatus (\wss -> case wss of { WSClosed wscr -> f wscr; _ -> return () } )
@@ -2113,7 +2113,7 @@ foreign import javascript unsafe
 
 -- exponential backoff based on a minimum interval
 reconnectOnInterval :: forall ms c port.
-                       (MonadIO c, '[Revent,WebSocket] <: ms)
+                       (MonadIO c, '[Evented,WebSocket] <: ms)
                     => Int -> Code ms c ()
 reconnectOnInterval interval = go
   where
@@ -2136,7 +2136,7 @@ reconnectOnInterval interval = go
 send :: ( ToJSON a
         , MonadIO c
         , MonadIO c'
-        , '[Revent,WebSocket] <: ms'
+        , '[Evented,WebSocket] <: ms'
         , With w (Code ms' c') IO
         , Functor (Messages ms)
         )
@@ -2168,7 +2168,7 @@ sendSelfMessage :: ( MonadIO c
 
                    , '[WebSocket] <: ms'
 
-                   , '[Revent] <: ms
+                   , '[Evented] <: ms
 
                    , Message mTy
                    , M mTy ~ msg
@@ -2190,7 +2190,7 @@ sendSelfMessage s mty_proxy m =
 request :: forall c ms rqTy request rqI rsp.
             ( MonadIO c
 
-            , '[Revent,WebSocket] <: ms
+            , '[Evented,WebSocket] <: ms
 
             , Request rqTy
 
@@ -2240,7 +2240,7 @@ request rqty_proxy req f = do
 
 apiRequest :: ( MonadIO c
 
-              , '[Revent,WebSocket] <: ms
+              , '[Evented,WebSocket] <: ms
 
               , Request rqTy
 
@@ -2267,9 +2267,9 @@ requestWith :: forall c c' ms ms' w rqTy request rqI rsp.
 
                , With w (Code ms' c') IO
 
-               , '[Revent,WebSocket] <: ms'
+               , '[Evented,WebSocket] <: ms'
 
-               , '[Revent] <: ms
+               , '[Evented] <: ms
 
                , Request rqTy
 
@@ -2333,9 +2333,9 @@ apiRequestWith :: ( MonadIO c
 
                   , With w (Code ms' c') IO
 
-                  , '[Revent,WebSocket] <: ms'
+                  , '[Evented,WebSocket] <: ms'
 
-                  , '[Revent] <: ms
+                  , '[Evented] <: ms
 
                   , Request rqTy
 
@@ -2363,9 +2363,9 @@ respondWith :: forall c c' w ms ms' rqTy request rqI rsp.
 
                , With w (Code ms' c') IO
 
-               , '[Revent] <: ms
+               , '[Evented] <: ms
 
-               , '[Revent,WebSocket] <: ms'
+               , '[Evented,WebSocket] <: ms'
 
                , Request rqTy
 
@@ -2425,7 +2425,7 @@ respondWith s rqty_proxy rr = do
 respond :: forall c ms rqTy request rqI rsp.
            ( MonadIO c
 
-           , '[Revent,WebSocket] <: ms
+           , '[Evented,WebSocket] <: ms
 
            , Request rqTy
 
@@ -2476,7 +2476,7 @@ respond rqty_proxy rr = do
 
 messageWith :: ( MonadIO c
                , MonadIO c'
-               , '[Revent,WebSocket] <: ms'
+               , '[Evented,WebSocket] <: ms'
                , With w (Code ms' c') IO
                , Message mTy
                , M mTy ~ msg
@@ -2491,7 +2491,7 @@ messageWith s mty_proxy m = send s (messageHeader mty_proxy) m
 
 apiMessageWith :: ( MonadIO c
                   , MonadIO c'
-                  , '[Revent,WebSocket] <: ms'
+                  , '[Evented,WebSocket] <: ms'
                   , With w (Code ms' c') IO
                   , Message mTy
                   , M mTy ~ msg
@@ -2507,7 +2507,7 @@ apiMessageWith :: ( MonadIO c
 apiMessageWith _ = messageWith
 
 message :: ( MonadIO c
-           , '[Revent,WebSocket] <: ms
+           , '[Evented,WebSocket] <: ms
            , Message mTy
            , M mTy ~ msg
            , ToJSON msg
@@ -2518,7 +2518,7 @@ message :: ( MonadIO c
 message mty_proxy m = send' $ Right (Dispatch (messageHeader mty_proxy) (toJSON m))
 
 apiMessage :: ( MonadIO c
-              , '[Revent,WebSocket] <: ms
+              , '[Evented,WebSocket] <: ms
               , Message mTy
               , M mTy ~ msg
               , ToJSON msg
@@ -2534,7 +2534,7 @@ onMessageWith :: forall c c' ms ms' w mTy msg.
                  ( MonadIO c
                  , MonadIO c'
                  , '[WebSocket] <: ms'
-                 , '[Revent] <: ms
+                 , '[Evented] <: ms
                  , With w (Code ms' c') IO
                  , Message mTy
                  , M mTy ~ msg
@@ -2586,7 +2586,7 @@ onMessageWith s mty_proxy f = do
 
 onMessage :: forall c ms mTy msg.
              ( MonadIO c
-             , '[Revent,WebSocket] <: ms
+             , '[Evented,WebSocket] <: ms
              , Message mTy
              , M mTy ~ msg
              , FromJSON msg

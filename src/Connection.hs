@@ -13,7 +13,7 @@ type IsConnection ms = IsConnection' ms ms
 
 newtype Origin = Origin SockAddr
 
-type Base = '[State () WebSocket,State () Origin,Revent,State () Vault,State () Shutdown]
+type Base = '[State () WebSocket,State () Origin,Evented,State () Vault,State () Shutdown]
 
 type ConnectionBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
 type ConnectionPrimer ms = Code (Appended ms Base) IO ()
