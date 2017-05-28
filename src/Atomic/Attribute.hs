@@ -103,66 +103,63 @@ data Feature (ms :: [* -> *])
     { _attr :: Txt
     , _value :: Txt
     }
+  | DelayedAttribute
+    { _attr :: Txt
+    , _value :: Txt
+    }
   | Property
+    { _prop :: Txt
+    , _value :: Txt
+    }
+  | DelayedProperty
     { _prop :: Txt
     , _value :: Txt
     }
   | StyleF
     { _stylePairs :: [(Txt,Txt)] }
   | OnE
-    { _eventId :: Txt
-    , _eventName :: Txt
+    { _eventName :: Txt
     , _eventOptions :: Options
     , _eventCreate :: IO () -> ENode -> Obj -> IO (Maybe (Code ms IO ()))
     , _eventListener :: Maybe (IO ())
     }
   | OnWin
-    { _eventId :: Txt
-    , _eventName :: Txt
+    { _eventName :: Txt
     , _eventOptions :: Options
     , _eventWinCreate :: !(IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ())))
     , _eventListener :: Maybe (IO ())
     }
   | OnDoc
-    { _eventId :: Txt
-    , _eventName :: Txt
+    { _eventName :: Txt
     , _eventOptions :: Options
     , _eventDocCreate :: IO () -> ENode -> Doc -> Obj -> IO (Maybe (Code ms IO ()))
     , _eventListener :: Maybe (IO ())
     }
   | OnBuild
-    { _eventId :: Txt
-    , _buildEvent :: Code ms IO ()
+    { _buildEvent :: Code ms IO ()
     }
   | OnDestroy
-    { _eventId :: Txt
-    , _destroyEvent :: Code ms IO ()
+    { _destroyEvent :: Code ms IO ()
     }
   | OnWillMount
-    { _eventId :: Txt
-    , _willMountEvent :: ENode -> IO ()
+    { _willMountEvent :: ENode -> IO ()
     }
   | OnDidMount
-    { _eventId :: Txt
-    , _didMountEvent :: ENode -> IO ()
+    { _didMountEvent :: ENode -> IO ()
     }
-  | forall model. OnUpdate
-    { _eventId :: Txt
-    , _updateModel :: model
-    , _updateEvent :: model -> ENode -> IO ()
+  | forall model. Typeable model => OnUpdate
+    { _updateModel :: model
+    , _updateEvent :: model -> model -> ENode -> IO ()
     }
-  | forall model. OnModel
-    { _eventId :: Txt
-    , _watchModel :: model
-    , _modelEvent :: model -> ENode -> Code ms IO ()
+  | forall model. Typeable model => OnModel
+    { _watchModel :: model
+    , _modelEvent :: model -> model -> ENode -> Code ms IO ()
     }
   | OnWillUnmount
-    { _eventId :: Txt
-    , _willUnmountEvent :: ENode -> IO ()
+    { _willUnmountEvent :: ENode -> IO ()
     }
   | OnDidUnmount
-    { _eventId :: Txt
-    , _didUnmountEvent :: ENode -> IO ()
+    { _didUnmountEvent :: ENode -> IO ()
     }
   | LinkTo
     { _link :: Txt
@@ -186,7 +183,9 @@ instance ToJSON (Feature ms) where
     where
       go NullFeature = object [ "type" .= ("null" :: Txt)]
       go (Property k v) = object [ "type" .= ("prop" :: Txt), "prop" .= k, "val" .= v]
+      go (DelayedProperty k v) = object [ "type" .= ("dprop" :: Txt), "prop" .= k, "val" .= v]
       go (Attribute k v) = object [ "type" .= ("attr" :: Txt), "attr" .= k, "val" .= v]
+      go (DelayedAttribute k v) = object ["type" .= ("dattr" :: Txt), "attr" .= k, "val" .= v]
       go (StyleF ss) = object [ "type" .= ("style" :: Txt), "styles" .= ss ]
       go (LinkTo e _) = object [ "type" .= ("link" :: Txt), "link" .= e]
       go (SVGLinkTo e _) = object [ "type" .= ("svglink" :: Txt), "link" .= e ]
@@ -208,10 +207,18 @@ instance FromJSON (Feature ms) where
           k <- o .: "attr"
           v <- o .: "val"
           pure $ Attribute k v
+        "dattr" -> do
+          k <- o .: "attr"
+          v <- o .: "val"
+          pure $ DelayedAttribute k v
         "prop" -> do
           k <- o .: "prop"
           v <- o .: "val"
           pure $ Property k v
+        "dprop" -> do
+          k <- o .: "prop"
+          v <- o .: "val"
+          pure $ DelayedProperty k v
         "style" -> do
           ss <- o .: "styles"
           pure $ StyleF ss
@@ -231,32 +238,36 @@ instance Eq (Feature ms) where
   (==) NullFeature NullFeature = True
   (==) (Property p v) (Property p' v') =
     prettyUnsafeEq p p' && prettyUnsafeEq v v'
+  (==) (DelayedProperty p v) (DelayedProperty p' v') =
+    prettyUnsafeEq p p' && prettyUnsafeEq v v'
   (==) (Attribute a v) (Attribute a' v') =
+    prettyUnsafeEq a a' && prettyUnsafeEq v v'
+  (==) (DelayedAttribute a v) (DelayedAttribute a' v') =
     prettyUnsafeEq a a' && prettyUnsafeEq v v'
   (==) (StyleF ss) (StyleF ss') =
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
-  (==) (OnE en e os ev _) (OnE en' e' os' ev' _) =
-    prettyUnsafeEq en en' && prettyUnsafeEq e e' && prettyUnsafeEq os os'
-  (==) (OnWin en e os ev _) (OnWin en' e' os' ev' _) =
-    prettyUnsafeEq en en' && prettyUnsafeEq e e' && prettyUnsafeEq os os'
-  (==) (OnDoc en e os ev _) (OnDoc en' e' os' ev' _) =
-    prettyUnsafeEq en en' && prettyUnsafeEq e e' && prettyUnsafeEq os os'
-  (==) (OnBuild en e) (OnBuild en' e') =
-    prettyUnsafeEq en en'
-  (==) (OnDestroy en e) (OnDestroy en' e') =
-    prettyUnsafeEq en en'
-  (==) (OnWillMount en e) (OnWillMount en' e') =
-    prettyUnsafeEq en en'
-  (==) (OnDidMount en e) (OnDidMount en' e') =
-    prettyUnsafeEq en en'
-  (==) (OnUpdate en m f) (OnUpdate en' m' f') =
-    prettyUnsafeEq en en' && reallyVeryUnsafeEq m m'
-  (==) (OnModel en m f) (OnModel en' m' f') =
-    prettyUnsafeEq en en' && reallyVeryUnsafeEq m m'
-  (==) (OnWillUnmount en e) (OnWillUnmount en' e') =
-    prettyUnsafeEq en en'
-  (==) (OnDidUnmount en e) (OnDidUnmount en' e') =
-    prettyUnsafeEq en en'
+  (==) (OnE e os ev _) (OnE e' os' ev' _) =
+    prettyUnsafeEq e e' && prettyUnsafeEq os os'
+  (==) (OnWin e os ev _) (OnWin e' os' ev' _) =
+    prettyUnsafeEq e e' && prettyUnsafeEq os os'
+  (==) (OnDoc e os ev _) (OnDoc e' os' ev' _) =
+    prettyUnsafeEq e e' && prettyUnsafeEq os os'
+  (==) (OnBuild e) (OnBuild e') =
+    reallyUnsafeEq e e'
+  (==) (OnDestroy e) (OnDestroy e') =
+    reallyUnsafeEq e e'
+  (==) (OnWillMount e) (OnWillMount e') =
+    reallyUnsafeEq e e'
+  (==) (OnDidMount e) (OnDidMount e') =
+    reallyUnsafeEq e e'
+  (==) (OnUpdate m f) (OnUpdate m' f') =
+    typeOf m == typeOf m' && reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
+  (==) (OnModel m f) (OnModel m' f') =
+    typeOf m == typeOf m' && reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
+  (==) (OnWillUnmount e) (OnWillUnmount e') =
+    reallyUnsafeEq e e'
+  (==) (OnDidUnmount e) (OnDidUnmount e') =
+    reallyUnsafeEq e e'
   (==) (LinkTo t _) (LinkTo t' _) =
     prettyUnsafeEq t t'
   (==) (SVGLinkTo t _) (SVGLinkTo t' _) =
@@ -298,8 +309,25 @@ instance FromTxt [Feature ms] where
 pattern Attr k v <- (Attribute k v) where
   Attr k v = Attribute k v
 
+pattern DelayedAttr k v <- (DelayedAttribute k v) where
+  DelayedAttr k v = DelayedAttribute k v
+
 pattern Prop k v <- (Property k v) where
   Prop k v = Property k v
+
+pattern DelayedProp k v <- (DelayedProperty k v) where
+  DelayedProp k v = DelayedProperty k v
+
+delayedFeature (DelayedAttribute k v) = Attribute k v
+delayedFeature (DelayedProperty k v) = Property k v
+delayedFeature x = x
+
+delayFeature (Attribute k v) = DelayedAttribute k v
+delayFeature (Property k v) = DelayedProperty k v
+delayFeature x = x
+
+pattern Delay x <- (delayedFeature -> x) where
+  Delay x = delayFeature x
 
 checkNotNull p = if T.null p then (False,p) else (True,p)
 
@@ -307,84 +335,73 @@ pattern BoolProp k b <- (Property k (checkNotNull -> (b,_))) where
   BoolProp k b = Property k (if b then "true" else "")
 
 on :: Txt -> Code ms IO () -> Feature ms
-on ev e = OnE "" ev def (\_ _ _ -> return (Just e)) Nothing
+on ev e = OnE ev def (\_ _ _ -> return (Just e)) Nothing
 
-pattern On ev opts f <- (OnE _ ev opts f _) where
-  On ev opts f = OnE "" ev opts f Nothing
--- on' :: Txt -> (IO () -> ENode -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
--- on' = on_ ""
+pattern On ev opts f <- (OnE ev opts f _) where
+  On ev opts f = OnE ev opts f Nothing
 
--- on_ :: Txt -> Txt -> (IO () -> ENode -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
--- on_ en ev f = On en ev def f Nothing
+pattern OnDocument ev opts f <- (OnDoc ev opts f _) where
+  OnDocument ev opts f = OnDoc ev opts f Nothing
 
-pattern OnDocument ev opts f <- (OnDoc _ ev opts f _) where
-  OnDocument ev opts f = OnDoc "" ev opts f Nothing
-
--- onDoc' :: Txt -> (IO () -> ENode -> Doc -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
--- onDoc' = onDoc_ ""
-
--- onDoc_ :: Txt -> Txt -> (IO () -> ENode -> Doc -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
--- onDoc_ en ev f = OnDoc en ev def f Nothing
-
-pattern OnWindow ev opts f <- (OnWin _ ev opts f _) where
-  OnWindow ev opts f = OnWin "" ev opts f Nothing
-
--- onWin' :: Txt -> (IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
--- onWin' = onWin_ ""
-
--- onWin_ :: Txt -> Txt -> (IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ()))) -> Feature ms
--- onWin_ en ev f = OnWin en ev def f Nothing
+pattern OnWindow ev opts f <- (OnWin ev opts f _) where
+  OnWindow ev opts f = OnWin ev opts f Nothing
 
 -- runs when the feature is created; top-down
 -- onBuild is guaranteed to run before onDestroy, but ordering w.r.t. mount/update/unmount is undetermined
-pattern OnAdd f <- (OnBuild _ f) where
-  OnAdd f = OnBuild "" f
+pattern OnAdd f <- (OnBuild f) where
+  OnAdd f = OnBuild f
 
 -- runs when the feature is destroyed; top-down
 -- onDestroy is guaranteed to run after onBuild, but ordering w.r.t. mount/update/unmount is undetermined
-pattern OnRemove f <- (OnDestroy _ f) where
-  OnRemove f = OnDestroy "" f
+pattern OnRemove f <- (OnDestroy f) where
+  OnRemove f = OnDestroy f
 
-pattern OnMounting f <- (OnWillMount _ f) where
-  OnMounting f = OnWillMount "" f
+pattern OnMounting f <- (OnWillMount f) where
+  OnMounting f = OnWillMount f
 
-pattern OnMounted f <- (OnDidMount _ f) where
-  OnMounted f = OnDidMount "" f
-
--- watches a model, as supplied, and calls the callback during feature diffing; top-down
--- make sure the body of the function will not change; must be totally static modulo the model/enode!
-pattern Watch mdl f <- (OnModel _ mdl f) where
-  Watch mdl f = OnModel "" mdl f
+pattern OnMounted f <- (OnDidMount f) where
+  OnMounted f = OnDidMount f
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
 -- make sure the body of the function will not change; must be totally static modulo the model/enode!
-pattern WatchIO mdl f <- (OnUpdate _ mdl f) where
-  WatchIO mdl f = OnUpdate "" mdl f
+-- That is, the only way to witness a value before and after a change is to track it via the model!
+-- If it is untracked, the function will only ever see the value after the change because of the
+-- way diffing is performed on Features.
+pattern Watch mdl f <- (OnModel mdl f) where
+  Watch mdl f = OnModel mdl f
+
+-- watches a model, as supplied, and calls the callback during feature diffing; top-down
+-- make sure the body of the function will not change; must be totally static modulo the model/enode!
+-- That is, the only way to witness a value before and after a change is to track it via the model!
+-- If it is untracked, the function will only ever see the value after the change because of the
+-- way diffing is performed on Features.
+pattern WatchIO mdl f <- (OnUpdate mdl f) where
+  WatchIO mdl f = OnUpdate mdl f
 
 -- runs when the attribute is being cleaned up; top-down
-pattern OnUnmounting f <- (OnWillUnmount _ f) where
-  OnUnmounting f = OnWillUnmount "" f
+pattern OnUnmounting f <- (OnWillUnmount f) where
+  OnUnmounting f = OnWillUnmount f
 
 -- runs when the element is remove()'d, not when it is removed from the DOM; bottom-up
-pattern OnUnmounted f <- (OnDidUnmount _ f) where
-  OnUnmounted f = OnDidUnmount "" f
+pattern OnUnmounted f <- (OnDidUnmount f) where
+  OnUnmounted f = OnDidUnmount f
 
 preventDefault :: Feature ms -> Feature ms
-preventDefault (OnE en ev os f m) = OnE en ev (os { _preventDef = True }) f m
-preventDefault (OnDoc en ev os f m) = OnDoc en ev (os { _preventDef = True }) f m
-preventDefault (OnWin en ev os f m) = OnWin en ev (os { _preventDef = True }) f m
+preventDefault (OnE ev os f m) = OnE ev (os { _preventDef = True }) f m
+preventDefault (OnDoc ev os f m) = OnDoc ev (os { _preventDef = True }) f m
+preventDefault (OnWin ev os f m) = OnWin ev (os { _preventDef = True }) f m
 preventDefault f = f
 
 stopPropagation :: Feature ms -> Feature ms
-stopPropagation (OnE en ev os f m) = OnE en ev (os { _stopProp = True }) f m
-stopPropagation (OnDoc en ev os f m) = OnDoc en ev (os { _stopProp = True }) f m
-stopPropagation (OnWin en ev os f m) = OnWin en ev (os { _stopProp = True }) f m
+stopPropagation (OnE ev os f m) = OnE ev (os { _stopProp = True }) f m
+stopPropagation (OnDoc ev os f m) = OnDoc ev (os { _stopProp = True }) f m
+stopPropagation (OnWin ev os f m) = OnWin ev (os { _stopProp = True }) f m
 stopPropagation f = f
 
 intercept :: Feature ms -> Feature ms
-intercept (OnE en ev os f m) = OnE en ev (os { _preventDef = True, _stopProp = True }) f m
-intercept (OnDoc en ev os f m) = OnDoc en ev (os { _preventDef = True, _stopProp = True }) f m
-intercept (OnWin en ev os f m) = OnWin en ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnE ev os f m) = OnE ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnDoc ev os f m) = OnDoc ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnWin ev os f m) = OnWin ev (os { _preventDef = True, _stopProp = True }) f m
 intercept f = f
 
 pattern Styles ss <- (StyleF ss) where
@@ -394,8 +411,8 @@ pattern Styles ss <- (StyleF ss) where
 pattern Lref l <- (LinkTo l _) where
   Lref l = LinkTo l Nothing
 
-pattern Href v <- (Attribute "href" v) where
-  Href v = Attribute "href" v
+pattern Href v <- (Property "href" v) where
+  Href v = Property "href" v
 
 pattern Value v <- (Property "value" v) where
   Value v = Property "value" v
@@ -1475,68 +1492,68 @@ pattern ZoomAndPan v <- (Attribute "zoomAndPan" v) where
 --------------------------------------------------------------------------------
 -- Event listener 'Attribute's
 
-pattern OnClick opts f <- (OnE _ "click" opts f _) where
-  OnClick opts f = OnE "" "click" opts f Nothing
+pattern OnClick opts f <- (OnE "click" opts f _) where
+  OnClick opts f = OnE "click" opts f Nothing
 
-pattern OnDoubleClick opts f <- (OnE _ "dblclick" opts f _) where
-  OnDoubleClick opts f = OnE "" "dblclick" opts f Nothing
+pattern OnDoubleClick opts f <- (OnE "dblclick" opts f _) where
+  OnDoubleClick opts f = OnE "dblclick" opts f Nothing
 
-pattern OnMouseDown opts f <- (OnE _ "mousedown" opts f _) where
-  OnMouseDown opts f = OnE "" "mousedown" opts f Nothing
+pattern OnMouseDown opts f <- (OnE "mousedown" opts f _) where
+  OnMouseDown opts f = OnE "mousedown" opts f Nothing
 
-pattern OnMouseUp opts f <- (OnE _ "mouseup" opts f _) where
-  OnMouseUp opts f = OnE "" "mouseup" opts f Nothing
+pattern OnMouseUp opts f <- (OnE "mouseup" opts f _) where
+  OnMouseUp opts f = OnE "mouseup" opts f Nothing
 
-pattern OnTouchStart opts f <- (OnE _ "touchstart" opts f _) where
-  OnTouchStart opts f = OnE "" "touchstart" opts f Nothing
+pattern OnTouchStart opts f <- (OnE "touchstart" opts f _) where
+  OnTouchStart opts f = OnE "touchstart" opts f Nothing
 
-pattern OnTouchEnd opts f <- (OnE _ "touchend" opts f _) where
-  OnTouchEnd opts f = OnE "" "touchend" opts f Nothing
+pattern OnTouchEnd opts f <- (OnE "touchend" opts f _) where
+  OnTouchEnd opts f = OnE "touchend" opts f Nothing
 
-pattern OnMouseEnter opts f <- (OnE _ "mouseenter" opts f _) where
-  OnMouseEnter opts f = OnE "" "mouseenter" opts f Nothing
+pattern OnMouseEnter opts f <- (OnE "mouseenter" opts f _) where
+  OnMouseEnter opts f = OnE "mouseenter" opts f Nothing
 
-pattern OnMouseLeave opts f <- (OnE _ "mouseleave" opts f _) where
-  OnMouseLeave opts f = OnE "" "mouseleave" opts f Nothing
+pattern OnMouseLeave opts f <- (OnE "mouseleave" opts f _) where
+  OnMouseLeave opts f = OnE "mouseleave" opts f Nothing
 
-pattern OnMouseOver opts f <- (OnE _ "mouseover" opts f _) where
-  OnMouseOver opts f = OnE "" "mouseover" opts f Nothing
+pattern OnMouseOver opts f <- (OnE "mouseover" opts f _) where
+  OnMouseOver opts f = OnE "mouseover" opts f Nothing
 
-pattern OnMouseOut opts f <- (OnE _ "mouseout" opts f _) where
-  OnMouseOut opts f = OnE "" "mouseout" opts f Nothing
+pattern OnMouseOut opts f <- (OnE "mouseout" opts f _) where
+  OnMouseOut opts f = OnE "mouseout" opts f Nothing
 
-pattern OnMouseMove opts f <- (OnE _ "mousemove" opts f _) where
-  OnMouseMove opts f = OnE "" "mousemove" opts f Nothing
+pattern OnMouseMove opts f <- (OnE "mousemove" opts f _) where
+  OnMouseMove opts f = OnE "mousemove" opts f Nothing
 
-pattern OnTouchMove opts f <- (OnE _ "touchmove" opts f _)  where
-  OnTouchMove opts f = OnE "" "touchmove" opts f Nothing
+pattern OnTouchMove opts f <- (OnE "touchmove" opts f _)  where
+  OnTouchMove opts f = OnE "touchmove" opts f Nothing
 
-pattern OnTouchCancel opts f <- (OnE _ "touchcancel" opts f _) where
-  OnTouchCancel opts f = OnE "" "touchcancel" opts f Nothing
+pattern OnTouchCancel opts f <- (OnE "touchcancel" opts f _) where
+  OnTouchCancel opts f = OnE "touchcancel" opts f Nothing
 
-pattern OnInput opts f <- (OnE _ "input" opts f _) where
-  OnInput opts f = OnE "" "input" opts f Nothing
+pattern OnInput opts f <- (OnE "input" opts f _) where
+  OnInput opts f = OnE "input" opts f Nothing
 
-pattern OnChange opts f <- (OnE _ "change" opts f _) where
-  OnChange opts f = OnE "" "change" opts f Nothing
+pattern OnChange opts f <- (OnE "change" opts f _) where
+  OnChange opts f = OnE "change" opts f Nothing
 
-pattern OnSubmit opts f <- (OnE _ "submit" opts f _) where
-  OnSubmit opts f = OnE "" "submit" opts f Nothing
+pattern OnSubmit opts f <- (OnE "submit" opts f _) where
+  OnSubmit opts f = OnE "submit" opts f Nothing
 
-pattern OnBlur opts f <- (OnE _ "blur" opts f _) where
-  OnBlur opts f = OnE "" "blur" opts f Nothing
+pattern OnBlur opts f <- (OnE "blur" opts f _) where
+  OnBlur opts f = OnE "blur" opts f Nothing
 
-pattern OnFocus opts f <- (OnE _ "focus" opts f _) where
-  OnFocus opts f = OnE "" "focus" opts f Nothing
+pattern OnFocus opts f <- (OnE "focus" opts f _) where
+  OnFocus opts f = OnE "focus" opts f Nothing
 
-pattern OnKeyUp opts f <- (OnE _ "keyup" opts f _) where
-  OnKeyUp opts f = OnE "" "keyup" opts f Nothing
+pattern OnKeyUp opts f <- (OnE "keyup" opts f _) where
+  OnKeyUp opts f = OnE "keyup" opts f Nothing
 
-pattern OnKeyDown opts f <- (OnE _ "keydown" opts f _) where
-  OnKeyDown opts f = OnE "" "keydown" opts f Nothing
+pattern OnKeyDown opts f <- (OnE "keydown" opts f _) where
+  OnKeyDown opts f = OnE "keydown" opts f Nothing
 
-pattern OnKeyPress opts f <- (OnE _ "keypress" opts f _) where
-  OnKeyPress opts f = OnE "" "keypress" opts f Nothing
+pattern OnKeyPress opts f <- (OnE "keypress" opts f _) where
+  OnKeyPress opts f = OnE "keypress" opts f Nothing
 
 -- onInput :: (Txt -> Code ms IO ()) -> Feature ms
 -- onInput f = on' "input" $ \_ _ -> fmap return $ flip parse $ \o -> do

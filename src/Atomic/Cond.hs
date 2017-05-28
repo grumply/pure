@@ -37,6 +37,24 @@ notNil = (/= nil)
 instance Cond [a] where
   nil = []
 
+instance (Cond a, Cond b) => Cond (a,b) where
+  nil = (nil,nil)
+
+instance (Cond a, Cond b, Cond c) => Cond (a,b,c) where
+  nil = (nil,nil,nil)
+
+instance (Cond a, Cond b, Cond c, Cond d) => Cond (a,b,c,d) where
+  nil = (nil,nil,nil,nil)
+
+instance (Cond a, Cond b, Cond c, Cond d, Cond e) => Cond (a,b,c,d,e) where
+  nil = (nil,nil,nil,nil,nil)
+
+instance (Cond a, Cond b, Cond c, Cond d, Cond e, Cond f) => Cond (a,b,c,d,e,f) where
+  nil = (nil,nil,nil,nil,nil,nil)
+
+instance (Cond a, Cond b, Cond c, Cond d, Cond e, Cond f, Cond g) => Cond (a,b,c,d,e,f,g) where
+  nil = (nil,nil,nil,nil,nil,nil,nil)
+
 instance Cond (Maybe a) where
   nil = Nothing
 

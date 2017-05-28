@@ -225,6 +225,12 @@ pattern Component ams <- (View (cast -> Just ams)) where
   Component ams = View ams
 
 class Component (a :: [* -> *] -> *) ms where
+  -- TODO:
+  --   build :: a ms -> IO (View ms)
+  --   diff :: (Code ms IO () -> IO ()) -> ENode -> View ms -> a ms -> a ms -> IO (View ms)
+  -- With build and diff the only primitive view elements would be HTML, SVGHTML, Managed, and View.
+  -- Great avenue for extensibility and modularity, but I don't see that the expressivity gained
+  -- would currently justify the work; it's mostly just a refactoring, but it is a major refactoring.
   render :: a ms -> View ms
 
 instance Component View ms where
@@ -540,24 +546,19 @@ list x _attributes _keyed =
     _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGHTMLs"
 
 -- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
--- for changes; if any of the variables within the model are updated or moved, a diff will be
--- performed. This is how changes external to an `st` are injected into an `st`; if an `st` uses
--- state from a `Controller`s model and they aren't tracked via the `st` model, those changes will
--- not be updated when the `Controller`s model updates. The same rules apply to nested/inheriting
--- `st` atoms.
+-- for changes; if any of the variables within the model are updated, a diff will be performed.
+-- This is how changes external to a `viewManager` are injected; if a `viewManager` uses state
+-- from a `Controller`s model and that state is untracked in the `viewManager`, changes to the
+-- `Controller`s model will not be injected. The same rules apply to nesting/inheriting
+-- `viewManager` models.
 --
--- The major purposes for this atome type are:
---   1. The implementation of extensible and highly configurable UI frameworks with the
---      aim of reducing configuration burdens by avoiding carrying framework state within
---      user-created contexts.
---   2. Stateful subviews a la form inputs, local animations, etc....
---
--- Major caveat: If the list of elements holding a st atom changes such that the diff algorithm
---               must recreate the st element, it will be reset to its original state. This would
+-- Major caveat: If the list of elements holding a viewManager changes such that the diff algorithm
+--               must recreate the element, it will be reset to its original state. This would
 --               happen if the position of the st element within the list changes. If a variable
 --               length list of children is required, either careful placement for the st element,
 --               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
---               this problem.
+--               this problem. The solution is the good practice of keeping lists of views static
+--               or at the very least keep extensibility at the end of a view list.
 viewManager :: forall model st e. Int -> model -> st -> (st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
 viewManager k watch_model initial_st view = STHTML watch_model k initial_st Nothing view (\_ _ -> return ())
 
@@ -2010,12 +2011,12 @@ runElementDiff f el os0 ms0 ns0 = do
           return (f:fs)
 
     go dm_ olds _ [] =
-      mapM (\old -> removeAttribute_ el old >> return NullFeature) olds
+      mapM (\old -> removeAttribute_ f el old >> return NullFeature) olds
 
     go dm_ (old:olds) (mid:mids) (new:news) =
       let
         remove =
-          removeAttribute_ el old
+          removeAttribute_ f el old
 
         set = do
           dm <- readIORef dm_
@@ -2062,6 +2063,15 @@ runElementDiff f el os0 ms0 ns0 = do
               else
                 replace
 
+            (DelayedProperty nm oldV,DelayedProperty nm' newV) ->
+              if prettyUnsafeEq nm nm' then
+                if prettyUnsafeEq oldV newV then
+                  continue old
+                else
+                  update
+              else
+                replace
+
             (StyleF oldS,StyleF newS) -> do
               -- we know /something/ changed
               applyStyleDiffs el oldS newS
@@ -2076,72 +2086,84 @@ runElementDiff f el os0 ms0 ns0 = do
               else
                 replace
 
-            (OnE en e os g _,OnE en' e' os' g' _) ->
-              if Txt.null en && Txt.null en' && prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
+            (DelayedAttribute nm val,DelayedAttribute nm' val') ->
+              if prettyUnsafeEq nm nm' then
+                if prettyUnsafeEq val val' then do
+                  continue old
+                else do
+                  update
+              else
+                replace
+
+            (OnE e os g _,OnE e' os' g' _) ->
+              if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then
                 continue old
               else
                 replace
 
-            (OnDoc en e os g _,OnDoc en' e' os' g' _) ->
-              if Txt.null en && Txt.null en' && prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
+            (OnDoc e os g _,OnDoc e' os' g' _) ->
+              if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then
                 continue old
               else
                 replace
 
-            (OnWin en e os g _,OnWin en' e' os' g' _) ->
-              if Txt.null en && Txt.null en' && prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
+            (OnWin e os g _,OnWin e' os' g' _) ->
+              if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then
                 continue old
               else do
                 replace
 
-            (OnBuild en e,OnBuild en' e') ->
-              if Txt.null en && Txt.null en' && reallyUnsafeEq e e' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
+            (OnBuild e,OnBuild e') ->
+              -- Unlike On(Will/Did)Mount, OnBuild runs any time the handler changes, like OnUpdate.
+              if reallyUnsafeEq e e' then
                 continue old
               else do
                 f e'
                 replace
 
-            (OnDestroy en e,OnDestroy en' e') ->
-              if Txt.null en && Txt.null en' && reallyUnsafeEq e e' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
+            (OnDestroy e,OnDestroy e') ->
+              if reallyUnsafeEq e e' then
                 continue old
               else do
                 f e
                 replace
 
-            (OnWillMount en g,OnWillMount en' g') ->
-              if Txt.null en && Txt.null en' && reallyUnsafeEq g g' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
+            (OnWillMount g,OnWillMount g') ->
+              -- OnWillMount has already run, it can't run again.
+              continue old
+
+            (OnDidMount g,OnDidMount g') ->
+              -- OnDidMount has already run, it can't run again.
+              continue old
+
+            (OnUpdate m g,OnUpdate m' g') ->
+              if typeOf m == typeOf m' then
+                if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
+                  continue old
+                else do
+                  g m (unsafeCoerce m') el
+                  replace
+              else
+                replace
+
+            (OnModel m g,OnModel m' g') ->
+              if typeOf m == typeOf m' then
+                if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
+                  continue old
+                else do
+                  f (g m (unsafeCoerce m') el)
+                  replace
+              else
+                replace
+
+            (OnWillUnmount g,OnWillUnmount g') ->
+              if reallyUnsafeEq g g' then
                 continue old
               else
                 replace
 
-            (OnDidMount en g,OnDidMount en' g') ->
-              if Txt.null en && Txt.null en' && reallyUnsafeEq g g' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
-                continue old
-              else
-                replace
-
-            (OnUpdate en m g,OnUpdate en' m' g') ->
-              if Txt.null en && Txt.null en' && reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
-                continue old
-              else do
-                g' m' el
-                replace
-
-            (OnModel en m g,OnModel en' m' g') ->
-              if Txt.null en && Txt.null en' && reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
-                continue old
-              else do
-                f (g' m' el)
-                replace
-
-            (OnWillUnmount en g,OnWillUnmount en' g') ->
-              if Txt.null en && Txt.null en' && reallyUnsafeEq g g' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
-                continue old
-              else
-                replace
-
-            (OnDidUnmount en g,OnDidUnmount en' g') ->
-              if Txt.null en && Txt.null en' && reallyUnsafeEq g g' || not (Txt.null en) && not (Txt.null en') && prettyUnsafeEq en en' then
+            (OnDidUnmount g,OnDidUnmount g') ->
+              if reallyUnsafeEq g g' then
                 continue old
               else
                 replace
@@ -2171,8 +2193,8 @@ runElementDiff f el os0 ms0 ns0 = do
               replace
 #endif
 
-removeAttribute_ :: ENode -> Feature e -> IO ()
-removeAttribute_ element attr =
+removeAttribute_ :: (Code e IO () -> IO ()) -> ENode -> Feature e -> IO ()
+removeAttribute_ f element attr =
 #ifndef __GHCJS__
   return ()
 #else
@@ -2180,21 +2202,30 @@ removeAttribute_ element attr =
     Property nm _ ->
       set_element_property_null_js element nm
 
+    DelayedProperty nm _ ->
+      set_element_property_null_js element nm
+
     Attribute nm _ ->
+      E.removeAttribute element nm
+
+    DelayedAttribute nm _ ->
       E.removeAttribute element nm
 
     LinkTo _ unreg -> do
       forM_ unreg id
       E.removeAttribute element ("href" :: Txt)
 
-    OnE _ _ _ _ unreg ->
+    OnE _ _ _ unreg ->
       forM_ unreg id
 
-    OnDoc _ _ _ _ unreg ->
+    OnDoc _ _ _ unreg ->
       forM_ unreg id
 
-    OnWin _ _ _ _ unreg ->
+    OnWin _ _ _ unreg ->
       forM_ unreg id
+
+    OnDestroy e ->
+      f e
 
     StyleF styles -> do
       obj <- O.create
@@ -2236,10 +2267,24 @@ setAttribute_ c diffing element attr didMount =
       set_property_js element nm v
       return (attr,didMount)
 
+    DelayedProperty nm v ->
+      if diffing then do
+        set_property_js element nm v
+        return (attr,didMount)
+      else do
+        return (attr,set_property_js element nm v >> didMount)
+
     -- optimize this; we're doing a little more work than necessary!
     Attribute nm val -> do
       E.setAttribute element nm val
       return (attr,didMount)
+
+    DelayedAttribute nm val ->
+      if diffing then do
+        E.setAttribute element nm val
+        return (attr,didMount)
+      else
+        return (attr,E.setAttribute element nm val >> didMount)
 
     LinkTo href _ -> do
       E.setAttribute element ("href" :: Txt) href
@@ -2256,7 +2301,7 @@ setAttribute_ c diffing element attr didMount =
                    scrollToTop
       return (LinkTo href (Just stopListener),didMount)
 
-    OnE en ev os f _ -> do
+    OnE ev os f _ -> do
       stopper <- newIORef undefined
       stopListener <-
         Ev.on
@@ -2269,9 +2314,9 @@ setAttribute_ c diffing element attr didMount =
                  liftIO $ f stop element (unsafeCoerce ce) >>= mapM_ c
                  return ()
       writeIORef stopper stopListener
-      return (OnE en ev os f (Just stopListener),didMount)
+      return (OnE ev os f (Just stopListener),didMount)
 
-    OnDoc en ev os f _ -> do
+    OnDoc ev os f _ -> do
       stopper <- newIORef undefined
       doc <- getDocument
       stopListener <-
@@ -2285,9 +2330,9 @@ setAttribute_ c diffing element attr didMount =
                  liftIO $ f stop element doc (unsafeCoerce ce) >>= mapM_ c
                  return ()
       writeIORef stopper stopListener
-      return (OnDoc en ev os f (Just stopListener),didMount)
+      return (OnDoc ev os f (Just stopListener),didMount)
 
-    OnWin en ev os f _ -> do
+    OnWin ev os f _ -> do
       stopper <- newIORef undefined
       win <- getWindow
       stopListener <-
@@ -2301,17 +2346,17 @@ setAttribute_ c diffing element attr didMount =
                  liftIO $ f stop element win (unsafeCoerce ce) >>= mapM_ c
                  return ()
       writeIORef stopper stopListener
-      return (OnWin en ev os f (Just stopListener),didMount)
+      return (OnWin ev os f (Just stopListener),didMount)
 
-    OnBuild _ e -> do
+    OnBuild e -> do
       c e
       return (attr,didMount)
 
-    OnWillMount _ f -> do
+    OnWillMount f -> do
       f element
       return (attr,didMount)
 
-    OnDidMount _ f -> do
+    OnDidMount f -> do
       return (attr,if diffing then didMount else f element >> didMount)
 
     StyleF styles -> do
@@ -2354,22 +2399,22 @@ cleanupAttr f element attr didUnmount =
     LinkTo _ unreg -> do
       forM_ unreg id
       return didUnmount
-    OnE _ _ _ _ unreg -> do
+    OnE _ _ _ unreg -> do
       forM_ unreg id
       return didUnmount
-    OnDoc _ _ _ _ unreg -> do
+    OnDoc _ _ _ unreg -> do
       forM_ unreg id
       return didUnmount
-    OnWin _ _ _ _ unreg -> do
+    OnWin _ _ _ unreg -> do
       forM_ unreg id
       return didUnmount
-    OnDestroy _ e -> do
+    OnDestroy e -> do
       f e
       return didUnmount
-    OnWillUnmount _ g -> do
+    OnWillUnmount g -> do
       g element
       return didUnmount
-    OnDidUnmount _ g -> return (didUnmount >> g element)
+    OnDidUnmount g -> return (didUnmount >> g element)
     _ -> return didUnmount
 #endif
 
