@@ -1326,16 +1326,16 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
       _node@(Just el) <- createElement doc _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       setInnerHTML el _content
-      didMount
       forM_ mparent $ \parent -> appendChild parent el
+      didMount
       return $ RawHTML _node _tag _attributes _content
 
     go mparent HTML {..} = do
       _node@(Just el) <- createElement doc _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       _atoms <- mapM (go (Just el)) _atoms
-      didMount
       forM_ mparent $ \parent -> appendChild parent el
+      didMount
       return $ HTML _node _tag _attributes _atoms
 
     go mparent STHTML {..} = do
@@ -1344,11 +1344,13 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
             -- this won't work properly on GHC; look into using onFPS or something to
             -- replicate the rAF approach
 #ifdef __GHCJS__
+            (st,sv,old,mid) <- readIORef strec
+            let st' = g st
+            writeIORef strec (st',sv,old,mid)
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
 #endif
               (st,sv,old,mid) <- readIORef strec
-              let st' = g st
-                  new_mid = unsafeCoerce $ sv st' upd
+              let new_mid = unsafeCoerce $ sv st upd
               new <- diffHelper f doc ch isFG old mid new_mid
               writeIORef strec (st',sv,new,new_mid)
               cb
@@ -1365,24 +1367,24 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       _atoms <- mapM (go (Just el)) _atoms
-      didMount
       forM_ mparent $ \parent -> appendChild parent el
+      didMount
       return $ SVGHTML _node _tag _attributes _atoms
 
     go mparent KHTML {..} = do
       _node@(Just el) <- createElement doc _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       _keyed <- mapM (\(k,x) -> go (Just el) (render x) >>= \y -> return (k,y)) _keyed
-      didMount
       forM_ mparent $ \parent -> appendChild parent el
+      didMount
       return $ KHTML _node _tag _attributes _keyed
 
     go mparent KSVGHTML {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       _keyed <- mapM (\(k,x) -> go (Just el) (render x) >>= \y -> return (k,y)) _keyed
-      didMount
       forM_ mparent $ \parent -> appendChild parent el
+      didMount
       return $ KSVGHTML _node _tag _attributes _keyed
 
     go mparent TextHTML {..} = do
@@ -1397,7 +1399,6 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
             Nothing -> do
               _node@(Just el) <- createElement doc _tag
               (_attributes,didMount) <- setAttributes _attributes f False el
-              didMount
               mi_ <- lookupController (key a)
               case mi_ of
                 Nothing -> do
@@ -1408,6 +1409,7 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
                     when isFG (triggerForeground m)
                     embed_ parent Managed {..}
                   embed_ el cvCurrentLive
+                  didMount
                   return Managed {..}
                 Just ControllerRecord {..} -> do
                   ControllerView {..} <- liftIO $ readIORef crView
@@ -1415,6 +1417,7 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
                   when isFG (triggerForeground m)
                   embed_ el cvCurrentLive
                   forM_ mparent $ \parent -> embed_ parent Managed {..}
+                  didMount
                   return Managed {..}
 
             Just e -> do
@@ -1440,7 +1443,6 @@ buildHTML :: Doc -> ControllerHooks -> Bool -> (Code e IO () -> IO ()) -> View e
 buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing
 
 getElement :: forall e. View e -> IO (Maybe ENode)
--- getElement (Component _) = return Nothing
 getElement TextHTML {} = return Nothing
 getElement STHTML {..} =
   case _strecord of
@@ -1451,7 +1453,6 @@ getElement STHTML {..} =
 getElement n = return $ _node n
 
 getNode :: forall e. View e -> IO (Maybe NNode)
--- getNode (Component _) = return Nothing
 getNode TextHTML {..} = return $ fmap toNode _tnode
 getNode STHTML {..} =
   case _strecord of
@@ -1462,14 +1463,11 @@ getNode STHTML {..} =
 getNode n = return $ fmap toNode $ _node n
 
 getAttributes :: View e -> [Feature e]
--- getAttributes (Component _) = []
 getAttributes TextHTML {} = []
 getAttributes STHTML {} = []
 getAttributes n = _attributes n
 
 getChildren :: forall e. View e -> IO [View e]
--- getChildren (Component _) = return []
-getChildren TextHTML {} = return []
 getChildren STHTML {..} = do
   case _strecord of
     Nothing -> return []
@@ -1480,7 +1478,7 @@ getChildren HTML {..} = return _atoms
 getChildren SVGHTML {..} = return _atoms
 getChildren KHTML {..} = return $ map snd _keyed
 getChildren KSVGHTML {..} = return $ map snd _keyed
-getChildren Managed {} = return []
+getChildren _ = return []
 
 diff_ :: ControllerPatch m -> IO ()
 diff_ APatch {..} = do
@@ -1613,7 +1611,7 @@ diffHelper f doc ch isFG =
     -- go' old mid (render -> new@(Component _)) =
     --  go' old mid (toView new)
 
-    go' old@HTML {} (render -> mid@HTML {}) (render -> new@HTML {}) =
+    go' old@HTML {} (render -> mid@HTML {}) (render -> new@HTML {}) = do
       if prettyUnsafeEq (_tag old) (_tag new)
       then do
         let Just n = _node old
