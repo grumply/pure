@@ -1344,13 +1344,11 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
             -- this won't work properly on GHC; look into using onFPS or something to
             -- replicate the rAF approach
 #ifdef __GHCJS__
-            (st,sv,old,mid) <- readIORef strec
-            let st' = g st
-            writeIORef strec (st',sv,old,mid)
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
 #endif
               (st,sv,old,mid) <- readIORef strec
-              let new_mid = unsafeCoerce $ sv st upd
+              let st' = g st
+              let new_mid = unsafeCoerce $ sv st' upd
               new <- diffHelper f doc ch isFG old mid new_mid
               writeIORef strec (st',sv,new,new_mid)
               cb
