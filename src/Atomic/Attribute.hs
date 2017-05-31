@@ -279,32 +279,32 @@ instance Eq (Feature ms) where
 instance Cond (Feature ms) where
   nil = NullFeature
 
-instance IsString (Feature ms) where
-  fromString = Attribute "class" . fromString
+-- instance IsString (Feature ms) where
+--   fromString = Attribute "class" . fromString
 
-instance GHC.Exts.IsList (Feature ms) where
-  type Item (Feature ms) = Txt
-  fromList = fromTxt . T.intercalate " "
-  toList (Attribute "class" cs) = T.words cs
-  toList _ = []
+-- instance GHC.Exts.IsList (Feature ms) where
+--   type Item (Feature ms) = Txt
+--   fromList = fromTxt . T.intercalate " "
+--   toList (Attribute "class" cs) = T.words cs
+--   toList _ = []
 
--- is this a terrible idea?
-instance GHC.Exts.IsList ([a] -> [a]) where
-  type Item ([a] -> [a]) = a
-  fromList = go
-    where
-      go [] xs' = xs'
-      go (x:xs) xs' = x:go xs xs'
-  toList f = f []
+-- -- is this a terrible idea?
+-- instance GHC.Exts.IsList ([a] -> [a]) where
+--   type Item ([a] -> [a]) = a
+--   fromList = go
+--     where
+--       go [] xs' = xs'
+--       go (x:xs) xs' = x:go xs xs'
+--   toList f = f []
 
-instance {-# OVERLAPS #-} IsString [Feature ms] where
-  fromString s = [fromString s]
+-- instance {-# OVERLAPS #-} IsString [Feature ms] where
+--   fromString s = [fromString s]
 
-instance FromTxt (Feature ms) where
-  fromTxt = Attribute "class" . fromTxt
+-- instance FromTxt (Feature ms) where
+--   fromTxt = Attribute "class" . fromTxt
 
-instance FromTxt [Feature ms] where
-  fromTxt t = [fromTxt t]
+-- instance FromTxt [Feature ms] where
+--   fromTxt t = [fromTxt t]
 
 pattern Attr k v <- (Attribute k v) where
   Attr k v = Attribute k v
