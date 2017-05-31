@@ -400,7 +400,7 @@ instance ToTxt (View e) where
       else
         ">" <> Txt.concat (map (toTxt . render) _atoms) <> "</" <> _tag <> ">"
 
-  toTxt STHTML {..} = toTxt $ render (_stview _ststate (\_ _ -> return ()))
+  toTxt STHTML {..} = toTxt $ render (_stview _stprops _ststate (\_ _ -> return ()))
 
   toTxt SVGHTML {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
@@ -579,9 +579,9 @@ renderDynamicHTML h =
     STHTML {..} -> do
       case _strecord of
         Nothing ->
-          return $ toTxt $ render $ _stview _ststate (\_ _ -> return ())
+          return $ toTxt $ render $ _stview _stprops _ststate (\_ _ -> return ())
         Just str -> do
-          (_,_,a,_) <- readIORef str
+          (_,_,_,a,_) <- readIORef str
           renderDynamicHTML (unsafeCoerce a :: View e)
 
     SVGHTML {..} -> do

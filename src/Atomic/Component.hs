@@ -188,11 +188,11 @@ data View e where
         } -> View e
 
   STHTML
-    :: { _stmodel  :: (model)
+    :: { _stprops  :: props
        , _stid     :: Int
        , _ststate  :: st
-       , _strecord :: (Maybe (IORef (st,st -> ((st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
-       , _stview   :: (st -> ((st -> st) -> IO () -> IO ()) -> View x)
+       , _strecord :: (Maybe (IORef (props,st,st -> ((st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
+       , _stview   :: (props -> st -> ((st -> st) -> IO () -> IO ()) -> View x)
        , _stupdate :: ((st -> st) -> IO () -> IO ())
        } -> View e
 
@@ -306,10 +306,13 @@ instance Typeable e => ToJSON (View e) where
 #endif
       go a
     where
-      go (STHTML _ _ st iorec v _) =
-        case iorec of
-          Nothing -> go $ render $ (unsafeCoerce :: forall x. x -> View e) $ v st (\_ _ -> return ())
-          Just ref -> go $ render $ (unsafeCoerce :: forall x. x -> View e) $ v ((\(a,_,_,_) -> a) $ unsafePerformIO (readIORef ref)) (\_ _ -> return ())
+      go (STHTML props _ st iorec v _) =
+        go $ render $ (unsafeCoerce :: forall x. x -> View e) $
+          case iorec of
+            Nothing -> v props st (\_ _ -> return ())
+            Just ref ->
+              let (props,st,_,_,_) = unsafePerformIO (readIORef ref)
+              in v props st (\_ _ -> return ())
       go (TextHTML _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
       go (RawHTML _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
       go (KHTML _ t as ks) = object [ "type" .= ("keyed" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks) ]
@@ -559,11 +562,11 @@ list x _attributes _keyed =
 --               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
 --               this problem. The solution is the good practice of keeping lists of views static
 --               or at the very least keep extensibility at the end of a view list.
-viewManager :: forall model st e. Int -> model -> st -> (st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
-viewManager k watch_model initial_st view = STHTML watch_model k initial_st Nothing view (\_ _ -> return ())
+viewManager :: forall props st e. Int -> props -> st -> (props -> st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
+viewManager k props initial_st view = STHTML props k initial_st Nothing view (\_ _ -> return ())
 
 constant :: View e -> View e
-constant a = viewManager 0 () () $ \_ _ -> a
+constant a = viewManager 0 () () $ \_ _ _ -> a
 
 controller :: ([Feature e] -> [View e] -> View e)
            -> (forall ts' ms' m. (IsController' ts' ms' m) => [Feature e] -> Controller' ts' ms' m -> View e)
@@ -649,7 +652,7 @@ rebuild h =
     go :: View e -> IO ()
     go STHTML {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,a,_) <- readIORef ref
+        (_,_,_,a,_) <- readIORef ref
         rebuild (unsafeCoerce a :: View e)
     go HTML {..}    = mapM_ go _atoms
     go SVGHTML {..} = mapM_ go _atoms
@@ -685,7 +688,7 @@ triggerBackground = go
     go :: View e -> m ()
     go STHTML {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,a,_) <- liftIO $ readIORef ref
+        (_,_,_,a,_) <- liftIO $ readIORef ref
         go (unsafeCoerce a)
     go HTML {..}    = mapM_ go _atoms
     go SVGHTML {..} = mapM_ go _atoms
@@ -710,7 +713,7 @@ triggerForeground = go
     go :: View e -> m ()
     go STHTML {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,a,_) <- liftIO $ readIORef ref
+        (_,_,_,a,_) <- liftIO $ readIORef ref
         go (unsafeCoerce a)
     go HTML {..}    = mapM_ go _atoms
     go SVGHTML {..} = mapM_ go _atoms
@@ -1273,7 +1276,7 @@ swapContent t e =
 embed_ :: forall e. ENode -> View e -> IO ()
 embed_ parent STHTML {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,a,_) <- readIORef ref
+    (_,_,_,a,_) <- readIORef ref
     embed_ parent (unsafeCoerce a :: View e)
 embed_ parent TextHTML {..} =
   forM_ _tnode $ \node -> do
@@ -1339,27 +1342,27 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
       return $ HTML _node _tag _attributes _atoms
 
     go mparent STHTML {..} = do
-      strec <- newIORef (_ststate,_stview,nil,nil)
+      strec <- newIORef (_stprops,_ststate,_stview,nil,nil)
       let upd g cb = void $ do
             -- this won't work properly on GHC; look into using onFPS or something to
             -- replicate the rAF approach
 #ifdef __GHCJS__
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
 #endif
-              (st,sv,old,mid) <- readIORef strec
+              (props,st,sv,old,mid) <- readIORef strec
               let st' = g st
-              let new_mid = unsafeCoerce $ sv st' upd
+              let new_mid = unsafeCoerce $ sv props st' upd
               new <- diffHelper f doc ch isFG old mid new_mid
-              writeIORef strec (st',sv,new,new_mid)
+              writeIORef strec (props,st',sv,new,new_mid)
               cb
 #ifdef __GHCJS__
             win <- getWindow
             requestAnimationFrame win (Just rafCallback)
 #endif
-      let mid = _stview _ststate upd
+      let mid = _stview _stprops _ststate upd
       new <- go mparent (unsafeCoerce $ render mid)
-      writeIORef strec (_ststate,_stview,new,unsafeCoerce mid)
-      return $ STHTML _stmodel _stid _ststate (Just $ unsafeCoerce strec) _stview upd
+      writeIORef strec (_stprops,_ststate,_stview,new,unsafeCoerce mid)
+      return $ STHTML _stprops _stid _ststate (Just $ unsafeCoerce strec) _stview upd
 
     go mparent SVGHTML {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
@@ -1446,7 +1449,7 @@ getElement STHTML {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,a,_) <- readIORef ref
+      (_,_,_,a,_) <- readIORef ref
       getElement (unsafeCoerce a :: View e)
 getElement n = return $ _node n
 
@@ -1456,7 +1459,7 @@ getNode STHTML {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,a,_) <- readIORef ref
+      (_,_,_,a,_) <- readIORef ref
       getNode (unsafeCoerce a :: View e)
 getNode n = return $ fmap toNode $ _node n
 
@@ -1470,7 +1473,7 @@ getChildren STHTML {..} = do
   case _strecord of
     Nothing -> return []
     Just ref -> do
-      (_,_,a,_) <- readIORef ref
+      (_,_,_,a,_) <- readIORef ref
       return [unsafeCoerce a :: View e]
 getChildren HTML {..} = return _atoms
 getChildren SVGHTML {..} = return _atoms
@@ -1633,17 +1636,17 @@ diffHelper f doc ch isFG =
 
     go' old@STHTML {} _ (render -> new@STHTML {}) = do
       case (old,new) of
-        (STHTML m k s ~(Just r) v u,STHTML m' k' s' _ v' _) -> do
+        (STHTML p k s ~(Just r) v u,STHTML p' k' _ _ v' _) -> do
           if prettyUnsafeEq k k' then
-            if reallyVeryUnsafeEq m m' then do
+            if reallyVeryUnsafeEq p p' then do
               return old
             else do
-              (st,sv,old,mid) <- readIORef r
-              writeIORef r (st,unsafeCoerce v',old,mid)
-              u (const (unsafeCoerce s')) (return ())
-              return $ STHTML m' k' s' (Just $ unsafeCoerce r) v' (unsafeCoerce u)
+              (_,st,sv,old,mid) <- readIORef r
+              writeIORef r (unsafeCoerce p',st,sv,old,mid)
+              u (const (unsafeCoerce st)) (return ())
+              return $ STHTML p' k' (unsafeCoerce s) (Just $ unsafeCoerce r) v' (unsafeCoerce u)
           else do
-            (_,_,a,_) <- readIORef r
+            (_,_,_,a,_) <- readIORef r
             new' <- buildHTML doc ch isFG f new
             replace a new'
             didUnmount <- cleanup f [unsafeCoerce a]
@@ -2249,6 +2252,16 @@ onRaw el nm os f = do
     liftIO $ f stop (unsafeCoerce ce)
   writeIORef stopper stopListener
   return stopListener
+
+property :: ENode -> Feature e -> IO ()
+property node (Property k v) = set_property_js node k v
+property node (DelayedProperty k v) = set_property_js node k v
+property _ _ = return ()
+
+attribute :: ENode -> Feature e -> IO ()
+attribute node (Attribute k v) = E.setAttribute node k v
+attribute node (DelayedAttribute k v) = E.setAttribute node k v
+attribute _ _ = return ()
 
 setAttribute_ :: (Code e IO () -> IO ()) -> Bool -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())
 setAttribute_ c diffing element attr didMount =
