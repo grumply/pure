@@ -548,6 +548,10 @@ list x _attributes _keyed =
         KSVGHTML {..}
     _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGHTMLs"
 
+
+viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
+viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\_ _ -> return ())
+
 -- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
 -- for changes; if any of the variables within the model are updated, a diff will be performed.
 -- This is how changes external to a `viewManager` are injected; if a `viewManager` uses state
@@ -562,11 +566,11 @@ list x _attributes _keyed =
 --               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
 --               this problem. The solution is the good practice of keeping lists of views static
 --               or at the very least keep extensibility at the end of a view list.
-viewManager :: forall props st e. Int -> props -> st -> (props -> st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
-viewManager k props initial_st view = STHTML props k initial_st Nothing view (\_ _ -> return ())
+viewManager :: forall props st e. props -> st -> (props -> st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
+viewManager props initial_st view = STHTML props 0 initial_st Nothing view (\_ _ -> return ())
 
 constant :: View e -> View e
-constant a = viewManager 0 () () $ \_ _ _ -> a
+constant a = viewManager () () $ \_ _ _ -> a
 
 controller :: ([Feature e] -> [View e] -> View e)
            -> (forall ts' ms' m. (IsController' ts' ms' m) => [Feature e] -> Controller' ts' ms' m -> View e)
