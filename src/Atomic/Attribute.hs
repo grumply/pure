@@ -428,8 +428,8 @@ makeLenses ''Feature
 makePrisms ''Options
 makeLenses ''Options
 
-pattern Classes cs <- (Attribute "class" (T.splitOn " " -> cs)) where
-  Classes cs = Attribute "class" $ T.intercalate " " cs
+pattern ClassList cs <- (Attribute "class" (T.splitOn " " -> cs)) where
+  ClassList cs = Attribute "class" $ T.intercalate " " cs
 
 toBool :: Txt -> Bool
 toBool t = if t == "" then False else True
