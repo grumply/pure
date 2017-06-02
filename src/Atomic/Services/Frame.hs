@@ -49,13 +49,13 @@ onFrame :: forall ms c.
            ( MonadIO c
            , '[Evented] <: ms
            )
-        => (IO () -> Code ms c ())
-        -> Code ms c (IO ())
+        => (IO () -> Ef ms c ())
+        -> Ef ms c (IO ())
 onFrame f = do
   buf <- get
   Just stopper <- demandMaybe =<< with frameS (do
     FrameState {..} <- get
-    sub :: Subscription (Code ms c) Double <- subscribe frames (return buf)
+    sub :: Subscription (Ef ms c) Double <- subscribe frames (return buf)
     bhv <- listen sub (\_ -> lift $ f (leaveSyndicate frames sub))
     let stopper = stop bhv >> leaveSyndicate frames sub
     unless isRunning createFrameLoop
@@ -65,8 +65,8 @@ onFrame f = do
 onFPS :: forall ms c.
          (MonadIO c, '[Evented] <: ms)
       => Double
-      -> (IO () -> Code ms c ())
-      -> Code ms c (IO ())
+      -> (IO () -> Ef ms c ())
+      -> Ef ms c (IO ())
 onFPS n f = do
   buf <- get
 
@@ -74,7 +74,7 @@ onFPS n f = do
 
   Just stopper <- demandMaybe =<< with frameS (do
     FrameState {..} <- get
-    sub :: Subscription (Code ms c) Double <- subscribe frames (return buf)
+    sub :: Subscription (Ef ms c) Double <- subscribe frames (return buf)
     let leave = leaveSyndicate frames sub
     bhv <- listen sub (\timestamp -> lift (f leave) >> become (continue leave delta timestamp))
     let stopper = stop bhv >> leaveSyndicate frames sub
@@ -95,13 +95,13 @@ onFPS n f = do
 onFrameWithTime :: ( MonadIO c
                    , '[Evented] <: ms
                    )
-                => (IO () -> Double -> Code '[Event Double] (Code ms c) ())
-                -> Code ms c (IO ())
+                => (IO () -> Double -> Ef '[Event Double] (Ef ms c) ())
+                -> Ef ms c (IO ())
 onFrameWithTime f = do
   buf <- get
   Just stopper <- demandMaybe =<< with frameS (do
     FrameState {..} <- get
-    sub :: Subscription (Code ms c) Double <- subscribe frames (return buf)
+    sub :: Subscription (Ef ms c) Double <- subscribe frames (return buf)
     let leave = leaveSyndicate frames sub
     bhv <- listen sub (f leave)
     let stopper = stop bhv >> leaveSyndicate frames sub
@@ -120,7 +120,7 @@ rAF win callback = do
   return 0
 #endif
 
-createFrameLoop :: ('[State () FrameState,Evented] <: ms) => Code ms IO ()
+createFrameLoop :: ('[State () FrameState,Evented] <: ms) => Ef ms IO ()
 createFrameLoop = do
   FrameState {..} <- get
   win <- getWindow
@@ -149,7 +149,7 @@ createFrameLoop = do
   return ()
 
 ease :: (MonadIO c, '[Evented] <: ms)
-     => Ease -> Double -> Double -> Code ms c Double -> (Double -> Code ms c ()) -> Code ms c ()
+     => Ease -> Double -> Double -> Ef ms c Double -> (Double -> Ef ms c ()) -> Ef ms c ()
 ease ease durationSec final getter setter = do
   current <- getter
   let delta = final - current
@@ -173,7 +173,7 @@ ease ease durationSec final getter setter = do
             become go'
 
 ease2 :: (MonadIO c, '[Evented] <: ms)
-     => Ease -> Double -> (Double,Double) -> Code ms c (Double,Double) -> ((Double,Double) -> Code ms c ()) -> Code ms c ()
+     => Ease -> Double -> (Double,Double) -> Ef ms c (Double,Double) -> ((Double,Double) -> Ef ms c ()) -> Ef ms c ()
 ease2 ease durationSec (final1,final2) getter setter = do
   (current1,current2) <- getter
   let delta1 = final1 - current1

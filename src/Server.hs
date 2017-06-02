@@ -49,7 +49,7 @@ instance ( IsServer' ts ms c
          , MonadIO c'
          )
   => With (Server' ts ms c uTs uMs)
-          (Code ms c)
+          (Ef ms c)
           c'
   where
     using_ s = do
@@ -73,10 +73,10 @@ instance ( IsServer' ts ms c
 type IsServer' ts ms c = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms), MonadIO c)
 type IsServer ms = IsServer' ms ms IO
 
-type ServerKey ms = Key (Ef.Base.As (Code (Appended ms Base) IO))
+type ServerKey ms = Key (Ef.Base.As (Ef (Appended ms Base) IO))
 type ServerBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
-type ServerPrimer ms = Code (Appended ms Base) IO ()
-type ServerConnection pms ms = Ef.Base.As (Code (Appended ms Base) IO) -> Connection' (Appended pms Connection.Base) (Appended pms Connection.Base)
+type ServerPrimer ms = Ef (Appended ms Base) IO ()
+type ServerConnection pms ms = Ef.Base.As (Ef (Appended ms Base) IO) -> Connection' (Appended pms Connection.Base) (Appended pms Connection.Base)
 
 newtype Connections = Connections (Syndicate (SockAddr,Socket,EvQueue))
 
@@ -86,25 +86,25 @@ data Server' ts ms c pts pms
   =
 #ifdef SECURE
     SecureServer
-    { key        :: !(Key (Ef.Base.As (Code ms c)))
+    { key        :: !(Key (Ef.Base.As (Ef ms c)))
     , ip         :: !(String)
     , port       :: !(Int)
     , sslKey     :: !(FilePath)
     , sslCert    :: !(FilePath)
     , sslChain   :: !(Maybe FilePath)
     , build      :: !(Modules Base (Action ts c) -> c (Modules ts (Action ts c)))
-    , prime      :: !(Code ms c ())
-    , connection :: !(Ef.Base.As (Code ms c) IO -> Connection' pts pms)
+    , prime      :: !(Ef ms c ())
+    , connection :: !(Ef.Base.As (Ef ms c) IO -> Connection' pts pms)
     }
   |
 #endif
     Server
-    { key        :: !(Key (Ef.Base.As (Code ms c)))
+    { key        :: !(Key (Ef.Base.As (Ef ms c)))
     , ip         :: !(String)
     , port       :: !(Int)
     , build      :: !(Modules Base (Action ts c) -> c (Modules ts (Action ts c)))
-    , prime      :: !(Code ms c ())
-    , connection :: !(Ef.Base.As (Code ms c) -> Connection' pts pms)
+    , prime      :: !(Ef ms c ())
+    , connection :: !(Ef.Base.As (Ef ms c) -> Connection' pts pms)
     }
 type Server ms pms = Server' (Appended ms Base) (Appended ms Base) IO (Appended pms Connection.Base) (Appended pms Connection.Base)
 
@@ -228,7 +228,7 @@ eventloop :: forall ts ms c uTs uMs.
              , IsConnection' uTs uMs
              , Functor (Messages uMs)
              )
-          => Code ms c ()
+          => Ef ms c ()
           -> Connection' uTs uMs
           -> Signal ms c (State () WebSocket (Action uTs IO),SockAddr,EvQueue)
           -> EvQueue

@@ -102,7 +102,7 @@ getTouchY = with touchS $ do
   liftIO $ readIORef touchYRef
 
 onTouchX :: (MonadIO c, '[Evented] <: ms)
-         => (Int -> Code ms c ()) -> Code ms c (IO ())
+         => (Int -> Ef ms c ()) -> Ef ms c (IO ())
 onTouchX f = do
   buf <- getEventQueue
   p <- periodical
@@ -114,7 +114,7 @@ onTouchX f = do
   return (stop s >> leaveNW)
 
 onTouchY :: (MonadIO c, '[Evented] <: ms)
-         => (Int -> Code ms c ()) -> Code ms c (IO ())
+         => (Int -> Ef ms c ()) -> Ef ms c (IO ())
 onTouchY f = do
   buf <- getEventQueue
   p <- periodical
@@ -126,8 +126,8 @@ onTouchY f = do
   return (stop s >> leaveNW)
 
 onTouchPosition :: (MonadIO c, '[Evented] <: ms)
-                => (TouchPosition -> Code ms c ())
-                -> Code ms c (IO ())
+                => (TouchPosition -> Ef ms c ())
+                -> Ef ms c (IO ())
 onTouchPosition f = do
   buf <- getEventQueue
   p <- periodical

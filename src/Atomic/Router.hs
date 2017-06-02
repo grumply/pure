@@ -29,27 +29,27 @@ import Unsafe.Coerce
 
 data Router r
   = Router
-      { router :: forall ms c. Code '[Route] (Code ms c) r
+      { router :: forall ms c. Ef '[Route] (Ef ms c) r
       , currentRoute :: Maybe r
       , routeSyndicate :: Syndicate r
       }
 
-getRouter :: (MonadIO c, '[State () (Router r)] <: ms) => Code ms c (Code '[Route] (Code ms c) r)
+getRouter :: (MonadIO c, '[State () (Router r)] <: ms) => Ef ms c (Ef '[Route] (Ef ms c) r)
 getRouter = router <$> get
 
-setRouter :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Code '[Route] (Code ms c) r -> Code ms c ()
+setRouter :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Ef '[Route] (Ef ms c) r -> Ef ms c ()
 setRouter r = void $ modify (\rtr -> (rtr { router = unsafeCoerce r } :: Router r,()))
 
-getRoute :: (MonadIO c, '[State () (Router r)] <: ms) => Code ms c (Maybe r)
+getRoute :: (MonadIO c, '[State () (Router r)] <: ms) => Ef ms c (Maybe r)
 getRoute = currentRoute <$> get
 
-setRoute :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Maybe r -> Code ms c ()
+setRoute :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Maybe r -> Ef ms c ()
 setRoute mr = void $ modify (\rtr -> (rtr { currentRoute = mr },()))
 
-getRouteSyndicate :: (MonadIO c, '[State () (Router r)] <: ms) => Code ms c (Syndicate r)
+getRouteSyndicate :: (MonadIO c, '[State () (Router r)] <: ms) => Ef ms c (Syndicate r)
 getRouteSyndicate = routeSyndicate <$> get
 
-setRouteSyndicate :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Syndicate r -> Code ms c ()
+setRouteSyndicate :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Syndicate r -> Ef ms c ()
 setRouteSyndicate rn = void $ modify (\rtr -> (rtr { routeSyndicate = rn } :: Router r,()))
 
 mkRouter :: forall ms c ts r.
@@ -59,7 +59,7 @@ mkRouter :: forall ms c ts r.
             , '[State () (Router r)] <: ms
             , Delta (Modules ts) (Messages ms)
             )
-         => Syndicate r -> Code '[Route] (Code ms c) r -> State () (Router r) (Action ts c)
+         => Syndicate r -> Ef '[Route] (Ef ms c) r -> State () (Router r) (Action ts c)
 mkRouter nw rtr = state (Router (unsafeCoerce rtr) Nothing nw)
 
 -- Note that this /should not/ be called within the first 500 milliseconds

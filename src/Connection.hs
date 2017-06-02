@@ -16,12 +16,12 @@ newtype Origin = Origin SockAddr
 type Base = '[State () WebSocket,State () Origin,Evented,State () Vault,State () Shutdown]
 
 type ConnectionBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
-type ConnectionPrimer ms = Code (Appended ms Base) IO ()
+type ConnectionPrimer ms = Ef (Appended ms Base) IO ()
 
 data Connection' ts ms =
   Connection
     { build :: !(Modules Base (Action ts IO) -> IO (Modules ts (Action ts IO)))
-    , prime :: !(Code ms IO ())
+    , prime :: !(Ef ms IO ())
     }
 type Connection ms = Connection' (Appended ms Base) (Appended ms Base)
 

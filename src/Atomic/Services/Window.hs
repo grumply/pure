@@ -178,8 +178,8 @@ windowS = Service {..}
             writeIORef height_ newHeight
 
 onScrollX :: (MonadIO c, '[Evented] <: ms)
-          => (Int -> Code ms c ())
-          -> Code ms c (IO ())
+          => (Int -> Ef ms c ())
+          -> Ef ms c (IO ())
 onScrollX f = do
   buf <- get
   Just stopper <- demandMaybe =<< with windowS (do
@@ -189,8 +189,8 @@ onScrollX f = do
   return stopper
 
 onScrollY :: (MonadIO c, '[Evented] <: ms)
-          => (Int -> Code ms c ())
-          -> Code ms c (IO ())
+          => (Int -> Ef ms c ())
+          -> Ef ms c (IO ())
 onScrollY f = do
   buf <- get
   Just stopper <- demandMaybe =<< with windowS (do
@@ -200,8 +200,8 @@ onScrollY f = do
   return stopper
 
 onScrollPosition :: (MonadIO c, '[Evented] <: ms)
-                 => (ScrollPosition -> Code ms c ())
-                 -> Code ms c (IO ())
+                 => (ScrollPosition -> Ef ms c ())
+                 -> Ef ms c (IO ())
 onScrollPosition f = do
   buf <- get
   Just stopper <- demandMaybe =<< with windowS (do
@@ -211,8 +211,8 @@ onScrollPosition f = do
   return stopper
 
 onWindowHeight :: (MonadIO c, '[Evented] <: ms)
-               => (Int -> Code ms c ())
-               -> Code ms c (IO ())
+               => (Int -> Ef ms c ())
+               -> Ef ms c (IO ())
 onWindowHeight f = do
   buf <- get
   Just stopper <- demandMaybe =<< with windowS (do
@@ -222,8 +222,8 @@ onWindowHeight f = do
   return stopper
 
 onWindowWidth :: (MonadIO c, '[Evented] <: ms)
-              => (Int -> Code ms c ())
-              -> Code ms c (IO ())
+              => (Int -> Ef ms c ())
+              -> Ef ms c (IO ())
 onWindowWidth f = do
   buf <- get
   Just stopper <- demandMaybe =<< with windowS (do
@@ -233,8 +233,8 @@ onWindowWidth f = do
   return stopper
 
 onWindowDimensions :: (MonadIO c, '[Evented] <: ms)
-                   => (WindowDimensions -> Code ms c ())
-                   -> Code ms c (IO ())
+                   => (WindowDimensions -> Ef ms c ())
+                   -> Ef ms c (IO ())
 onWindowDimensions f = do
   buf <- get
   Just stopper <- demandMaybe =<< with windowS (do

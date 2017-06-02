@@ -111,7 +111,7 @@ class EnactEndpoints api_ty hndlr ms c es es' where
   -- we take api_ty's es to be our fixed basis
   enactEndpoints :: api_ty es
                  -> Endpoints hndlr ms c es'
-                 -> Code ms c (ActiveEndpoints ms c es)
+                 -> Ef ms c (ActiveEndpoints ms c es)
 
 instance (Monad c, Functor (Messages ms)) => EnactEndpoints api_ty hndlr ms c '[] '[] where
   enactEndpoints _ _ = return ActiveEndpointsNull

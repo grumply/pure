@@ -86,8 +86,8 @@ onWindowSyndicate :: ( IsEv e
                    , '[Evented] <: ms
                    )
                 => EVName Win e
-                -> (e -> Code '[Event e] (Code ms c) ())
-                -> Code ms c (IO ())
+                -> (e -> Ef '[Event e] (Ef ms c) ())
+                -> Ef ms c (IO ())
 onWindowSyndicate en f = do
   nw <- getWindowSyndicate en
   connect nw f
@@ -135,8 +135,8 @@ onDocumentSyndicate :: ( IsEv e
                      , '[Evented] <: ms
                      )
                   => EVName Doc e
-                  -> (e -> Code '[Event e] (Code ms c) ())
-                  -> Code ms c (IO ())
+                  -> (e -> Ef '[Event e] (Ef ms c) ())
+                  -> Ef ms c (IO ())
 onDocumentSyndicate en f = do
   nw <- getDocumentSyndicate en
   connect nw f
@@ -181,8 +181,8 @@ onWindowSyndicatePreventDefault :: ( IsEv e
                                  , '[Evented] <: ms
                                  )
                               => EVName Win e
-                              -> (e -> Code '[Event e] (Code ms c) ())
-                              -> Code ms c (IO ())
+                              -> (e -> Ef '[Event e] (Ef ms c) ())
+                              -> Ef ms c (IO ())
 onWindowSyndicatePreventDefault en f = do
   nw <- getWindowSyndicatePreventDefault en
   connect nw f

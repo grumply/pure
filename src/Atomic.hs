@@ -48,6 +48,8 @@ import Control.Lens as Export hiding
 import qualified Control.Lens
 import Control.Lens.Extras as Export
 
+import Control.Concurrent as Export hiding (yield)
+import Data.IORef as Export
 import Data.Function as Export hiding (on)
 import Data.Bifunctor as Export
 import Data.Bool as Export
@@ -329,8 +331,8 @@ type Observer m = Controller '[] (Observing m)
 -- observer :: Observatory m -> ControllerKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
 observer :: forall m ms a w.
             ( Typeable m
-            , With w (Code ms IO) (Code (Base (Observing m)) IO)
-            , With w (Code ms IO) IO
+            , With w (Ef ms IO) (Ef (Base (Observing m)) IO)
+            , With w (Ef ms IO) IO
             , '[Observable m] <: ms
             , Component a (Base (Observing m))
             )
@@ -345,11 +347,11 @@ observer s key0 view0 = Controller {..}
     view (Observing (Just m)) = render $ view0 m
 
 -- specialized to Observatory to avoid inline type signatures
-observes :: (Typeable m, MonadIO c, '[Evented] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
+observes :: (Typeable m, MonadIO c, '[Evented] <: ms) => Observatory m -> (m -> Ef ms c ()) -> Ef ms c (Promise (IO ()))
 observes o f = observe o (Export.lift . f)
 
 -- specialized to Observatory to avoid inline type signatures
-observes' :: (Typeable m, MonadIO c, '[Evented] <: ms) => Observatory m -> (m -> Code ms c ()) -> Code ms c (Promise (IO ()))
+observes' :: (Typeable m, MonadIO c, '[Evented] <: ms) => Observatory m -> (m -> Ef ms c ()) -> Ef ms c (Promise (IO ()))
 observes' = observe'
 
 newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)

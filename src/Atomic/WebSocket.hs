@@ -121,7 +121,7 @@ data WebSocket
     }
 
 getWSMsgHandlers :: ('[State () WebSocket] <: ms, Monad c)
-                 => Code ms c (IORef (Map.HashMap Txt (Syndicate Dispatch)))
+                 => Ef ms c (IORef (Map.HashMap Txt (Syndicate Dispatch)))
 getWSMsgHandlers = do
   WebSocket {..} <- get
   return wsMessageHandlers
@@ -170,9 +170,9 @@ data RequestHandler ms c rqTy
          , ToJSON response
          )
       => Proxy rqTy
-      -> (Code ms c ()
-           -> Either Dispatch (Either LazyByteString response -> Code ms c (Either WSStatus ()),request)
-           -> Code '[Event Dispatch] (Code ms c) ()
+      -> (Ef ms c ()
+           -> Either Dispatch (Either LazyByteString response -> Ef ms c (Either WSStatus ()),request)
+           -> Ef '[Event Dispatch] (Ef ms c) ()
          )
       -> RequestHandler ms c rqTy
 
@@ -190,9 +190,9 @@ responds :: ( MonadIO c
             , ToJSON response
             )
          => Proxy rqTy
-         -> (Code ms c ()
-              -> Either Dispatch (Either LazyByteString response -> Code ms c (Either WSStatus ()),request)
-              -> Code '[Event Dispatch] (Code ms c) ()
+         -> (Ef ms c ()
+              -> Either Dispatch (Either LazyByteString response -> Ef ms c (Either WSStatus ()),request)
+              -> Ef '[Event Dispatch] (Ef ms c) ()
             )
          -> RequestHandler ms c rqTy
 responds = RequestHandler
@@ -209,7 +209,7 @@ data MessageHandler ms c mTy
          , ToJSON msg
          )
       => Proxy mTy
-      -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
+      -> (Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
       -> MessageHandler ms c mTy
 
 accepts :: ( MonadIO c
@@ -219,7 +219,7 @@ accepts :: ( MonadIO c
            , ToJSON msg
            )
         => Proxy mTy
-        -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
+        -> (Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
         -> MessageHandler ms c mTy
 accepts = MessageHandler
 
@@ -241,7 +241,7 @@ instance ( GetHandler MessageHandler message msgs'
       MessageHandler _ f -> do
         let p = Proxy :: Proxy message
             mhs' = deleteHandler p mhs :: MsgHandlers ms c msgs''
-        amh <- onMessage p ((unsafeCoerce f) :: Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
+        amh <- onMessage p ((unsafeCoerce f) :: Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
         ams <- enactEndpoints ms mhs'
         return $ ActiveEndpointsCons pm amh ams
 
@@ -261,7 +261,7 @@ instance ( GetHandler RequestHandler request rqs'
       RequestHandler _ f -> do
         let p = Proxy :: Proxy request
             mhs' = deleteHandler p mhs :: ReqHandlers ms c rqs''
-        amh <- respond p ((unsafeCoerce f) :: Code ms c () -> Either Dispatch (Either LazyByteString response -> Code ms c (Either WSStatus ()),req) -> Code '[Event Dispatch] (Code ms c) ())
+        amh <- respond p ((unsafeCoerce f) :: Ef ms c () -> Either Dispatch (Either LazyByteString response -> Ef ms c (Either WSStatus ()),req) -> Ef '[Event Dispatch] (Ef ms c) ())
         ams <- enactEndpoints ms mhs'
         return $ ActiveEndpointsCons pm amh ams
 
@@ -293,7 +293,7 @@ data Implementation ms c msgs rqs msgs' rqs'
 
 enact :: (MonadIO c, Functor (Messages ms))
       => Implementation ms c msgs rqs msgs' rqs'
-      -> Code ms c (ActiveAPI ms c msgs rqs)
+      -> Ef ms c (ActiveAPI ms c msgs rqs)
 enact (Impl local mhs rhs) = do
   let API mapi rapi = local
   amapi <- enactEndpoints mapi mhs
@@ -302,7 +302,7 @@ enact (Impl local mhs rhs) = do
   return active
 
 cleanupEndpoints :: (MonadIO c, '[State () WebSocket] <: ms)
-                 => Code ms c ()
+                 => Ef ms c ()
 cleanupEndpoints = do
   WebSocket {..} <- get
   mh <- liftIO $ readIORef wsMessageHandlers
@@ -334,32 +334,32 @@ setMsgsPerMinute n = do
   put ws { wsThroughputLimits = ((fst wsThroughputLimits) { messagesPerMinute = n},snd wsThroughputLimits) }
 
 onWSStatus :: ('[State () WebSocket, Evented] <: ms,MonadIO c)
-        => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
-        -> Code ms c (IO ())
+        => (WSStatus -> Ef '[Event WSStatus] (Ef ms c) ())
+        -> Ef ms c (IO ())
 onWSStatus f = do
   WebSocket {..} <- get
   connect wsStatusSyndicate f
 
 onWSClose :: ('[State () WebSocket, Evented] <: ms,MonadIO c)
-        => (WSCloseReason -> Code '[Event WSStatus] (Code ms c) ())
-        -> Code ms c (IO ())
+        => (WSCloseReason -> Ef '[Event WSStatus] (Ef ms c) ())
+        -> Ef ms c (IO ())
 onWSClose f = onWSStatus (\wss -> case wss of { WSClosed wscr -> f wscr; _ -> return () } )
 
 getWSStatus :: ('[State () WebSocket] <: ms, Monad c)
-            => Code ms c WSStatus
+            => Ef ms c WSStatus
 getWSStatus = do
   WebSocket {..} <- get
   return wsStatus
 
 setWSStatus :: ('[State () WebSocket] <: ms, MonadIO c)
-            => WSStatus -> Code ms c ()
+            => WSStatus -> Ef ms c ()
 setWSStatus wss = do
   ws <- get
   put ws { wsStatus = wss }
   publish (wsStatusSyndicate ws) wss
 
 getWSInfo :: ('[State () WebSocket] <: ms, MonadIO c)
-          => Code ms c (Maybe (S.SockAddr,S.Socket))
+          => Ef ms c (Maybe (S.SockAddr,S.Socket))
 getWSInfo = do
   ws <- get
   case wsSocket ws of
@@ -368,13 +368,13 @@ getWSInfo = do
 
 onWSCloseSimplyShutdown :: forall ms c.
                          ('[State () WebSocket, Evented, State () Shutdown] <: ms, MonadIO c)
-                      => Code ms c (IO ())
+                      => Ef ms c (IO ())
 onWSCloseSimplyShutdown = do
   onWSClose $ \closeReason -> lift $ do
     buf <- get
     Shutdown sdn <- get
     publish sdn ()
-    (rnr :: Signal ms c (Code ms c ()),_) <- runner
+    (rnr :: Signal ms c (Ef ms c ()),_) <- runner
     buffer buf rnr $ liftIO $ do
       killBuffer buf
       tid <- myThreadId
@@ -430,7 +430,7 @@ serverWS q sock tp = liftIO $ do
 
   c <- WS.acceptRequest pc
 
-  (rnr :: Signal ms c (Code ms c ()),_) <- runner
+  (rnr :: Signal ms c (Ef ms c ()),_) <- runner
 
   rt <- forkIO $ receiveLoop sock tpl mhs brr q c rnr
 
@@ -454,7 +454,7 @@ initializeClientWS :: forall ms c ts.
                    => String
                    -> Int
                    -> String
-                   -> Code ms c ()
+                   -> Ef ms c ()
 initializeClientWS host port path = do
 
   wsstatus <- getWSStatus
@@ -497,7 +497,7 @@ initializeClientWS host port path = do
               []
               return
 
-          (rnr :: Signal ms c (Code ms c ()),_) <- runner
+          (rnr :: Signal ms c (Ef ms c ()),_) <- runner
 
           rt <- liftIO $ forkIO $ receiveLoop sock (snd wsThroughputLimits) wsMessageHandlers wsBytesReadRef q c rnr
 
@@ -537,7 +537,7 @@ serverWSS q sock ssl tp = liftIO $ do
 
   c <- WS.acceptRequest pc
 
-  rnr :: Signal ms c (Code ms c ()) <- runner
+  rnr :: Signal ms c (Ef ms c ()) <- runner
 
   rt <- forkIO $ receiveLoop sock tpl mhs brr q c rnr
 
@@ -558,7 +558,7 @@ initializeClientWSS :: forall ms c ts.
                     => String
                     -> Int
                     -> String
-                    -> Code ms c ()
+                    -> Ef ms c ()
 initializeClientWSS host port path = do
 
   wsstatus <- getWSStatus
@@ -602,7 +602,7 @@ initializeClientWSS host port path = do
               []
               return
 
-          rnr :: Signal ms c (Code ms c ()) <- runner
+          rnr :: Signal ms c (Ef ms c ()) <- runner
 
           rt <- liftIO $ forkIO $ receiveLoop sock (snd wsThroughputLimits) wsMessageHandlers wsBytesReadRef q c rnr
 
@@ -615,7 +615,7 @@ initializeClientWSS host port path = do
 
 wsClose :: forall ms c.
            (MonadIO c, '[State () WebSocket] <: ms)
-        => WSCloseReason -> Code ms c ()
+        => WSCloseReason -> Ef ms c ()
 wsClose wscr = do
   -- liftIO $ putStrLn $ "Sending wsClose because: " ++ show wscr
   ws@WebSocket {..} <- get
@@ -887,7 +887,7 @@ hGetContentsN chk h = streamRead
 
 -- enable caching of pre-encoded msgs like an initial connection payload
 sendRawWith :: ( '[State () WebSocket] <: ms'
-               , With w (Code ms' c') IO
+               , With w (Ef ms' c') IO
                , MonadIO c'
                , MonadIO c
                )
@@ -898,7 +898,7 @@ sendRawWith s = with s . sendRaw
 sendRaw :: ( '[State () WebSocket] <: ms
            , MonadIO c
            )
-        => LazyByteString -> Code ms c (Either WSStatus ())
+        => LazyByteString -> Ef ms c (Either WSStatus ())
 sendRaw b = do
   WebSocket {..} <- get
   case wsSocket of
@@ -918,7 +918,7 @@ sendRaw b = do
 sendRawStreamWith :: ( MonadIO c
                , MonadIO c'
                , '[State () WebSocket] <: ms'
-               , With w (Code ms' c') IO
+               , With w (Ef ms' c') IO
                )
             => w
             -> Txt
@@ -931,7 +931,7 @@ sendRawStream :: ( MonadIO c
                    )
                 => Txt
                 -> LazyByteString
-                -> Code ms c (Either WSStatus ())
+                -> Ef ms c (Either WSStatus ())
 sendRawStream h bl = do
   let chunks = BL.toChunks bl
   WebSocket {..} <- get
@@ -992,12 +992,12 @@ sendRawStream h bl = do
 -- streaming performance; the msgs sent with sendFileWith cannot be consumed
 -- as standard JSON.
 sendFileWith :: ( '[State () WebSocket] <: ms'
-                , With w (Code ms' c') IO
+                , With w (Ef ms' c') IO
                 , MonadIO c'
                 , MonadIO c
                 , Functor (Messages ms)
                 )
-             => w -> Txt -> FilePath -> Code ms c (Promise (Either WSStatus ()))
+             => w -> Txt -> FilePath -> Ef ms c (Promise (Either WSStatus ()))
 sendFileWith s h fp = do
   bl <- liftIO $ readFile8k fp
   sendRawStreamWith s h bl
@@ -1016,7 +1016,7 @@ sendFileWith s h fp = do
 sendFile :: ( '[State () WebSocket] <: ms
             , MonadIO c
             )
-         => Txt -> FilePath -> Code ms c (Either WSStatus ())
+         => Txt -> FilePath -> Ef ms c (Either WSStatus ())
 sendFile h fp = do
   bl <- liftIO $ readFile8k fp
   sendRawStream h bl
@@ -1027,7 +1027,7 @@ sendFile h fp = do
 requestWith :: ( MonadIO c
                , MonadIO c'
 
-               , With w (Code ms' c') IO
+               , With w (Ef ms' c') IO
 
                , '[State () WebSocket] <: ms'
 
@@ -1046,8 +1046,8 @@ requestWith :: ( MonadIO c
             => w
             -> Proxy rqTy
             -> request
-            -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Promise (Endpoint Dispatch))
+            -> (Ef ms c () -> Either Dispatch response -> Ef '[Event Dispatch] (Ef ms c) ())
+            -> Ef ms c (Promise (Endpoint Dispatch))
 requestWith srv rqty_proxy req f = do
   pr <- promise
   buf <- get
@@ -1081,7 +1081,7 @@ requestWith srv rqty_proxy req f = do
         Nothing -> (Map.insert header newn mhs,newn)
         Just n  -> (mhs,n)
 
-    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
     let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -1095,7 +1095,7 @@ apiRequestWith :: forall w ms c ms' c' rqTy request rqI msgs rqs response.
                   ( MonadIO c
                   , MonadIO c'
 
-                  , With w (Code ms' c') IO
+                  , With w (Ef ms' c') IO
 
                   , '[State () WebSocket] <: ms'
 
@@ -1117,8 +1117,8 @@ apiRequestWith :: forall w ms c ms' c' rqTy request rqI msgs rqs response.
                 -> w
                 -> Proxy rqTy
                 -> request
-                -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-                -> Code ms c (Promise (Endpoint Dispatch))
+                -> (Ef ms c () -> Either Dispatch response -> Ef '[Event Dispatch] (Ef ms c) ())
+                -> Ef ms c (Promise (Endpoint Dispatch))
 apiRequestWith _ = requestWith
 
 request :: forall c ms rqTy request rqI rsp.
@@ -1138,8 +1138,8 @@ request :: forall c ms rqTy request rqI rsp.
             )
          => Proxy rqTy
          -> request
-         -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-         -> Code ms c (Endpoint Dispatch) 
+         -> (Ef ms c () -> Either Dispatch rsp -> Ef '[Event Dispatch] (Ef ms c) ())
+         -> Ef ms c (Endpoint Dispatch) 
 request rqty_proxy req f = do
   s_ <- liftIO $ newIORef undefined
   let header = responseHeader rqty_proxy req
@@ -1164,7 +1164,7 @@ request rqty_proxy req f = do
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
 
-  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
   let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -1192,14 +1192,14 @@ apiRequest :: forall c ms rqTy request rqI response rqs msgs.
            => FullAPI msgs rqs
            -> Proxy rqTy
            -> request
-           -> (Code ms c () -> Either Dispatch response -> Code '[Event Dispatch] (Code ms c) ())
-           -> Code ms c (Endpoint Dispatch)
+           -> (Ef ms c () -> Either Dispatch response -> Ef '[Event Dispatch] (Ef ms c) ())
+           -> Ef ms c (Endpoint Dispatch)
 apiRequest _ = request
 
 respondWith :: ( MonadIO c
                , MonadIO c'
 
-               , With w (Code ms' c') IO
+               , With w (Ef ms' c') IO
 
                , '[Evented] <: ms
 
@@ -1217,9 +1217,9 @@ respondWith :: ( MonadIO c
                )
             => w
             -> Proxy rqTy
-            -> (Code ms c () -> Either Dispatch (Either LazyByteString response -> Code ms c (Promise (Either WSStatus ())),request) -> Code '[Event Dispatch] (Code ms c) ()
+            -> (Ef ms c () -> Either Dispatch (Either LazyByteString response -> Ef ms c (Promise (Either WSStatus ())),request) -> Ef '[Event Dispatch] (Ef ms c) ()
                )
-            -> Code ms c (Promise (Endpoint Dispatch))
+            -> Ef ms c (Promise (Endpoint Dispatch))
 respondWith srv rqty_proxy rr = do
   pr <- promise
   buf <- get
@@ -1258,7 +1258,7 @@ respondWith srv rqty_proxy rr = do
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
 
-    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
     let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -1282,8 +1282,8 @@ respond :: ( MonadIO c
            , ToJSON response
            )
         => Proxy rqTy
-        -> (Code ms c () -> Either Dispatch (Either LazyByteString response -> Code ms c (Either WSStatus ()),request) -> Code '[Event Dispatch] (Code ms c) ())
-        -> Code ms c (Endpoint Dispatch)
+        -> (Ef ms c () -> Either Dispatch (Either LazyByteString response -> Ef ms c (Either WSStatus ()),request) -> Ef '[Event Dispatch] (Ef ms c) ())
+        -> Ef ms c (Endpoint Dispatch)
 respond rqty_proxy rr = do
   s_ <- liftIO $ newIORef undefined
 
@@ -1319,7 +1319,7 @@ respond rqty_proxy rr = do
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
 
-  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
   let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -1329,7 +1329,7 @@ respond rqty_proxy rr = do
 messageWith :: ( MonadIO c
                , MonadIO c'
                , '[State () WebSocket] <: ms'
-               , With w (Code ms' c') IO
+               , With w (Ef ms' c') IO
                , Message mTy
                , M mTy ~ message
                , ToJSON message
@@ -1338,14 +1338,14 @@ messageWith :: ( MonadIO c
             => w
             -> Proxy mTy
             -> message
-            -> Code ms c (Promise (Either WSStatus ()))
+            -> Ef ms c (Promise (Either WSStatus ()))
 messageWith s mty_proxy m =
   sendRawWith s $ toBS $ encodeDispatch (messageHeader mty_proxy) m
 
 apiMessageWith :: ( MonadIO c
                   , MonadIO c'
                   , '[State () WebSocket] <: ms'
-                  , With w (Code ms' c') IO
+                  , With w (Ef ms' c') IO
                   , Message mTy
                   , M mTy ~ message
                   , ToJSON message
@@ -1356,7 +1356,7 @@ apiMessageWith :: ( MonadIO c
                 -> w
                 -> Proxy mTy
                 -> message
-                -> Code ms c (Promise (Either WSStatus ()))
+                -> Ef ms c (Promise (Either WSStatus ()))
 apiMessageWith _ = messageWith
 
 message :: ( MonadIO c
@@ -1367,7 +1367,7 @@ message :: ( MonadIO c
            )
         => Proxy mTy
         -> msg
-        -> Code ms c (Either WSStatus ())
+        -> Ef ms c (Either WSStatus ())
 message mty_proxy m =
   sendRaw $ toBS $ encodeDispatch (messageHeader mty_proxy) m
 
@@ -1381,7 +1381,7 @@ apiMessage :: ( MonadIO c
            => FullAPI msgs rqs
            -> Proxy mTy
            -> msg
-           -> Code ms c (Either WSStatus ())
+           -> Ef ms c (Either WSStatus ())
 apiMessage _ mty_proxy m =
   sendRaw $ toBS $ encodeDispatch (messageHeader mty_proxy) m
 
@@ -1389,15 +1389,15 @@ onMessageWith :: ( MonadIO c
                  , MonadIO c'
                  , '[State () WebSocket] <: ms'
                  , '[Evented] <: ms
-                 , With w (Code ms' c') IO
+                 , With w (Ef ms' c') IO
                  , Message mTy
                  , M mTy ~ msg
                  , FromJSON msg
                  )
               => w
               -> Proxy mTy
-              -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-              -> Code ms c (Promise (Endpoint Dispatch))
+              -> (Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
+              -> Ef ms c (Promise (Endpoint Dispatch))
 onMessageWith s mty_proxy f = do
   pr <- promise
   buf <- get
@@ -1430,7 +1430,7 @@ onMessageWith s mty_proxy f = do
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
 
-    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
     let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -1445,8 +1445,8 @@ onMessage :: ( MonadIO c
              , FromJSON msg
              )
           => Proxy mTy
-          -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint Dispatch)
+          -> (Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
+          -> Ef ms c (Endpoint Dispatch)
 onMessage mty_proxy f = do
   s_ <- liftIO $ newIORef undefined
 
@@ -1475,7 +1475,7 @@ onMessage mty_proxy f = do
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
 
-  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
   let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -1644,7 +1644,7 @@ data RequestHandler ms c rqTy
          , ToJSON rsp
          )
       => Proxy rqTy
-      -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
+      -> (Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
       -> RequestHandler ms c rqTy
 
 responds :: ( MonadIO c
@@ -1661,7 +1661,7 @@ responds :: ( MonadIO c
             , ToJSON rsp
             )
           => Proxy rqTy
-          -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
+          -> (Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
           -> RequestHandler ms c rqTy
 responds = RequestHandler
 
@@ -1677,7 +1677,7 @@ data MessageHandler ms c mTy
          , ToJSON message
          )
       => Proxy mTy
-      -> (Code ms c () -> Either Dispatch message -> Code '[Event Dispatch] (Code ms c) ())
+      -> (Ef ms c () -> Either Dispatch message -> Ef '[Event Dispatch] (Ef ms c) ())
       -> MessageHandler ms c mTy
 
 accepts :: ( MonadIO c
@@ -1687,7 +1687,7 @@ accepts :: ( MonadIO c
            , ToJSON message
            )
         => Proxy mTy
-        -> (Code ms c () -> Either Dispatch message -> Code '[Event Dispatch] (Code ms c) ())
+        -> (Ef ms c () -> Either Dispatch message -> Ef '[Event Dispatch] (Ef ms c) ())
         -> MessageHandler ms c mTy
 accepts = MessageHandler
 
@@ -1708,7 +1708,7 @@ instance ( GetHandler MessageHandler message msgs'
       MessageHandler _ f -> do
         let p = Proxy :: Proxy message
             mhs' = deleteHandler p mhs :: MsgHandlers ms c msgs''
-        amh <- onMessage p ((unsafeCoerce f) :: Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
+        amh <- onMessage p ((unsafeCoerce f) :: Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
         ams <- enactEndpoints ms mhs'
         return $ ActiveEndpointsCons pm amh ams
 
@@ -1728,7 +1728,7 @@ instance ( GetHandler RequestHandler request rqs'
       RequestHandler _ f -> do
         let p = Proxy :: Proxy request
             mhs' = deleteHandler p mhs :: ReqHandlers ms c rqs''
-        amh <- respond p ((unsafeCoerce f) :: Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),req) -> Code '[Event Dispatch] (Code ms c) ())
+        amh <- respond p ((unsafeCoerce f) :: Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (),req) -> Ef '[Event Dispatch] (Ef ms c) ())
         ams <- enactEndpoints ms mhs'
         return $ ActiveEndpointsCons pm amh ams
 
@@ -1760,7 +1760,7 @@ data Implementation ms c msgs rqs msgs' rqs'
 
 enact :: Functor (Messages ms)
       => Implementation ms c msgs rqs msgs' rqs'
-      -> Code ms c (ActiveAPI ms c msgs rqs)
+      -> Ef ms c (ActiveAPI ms c msgs rqs)
 enact (Impl local mhs rhs) = do
   let API mapi rapi = local
   amapi <- enactEndpoints mapi mhs
@@ -1769,7 +1769,7 @@ enact (Impl local mhs rhs) = do
   return active
 
 cleanupEndpoints :: (MonadIO c, '[WebSocket] <: ms)
-                 => Code ms c ()
+                 => Ef ms c ()
 cleanupEndpoints = do
   mh_ <- getWSMsgHandlers
   mh <- liftIO $ readIORef mh_
@@ -1862,7 +1862,7 @@ ws_ hn p secure = WebSocket
                 Just sock -> return cws
                 Nothing -> liftIO $ do
                   msock <- tryNewWebSocket ((if secure then "wss://" else "ws://") ++ hn ++ ':':port) (Just [] :: Maybe [String])
-                  (rnr,_) :: (Signal ms c (Code ms c ()),Behavior ms c (Code ms c ())) <- runner
+                  (rnr,_) :: (Signal ms c (Ef ms c ()),Behavior ms c (Ef ms c ())) <- runner
                   cBuf <- liftIO $ newIORef mempty
                   case msock of
                     Nothing -> return Nothing
@@ -1938,53 +1938,53 @@ tryNewWebSocket url protocols = do
 
 isWSReconnecting :: forall ms c.
                     (Monad c, '[WebSocket] <: ms)
-                 => Code ms c Bool
+                 => Ef ms c Bool
 isWSReconnecting = Send (GetWebSocketReconnecting Return)
 
 setWSReconnecting :: forall ms c.
                      (Monad c, '[WebSocket] <: ms)
-                  => Bool -> Code ms c ()
+                  => Bool -> Ef ms c ()
 setWSReconnecting b = Send (SetWebSocketReconnecting b (Return ()))
 
 getWS :: forall ms c.
          (Monad c, '[WebSocket] <: ms)
-      => Code ms c (Maybe WS.WebSocket)
+      => Ef ms c (Maybe WS.WebSocket)
 getWS = Send (GetWebSocket Return)
 
 setWS :: forall ms c.
          (Monad c, '[WebSocket] <: ms)
-      => Maybe DT.WebSocket -> Code ms c ()
+      => Maybe DT.WebSocket -> Ef ms c ()
 setWS mws = Send (SetWebSocket mws (Return ()))
 
 getWSState :: forall ms c.
               (Monad c, '[WebSocket] <: ms)
-           => Code ms c WSStatus
+           => Ef ms c WSStatus
 getWSState = Send (GetWSStatus Return)
 
 setWSState :: forall ms c.
               (Monad c, '[WebSocket] <: ms)
-           => WSStatus -> Code ms c ()
+           => WSStatus -> Ef ms c ()
 setWSState wss = Send (SetWSStatus wss (Return ()))
 
 getWSMsgHandlers :: forall ms c.
                     (Monad c, '[WebSocket] <: ms)
-                 => Code ms c (IORef (Map.HashMap Txt (Syndicate Dispatch)))
+                 => Ef ms c (IORef (Map.HashMap Txt (Syndicate Dispatch)))
 getWSMsgHandlers = Send (GetWebSocketMsgHandlers Return)
 
 putWSMsgHandlers :: forall ms c.
                     (Monad c, '[WebSocket] <: ms)
                 => IORef (Map.HashMap Txt (Syndicate Dispatch))
-                -> Code ms c ()
+                -> Ef ms c ()
 putWSMsgHandlers hm = Send (SetWebSocketMsgHandlers hm (Return ()))
 
 wsSetup :: forall ms c.
            (MonadIO c, '[Evented,WebSocket] <: ms)
-        => Code ms c ()
+        => Ef ms c ()
 wsSetup = Send (InitializeWebSocket (Return ()))
 
 wsInitialize :: forall ms c.
                 (MonadIO c, '[Evented,WebSocket] <: ms)
-             => Code ms c WSStatus
+             => Ef ms c WSStatus
 wsInitialize = do
   wsSetup
   wssn <- Send (GetWSStatuss Return)
@@ -1999,7 +1999,7 @@ wsInitialize = do
 
 wsConnect :: forall ms c.
              (MonadIO c, '[Evented,WebSocket] <: ms)
-          => Code ms c WSStatus
+          => Ef ms c WSStatus
 wsConnect = do
   sig <- get
   Send (ConnectWebSocket sig (Return ()))
@@ -2007,7 +2007,7 @@ wsConnect = do
 
 wsDisconnect :: forall ms c.
                 (MonadIO c, '[WebSocket] <: ms)
-             => Code ms c ()
+             => Ef ms c ()
 wsDisconnect = do
   mws <- getWS
   case mws of
@@ -2017,7 +2017,7 @@ wsDisconnect = do
 
 send' :: forall ms c.
         (MonadIO c, '[Evented,WebSocket] <: ms)
-     => Either LazyByteString Dispatch -> Code ms c (Either WSException SendStatus)
+     => Either LazyByteString Dispatch -> Ef ms c (Either WSException SendStatus)
 send' m = go True
   where
     go b = do
@@ -2065,7 +2065,7 @@ data SendStatus = BufferedSend | Sent
 
 trySend' :: forall ms c.
            (MonadIO c, '[WebSocket] <: ms)
-        => Either LazyByteString Dispatch -> Code ms c (Either WSStatus ())
+        => Either LazyByteString Dispatch -> Ef ms c (Either WSStatus ())
 trySend' m = do
   wss <- getWSState
   case wss of
@@ -2091,21 +2091,21 @@ instance Exception WSException
 
 unsubscribe :: forall ms c.
                (MonadIO c, Functor (Messages ms))
-            => Behavior ms c WME.MessageEvent -> Code ms c ()
+            => Behavior ms c WME.MessageEvent -> Ef ms c ()
 unsubscribe = stop
 
 onWSStatus :: forall ms c.
            (MonadIO c, '[Evented,WebSocket] <: ms)
-        => (WSStatus -> Code '[Event WSStatus] (Code ms c) ())
-        -> Code ms c (IO ())
+        => (WSStatus -> Ef '[Event WSStatus] (Ef ms c) ())
+        -> Ef ms c (IO ())
 onWSStatus bhvr = do
   wsn <- Send (GetWSStatuss Return)
   connect wsn bhvr
 
 onWSClose :: forall ms c.
             (MonadIO c, '[Evented,WebSocket] <: ms)
-        => (WSCloseReason -> Code '[Event WSStatus] (Code ms c) ())
-        -> Code ms c (IO ())
+        => (WSCloseReason -> Ef '[Event WSStatus] (Ef ms c) ())
+        -> Ef ms c (IO ())
 onWSClose f = onWSStatus (\wss -> case wss of { WSClosed wscr -> f wscr; _ -> return () } )
 
 foreign import javascript unsafe
@@ -2114,7 +2114,7 @@ foreign import javascript unsafe
 -- exponential backoff based on a minimum interval
 reconnectOnInterval :: forall ms c port.
                        (MonadIO c, '[Evented,WebSocket] <: ms)
-                    => Int -> Code ms c ()
+                    => Int -> Ef ms c ()
 reconnectOnInterval interval = go
   where
     go = do
@@ -2137,26 +2137,26 @@ send :: ( ToJSON a
         , MonadIO c
         , MonadIO c'
         , '[Evented,WebSocket] <: ms'
-        , With w (Code ms' c') IO
+        , With w (Ef ms' c') IO
         , Functor (Messages ms)
         )
      => w
      -> Txt
      -> a
-     -> Code ms c (Promise (Either WSException SendStatus))
+     -> Ef ms c (Promise (Either WSException SendStatus))
 send s h a = with s $ send' $ Right $ Dispatch h $ toJSON a
 
 trySend :: ( ToJSON a
            , MonadIO c
            , MonadIO c'
            , '[WebSocket] <: ms'
-           , With w (Code ms' c') IO
+           , With w (Ef ms' c') IO
            , Functor (Messages ms)
            )
         => w
         -> Txt
         -> a
-        -> Code ms c (Promise (Either WSStatus ()))
+        -> Ef ms c (Promise (Either WSStatus ()))
 trySend s h a = with s $ trySend' $ Right $ Dispatch h $ toJSON a
 
 
@@ -2164,7 +2164,7 @@ trySend s h a = with s $ trySend' $ Right $ Dispatch h $ toJSON a
 sendSelfMessage :: ( MonadIO c
                    , MonadIO c'
 
-                   , With w (Code ms' c') IO
+                   , With w (Ef ms' c') IO
 
                    , '[WebSocket] <: ms'
 
@@ -2177,7 +2177,7 @@ sendSelfMessage :: ( MonadIO c
                 => w
                 -> Proxy mTy
                 -> msg
-                -> Code ms c (Promise ())
+                -> Ef ms c (Promise ())
 sendSelfMessage s mty_proxy m =
   with s $ do
     mhs_ <- getWSMsgHandlers
@@ -2204,8 +2204,8 @@ request :: forall c ms rqTy request rqI rsp.
             )
          => Proxy rqTy
          -> request
-         -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-         -> Code ms c (Endpoint Dispatch) 
+         -> (Ef ms c () -> Either Dispatch rsp -> Ef '[Event Dispatch] (Ef ms c) ())
+         -> Ef ms c (Endpoint Dispatch) 
 request rqty_proxy req f = do
   s_ <- liftIO $ newIORef undefined
   let header = responseHeader rqty_proxy req
@@ -2230,7 +2230,7 @@ request rqty_proxy req f = do
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
 
-  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
   let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -2257,15 +2257,15 @@ apiRequest :: ( MonadIO c
           => FullAPI msgs rqs
           -> Proxy rqTy
           -> request
-          -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint Dispatch) 
+          -> (Ef ms c () -> Either Dispatch rsp -> Ef '[Event Dispatch] (Ef ms c) ())
+          -> Ef ms c (Endpoint Dispatch) 
 apiRequest _ = request
 
 requestWith :: forall c c' ms ms' w rqTy request rqI rsp.
                ( MonadIO c
                , MonadIO c'
 
-               , With w (Code ms' c') IO
+               , With w (Ef ms' c') IO
 
                , '[Evented,WebSocket] <: ms'
 
@@ -2284,8 +2284,8 @@ requestWith :: forall c c' ms ms' w rqTy request rqI rsp.
             => w
             -> Proxy rqTy
             -> request
-            -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Promise (Endpoint Dispatch))
+            -> (Ef ms c () -> Either Dispatch rsp -> Ef '[Event Dispatch] (Ef ms c) ())
+            -> Ef ms c (Promise (Endpoint Dispatch))
 requestWith s rqty_proxy req f = do
   pr <- promise
   buf <- get
@@ -2318,7 +2318,7 @@ requestWith s rqty_proxy req f = do
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
 
-    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
     let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -2331,7 +2331,7 @@ requestWith s rqty_proxy req f = do
 apiRequestWith :: ( MonadIO c
                   , MonadIO c'
 
-                  , With w (Code ms' c') IO
+                  , With w (Ef ms' c') IO
 
                   , '[Evented,WebSocket] <: ms'
 
@@ -2353,15 +2353,15 @@ apiRequestWith :: ( MonadIO c
                -> w
                -> Proxy rqTy
                -> request
-               -> (Code ms c () -> Either Dispatch rsp -> Code '[Event Dispatch] (Code ms c) ())
-               -> Code ms c (Promise (Endpoint Dispatch))
+               -> (Ef ms c () -> Either Dispatch rsp -> Ef '[Event Dispatch] (Ef ms c) ())
+               -> Ef ms c (Promise (Endpoint Dispatch))
 apiRequestWith _ = requestWith
 
 respondWith :: forall c c' w ms ms' rqTy request rqI rsp.
                ( MonadIO c
                , MonadIO c'
 
-               , With w (Code ms' c') IO
+               , With w (Ef ms' c') IO
 
                , '[Evented] <: ms
 
@@ -2379,8 +2379,8 @@ respondWith :: forall c c' w ms ms' rqTy request rqI rsp.
                )
             => w
             -> Proxy rqTy
-            -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (Promise ()),request) -> Code '[Event Dispatch] (Code ms c) ())
-            -> Code ms c (Promise (Endpoint Dispatch))
+            -> (Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (Promise ()),request) -> Ef '[Event Dispatch] (Ef ms c) ())
+            -> Ef ms c (Promise (Endpoint Dispatch))
 respondWith s rqty_proxy rr = do
   pr <- promise
   buf <- get
@@ -2413,7 +2413,7 @@ respondWith s rqty_proxy rr = do
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
 
-    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
     let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -2438,8 +2438,8 @@ respond :: forall c ms rqTy request rqI rsp.
            , ToJSON rsp
            )
         => Proxy rqTy
-        -> (Code ms c () -> Either Dispatch (Either LazyByteString rsp -> Code ms c (),request) -> Code '[Event Dispatch] (Code ms c) ())
-        -> Code ms c (Endpoint Dispatch)
+        -> (Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
+        -> Ef ms c (Endpoint Dispatch)
 respond rqty_proxy rr = do
   s_ <- liftIO $ newIORef undefined
   let header = requestHeader rqty_proxy
@@ -2467,7 +2467,7 @@ respond rqty_proxy rr = do
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
 
-  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
   let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -2477,7 +2477,7 @@ respond rqty_proxy rr = do
 messageWith :: ( MonadIO c
                , MonadIO c'
                , '[Evented,WebSocket] <: ms'
-               , With w (Code ms' c') IO
+               , With w (Ef ms' c') IO
                , Message mTy
                , M mTy ~ msg
                , ToJSON msg
@@ -2486,13 +2486,13 @@ messageWith :: ( MonadIO c
             => w
             -> Proxy mTy
             -> msg
-            -> Code ms c (Promise (Either WSException SendStatus))
+            -> Ef ms c (Promise (Either WSException SendStatus))
 messageWith s mty_proxy m = send s (messageHeader mty_proxy) m
 
 apiMessageWith :: ( MonadIO c
                   , MonadIO c'
                   , '[Evented,WebSocket] <: ms'
-                  , With w (Code ms' c') IO
+                  , With w (Ef ms' c') IO
                   , Message mTy
                   , M mTy ~ msg
                   , ToJSON msg
@@ -2503,7 +2503,7 @@ apiMessageWith :: ( MonadIO c
                 -> w
                 -> Proxy mTy
                 -> msg
-                -> Code ms c (Promise (Either WSException SendStatus))
+                -> Ef ms c (Promise (Either WSException SendStatus))
 apiMessageWith _ = messageWith
 
 message :: ( MonadIO c
@@ -2514,7 +2514,7 @@ message :: ( MonadIO c
            )
         => Proxy mTy
         -> msg
-        -> Code ms c (Either WSException SendStatus)
+        -> Ef ms c (Either WSException SendStatus)
 message mty_proxy m = send' $ Right (Dispatch (messageHeader mty_proxy) (toJSON m))
 
 apiMessage :: ( MonadIO c
@@ -2527,7 +2527,7 @@ apiMessage :: ( MonadIO c
             => FullAPI msgs rqs
             -> Proxy mTy
             -> msg
-            -> Code ms c (Either WSException SendStatus)
+            -> Ef ms c (Either WSException SendStatus)
 apiMessage _ = message
 
 onMessageWith :: forall c c' ms ms' w mTy msg.
@@ -2535,15 +2535,15 @@ onMessageWith :: forall c c' ms ms' w mTy msg.
                  , MonadIO c'
                  , '[WebSocket] <: ms'
                  , '[Evented] <: ms
-                 , With w (Code ms' c') IO
+                 , With w (Ef ms' c') IO
                  , Message mTy
                  , M mTy ~ msg
                  , FromJSON msg
                  )
                => w
                -> Proxy mTy
-               -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-               -> Code ms c (Promise (Endpoint Dispatch))
+               -> (Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
+               -> Ef ms c (Promise (Endpoint Dispatch))
 onMessageWith s mty_proxy f = do
   pr <- promise
   buf <- get
@@ -2576,7 +2576,7 @@ onMessageWith s mty_proxy f = do
               Nothing -> (Map.insert header newn mhs,newn)
               Just n -> (mhs,n)
 
-    sub :: Subscription (Code ms c) Dispatch <- subscribe n (return buf)
+    sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
     let stopper = stop bhv >> leaveSyndicate n sub
 
@@ -2592,8 +2592,8 @@ onMessage :: forall c ms mTy msg.
              , FromJSON msg
              )
           => Proxy mTy
-          -> (Code ms c () -> Either Dispatch msg -> Code '[Event Dispatch] (Code ms c) ())
-          -> Code ms c (Endpoint Dispatch) 
+          -> (Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
+          -> Ef ms c (Endpoint Dispatch) 
 onMessage mty_proxy f = do
   s_ <- liftIO $ newIORef undefined
 
@@ -2622,7 +2622,7 @@ onMessage mty_proxy f = do
             Nothing -> (Map.insert header newn mhs,newn)
             Just n -> (mhs,n)
 
-  sub :: Subscription (Code ms c) Dispatch <- subscribe n get
+  sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
   let stopper = stop bhv >> leaveSyndicate n sub
 

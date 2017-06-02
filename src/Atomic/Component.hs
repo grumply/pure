@@ -227,7 +227,7 @@ pattern Component ams <- (View (cast -> Just ams)) where
 class Component (a :: [* -> *] -> *) ms where
   -- TODO:
   --   build :: a ms -> IO (View ms)
-  --   diff :: (Code ms IO () -> IO ()) -> ENode -> View ms -> a ms -> a ms -> IO (View ms)
+  --   diff :: (Ef ms IO () -> IO ()) -> ENode -> View ms -> a ms -> a ms -> IO (View ms)
   -- With build and diff the only primitive view elements would be HTML, SVGHTML, Managed, and View.
   -- Great avenue for extensibility and modularity, but I don't see that the expressivity gained
   -- would currently justify the work; it's mostly just a refactoring, but it is a major refactoring.
@@ -636,7 +636,7 @@ styles = css' True . classify
 
 
 -- -- Useful for standalone contexts without a Component root.
--- renderController' :: IsController' ts ms m => Controller' ts ms m -> ENode -> HTML (Code ms IO ()) -> IO (HTML (Code ms IO ()))
+-- renderController' :: IsController' ts ms m => Controller' ts ms m -> ENode -> HTML (Ef ms IO ()) -> IO (HTML (Ef ms IO ()))
 -- renderController' a parent html = do
 --   let f e = void $ with a e
 --   doc <- getDocument
@@ -731,7 +731,7 @@ onForeground :: ( MonadIO c, MonadIO c'
                 , '[State () ControllerHooks] <: ms'
                 , With w (Narrative (Messages ms') c') IO
                 )
-             => w -> Code '[Event ()] (Code ms c) () -> Code ms c (Promise (IO ()))
+             => w -> Ef '[Event ()] (Ef ms c) () -> Ef ms c (Promise (IO ()))
 onForeground c f = do
   connectWith c (get >>= \(ControllerHooks _ _ fg) -> return fg) $ \_ -> f
 
@@ -740,7 +740,7 @@ onBackground :: ( MonadIO c, MonadIO c'
                 , '[State () ControllerHooks] <: ms'
                 , With w (Narrative (Messages ms') c') IO
                 )
-             => w -> Code '[Event ()] (Code ms c) () -> Code ms c (Promise (IO ()))
+             => w -> Ef '[Event ()] (Ef ms c) () -> Ef ms c (Promise (IO ()))
 onBackground c f = do
   connectWith c (get >>= \(ControllerHooks _ bg _) -> return bg) $ \_ -> f
 
@@ -762,9 +762,9 @@ type Differ ms m =
     forall a. Component a ms =>
        (m ms -> a ms)
     -> IO ()
-    -> (Code ms IO () -> IO ())
+    -> (Ef ms IO () -> IO ())
     -> ControllerState m
-    -> Code ms IO ()
+    -> Ef ms IO ()
 
 data AState m =
   AState
@@ -776,7 +776,7 @@ data ControllerPatch m =
   forall ms a. Component a ms =>
   APatch
       -- only modify ap_AState with atomicModifyIORef
-    { ap_send         :: Code ms IO () -> IO ()
+    { ap_send         :: Ef ms IO () -> IO ()
     , ap_AState       :: IORef (Maybe (AState m),Bool) -- an AState record for manipulation; nullable by context to stop a patch.
     , ap_patchComponent    :: (m ms -> a ms)
     , ap_viewTrigger  :: IO ()
@@ -800,7 +800,7 @@ data ControllerView ms m = ControllerView
   }
 
 data ControllerRecord ms m = ControllerRecord
-  { crAsController :: As (Code ms IO)
+  { crAsController :: As (Ef ms IO)
   , crView        :: IORef (ControllerView ms m)
   , crHooks       :: ControllerHooks
   }
@@ -808,7 +808,7 @@ data ControllerRecord ms m = ControllerRecord
 data ControllerState (m :: [* -> *] -> *) where
   ControllerState ::
     { asPatch        :: Maybe (ControllerPatch m)
-    , asDiffer       :: ControllerState m -> Code ms IO ()
+    , asDiffer       :: ControllerState m -> Ef ms IO ()
     , asDiffStrategy :: DiffStrategy
     , asUpdates      :: Syndicate (m ms)
     , asModel        :: m ms
@@ -868,12 +868,12 @@ instance ToTxt [Feature e] where
 
 type ControllerKey ms m = Key (ControllerRecord (Appended ms (Base m)) m)
 type ControllerBuilder ts m = Modules (Base m) (Action (Appended ts (Base m)) IO) -> IO (Modules (Appended ts (Base m)) (Action (Appended ts (Base m)) IO))
-type ControllerPrimer ms m = Code (Appended ms (Base m)) IO ()
+type ControllerPrimer ms m = Ef (Appended ms (Base m)) IO ()
 
 data Controller' ts ms m = forall a. Component a ms => Controller
   { key       :: !(Key (ControllerRecord ms m))
   , build     :: !(Modules (Base m) (Action ts IO) -> IO (Modules ts (Action ts IO)))
-  , prime     :: !(Code ms IO ())
+  , prime     :: !(Ef ms IO ())
   , model     :: !(m ms)
   , view      :: !(m ms -> a ms)
   }
@@ -893,7 +893,7 @@ instance Ord (Controller' ts ms m) where
 
 instance IsController' ts ms m
   => With (Controller' ts ms m)
-          (Code ms IO)
+          (Ef ms IO)
           IO
   where
     using_ c = do
@@ -1015,19 +1015,19 @@ mkController mkControllerAction c@Controller {..} = do
         buf obj'
   return cr
 
-diff :: forall m ms. (Base m <: ms) => Proxy m -> Code ms IO ()
+diff :: forall m ms. (Base m <: ms) => Proxy m -> Ef ms IO ()
 diff _ = do
   as@ControllerState {..} :: ControllerState m <- get
   unsafeCoerce (asDiffer as)
 
 setEagerDiff :: forall m ms. ('[State () (ControllerState m)] <: ms)
-             => Proxy m -> Code ms IO ()
+             => Proxy m -> Ef ms IO ()
 setEagerDiff _ = do
   ControllerState {..} :: ControllerState m <- get
   put ControllerState { asDiffStrategy = Eager, .. }
 
 setManualDiff :: forall m ms. ('[State () (ControllerState m)] <: ms)
-              => Proxy m -> Code ms IO ()
+              => Proxy m -> Ef ms IO ()
 setManualDiff _ = do
   ControllerState {..} :: ControllerState m <- get
   put ControllerState { asDiffStrategy = Manual, .. }
@@ -1046,7 +1046,7 @@ ownHTML :: forall ts ms c m.
            , Base m <: ms
            )
         => Controller' ts ms m
-        -> Code ms c (View ms)
+        -> Ef ms c (View ms)
 ownHTML _ = do
   ControllerState {..} :: ControllerState m <- get
   ControllerView {..} <- liftIO $ readIORef asLive
@@ -1059,8 +1059,8 @@ onModelChange :: forall ts ms ms' m c.
                 , '[Evented] <: ms'
                 )
               => Controller' ts ms m
-              -> (m ms -> Code '[Event (m ms)] (Code ms' c) ())
-              -> Code ms' c (Promise (IO ()))
+              -> (m ms -> Ef '[Event (m ms)] (Ef ms' c) ())
+              -> Ef ms' c (Promise (IO ()))
 onModelChange c f = do
   buf <- get
   with c $ do
@@ -1075,8 +1075,8 @@ onOwnModelChange :: forall ts ms ms' m c.
                     , Base m <: ms
                     )
                   => Controller' ts ms m
-                  -> (m ms -> Code '[Event (m ms)] (Code ms c) ())
-                  -> Code ms c (IO ())
+                  -> (m ms -> Ef '[Event (m ms)] (Ef ms c) ())
+                  -> Ef ms c (IO ())
 onOwnModelChange _ f = do
   buf <- get
   pr  <- promise
@@ -1090,8 +1090,8 @@ onOwnModelChangeByProxy :: forall ms m c.
                            , Base m <: ms
                            )
                          => Proxy m
-                         -> (m ms -> Code '[Event (m ms)] (Code ms c) ())
-                         -> Code ms c (IO ())
+                         -> (m ms -> Ef '[Event (m ms)] (Ef ms c) ())
+                         -> Ef ms c (IO ())
 onOwnModelChangeByProxy _ f = do
   buf <- get
   pr  <- promise
@@ -1100,7 +1100,7 @@ onOwnModelChangeByProxy _ f = do
   bhv <- listen sub f
   return (stop bhv >> leaveSyndicate (unsafeCoerce asUpdates) sub)
 
-getModel :: forall m ms. ('[State () (ControllerState m)] <: ms) => Code ms IO (m ms)
+getModel :: forall m ms. ('[State () (ControllerState m)] <: ms) => Ef ms IO (m ms)
 getModel = do
   ControllerState {..} :: ControllerState m <- get
   return $ unsafeCoerce asModel
@@ -1108,14 +1108,14 @@ getModel = do
 putModel :: forall ms m.
         ( Base m <: ms
         )
-     => m ms -> Code ms IO ()
+     => m ms -> Ef ms IO ()
 putModel !new = do
   (ControllerState {..},(old,cmp')) <- modify $ \(ControllerState {..} :: ControllerState m) ->
     let !old = unsafeCoerce asModel
         cmp' = ControllerState { asModel = unsafeCoerce new, .. }
     in (cmp',(old,cmp'))
   publish (unsafeCoerce asUpdates) new
-  let d :: ControllerState m -> Code ms IO ()
+  let d :: ControllerState m -> Ef ms IO ()
       d = unsafeCoerce asDiffer
 #ifdef __GHCJS__
   case reallyUnsafePtrEquality# old new of
@@ -1130,10 +1130,10 @@ putModel !new = do
 
 modifyModel :: forall e ms m.
            ( Base m <: ms
-           , e ~ Code ms IO ()
+           , e ~ Ef ms IO ()
            )
         => (m ms -> m ms)
-        -> Code ms IO ()
+        -> Ef ms IO ()
 modifyModel f = do
   (ControllerState {..},(old,!new,cmp')) <- modify $ \ControllerState {..} ->
     let !old = unsafeCoerce asModel
@@ -1141,7 +1141,7 @@ modifyModel f = do
         cmp' = ControllerState { asModel = unsafeCoerce new, ..  }
     in (cmp',(old,new,cmp'))
   publish (unsafeCoerce asUpdates) new
-  let d :: ControllerState m -> Code ms IO ()
+  let d :: ControllerState m -> Ef ms IO ()
       d = unsafeCoerce asDiffer
 #ifdef __GHCJS__
   case reallyUnsafePtrEquality# old new of
@@ -1295,7 +1295,7 @@ embedMany_ parent children = do
   forM_ children $ \child -> do
     embed_ parent child
 
-setAttributes :: [Feature e] -> (Code e IO () -> IO ()) -> Bool -> ENode -> IO ([Feature e],IO ())
+setAttributes :: [Feature e] -> (Ef e IO () -> IO ()) -> Bool -> ENode -> IO ([Feature e],IO ())
 setAttributes as f diffing el = do
 #ifdef __GHCJS__
   didMount_ <- newIORef (return ())
@@ -1318,7 +1318,7 @@ setAttributes as f diffing el = do
 -- and this: https://stackoverflow.com/questions/8913419/is-chromes-appendchild-really-that-slow
 -- Would a bottom-up, display='none' -> display='' solution work globally?
 -- Does the fact that this runs in a rAF resolve any of this a priori?
-buildAndEmbedMaybe :: forall e. (Code e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (View e)
+buildAndEmbedMaybe :: forall e. (Ef e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (View e)
 buildAndEmbedMaybe f doc ch isFG mn = go mn . render
   where
     go :: Maybe ENode -> View e -> IO (View e)
@@ -1351,6 +1351,7 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
             -- this won't work properly on GHC; look into using onFPS or something to
             -- replicate the rAF approach
 #ifdef __GHCJS__
+            mv <- newEmptyMVar
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
 #endif
               (props,st,sv,old,mid) <- readIORef strec
@@ -1358,8 +1359,11 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
               let new_mid = unsafeCoerce $ sv props st' upd
               new <- diffHelper f doc ch isFG old mid new_mid
               writeIORef strec (props,st',sv,new,new_mid)
-              cb
+              putMVar mv ()
 #ifdef __GHCJS__
+            _ <- forkIO $
+                   -- prevent callback from running inside the animation frame!
+                   do { takeMVar mv; cb }
             win <- getWindow
             requestAnimationFrame win (Just rafCallback)
 #endif
@@ -1444,7 +1448,7 @@ buildAndEmbedMaybe f doc ch isFG mn = go mn . render
                   embed_ e cvCurrentLive
                   return m
 
-buildHTML :: Doc -> ControllerHooks -> Bool -> (Code e IO () -> IO ()) -> View e -> IO (View e)
+buildHTML :: Doc -> ControllerHooks -> Bool -> (Ef e IO () -> IO ()) -> View e -> IO (View e)
 buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing
 
 getElement :: forall e. View e -> IO (Maybe ENode)
@@ -1540,7 +1544,7 @@ delete o = do
   forM_ mn delete_js
 #endif
 
-cleanup :: (Code e IO () -> IO ()) -> [View e] -> IO (IO ())
+cleanup :: (Ef e IO () -> IO ()) -> [View e] -> IO (IO ())
 #ifndef __GHCJS__
 cleanup _ _ = return (return ())
 #else
@@ -1573,7 +1577,7 @@ insertBefore_ parent child new = do
   void $ N.insertBefore parent mnn mcn
 #endif
 
-diffHelper :: forall e. (Code e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> View e -> View e -> View e -> IO (View e)
+diffHelper :: forall e. (Ef e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> View e -> View e -> View e -> IO (View e)
 diffHelper f doc ch isFG =
 #ifdef __GHCJS__
     go
@@ -1990,7 +1994,7 @@ applyStyleDiffs el olds0 news0 = do
                 replace
 #endif
 
-runElementDiff :: (Code e IO () -> IO ()) -> ENode -> [Feature e] -> [Feature e] -> [Feature e] -> IO ([Feature e],IO ())
+runElementDiff :: (Ef e IO () -> IO ()) -> ENode -> [Feature e] -> [Feature e] -> [Feature e] -> IO ([Feature e],IO ())
 runElementDiff f el os0 ms0 ns0 = do
 #ifndef __GHCJS__
     return (ns0,return ())
@@ -2104,27 +2108,27 @@ runElementDiff f el os0 ms0 ns0 = do
               else
                 replace
 
-            (OnDoc e os g _,OnDoc e' os' g' _) ->
+            (OnDocument e os g _,OnDocument e' os' g' _) ->
               if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then
                 continue old
               else
                 replace
 
-            (OnWin e os g _,OnWin e' os' g' _) ->
+            (OnWindow e os g _,OnWindow e' os' g' _) ->
               if prettyUnsafeEq e e' && prettyUnsafeEq os os' && reallyUnsafeEq g g' then
                 continue old
               else do
                 replace
 
-            (OnBuild e,OnBuild e') ->
-              -- Unlike On(Will/Did)Mount, OnBuild runs any time the handler changes, like OnUpdate.
+            (OnFeatureAdd e,OnFeatureAdd e') ->
+              -- Unlike On(Will/Did)Mount, OnFeatureAdd runs any time the handler changes, like OnModelChange.
               if reallyUnsafeEq e e' then
                 continue old
               else do
                 f e'
                 replace
 
-            (OnDestroy e,OnDestroy e') ->
+            (OnFeatureRemove e,OnFeatureRemove e') ->
               if reallyUnsafeEq e e' then
                 continue old
               else do
@@ -2139,7 +2143,7 @@ runElementDiff f el os0 ms0 ns0 = do
               -- OnDidMount has already run, it can't run again.
               continue old
 
-            (OnUpdate m g,OnUpdate m' g') ->
+            (OnModelChangeIO m g,OnModelChangeIO m' g') ->
               if typeOf m == typeOf m' then
                 if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
                   continue old
@@ -2149,7 +2153,7 @@ runElementDiff f el os0 ms0 ns0 = do
               else
                 replace
 
-            (OnModel m g,OnModel m' g') ->
+            (OnModelChange m g,OnModelChange m' g') ->
               if typeOf m == typeOf m' then
                 if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
                   continue old
@@ -2196,7 +2200,7 @@ runElementDiff f el os0 ms0 ns0 = do
               replace
 #endif
 
-removeAttribute_ :: (Code e IO () -> IO ()) -> ENode -> Feature e -> IO ()
+removeAttribute_ :: (Ef e IO () -> IO ()) -> ENode -> Feature e -> IO ()
 removeAttribute_ f element attr =
 #ifndef __GHCJS__
   return ()
@@ -2221,13 +2225,13 @@ removeAttribute_ f element attr =
     OnE _ _ _ unreg ->
       forM_ unreg id
 
-    OnDoc _ _ _ unreg ->
+    OnDocument _ _ _ unreg ->
       forM_ unreg id
 
-    OnWin _ _ _ unreg ->
+    OnWindow _ _ _ unreg ->
       forM_ unreg id
 
-    OnDestroy e ->
+    OnFeatureRemove e ->
       f e
 
     StyleF styles -> do
@@ -2267,7 +2271,7 @@ attribute node (Attribute k v) = E.setAttribute node k v
 attribute node (DelayedAttribute k v) = E.setAttribute node k v
 attribute _ _ = return ()
 
-setAttribute_ :: (Code e IO () -> IO ()) -> Bool -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())
+setAttribute_ :: (Ef e IO () -> IO ()) -> Bool -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())
 setAttribute_ c diffing element attr didMount =
 #ifndef __GHCJS__
   return (attr,return ())
@@ -2324,12 +2328,12 @@ setAttribute_ c diffing element attr didMount =
                  when (_preventDef os) Ev.preventDefault
                  when (_stopProp os) Ev.stopPropagation
                  stop <- liftIO $ readIORef stopper
-                 liftIO $ f stop element (unsafeCoerce ce) >>= mapM_ c
+                 liftIO $ f (stop,element,unsafeCoerce ce) >>= mapM_ c
                  return ()
       writeIORef stopper stopListener
       return (OnE ev os f (Just stopListener),didMount)
 
-    OnDoc ev os f _ -> do
+    OnDocument ev os f _ -> do
       stopper <- newIORef undefined
       doc <- getDocument
       stopListener <-
@@ -2340,12 +2344,12 @@ setAttribute_ c diffing element attr didMount =
                  when (_preventDef os) Ev.preventDefault
                  when (_stopProp os) Ev.stopPropagation
                  stop <- liftIO $ readIORef stopper
-                 liftIO $ f stop element doc (unsafeCoerce ce) >>= mapM_ c
+                 liftIO $ f (stop,element,doc,unsafeCoerce ce) >>= mapM_ c
                  return ()
       writeIORef stopper stopListener
-      return (OnDoc ev os f (Just stopListener),didMount)
+      return (OnDocument ev os f (Just stopListener),didMount)
 
-    OnWin ev os f _ -> do
+    OnWindow ev os f _ -> do
       stopper <- newIORef undefined
       win <- getWindow
       stopListener <-
@@ -2356,12 +2360,12 @@ setAttribute_ c diffing element attr didMount =
                  when (_preventDef os) Ev.preventDefault
                  when (_stopProp os) Ev.stopPropagation
                  stop <- liftIO $ readIORef stopper
-                 liftIO $ f stop element win (unsafeCoerce ce) >>= mapM_ c
+                 liftIO $ f (stop,element,win,unsafeCoerce ce) >>= mapM_ c
                  return ()
       writeIORef stopper stopListener
-      return (OnWin ev os f (Just stopListener),didMount)
+      return (OnWindow ev os f (Just stopListener),didMount)
 
-    OnBuild e -> do
+    OnFeatureAdd e -> do
       c e
       return (attr,didMount)
 
@@ -2400,7 +2404,7 @@ setAttribute_ c diffing element attr didMount =
     _ -> return (attr,didMount)
 #endif
 
-cleanupAttr :: (Code e IO () -> IO ()) -> ENode -> Feature e -> IO () -> IO (IO ())
+cleanupAttr :: (Ef e IO () -> IO ()) -> ENode -> Feature e -> IO () -> IO (IO ())
 cleanupAttr f element attr didUnmount =
 #ifndef __GHCJS__
   return didUnmount
@@ -2415,13 +2419,13 @@ cleanupAttr f element attr didUnmount =
     OnE _ _ _ unreg -> do
       forM_ unreg id
       return didUnmount
-    OnDoc _ _ _ unreg -> do
+    OnDocument _ _ _ unreg -> do
       forM_ unreg id
       return didUnmount
-    OnWin _ _ _ unreg -> do
+    OnWindow _ _ _ unreg -> do
       forM_ unreg id
       return didUnmount
-    OnDestroy e -> do
+    OnFeatureRemove e -> do
       f e
       return didUnmount
     OnWillUnmount g -> do

@@ -136,8 +136,8 @@ clearLocalStorage = do
 onStorage :: ( MonadIO c
              , '[Evented] <: ms
              )
-          => (Obj -> Code '[Event Obj] (Code ms c) ())
-          -> Code ms c (IO ())
+          => (Obj -> Ef '[Event Obj] (Ef ms c) ())
+          -> Ef ms c (IO ())
 onStorage =
   onWindowSyndicate
 #ifdef __GHCJS__
@@ -212,8 +212,8 @@ onLocalMessage :: forall ms c msg message messageType.
                   , '[Evented] <: ms
                   )
                => Proxy messageType
-               -> (message -> Code ms c ())
-               -> Code ms c (IO ())
+               -> (message -> Ef ms c ())
+               -> Ef ms c (IO ())
 onLocalMessage mty_proxy f = do
   slf <- asSelf
   onStorage $ \se -> do

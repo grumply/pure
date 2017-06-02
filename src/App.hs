@@ -69,20 +69,20 @@ type IsApp ms r = IsApp' ms ms IO r
 
 type Base r = '[ State () (Router r), Evented, State () Shutdown ]
 
-type AppKey ms r = Key (Ef.Base.As (Code (Appended ms (Base r)) IO))
+type AppKey ms r = Key (Ef.Base.As (Ef (Appended ms (Base r)) IO))
 type AppBuilder ts r = Modules (Base r) (Action (Appended ts (Base r)) IO) -> IO (Modules (Appended ts (Base r)) (Action (Appended ts (Base r)) IO))
-type AppPrimer ms r = Code (Appended ms (Base r)) IO ()
-type AppRouter ms r = Code '[Route] (Code (Appended ms (Base r)) IO) r
-type AppPages ms r = r -> Code (Appended ms (Base r)) IO System
+type AppPrimer ms r = Ef (Appended ms (Base r)) IO ()
+type AppRouter ms r = Ef '[Route] (Ef (Appended ms (Base r)) IO) r
+type AppPages ms r = r -> Ef (Appended ms (Base r)) IO System
 
 data App' ts ms c r
   = App
-    { key     :: !(Key (Ef.Base.As (Code ms c)))
+    { key     :: !(Key (Ef.Base.As (Ef ms c)))
     , build   :: !(Modules (Base r) (Action ts c) -> c (Modules ts (Action ts c)))
-    , prime   :: !(Code ms c ())
+    , prime   :: !(Ef ms c ())
     , root    :: !(Maybe Txt)
-    , routes  :: !(Code '[Route] (Code ms c) r)
-    , pages   :: !(r -> Code ms c System)
+    , routes  :: !(Ef '[Route] (Ef ms c) r)
+    , pages   :: !(r -> Ef ms c System)
     }
 type App ms r = App' (Appended ms (Base r)) (Appended ms (Base r)) IO r
 
@@ -94,17 +94,17 @@ instance Eq (App' ts ms c r) where
          1# -> True
          _  -> k1 == k2
 
-simpleApp :: Code '[Route] (Code (Base r) IO) r -> (r -> Code (Base r) IO System) -> App '[] r
+simpleApp :: Ef '[Route] (Ef (Base r) IO) r -> (r -> Ef (Base r) IO System) -> App '[] r
 simpleApp = App "main" return (return ()) Nothing
 
 onRoute :: ( IsApp' ts ms IO r
            , Monad c',  MonadIO c'
-           , With (App' ts ms IO r) (Code ms IO) IO
+           , With (App' ts ms IO r) (Ef ms IO) IO
            , '[Evented] <: ms'
            )
          => App' ts ms IO r
-         -> (r -> Code '[Event r] (Code ms' c') ())
-         -> Code ms' c' (IO ())
+         -> (r -> Ef '[Event r] (Ef ms' c') ())
+         -> Ef ms' c' (IO ())
 onRoute fus rf = do
   buf <- get
   Just stopper <- demandMaybe =<< with fus (do
@@ -136,7 +136,7 @@ run app@App {..} = do
                      *:* state q
                      *:* state (Shutdown sdn)
                      *:* Empty
-  (sig :: Signal ms c (Code ms c ()),_) <- runner
+  (sig :: Signal ms c (Ef ms c ()),_) <- runner
   addApp key =<< unsafeConstructAs q
   (obj,_) <- Ef.Base.Object built ! do
     crn <- getRouteSyndicate
@@ -257,7 +257,7 @@ instance ( IsApp' ts ms c r
          , MonadIO c
          )
   => With (App' ts ms c r)
-          (Code ms c)
+          (Ef ms c)
           c
   where
     using_ f = do
@@ -297,7 +297,7 @@ deleteApp = vaultDelete organismVault__
 setupRouter :: forall ms c routeType.
                (Eq routeType, MonadIO c, '[Evented,State () (Router routeType)] <: ms)
             => Proxy routeType
-            -> Code ms c (IO (),Promise (IO ()))
+            -> Ef ms c (IO (),Promise (IO ()))
 setupRouter _ = do
   crn :: Syndicate routeType <- getRouteSyndicate
   psn <- getWindowSyndicatePreventDefault popstate
@@ -328,11 +328,11 @@ setupRouter _ = do
                   publish crn ncr
 
 goto :: ( MonadIO c
-        , With (App' ts ms IO r) (Code ms IO) IO
+        , With (App' ts ms IO r) (Ef ms IO) IO
         , '[State () (Router r)] <: ms
         , '[Evented] <: ms'
         )
-     => App' ts ms IO r -> Txt -> r -> Code ms' c (Promise ())
+     => App' ts ms IO r -> Txt -> r -> Ef ms' c (Promise ())
 goto f rts rt = do
   pushPath rts
   with f $ do

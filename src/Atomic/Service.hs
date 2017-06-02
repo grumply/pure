@@ -23,7 +23,7 @@ import Unsafe.Coerce
 instance (IsService' ts ms, MonadIO c) =>
           With
           (Service' ts ms)
-          (Code ms IO)
+          (Ef ms IO)
           c
   where
     using_ s = do
@@ -38,7 +38,7 @@ instance (IsService' ts ms, MonadIO c) =>
               Nothing -> do
                 buf <- newEvQueue
                 startService buf s
-                asService :: As (Code ms IO) <- unsafeConstructAs buf
+                asService :: As (Ef ms IO) <- unsafeConstructAs buf
                 let new_v = Map.insert i (unsafeCoerce asService) v
                 return (new_v,liftIO . runAs asService)
               Just as ->
@@ -65,15 +65,15 @@ type IsService ms = IsService' (Appended Base ms) (Appended Base ms)
 
 type Base = '[Evented,State () Vault,State () Shutdown]
 
-type ServiceKey ms = Key (As (Code (Appended ms Base) IO))
+type ServiceKey ms = Key (As (Ef (Appended ms Base) IO))
 type ServiceBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
-type ServicePrimer ms = Code (Appended ms Base) IO ()
+type ServicePrimer ms = Ef (Appended ms Base) IO ()
 
 data Service' ts ms
   = Service
-      { key      :: !(Key (As (Code ms IO)))
+      { key      :: !(Key (As (Ef ms IO)))
       , build    :: !(Modules Base (Action ts IO) -> IO (Modules ts (Action ts IO)))
-      , prime    :: !(Code ms IO ())
+      , prime    :: !(Ef ms IO ())
       }
 type Service ms = Service' (Appended ms Base) (Appended ms Base)
 

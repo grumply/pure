@@ -26,9 +26,9 @@ type IsModule ms = IsModule' ms ms
 
 data Module' ts ms
   = Module
-    { key        :: !(Key (As (Code ms IO)))
+    { key        :: !(Key (As (Ef ms IO)))
     , build      :: !(Modules ModuleBase (Action ts IO) -> IO (Modules ts (Action ts IO)))
-    , prime      :: !(Code ms IO ())
+    , prime      :: !(Ef ms IO ())
     }
 type Module ms = Module' ms ms
 
@@ -43,7 +43,7 @@ instance Eq (Module' ts ms) where
 -- the enacting context, ms', must coincidentally witness
 -- the same base type as modules.
 instance (IsModule' ts ms, MonadIO c, ModuleBase <: ms')
-  => With (Module' ts ms) (Code ms IO) (Code ms' c)
+  => With (Module' ts ms) (Ef ms IO) (Ef ms' c)
   where
     using_ c = do
       lv  <- get
@@ -59,7 +59,7 @@ instance (IsModule' ts ms, MonadIO c, ModuleBase <: ms')
               Nothing -> do
                 buf <- newEvQueue
                 startModule sdn lv buf c
-                asModule :: As (Code ms IO) <- unsafeConstructAs buf
+                asModule :: As (Ef ms IO) <- unsafeConstructAs buf
                 let new_v = Map.insert i (unsafeCoerce asModule) v
                 return (new_v,liftIO . runAs asModule)
         Just as ->

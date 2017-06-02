@@ -120,26 +120,26 @@ data Feature (ms :: [* -> *])
   | OnE
     { _eventName :: Txt
     , _eventOptions :: Options
-    , _eventCreate :: IO () -> ENode -> Obj -> IO (Maybe (Code ms IO ()))
+    , _eventCreate :: (IO (),ENode,Obj) -> IO (Maybe (Ef ms IO ()))
     , _eventListener :: Maybe (IO ())
     }
-  | OnWin
+  | OnWindow
     { _eventName :: Txt
     , _eventOptions :: Options
-    , _eventWinCreate :: !(IO () -> ENode -> Win -> Obj -> IO (Maybe (Code ms IO ())))
+    , _eventWinCreate :: (IO (),ENode,Win,Obj) -> IO (Maybe (Ef ms IO ()))
     , _eventListener :: Maybe (IO ())
     }
-  | OnDoc
+  | OnDocument
     { _eventName :: Txt
     , _eventOptions :: Options
-    , _eventDocCreate :: IO () -> ENode -> Doc -> Obj -> IO (Maybe (Code ms IO ()))
+    , _eventDocCreate :: (IO (),ENode,Doc,Obj) -> IO (Maybe (Ef ms IO ()))
     , _eventListener :: Maybe (IO ())
     }
-  | OnBuild
-    { _buildEvent :: Code ms IO ()
+  | OnFeatureAdd
+    { _featureAddEvent :: Ef ms IO ()
     }
-  | OnDestroy
-    { _destroyEvent :: Code ms IO ()
+  | OnFeatureRemove
+    { _featureRemoveEvent :: Ef ms IO ()
     }
   | OnWillMount
     { _willMountEvent :: ENode -> IO ()
@@ -147,13 +147,13 @@ data Feature (ms :: [* -> *])
   | OnDidMount
     { _didMountEvent :: ENode -> IO ()
     }
-  | forall model. Typeable model => OnUpdate
+  | forall model. Typeable model => OnModelChangeIO
     { _updateModel :: model
     , _updateEvent :: model -> model -> ENode -> IO ()
     }
-  | forall model. Typeable model => OnModel
+  | forall model. Typeable model => OnModelChange
     { _watchModel :: model
-    , _modelEvent :: model -> model -> ENode -> Code ms IO ()
+    , _modelEvent :: model -> model -> ENode -> Ef ms IO ()
     }
   | OnWillUnmount
     { _willUnmountEvent :: ENode -> IO ()
@@ -248,21 +248,21 @@ instance Eq (Feature ms) where
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
   (==) (OnE e os ev _) (OnE e' os' ev' _) =
     prettyUnsafeEq e e' && prettyUnsafeEq os os'
-  (==) (OnWin e os ev _) (OnWin e' os' ev' _) =
+  (==) (OnWindow e os ev _) (OnWindow e' os' ev' _) =
     prettyUnsafeEq e e' && prettyUnsafeEq os os'
-  (==) (OnDoc e os ev _) (OnDoc e' os' ev' _) =
+  (==) (OnDocument e os ev _) (OnDocument e' os' ev' _) =
     prettyUnsafeEq e e' && prettyUnsafeEq os os'
-  (==) (OnBuild e) (OnBuild e') =
+  (==) (OnFeatureAdd e) (OnFeatureAdd e') =
     reallyUnsafeEq e e'
-  (==) (OnDestroy e) (OnDestroy e') =
+  (==) (OnFeatureRemove e) (OnFeatureRemove e') =
     reallyUnsafeEq e e'
   (==) (OnWillMount e) (OnWillMount e') =
     reallyUnsafeEq e e'
   (==) (OnDidMount e) (OnDidMount e') =
     reallyUnsafeEq e e'
-  (==) (OnUpdate m f) (OnUpdate m' f') =
+  (==) (OnModelChangeIO m f) (OnModelChangeIO m' f') =
     typeOf m == typeOf m' && reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
-  (==) (OnModel m f) (OnModel m' f') =
+  (==) (OnModelChange m f) (OnModelChange m' f') =
     typeOf m == typeOf m' && reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq f f'
   (==) (OnWillUnmount e) (OnWillUnmount e') =
     reallyUnsafeEq e e'
@@ -334,27 +334,23 @@ checkNotNull p = if T.null p then (False,p) else (True,p)
 pattern BoolProp k b <- (Property k (checkNotNull -> (b,_))) where
   BoolProp k b = Property k (if b then "true" else "")
 
-on :: Txt -> Code ms IO () -> Feature ms
-on ev e = OnE ev def (\_ _ _ -> return (Just e)) Nothing
+-- on :: Txt -> Ef ms IO () -> Feature ms
+-- on ev e = OnE ev def (\_ -> return (Just e)) Nothing
 
-pattern On ev opts f <- (OnE ev opts f _) where
-  On ev opts f = OnE ev opts f Nothing
+pattern On ev f <- (OnE ev _ f _) where
+  On ev f = OnE ev def f Nothing
 
-pattern OnDocument ev opts f <- (OnDoc ev opts f _) where
-  OnDocument ev opts f = OnDoc ev opts f Nothing
+pattern OnDoc ev f <- (OnDocument ev _ f _) where
+  OnDoc ev f = OnDocument ev def f Nothing
 
-pattern OnWindow ev opts f <- (OnWin ev opts f _) where
-  OnWindow ev opts f = OnWin ev opts f Nothing
+pattern OnWin ev f <- (OnWindow ev _ f _) where
+  OnWin ev f = OnWindow ev def f Nothing
 
--- runs when the feature is created; top-down
--- onBuild is guaranteed to run before onDestroy, but ordering w.r.t. mount/update/unmount is undetermined
-pattern OnAdd f <- (OnBuild f) where
-  OnAdd f = OnBuild f
+pattern OnAdd f <- (OnFeatureAdd f) where
+  OnAdd f = OnFeatureAdd f
 
--- runs when the feature is destroyed; top-down
--- onDestroy is guaranteed to run after onBuild, but ordering w.r.t. mount/update/unmount is undetermined
-pattern OnRemove f <- (OnDestroy f) where
-  OnRemove f = OnDestroy f
+pattern OnRemove f <- (OnFeatureRemove f) where
+  OnRemove f = OnFeatureRemove f
 
 pattern OnMounting f <- (OnWillMount f) where
   OnMounting f = OnWillMount f
@@ -367,16 +363,16 @@ pattern OnMounted f <- (OnDidMount f) where
 -- That is, the only way to witness a value before and after a change is to track it via the model!
 -- If it is untracked, the function will only ever see the value after the change because of the
 -- way diffing is performed on Features.
-pattern Watch mdl f <- (OnModel mdl f) where
-  Watch mdl f = OnModel mdl f
+pattern Watch mdl f <- (OnModelChange mdl f) where
+  Watch mdl f = OnModelChange mdl f
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
 -- make sure the body of the function will not change; must be totally static modulo the model/enode!
 -- That is, the only way to witness a value before and after a change is to track it via the model!
 -- If it is untracked, the function will only ever see the value after the change because of the
 -- way diffing is performed on Features.
-pattern WatchIO mdl f <- (OnUpdate mdl f) where
-  WatchIO mdl f = OnUpdate mdl f
+pattern WatchIO mdl f <- (OnModelChangeIO mdl f) where
+  WatchIO mdl f = OnModelChangeIO mdl f
 
 -- runs when the attribute is being cleaned up; top-down
 pattern OnUnmounting f <- (OnWillUnmount f) where
@@ -386,23 +382,50 @@ pattern OnUnmounting f <- (OnWillUnmount f) where
 pattern OnUnmounted f <- (OnDidUnmount f) where
   OnUnmounted f = OnDidUnmount f
 
+preventedDefault :: Feature ms -> (Bool,Feature ms)
+preventedDefault f@(OnE _ (Options True _) _ _) = (True,f)
+preventedDefault f@(OnDocument _ (Options True _) _ _) = (True,f)
+preventedDefault f@(OnWindow _ (Options True _) _ _) = (True,f)
+preventedDefault f = (False,f)
+
 preventDefault :: Feature ms -> Feature ms
 preventDefault (OnE ev os f m) = OnE ev (os { _preventDef = True }) f m
-preventDefault (OnDoc ev os f m) = OnDoc ev (os { _preventDef = True }) f m
-preventDefault (OnWin ev os f m) = OnWin ev (os { _preventDef = True }) f m
+preventDefault (OnDocument ev os f m) = OnDocument ev (os { _preventDef = True }) f m
+preventDefault (OnWindow ev os f m) = OnWindow ev (os { _preventDef = True }) f m
 preventDefault f = f
+
+pattern PreventDefault f <- (preventedDefault -> (True,f)) where
+  PreventDefault f = preventDefault f
+
+stoppedPropagation :: Feature ms -> (Bool,Feature ms)
+stoppedPropagation f@(OnE _ (Options _ True) _ _) = (True,f)
+stoppedPropagation f@(OnDocument _ (Options _ True) _ _) = (True,f)
+stoppedPropagation f@(OnWindow _ (Options _ True) _ _) = (True,f)
+stoppedPropagation f = (False,f)
 
 stopPropagation :: Feature ms -> Feature ms
 stopPropagation (OnE ev os f m) = OnE ev (os { _stopProp = True }) f m
-stopPropagation (OnDoc ev os f m) = OnDoc ev (os { _stopProp = True }) f m
-stopPropagation (OnWin ev os f m) = OnWin ev (os { _stopProp = True }) f m
+stopPropagation (OnDocument ev os f m) = OnDocument ev (os { _stopProp = True }) f m
+stopPropagation (OnWindow ev os f m) = OnWindow ev (os { _stopProp = True }) f m
 stopPropagation f = f
+
+pattern StopPropagation f <- (stoppedPropagation -> (True,f)) where
+  StopPropagation f = stopPropagation f
+
+intercepted :: Feature ms -> (Bool,Feature ms)
+intercepted f@(OnE _ (Options True True) _ _) = (True,f)
+intercepted f@(OnDocument _ (Options True True) _ _) = (True,f)
+intercepted f@(OnWindow _ (Options True True) _ _) = (True,f)
+intercepted f = (False,f)
 
 intercept :: Feature ms -> Feature ms
 intercept (OnE ev os f m) = OnE ev (os { _preventDef = True, _stopProp = True }) f m
-intercept (OnDoc ev os f m) = OnDoc ev (os { _preventDef = True, _stopProp = True }) f m
-intercept (OnWin ev os f m) = OnWin ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnDocument ev os f m) = OnDocument ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnWindow ev os f m) = OnWindow ev (os { _preventDef = True, _stopProp = True }) f m
 intercept f = f
+
+pattern Intercept f <- (intercepted -> (True,f)) where
+  Intercept f = intercept f
 
 pattern Styles ss <- (StyleF ss) where
   Styles ss = StyleF ss
@@ -985,8 +1008,8 @@ pattern In v <- (Attribute "in" v) where
 pattern In2 v <- (Attribute "in2" v) where
   In2 v = Attribute "in2" v
 
-pattern Intercept v <- (Attribute "intercept" v) where
-  Intercept v = Attribute "intercept" v
+-- pattern Intercept v <- (Attribute "intercept" v) where
+--   Intercept v = Attribute "intercept" v
 
 pattern K v <- (Attribute "k" v) where
   K v = Attribute "k" v
@@ -1492,108 +1515,126 @@ pattern ZoomAndPan v <- (Attribute "zoomAndPan" v) where
 --------------------------------------------------------------------------------
 -- Event listener 'Attribute's
 
-pattern OnClick opts f <- (OnE "click" opts f _) where
-  OnClick opts f = OnE "click" opts f Nothing
+----------------------------------------
+-- Window events
 
-pattern OnDoubleClick opts f <- (OnE "dblclick" opts f _) where
-  OnDoubleClick opts f = OnE "dblclick" opts f Nothing
+pattern OnResize f <- (OnWindow "resize" _ f _) where
+  OnResize f = OnWindow "resize" def f Nothing
 
-pattern OnMouseDown opts f <- (OnE "mousedown" opts f _) where
-  OnMouseDown opts f = OnE "mousedown" opts f Nothing
+pattern OnScroll f <- (OnWindow "scroll" _ f _) where
+  OnScroll f = OnWindow "scroll" def f Nothing
 
-pattern OnMouseUp opts f <- (OnE "mouseup" opts f _) where
-  OnMouseUp opts f = OnE "mouseup" opts f Nothing
+pattern OnClose f <- (OnWindow "close" _ f _) where
+  OnClose f = OnWindow "close" def f Nothing
 
-pattern OnTouchStart opts f <- (OnE "touchstart" opts f _) where
-  OnTouchStart opts f = OnE "touchstart" opts f Nothing
+pattern OnBeforeUnload f <- (OnWindow "beforeunload" _ f _) where
+  OnBeforeUnload f = OnWindow "beforeunload" def f Nothing
 
-pattern OnTouchEnd opts f <- (OnE "touchend" opts f _) where
-  OnTouchEnd opts f = OnE "touchend" opts f Nothing
+----------------------------------------
+-- Element events
 
-pattern OnMouseEnter opts f <- (OnE "mouseenter" opts f _) where
-  OnMouseEnter opts f = OnE "mouseenter" opts f Nothing
+pattern OnClick f <- (OnE "click" _ f _) where
+  OnClick f = OnE "click" def f Nothing
 
-pattern OnMouseLeave opts f <- (OnE "mouseleave" opts f _) where
-  OnMouseLeave opts f = OnE "mouseleave" opts f Nothing
+pattern OnDoubleClick f <- (OnE "dblclick" _ f _) where
+  OnDoubleClick f = OnE "dblclick" def f Nothing
 
-pattern OnMouseOver opts f <- (OnE "mouseover" opts f _) where
-  OnMouseOver opts f = OnE "mouseover" opts f Nothing
+pattern OnMouseDown f <- (OnE "mousedown" _ f _) where
+  OnMouseDown f = OnE "mousedown" def f Nothing
 
-pattern OnMouseOut opts f <- (OnE "mouseout" opts f _) where
-  OnMouseOut opts f = OnE "mouseout" opts f Nothing
+pattern OnMouseUp f <- (OnE "mouseup" _ f _) where
+  OnMouseUp f = OnE "mouseup" def f Nothing
 
-pattern OnMouseMove opts f <- (OnE "mousemove" opts f _) where
-  OnMouseMove opts f = OnE "mousemove" opts f Nothing
+pattern OnTouchStart f <- (OnE "touchstart" _ f _) where
+  OnTouchStart f = OnE "touchstart" def f Nothing
 
-pattern OnTouchMove opts f <- (OnE "touchmove" opts f _)  where
-  OnTouchMove opts f = OnE "touchmove" opts f Nothing
+pattern OnTouchEnd f <- (OnE "touchend" _ f _) where
+  OnTouchEnd f = OnE "touchend" def f Nothing
 
-pattern OnTouchCancel opts f <- (OnE "touchcancel" opts f _) where
-  OnTouchCancel opts f = OnE "touchcancel" opts f Nothing
+pattern OnMouseEnter f <- (OnE "mouseenter" _ f _) where
+  OnMouseEnter f = OnE "mouseenter" def f Nothing
 
-pattern OnInput opts f <- (OnE "input" opts f _) where
-  OnInput opts f = OnE "input" opts f Nothing
+pattern OnMouseLeave f <- (OnE "mouseleave" _ f _) where
+  OnMouseLeave f = OnE "mouseleave" def f Nothing
 
-pattern OnChange opts f <- (OnE "change" opts f _) where
-  OnChange opts f = OnE "change" opts f Nothing
+pattern OnMouseOver f <- (OnE "mouseover" _ f _) where
+  OnMouseOver f = OnE "mouseover" def f Nothing
 
-pattern OnSubmit opts f <- (OnE "submit" opts f _) where
-  OnSubmit opts f = OnE "submit" opts f Nothing
+pattern OnMouseOut f <- (OnE "mouseout" _ f _) where
+  OnMouseOut f = OnE "mouseout" def f Nothing
 
-pattern OnBlur opts f <- (OnE "blur" opts f _) where
-  OnBlur opts f = OnE "blur" opts f Nothing
+pattern OnMouseMove f <- (OnE "mousemove" _ f _) where
+  OnMouseMove f = OnE "mousemove" def f Nothing
 
-pattern OnFocus opts f <- (OnE "focus" opts f _) where
-  OnFocus opts f = OnE "focus" opts f Nothing
+pattern OnTouchMove f <- (OnE "touchmove" _ f _)  where
+  OnTouchMove f = OnE "touchmove" def f Nothing
 
-pattern OnKeyUp opts f <- (OnE "keyup" opts f _) where
-  OnKeyUp opts f = OnE "keyup" opts f Nothing
+pattern OnTouchCancel f <- (OnE "touchcancel" _ f _) where
+  OnTouchCancel f = OnE "touchcancel" def f Nothing
 
-pattern OnKeyDown opts f <- (OnE "keydown" opts f _) where
-  OnKeyDown opts f = OnE "keydown" opts f Nothing
+pattern OnInput f <- (OnE "input" _ f _) where
+  OnInput f = OnE "input" def f Nothing
 
-pattern OnKeyPress opts f <- (OnE "keypress" opts f _) where
-  OnKeyPress opts f = OnE "keypress" opts f Nothing
+pattern OnChange f <- (OnE "change" _ f _) where
+  OnChange f = OnE "change" def f Nothing
 
--- onInput :: (Txt -> Code ms IO ()) -> Feature ms
+pattern OnSubmit f <- (OnE "submit" _ f _) where
+  OnSubmit f = OnE "submit" def f Nothing
+
+pattern OnBlur f <- (OnE "blur" _ f _) where
+  OnBlur f = OnE "blur" def f Nothing
+
+pattern OnFocus f <- (OnE "focus" _ f _) where
+  OnFocus f = OnE "focus" def f Nothing
+
+pattern OnKeyUp f <- (OnE "keyup" _ f _) where
+  OnKeyUp f = OnE "keyup" def f Nothing
+
+pattern OnKeyDown f <- (OnE "keydown" _ f _) where
+  OnKeyDown f = OnE "keydown" def f Nothing
+
+pattern OnKeyPress f <- (OnE "keypress" _ f _) where
+  OnKeyPress f = OnE "keypress" def f Nothing
+
+-- onInput :: (Txt -> Ef ms IO ()) -> Feature ms
 -- onInput f = on' "input" $ \_ _ -> fmap return $ flip parse $ \o -> do
 --   target <- o .: "target"
 --   value <- target .: "value"
 --   pure $ f value
 
--- onInputChange :: (Txt -> Code ms IO ()) -> Feature ms
+-- onInputChange :: (Txt -> Ef ms IO ()) -> Feature ms
 -- onInputChange f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
 --   target <- o .: "target"
 --   value <- target .: "value"
 --   pure $ f value
 
--- onCheck :: (Bool -> Code ms IO ()) -> Feature ms
+-- onCheck :: (Bool -> Ef ms IO ()) -> Feature ms
 -- onCheck f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
 --   target <- o .: "target"
 --   checked <- target .: "checked"
 --   pure $ f checked
 
--- onSubmit :: Code ms IO () -> Feature ms
+-- onSubmit :: Ef ms IO () -> Feature ms
 -- onSubmit e = intercept $ on' "submit" $ \_ _ _ -> return $ Just e
 
--- onBlur :: Code ms IO () -> Feature ms
+-- onBlur :: Ef ms IO () -> Feature ms
 -- onBlur = on "blur"
 
--- onFocus :: Code ms IO () -> Feature ms
+-- onFocus :: Ef ms IO () -> Feature ms
 -- onFocus = on "focus"
 
--- onKeyUp :: (Int -> Code ms IO ()) -> Feature ms
+-- onKeyUp :: (Int -> Ef ms IO ()) -> Feature ms
 -- onKeyUp f = on' "keyup" $ \_ _ -> fmap return $ flip parse $ \o -> do
 --   key <- o .: "keyCode"
 --   pure $ f key
 
 
--- onKeyDown :: (Int -> Code ms IO ()) -> Feature ms
+-- onKeyDown :: (Int -> Ef ms IO ()) -> Feature ms
 -- onKeyDown f = on' "keydown" $ \_ _ -> fmap return $ flip parse $ \o -> do
 --   key <- o .: "keyCode"
 --   pure $ f key
 
--- onKeyPress :: (Int -> Code ms IO ()) -> Feature ms
+-- onKeyPress :: (Int -> Ef ms IO ()) -> Feature ms
 -- onKeyPress f = on' "keypress" $ \_ _ -> fmap return $ flip parse $ \o -> do
 --   key <- o .: "keyCode"
 --   pure $ f key

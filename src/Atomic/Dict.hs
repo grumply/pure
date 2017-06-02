@@ -38,7 +38,7 @@ item = iso Val (\(Val v) -> cast v)
 
 data Dict = Dict
   { dict_map :: Map.HashMap Txt Val
-  , dict_upd :: (Maybe (forall ms. Dict -> Code ms IO ()))
+  , dict_upd :: (Maybe (forall ms. Dict -> Ef ms IO ()))
   }
 instance Eq Dict where
   (==) (Dict s _) (Dict s' _) = reallyUnsafeEq s s'
@@ -53,7 +53,7 @@ instance GHC.Exts.IsList Dict where
   fromList xs = def { dict_map = Map.fromList xs } 
   toList st = Map.toList (dict_map st)
 
-setDict :: ('[State () Dict] <: ms, Monad c) => Dict -> Code ms c ()
+setDict :: ('[State () Dict] <: ms, Monad c) => Dict -> Ef ms c ()
 setDict st = do
   st' <- get
   case dict_upd st' of
@@ -62,7 +62,7 @@ setDict st = do
 
 -- Guarantee a value exists in a `Dict`, i.e. insert if non-existent. Print a trace statement
 -- if debugging is enabled via DEBUGDICT or DEVEL.
-(%|) :: forall a c ms. ('[State () Dict] <: ms, Monad c, Typeable a) => Txt -> a -> Dict -> Code ms c ()
+(%|) :: forall a c ms. ('[State () Dict] <: ms, Monad c, Typeable a) => Txt -> a -> Dict -> Ef ms c ()
 (%|) k v (Dict st upd) =
   let new = Dict (Map.insert k (Val v) st) upd in
     -- prints a trace statement if the type of value at the given key index is unexpected
@@ -83,7 +83,7 @@ setDict st = do
 --
 -- > d &| ("name" =| nm) . ("pass" =| p)
 infixr 4 &|
-(&|) :: ('[State () Dict] <: ms, Monad c) => Dict -> (Dict -> Dict) -> Code ms c ()
+(&|) :: ('[State () Dict] <: ms, Monad c) => Dict -> (Dict -> Dict) -> Ef ms c ()
 (&|) st upd = setDict (upd st)
 
 -- Index a value in a `Dict`. Failure produces an error.

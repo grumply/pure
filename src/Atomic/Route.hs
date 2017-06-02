@@ -40,11 +40,11 @@ data Route k
     | GetParam Txt (Maybe Txt -> k)
     | SetParam Txt Txt k
 
-    | forall ms c a. Reroute (Code '[Route] c a)
+    | forall ms c a. Reroute (Ef '[Route] c a)
 
-    | forall ms c a. Subpath Txt (Code '[Route] c a) k
+    | forall ms c a. Subpath Txt (Ef '[Route] c a) k
 
-    | forall ms c a. Path Txt (Code '[Route] c a) k
+    | forall ms c a. Path Txt (Ef '[Route] c a) k
 
     | forall a. Route a
     | Keep
@@ -64,28 +64,28 @@ instance Functor Route where
 
 instance Delta Route Route
 
-instance (Monad c,FromTxt a) => IsString (Code '[Route] c a) where
+instance (Monad c,FromTxt a) => IsString (Ef '[Route] c a) where
   fromString = getParamOrKeep . fromString
 
-getRawUrl :: (Monad c) => Code '[Route] c Txt
+getRawUrl :: (Monad c) => Ef '[Route] c Txt
 getRawUrl = Send (GetRawUrl Return)
 
-setPath :: (Monad c) => Txt -> Code '[Route] c ()
+setPath :: (Monad c) => Txt -> Ef '[Route] c ()
 setPath url = Send (SetPath url (Return ()))
 
-getPath :: (Monad c) => Code '[Route] c Txt
+getPath :: (Monad c) => Ef '[Route] c Txt
 getPath = Send (GetPath Return)
 
-getParams :: (Monad c) => Code '[Route] c [(Txt,Txt)]
+getParams :: (Monad c) => Ef '[Route] c [(Txt,Txt)]
 getParams = Send (GetParams Return)
 
-setParam :: (Monad c) => Txt -> Txt -> Code '[Route] c ()
+setParam :: (Monad c) => Txt -> Txt -> Ef '[Route] c ()
 setParam p v = Send (SetParam p v (Return ()))
 
-getParam :: (Monad c) => Txt -> Code '[Route] c (Maybe Txt)
+getParam :: (Monad c) => Txt -> Ef '[Route] c (Maybe Txt)
 getParam p = Send (GetParam p Return)
 
-getParamOrKeep :: (FromTxt a, Monad c) => Txt -> Code '[Route] c a
+getParamOrKeep :: (FromTxt a, Monad c) => Txt -> Ef '[Route] c a
 getParamOrKeep p = do
   mp <- getParam p
   case mp of
@@ -94,27 +94,27 @@ getParamOrKeep p = do
 
 subpath :: (Monad c)
         => Txt
-        -> Code '[Route] c a
-        -> Code '[Route] c ()
+        -> Ef '[Route] c a
+        -> Ef '[Route] c ()
 subpath match handler = Send (Subpath match handler (Return ()))
 
 path :: (Monad c)
      => Txt
-     -> Code '[Route] c a
-     -> Code '[Route] c ()
+     -> Ef '[Route] c a
+     -> Ef '[Route] c ()
 path stencil handler = Send (Path stencil handler (Return ()))
 
 dispatch :: (Monad c)
          => a
-         -> Code '[Route] c a
+         -> Ef '[Route] c a
 dispatch a = Send (Route a)
 
-keep :: (Monad c) => Code '[Route] c a
+keep :: (Monad c) => Ef '[Route] c a
 keep = Send Keep
 
 reroute :: (Monad c)
-        => Code '[Route] c a
-        -> Code '[Route] c b
+        => Ef '[Route] c a
+        -> Ef '[Route] c b
 reroute rtr = Send (Reroute rtr)
 
 stripTrailingSlashes = JSS.dropWhileEnd (== '/')
@@ -138,7 +138,7 @@ safeTail x =
 -- this is a very rough implementation in need of much love
 route :: forall ms c a.
          (MonadIO c)
-      => Code '[Route] c a
+      => Ef '[Route] c a
       -> Txt
       -> c (Maybe a)
 route rtr url0@(breakRoute -> (path,params)) =
@@ -148,13 +148,13 @@ route rtr url0@(breakRoute -> (path,params)) =
       withUrl :: forall b.
                  Txt
               -> [(Txt,Txt)]
-              -> Code '[Route] c b
+              -> Ef '[Route] c b
               -> c (Maybe b)
       withUrl url params = go
           where
 
               go :: forall x.
-                    Code '[Route] c x
+                    Ef '[Route] c x
                  -> c (Maybe x)
               go (Return _) = return Nothing
               go (Lift sup) = sup >>= go

@@ -28,7 +28,7 @@ data Styles_ k where
   Style_ :: Txt -> Txt -> k -> Styles_ k
   deriving Functor
 
-type Styles = Code '[Styles_] Identity ()
+type Styles = Ef '[Styles_] Identity ()
 
 infixr 5 =:
 (=:) :: Txt -> Txt -> Styles
@@ -92,7 +92,7 @@ data CSS_ k where
   CSS3_ :: Txt -> Txt -> Maybe CSS -> k -> CSS_ k
   deriving Functor
 
-type CSS = Code '[CSS_] Identity ()
+type CSS = Ef '[CSS_] Identity ()
 
 select :: Txt -> Styles -> CSS
 select sel ss = Send (CSS_ sel ss (Return ()))

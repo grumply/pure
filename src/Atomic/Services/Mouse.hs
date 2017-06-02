@@ -109,7 +109,7 @@ getMouseY = with mouseS $ do
   liftIO $ readIORef mouseYRef
 
 onMouseX :: (MonadIO c, '[Evented] <: ms)
-         => (Int -> Code ms c ()) -> Code ms c (IO ())
+         => (Int -> Ef ms c ()) -> Ef ms c (IO ())
 onMouseX f = do
   buf <- get
   Just stopper <- demandMaybe =<< with mouseS (do
@@ -119,7 +119,7 @@ onMouseX f = do
   return stopper
 
 onMouseY :: (MonadIO c, '[Evented] <: ms)
-         => (Int -> Code ms c ()) -> Code ms c (IO ())
+         => (Int -> Ef ms c ()) -> Ef ms c (IO ())
 onMouseY f = do
   buf <- get
   Just stopper <- demandMaybe =<< with mouseS (do
@@ -129,8 +129,8 @@ onMouseY f = do
   return stopper
 
 onMousePosition :: (MonadIO c, '[Evented] <: ms)
-                => (MousePosition -> Code ms c ())
-                -> Code ms c (IO ())
+                => (MousePosition -> Ef ms c ())
+                -> Ef ms c (IO ())
 onMousePosition f = do
   buf <- get
   Just stopper <- demandMaybe =<< with mouseS (do

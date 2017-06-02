@@ -25,7 +25,7 @@ scrollTo :: ( MonadIO c
          => Ease
          -> Double
          -> View ms'
-         -> Code ms c (Maybe (IO ()))
+         -> Ef ms c (Maybe (IO ()))
 scrollTo ease duration {- milliseconds -} to = do
   me <- liftIO $ getElement to
   case me of
@@ -49,7 +49,7 @@ foreign import javascript unsafe
 #endif
 
 easeScroll :: (MonadIO c)
-           => Win -> Ease -> Double -> Double -> ENode -> Double -> Double -> Code '[Event Double] c ()
+           => Win -> Ease -> Double -> Double -> ENode -> Double -> Double -> Ef '[Event Double] c ()
 easeScroll win ease begin delta dest duration start = go begin start
   where
 
