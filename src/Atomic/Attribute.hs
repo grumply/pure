@@ -136,10 +136,10 @@ data Feature (ms :: [* -> *])
     , _eventListener :: Maybe (IO ())
     }
   | OnFeatureAdd
-    { _featureAddEvent :: Ef ms IO ()
+    { _featureAddEvent :: ENode -> Ef ms IO ()
     }
   | OnFeatureRemove
-    { _featureRemoveEvent :: Ef ms IO ()
+    { _featureRemoveEvent :: ENode -> Ef ms IO ()
     }
   | OnWillMount
     { _willMountEvent :: ENode -> IO ()

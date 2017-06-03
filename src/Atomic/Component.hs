@@ -2125,14 +2125,14 @@ runElementDiff f el os0 ms0 ns0 = do
               if reallyUnsafeEq e e' then
                 continue old
               else do
-                f e'
+                f (e' el)
                 replace
 
             (OnFeatureRemove e,OnFeatureRemove e') ->
               if reallyUnsafeEq e e' then
                 continue old
               else do
-                f e
+                f (e el)
                 replace
 
             (OnWillMount g,OnWillMount g') ->
@@ -2232,7 +2232,7 @@ removeAttribute_ f element attr =
       forM_ unreg id
 
     OnFeatureRemove e ->
-      f e
+      f (e element)
 
     StyleF styles -> do
       obj <- O.create
@@ -2366,7 +2366,7 @@ setAttribute_ c diffing element attr didMount =
       return (OnWindow ev os f (Just stopListener),didMount)
 
     OnFeatureAdd e -> do
-      c e
+      c (e element)
       return (attr,didMount)
 
     OnWillMount f -> do
@@ -2426,7 +2426,7 @@ cleanupAttr f element attr didUnmount =
       forM_ unreg id
       return didUnmount
     OnFeatureRemove e -> do
-      f e
+      f (e element)
       return didUnmount
     OnWillUnmount g -> do
       g element
