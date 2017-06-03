@@ -1452,6 +1452,7 @@ buildHTML :: Doc -> ControllerHooks -> Bool -> (Ef e IO () -> IO ()) -> View e -
 buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing
 
 getElement :: forall e. View e -> IO (Maybe ENode)
+getElement View {} = return Nothing
 getElement TextHTML {} = return Nothing
 getElement STHTML {..} =
   case _strecord of
@@ -1462,6 +1463,7 @@ getElement STHTML {..} =
 getElement n = return $ _node n
 
 getNode :: forall e. View e -> IO (Maybe NNode)
+getNode View {} = return Nothing
 getNode TextHTML {..} = return $ fmap toNode _tnode
 getNode STHTML {..} =
   case _strecord of
@@ -1474,6 +1476,8 @@ getNode n = return $ fmap toNode $ _node n
 getAttributes :: View e -> [Feature e]
 getAttributes TextHTML {} = []
 getAttributes STHTML {} = []
+getAttributes View {} = []
+getAttributes NullHTML {} = []
 getAttributes n = _attributes n
 
 getChildren :: forall e. View e -> IO [View e]
