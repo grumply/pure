@@ -525,6 +525,9 @@ pattern Disabled b <- (Property "disabled" (toBool -> b)) where
 pattern Enctyp p <- (Property "enctyp" p) where
   Enctyp p = Property "enctyp" p
 
+pattern For v <- (Attribute "for" v) where
+  For v = Attribute "for" v
+
 pattern Formaction v <- (Attribute "formaction" v) where
   Formaction v = Attribute "formaction" v
 
@@ -1596,51 +1599,50 @@ pattern OnKeyDown f <- (OnE "keydown" _ f _) where
 pattern OnKeyPress f <- (OnE "keypress" _ f _) where
   OnKeyPress f = OnE "keypress" def f Nothing
 
--- onInput :: (Txt -> Ef ms IO ()) -> Feature ms
--- onInput f = on' "input" $ \_ _ -> fmap return $ flip parse $ \o -> do
---   target <- o .: "target"
---   value <- target .: "value"
---   pure $ f value
+onInput :: (Txt -> Ef ms IO ()) -> Feature ms
+onInput f = On "input" $ \(_,_,o) -> return $ parse o $ \o -> do
+  target <- o .: "target"
+  value <- target .: "value"
+  pure $ f value
 
--- onInputChange :: (Txt -> Ef ms IO ()) -> Feature ms
--- onInputChange f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
---   target <- o .: "target"
---   value <- target .: "value"
---   pure $ f value
+onInputChange :: (Txt -> Ef ms IO ()) -> Feature ms
+onInputChange f = On "change" $ \(_,_,o) -> return $ parse o $ \o -> do
+  target <- o .: "target"
+  value <- target .: "value"
+  pure $ f value
 
--- onCheck :: (Bool -> Ef ms IO ()) -> Feature ms
--- onCheck f = on' "change" $ \_ _ -> fmap return $ flip parse $ \o -> do
---   target <- o .: "target"
---   checked <- target .: "checked"
---   pure $ f checked
+onCheck :: (Bool -> Ef ms IO ()) -> Feature ms
+onCheck f = On "change" $ \(_,_,o) -> return $ parse o $ \o -> do
+  target <- o .: "target"
+  checked <- target .: "checked"
+  pure $ f checked
 
--- onSubmit :: Ef ms IO () -> Feature ms
--- onSubmit e = intercept $ on' "submit" $ \_ _ _ -> return $ Just e
+onSubmit :: Ef ms IO () -> Feature ms
+onSubmit e = Intercept $ On "submit" $ \_ -> return $ Just e
 
--- onBlur :: Ef ms IO () -> Feature ms
--- onBlur = on "blur"
+onBlur :: Ef ms IO () -> Feature ms
+onBlur f = On "blur" $ \_ -> return $ Just f
 
--- onFocus :: Ef ms IO () -> Feature ms
--- onFocus = on "focus"
+onFocus :: Ef ms IO () -> Feature ms
+onFocus f = On "focus" $ \_ -> return $ Just f
 
--- onKeyUp :: (Int -> Ef ms IO ()) -> Feature ms
--- onKeyUp f = on' "keyup" $ \_ _ -> fmap return $ flip parse $ \o -> do
---   key <- o .: "keyCode"
---   pure $ f key
+onKeyUp :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
+onKeyUp f = On "keyup" $ \(_,_,o) -> return $ f o
 
+onKeyDown :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
+onKeyDown f = On "keydown" $ \(_,_,o) -> return $ f o
 
--- onKeyDown :: (Int -> Ef ms IO ()) -> Feature ms
--- onKeyDown f = on' "keydown" $ \_ _ -> fmap return $ flip parse $ \o -> do
---   key <- o .: "keyCode"
---   pure $ f key
+onKeyPress :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
+onKeyPress f = On "keypress" $ \(_,_,o) -> return $ f o
 
--- onKeyPress :: (Int -> Ef ms IO ()) -> Feature ms
--- onKeyPress f = on' "keypress" $ \_ _ -> fmap return $ flip parse $ \o -> do
---   key <- o .: "keyCode"
---   pure $ f key
+onClick :: Ef ms IO () -> Feature ms
+onClick f = On "click" $ \_ -> return $ Just f
 
--- ignoreClick :: Feature ms
--- ignoreClick = intercept $ on' "click" $ \_ _ _ -> return Nothing
+onDoubleClick :: Ef ms IO () -> Feature ms
+onDoubleClick f = On "dblclick" $ \_ -> return $ Just f
+
+ignoreClick :: Feature ms
+ignoreClick = Intercept $ On "click" $ \_ -> return Nothing
 
 --------------------------------------------------------------------------------
 -- Keys
