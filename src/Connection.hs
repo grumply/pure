@@ -1,7 +1,7 @@
 module Connection (module Connection, module Export) where
 
 import Ef.Base as Export hiding (As,Index,watch,transform,construct,uncons,distribute,embed,observe,End,Nat(..),maps)
-import Atomic as Export
+import Atomic as Export hiding (Origin)
 import Prelude as Export hiding (all,exponent,tan,lookup,reverse)
 
 import Atomic.WebSocket

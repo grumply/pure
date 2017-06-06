@@ -1154,13 +1154,13 @@ modifyModel f = do
 #endif
 
 differ :: (Base m <: ms) => Differ ms m
-differ render trig sendEv ControllerState {..} = do
+differ r trig sendEv ControllerState {..} = do
 #ifdef __GHCJS__
   ch <- get
   let setupDiff = do
         let !new_as = AState (unsafeCoerce asLive) (unsafeCoerce asModel)
         new_ap_AState <- liftIO $ newIORef (Just new_as,False)
-        let !aPatch = APatch sendEv new_ap_AState render trig ch
+        let !aPatch = APatch sendEv new_ap_AState r trig ch
         put ControllerState { asPatch = Just aPatch, .. }
         liftIO $ diff_ aPatch
         return ()
@@ -1180,18 +1180,18 @@ differ render trig sendEv ControllerState {..} = do
           setupDiff
   return ()
 #else
-  let v = render asModel
+  let v = render $ r (unsafeCoerce asModel)
   liftIO $ do
     ControllerView _ _ _ isFG <- liftIO $ readIORef asLive
-    writeIORef asLive $ unsafeCoerce $ ControllerView v v asModel isFG
+    writeIORef asLive $ unsafeCoerce $ ControllerView v v (unsafeCoerce asModel) isFG
 #endif
 
 #ifdef __GHCJS__
 toNode :: T.IsNode n => n -> IO NNode
 toNode = T.castToNode
 #else
-toNode :: n -> NNode
-toNode _ = ()
+toNode :: n -> IO NNode
+toNode _ = return ()
 #endif
 
 createElement :: Doc -> Txt -> IO (Maybe ENode)
@@ -1353,6 +1353,9 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
 #ifdef __GHCJS__
             mv <- newEmptyMVar
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
+#endif
+#ifndef __GHCJS__
+              mv <- newEmptyMVar
 #endif
               (props,st,sv,old,mid) <- readIORef strec
               let st' = g st
@@ -2255,6 +2258,7 @@ removeAttribute_ f element attr =
 
 onRaw :: ENode -> Txt -> Atomic.Attribute.Options -> (IO () -> Obj -> IO ()) -> IO (IO ())
 onRaw el nm os f = do
+#ifdef __GHCJS__
   stopper <- newIORef undefined
   stopListener <- Ev.on el (Ev.unsafeEventName nm :: Ev.EventName E.Element T.CustomEvent) $ do
     ce <- Ev.event
@@ -2264,15 +2268,22 @@ onRaw el nm os f = do
     liftIO $ f stop (unsafeCoerce ce)
   writeIORef stopper stopListener
   return stopListener
+#else
+  return (return ())
+#endif
 
 property :: ENode -> Feature e -> IO ()
+#ifdef __GHCJS__
 property node (Property k v) = set_property_js node k v
 property node (DelayedProperty k v) = set_property_js node k v
+#endif
 property _ _ = return ()
 
 attribute :: ENode -> Feature e -> IO ()
+#ifdef __GHCJS__
 attribute node (Attribute k v) = E.setAttribute node k v
 attribute node (DelayedAttribute k v) = E.setAttribute node k v
+#endif
 attribute _ _ = return ()
 
 setAttribute_ :: (Ef e IO () -> IO ()) -> Bool -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())

@@ -9,7 +9,7 @@ import qualified Ef.Event
 import qualified Ef.Base
 import Prelude as Export hiding (all,exponent,tan,lookup,reverse)
 
-import Atomic as Export hiding (accept)
+import Atomic as Export hiding (accept,Origin)
 
 import Atomic.WebSocket as Export hiding (LazyByteString)
 import Connection hiding (Base,accept)

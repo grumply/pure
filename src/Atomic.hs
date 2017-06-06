@@ -294,8 +294,8 @@ dash = Txt.map (\x -> if x == '.' then '-' else x)
         Nothing  -> nullValue
     _            -> nullValue
 #else
-        Nothing  -> Null
-    _            -> Null
+        Nothing  -> JSON.Null
+    _            -> JSON.Null
 #endif
 
 type Static = Controller '[] (Const ())
