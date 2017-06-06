@@ -73,7 +73,7 @@ type AppKey ms r = Key (Ef.Base.As (Ef (Appended ms (Base r)) IO))
 type AppBuilder ts r = Modules (Base r) (Action (Appended ts (Base r)) IO) -> IO (Modules (Appended ts (Base r)) (Action (Appended ts (Base r)) IO))
 type AppPrimer ms r = Ef (Appended ms (Base r)) IO ()
 type AppRouter ms r = Ef '[Route] (Ef (Appended ms (Base r)) IO) r
-type AppPages ms r = r -> Ef (Appended ms (Base r)) IO System
+type AppPages ms r = r -> Ef (Appended ms (Base r)) IO Page
 
 data App' ts ms c r
   = App
@@ -82,7 +82,7 @@ data App' ts ms c r
     , prime   :: !(Ef ms c ())
     , root    :: !(Maybe Txt)
     , routes  :: !(Ef '[Route] (Ef ms c) r)
-    , pages   :: !(r -> Ef ms c System)
+    , pages   :: !(r -> Ef ms c Page)
     }
 type App ms r = App' (Appended ms (Base r)) (Appended ms (Base r)) IO r
 
@@ -94,7 +94,7 @@ instance Eq (App' ts ms c r) where
          1# -> True
          _  -> k1 == k2
 
-simpleApp :: Ef '[Route] (Ef (Base r) IO) r -> (r -> Ef (Base r) IO System) -> App '[] r
+simpleApp :: Ef '[Route] (Ef (Base r) IO) r -> (r -> Ef (Base r) IO Page) -> App '[] r
 simpleApp = App "main" return (return ()) Nothing
 
 onRoute :: ( IsApp' ts ms IO r
@@ -163,7 +163,7 @@ run app@App {..} = do
     go first ort doc (Carrier rt) p = do
       go' p
       where
-        go' (Subsystem b'@(Controller' b)) = do
+        go' (Partial b'@(Controller' b)) = do
           b <- liftIO $ do
             mb_ <- lookupController (Component.key b)
             case mb_ of
@@ -179,7 +179,7 @@ run app@App {..} = do
                 ControllerView _ new _ _ <- readIORef crView
                 rebuild new
                 if first then do
-                  clearNode (Just (toNode ort))
+                  clearNode . Just =<< toNode ort
                   mn <- getNode new
                   forM_ mn (appendChild ort)
                 else
@@ -189,24 +189,24 @@ run app@App {..} = do
             pg <- lift $ pages r
             go False ort doc b pg
 
-        go' (System hc'@(Controller' hc) b'@(Controller' b)) = do
+        go' (Page hc'@(Controller' hc) b'@(Controller' b)) = do
           b <- liftIO $ do
             mh_ <- lookupController (Component.key hc)
             case mh_ of
               Nothing -> void $ do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
-                let h = T.castToElement h_
+                h <- T.castToElement h_
 #else
-                let h = ()
+                h <- return ()
 #endif
                 mkController (Replace (NullHTML (Just h))) hc
               Just ControllerRecord {..} -> do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
-                let h = T.castToElement h_
+                h <- T.castToElement h_
 #else
-                let h = ()
+                h <- return ()
 #endif
                 ControllerView _ new _ _ <- readIORef crView
                 rebuild new
@@ -225,10 +225,10 @@ run app@App {..} = do
                 ControllerView _ new _ _ <- readIORef crView
                 rebuild new
                 if first then do
-                  clearNode (Just (toNode ort))
+                  clearNode . Just =<< toNode ort
                   mn <- getNode new
                   forM_ mn (appendChild ort)
-                else
+                else do
                   replace old new
                 return (Carrier crView)
           become $ \r -> do
@@ -322,10 +322,11 @@ setupRouter _ = do
           unless (p' == p) $ do
             mncr <- lift $ Route.route rtr p'
             forM_ mncr $ \ncr ->
-              when (mncr /= cr) $ do
+              when (mncr /= cr) $
                 lift $ do
                   setRoute mncr
                   publish crn ncr
+            become (go' p' mncr)
 
 goto :: ( MonadIO c
         , With (App' ts ms IO r) (Ef ms IO) IO

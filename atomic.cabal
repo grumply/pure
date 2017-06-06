@@ -26,11 +26,13 @@ Flag devel
      Default: False
 
 library
+  ghc-options: -fconstraint-solver-iterations=0
+
   if flag(debugws)
-    cpp-options:    -DDEBUGWS
+    cpp-options: -DGHCJS_BROWSER -DDEBUGWS
 
   if flag(devel)
-    cpp-options:    -DDEVEL
+    cpp-options: -DGHCJS_BROWSER -DDEVEL
 
   if (impl(ghcjs))
     exposed-modules:    Atomic
@@ -93,6 +95,7 @@ library
                       , Atomic.UnsafeEq
                       , Atomic.Vault
                       , Atomic.WebSocket
+    cpp-options: -DGHCJS_BROWSER
     build-depends:      base >=4.8
                       , ef-core >= 2.0
                       , ef-base >= 2.0
@@ -101,7 +104,7 @@ library
                       , aeson >= 0.9
                       , hashable
                       , ghcjs-base
-                      , ghcjs-dom == 0.2.3.1
+                      , ghcjs-dom == 0.3.*
                       , unordered-containers
                       , template-haskell
                       , ghc-prim
@@ -172,6 +175,7 @@ library
                       , Atomic.UnsafeEq
                       , Atomic.Vault
                       , Atomic.WebSocket
+    cpp-options: -DGHCJS_BROWSER
     if flag(secure)
       cpp-options:    -DSECURE
       build-depends:    base >=4.8

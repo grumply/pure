@@ -12,7 +12,7 @@ module Atomic
   , list, hashed
   , Component(..)
   , Controller(..)
-  , controller
+  , mvc
   , viewManager, constant
   , unindent
   , css, css', scss, scss', styles
@@ -429,12 +429,12 @@ instance ToTxt (View e) where
 instance Typeable e => ToTxt [View e] where
   toTxt = mconcat . map toTxt
 
-data System
-  = System
-    { getHead :: Constr
+data Page
+  = Page
+    { getHead    :: Constr
     , getContent :: Constr
     }
-  | Subsystem
+  | Partial
     { getContent :: Constr
     }
   deriving Eq
@@ -444,16 +444,16 @@ page :: ( IsController' ts ms m
         )
      => Controller' ts ms m
      -> Controller' ts' ms' m'
-     -> System
-page h b = System (Controller' h) (Controller' b)
+     -> Page
+page h b = Page (Controller' h) (Controller' b)
 
 partial :: IsController' ts ms m
         => Controller' ts ms m
-        -> System
-partial = Subsystem . Controller'
+        -> Page
+partial = Partial . Controller'
 
-renderSystem :: System -> Txt
-renderSystem (System h c) =
+renderPage :: Page -> Txt
+renderPage (Page h c) =
   "<!DOCTYPE html>" <>
     case h of
       Controller' Controller {..} ->
@@ -463,12 +463,12 @@ renderSystem (System h c) =
                 [ unsafeCoerce $ render $ view model
                 , Body []
                     [ case c of
-                        Controller' a@Controller {} -> controller Div [ Id "atomic" ] a
+                        Controller' a@Controller {} -> mvc Div [ Id "atomic" ] a
                     ]
                 ]
         in
           toTxt (render htm)
-renderSystem (Subsystem c) =
+renderPage (Partial c) =
   ("<!DOCTYPE html>" <>) $
     let htm :: View '[]
         htm =
@@ -476,14 +476,14 @@ renderSystem (Subsystem c) =
             [ Head [] []
             , Body []
                 [ case c of
-                    Controller' a@Controller {} -> controller Div [ Id "atomic" ] a
+                    Controller' a@Controller {} -> mvc Div [ Id "atomic" ] a
                 ]
             ]
     in
       toTxt (render htm)
 
-renderSystemBootstrap :: System -> Txt -> Txt
-renderSystemBootstrap (System h c) mainScript =
+renderPageBootstrap :: Page -> Txt -> Txt
+renderPageBootstrap (Page h c) mainScript =
   "<!DOCTYPE html>" <>
     case h of
       Controller' Controller {..} ->
@@ -493,13 +493,13 @@ renderSystemBootstrap (System h c) mainScript =
                 [ Head [] []
                 , Body []
                     [ case c of
-                        Controller' a@Controller {} -> controller Div [ Id "atomic" ] a
+                        Controller' a@Controller {} -> mvc Div [ Id "atomic" ] a
                     , Script [ Src mainScript, Defer True ] []
                     ]
                 ]
         in
           toTxt (render htm)
-renderSystemBootstrap (Subsystem c) mainScript =
+renderPageBootstrap (Partial c) mainScript =
   "<!DOCTYPE html>" <>
     case c of
       Controller' a@Controller {} ->
@@ -508,43 +508,43 @@ renderSystemBootstrap (Subsystem c) mainScript =
               Html []
                 [ Head [] []
                 , Body []
-                    [ controller Div [ Id "atomic" ] a
+                    [ mvc Div [ Id "atomic" ] a
                     , Script [ Src mainScript, Defer True ] []
                     ]
                 ]
         in
           toTxt (render htm)
 
-renderDynamicSystem :: System -> IO Txt
-renderDynamicSystem (System (Controller' h) (Controller' c)) = do
+renderDynamicPage :: Page -> IO Txt
+renderDynamicPage (Page (Controller' h) (Controller' c)) = do
   let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentHTML h
   head_html <- renderDynamicHTML h_
   let bdy :: View '[]
-      bdy = Body [] [ controller Div [ Id "atomic" ] c]
+      bdy = Body [] [ mvc Div [ Id "atomic" ] c]
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> head_html <> body_html <> "</html>"
-renderDynamicSystem (Subsystem (Controller' c)) = do
+renderDynamicPage (Partial (Controller' c)) = do
   let dt = "<!DOCTYPE html><head></head>"
   Just c_ <- demandMaybe =<< currentHTML c
   let bdy :: View '[]
-      bdy = Body [] [ controller Div [ Id "atomic" ] c ]
+      bdy = Body [] [ mvc Div [ Id "atomic" ] c ]
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> body_html <> "</html>"
 
-renderDynamicSystemBootstrap :: System -> Txt -> IO Txt
-renderDynamicSystemBootstrap (System (Controller' h) (Controller' c)) mainScript = do
+renderDynamicPageBootstrap :: Page -> Txt -> IO Txt
+renderDynamicPageBootstrap (Page (Controller' h) (Controller' c)) mainScript = do
   let dt = "<!DOCTYPE html><html>"
   Just h_ <- demandMaybe =<< currentHTML h
   head_html <- renderDynamicHTML h_
   let bdy :: View '[]
-      bdy = Body [] [ controller Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
+      bdy = Body [] [ mvc Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> head_html <> body_html <> "</html>"
-renderDynamicSystemBootstrap (Subsystem (Controller' c)) mainScript = do
+renderDynamicPageBootstrap (Partial (Controller' c)) mainScript = do
   let dt = "<!DOCTYPE html><html><head></head>"
   let bdy :: View '[]
-      bdy = Body [] [ controller Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
+      bdy = Body [] [ mvc Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> body_html <> "</html>"
 

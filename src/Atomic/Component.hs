@@ -572,9 +572,9 @@ viewManager props initial_st view = STHTML props 0 initial_st Nothing view (\_ _
 constant :: View e -> View e
 constant a = viewManager () () $ \_ _ _ -> a
 
-controller :: ([Feature e] -> [View e] -> View e)
-           -> (forall ts' ms' m. (IsController' ts' ms' m) => [Feature e] -> Controller' ts' ms' m -> View e)
-controller f = \as c ->
+mvc :: ([Feature e] -> [View e] -> View e)
+    -> (forall ts' ms' m. (IsController' ts' ms' m) => [Feature e] -> Controller' ts' ms' m -> View e)
+mvc f = \as c ->
   case f [] [] of
     HTML _ t _ _ -> Managed Nothing t as (Controller' c)
     _ -> error "Incorrect usage of construct; Controllers may only be embedded in plain html HTMLs."
@@ -654,7 +654,7 @@ rebuild h =
     go h
   where
     go :: View e -> IO ()
-    go STHTML {..}  =
+    go STHTML {..}  = do
       forM_ _strecord $ \ref -> do
         (_,_,_,a,_) <- readIORef ref
         rebuild (unsafeCoerce a :: View e)
@@ -662,7 +662,7 @@ rebuild h =
     go SVGHTML {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
     go KSVGHTML {..}  = mapM_ (go . snd) _keyed
-    go m@Managed {..} =
+    go m@Managed {..} = do
       case _constr of
         Controller' c -> do
           mi_ <- lookupController (key c)
@@ -962,8 +962,7 @@ mkController :: forall ms ts m.
        -> Controller' ts ms m
        -> IO (ControllerRecord ms m)
 mkController mkControllerAction c@Controller {..} = do
-  let !m = model
-      !raw = render $ view m
+  let !raw = render $ view model
   doc <- getDocument
   buf <- newEvQueue
   ch  <- ControllerHooks <$> syndicate <*> syndicate <*> syndicate
@@ -974,7 +973,7 @@ mkController mkControllerAction c@Controller {..} = do
   (i,l) <- case mkControllerAction of
             ClearAndAppend n -> do
               i <- buildAndEmbedMaybe sendEv doc ch True Nothing raw
-              clearNode (Just $ toNode n)
+              clearNode . Just =<< toNode n
               mn <- getNode i
               forM_ mn (appendChild n)
               return (i,True)
@@ -988,7 +987,7 @@ mkController mkControllerAction c@Controller {..} = do
             BuildOnly -> do
               i <- buildAndEmbedMaybe sendEv doc ch False Nothing raw
               return (i,False)
-  cr <- ControllerRecord <$> pure as <*> newIORef (ControllerView raw i m l) <*> pure ch
+  cr <- ControllerRecord <$> pure as <*> newIORef (ControllerView raw i model l) <*> pure ch
   -- keep out of forkIO to prevent double-initialization
   addController key cr
   forkIO $ do
@@ -1188,7 +1187,7 @@ differ render trig sendEv ControllerState {..} = do
 #endif
 
 #ifdef __GHCJS__
-toNode :: T.IsNode n => n -> NNode
+toNode :: T.IsNode n => n -> IO NNode
 toNode = T.castToNode
 #else
 toNode :: n -> NNode
@@ -1230,7 +1229,7 @@ clearNode mnode =
 #ifdef __GHCJS__
 appendChild :: T.IsNode n => ENode -> n -> IO ()
 appendChild parent child =
-  append_child_js parent (toNode child)
+  append_child_js parent =<< toNode child
 #else
 appendChild :: ENode -> n -> IO ()
 appendChild _ _ =
@@ -1319,7 +1318,8 @@ setAttributes as f diffing el = do
 -- Would a bottom-up, display='none' -> display='' solution work globally?
 -- Does the fact that this runs in a rAF resolve any of this a priori?
 buildAndEmbedMaybe :: forall e. (Ef e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (View e)
-buildAndEmbedMaybe f doc ch isFG mn = go mn . render
+buildAndEmbedMaybe f doc ch isFG mn v = do
+  go mn $ render v
   where
     go :: Maybe ENode -> View e -> IO (View e)
     go mparent (View c) = go mparent (render c)
@@ -1464,14 +1464,14 @@ getElement n = return $ _node n
 
 getNode :: forall e. View e -> IO (Maybe NNode)
 getNode View {} = return Nothing
-getNode TextHTML {..} = return $ fmap toNode _tnode
+getNode TextHTML {..} = forM _tnode toNode
 getNode STHTML {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
       (_,_,_,a,_) <- readIORef ref
       getNode (unsafeCoerce a :: View e)
-getNode n = return $ fmap toNode $ _node n
+getNode n = forM (_node n) toNode
 
 getAttributes :: View e -> [Feature e]
 getAttributes TextHTML {} = []
@@ -1506,7 +1506,7 @@ diff_ APatch {..} = do
       Just (AState as_live !as_model) -> do
         doc <- getDocument
         ControllerView !raw_html !live_html live_m isFG <- readIORef as_live
-        let !new_html = render $ ap_patchComponent $ unsafeCoerce as_model
+        let !new_html = render $ ap_patchComponent as_model
         new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
         writeIORef as_live $ ControllerView new_html new_live_html as_model isFG
         ap_viewTrigger
@@ -1591,7 +1591,7 @@ diffHelper f doc ch isFG =
   where
 
     go :: View e -> View e -> View e -> IO (View e)
-    go old mid new =
+    go old mid new = do
       if reallyUnsafeEq mid new then do
         return old
       else
@@ -2472,7 +2472,7 @@ getFirstElementByTagName nm = do
 #ifdef __GHCJS__
   Just nl <- D.getElementsByTagName doc nm
   Just b  <- N.item nl 0
-  return $ T.castToElement b
+  liftIO $ T.castToElement b
 #else
   return doc
 #endif
