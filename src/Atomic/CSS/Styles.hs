@@ -911,8 +911,11 @@ matrix scX skY skX scY tX tY =
             <> int tX  <> ","
             <> int tY  <> ")"
 
-scale :: Double -> Double -> Txt
-scale opts1 opts2 = "scale(" <> dec opts1 <> "," <> dec opts2 <> ")"
+scale :: Double -> Txt
+scale opts1 = "scale(" <> dec opts1 <> ")"
+
+scale2 :: Double -> Double -> Txt
+scale2 opts1 opts2 = "scale(" <> dec opts1 <> "," <> dec opts2 <> ")"
 
 scaleX :: Double -> Txt
 scaleX opts1 = "scaleX(" <> dec opts1 <> ")"
