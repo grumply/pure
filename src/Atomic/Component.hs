@@ -2155,7 +2155,7 @@ runElementDiff f el os0 ms0 ns0 = do
                 if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
                   continue old
                 else do
-                  g m (unsafeCoerce m') el
+                  g' (unsafeCoerce m) m' el
                   replace
               else
                 replace
@@ -2165,7 +2165,7 @@ runElementDiff f el os0 ms0 ns0 = do
                 if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
                   continue old
                 else do
-                  f (g m (unsafeCoerce m') el)
+                  f (g' (unsafeCoerce m) m' el)
                   replace
               else
                 replace

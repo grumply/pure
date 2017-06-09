@@ -1,7 +1,10 @@
 {-# language UndecidableInstances #-}
 {-# language PatternSynonyms #-}
 {-# language ViewPatterns #-}
+{-# language OverloadedStrings #-}
 module Atomic.Cond where
+
+import Ef
 
 import Control.Lens.Empty
 import Control.Lens.Prism
@@ -14,69 +17,66 @@ class Cond a where
   default nil :: (Monoid a, Eq a) => a
   nil = mempty
 
+  isNil :: a -> Bool
+  default isNil :: (Eq a) => a -> Bool
+  isNil = (== nil)
+
+  notNil :: a -> Bool
+  notNil = not . isNil
+
 infix 9 ?
-(?) :: (Cond x, Eq x) => x -> a -> a -> a
+(?) :: (Cond x) => x -> a -> a -> a
 (?) x t e = if notNil x then t else e
 
 infix 9 ?&
-(?&) :: (Cond x, Eq x) => x -> a -> a -> a
+(?&) :: (Cond x) => x -> a -> a -> a
 (?&) x t e = x ? e $ t
 
 may :: Cond a => (b -> a) -> Maybe b -> a
 may = maybe nil
 
-cond :: (Cond x, Eq x, Cond a) => x -> a -> a
+cond :: (Cond x, Cond a) => x -> a -> a
 cond b t = b ? t $ nil
 
-isNil :: (Cond a, Eq a) => a -> Bool
-isNil = (== nil)
-
-notNil :: (Cond a, Eq a) => a -> Bool
-notNil = (/= nil)
+instance Cond (Ef ms IO ()) where
+  nil = Return ()
+  isNil (Return ()) = True
+  isNil _ = False
 
 instance Cond [a] where
   nil = []
-
-instance (Cond a, Cond b) => Cond (a,b) where
-  nil = (nil,nil)
-
-instance (Cond a, Cond b, Cond c) => Cond (a,b,c) where
-  nil = (nil,nil,nil)
-
-instance (Cond a, Cond b, Cond c, Cond d) => Cond (a,b,c,d) where
-  nil = (nil,nil,nil,nil)
-
-instance (Cond a, Cond b, Cond c, Cond d, Cond e) => Cond (a,b,c,d,e) where
-  nil = (nil,nil,nil,nil,nil)
-
-instance (Cond a, Cond b, Cond c, Cond d, Cond e, Cond f) => Cond (a,b,c,d,e,f) where
-  nil = (nil,nil,nil,nil,nil,nil)
-
-instance (Cond a, Cond b, Cond c, Cond d, Cond e, Cond f, Cond g) => Cond (a,b,c,d,e,f,g) where
-  nil = (nil,nil,nil,nil,nil,nil,nil)
+  isNil [] = True
+  isNil _ = False
 
 instance Cond (Maybe a) where
   nil = Nothing
+  isNil Nothing = True
+  isNil _ = False
 
 instance Cond Bool where
   nil = False
+  isNil = not
 
-instance Cond Txt
+instance Cond Txt where
+  nil = ""
+  isNil "" = True
+  isNil _  = False
 
 instance Cond Int where
   nil = 0
+  isNil = (== 0)
 
 instance Cond Integer where
   nil = 0
+  isNil = (== 0)
 
 instance Cond Double where
   nil = 0
+  isNil = (== 0)
 
 instance Cond Float where
   nil = 0
-
-instance Cond (a -> a) where
-  nil = id
+  isNil = (== 0)
 
 pattern Nil <- (isNil -> True) where
   Nil = nil
