@@ -11,7 +11,7 @@ import Data.String
 import Data.Monoid
 
 newtype Key phantom = Key { getKey :: (Txt,Int) }
-  deriving (Show)
+  deriving (Show,Eq)
 
 instance FromTxt (Key phantom) where
   fromTxt t = Key (t,hash t)
