@@ -5,7 +5,7 @@ module Atomic.Dict where
 import Ef
 import Ef.State
 
-import Control.Lens
+-- import Control.Lens
 import Data.Typeable
 
 import qualified Data.HashMap.Strict as Map
@@ -33,8 +33,8 @@ instance ToTxt Val where
       Just x   -> x
 instance FromTxt Val where
   fromTxt = Val
-item :: (Typeable a) => Iso a (Maybe a) Val Val
-item = iso Val (\(Val v) -> cast v)
+-- item :: (Typeable a) => Iso a (Maybe a) Val Val
+-- item = iso Val (\(Val v) -> cast v)
 
 data Dict = Dict
   { dict_map :: Map.HashMap Txt Val

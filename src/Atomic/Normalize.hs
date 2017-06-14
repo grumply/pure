@@ -22,7 +22,7 @@ normalize =
             margin   =: ems 0.67 <<>> int 0
 
           select ("figcaption" <&>> "figure" <&>> "main") $ do
-            display =: block
+            display =: blockS
 
           select "hr" $ do
             boxSizing =: contentBox
@@ -150,7 +150,7 @@ normalize =
             font             =: inherit
 
           select "details" $ do
-            display =: block
+            display =: blockS
 
           select "summary" $ do
             display =: listItem

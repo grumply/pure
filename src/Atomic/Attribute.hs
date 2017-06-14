@@ -30,7 +30,7 @@ import GHC.Exts
 import qualified Data.Function as F
 import Data.List (sortBy)
 
-import Control.Lens (makePrisms,makeLenses)
+-- import Control.Lens (makePrisms,makeLenses)
 
 import Prelude
 
@@ -446,10 +446,10 @@ xlink xl v = XLink xl v
 pattern SVGLink l <- (SVGLinkTo l _) where
   SVGLink l = SVGLinkTo l Nothing
 
-makePrisms ''Feature
-makeLenses ''Feature
-makePrisms ''Options
-makeLenses ''Options
+-- makePrisms ''Feature
+-- makeLenses ''Feature
+-- makePrisms ''Options
+-- makeLenses ''Options
 
 pattern ClassList cs <- (Attribute "class" (T.splitOn " " -> cs)) where
   ClassList cs = Attribute "class" $ T.intercalate " " cs
@@ -816,8 +816,10 @@ pattern CalcMode v <- (Attribute "calcMode" v) where
 pattern CapHeight v <- (Attribute "cap-height" v) where
   CapHeight v = Attribute "cap-height" v
 
-pattern Class v <- (Attribute "class" v) where
-  Class v = Attribute "class" v
+pattern ClassName c <- (Property "className" c) where
+  ClassName c = Property "className" c
+-- pattern Class v <- (Attribute "class" v) where
+--   Class v = Attribute "class" v
 
 pattern Clip v <- (Attribute "clip" v) where
   Clip v = Attribute "clip" v

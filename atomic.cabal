@@ -109,7 +109,7 @@ library
                       , template-haskell
                       , ghc-prim
                       , void
-                      , lens
+                      -- , lens
                       , containers
 
   else
@@ -198,7 +198,7 @@ library
                       , aeson >= 0.9
                       , void
                       , template-haskell
-                      , lens
+                      -- , lens
                       , vector
     else 
       build-depends:    base >=4.8
@@ -219,7 +219,7 @@ library
                       , aeson >= 0.9
                       , void
                       , template-haskell
-                      , lens
+                      -- , lens
                       , vector
 
   default-extensions:  BangPatterns

@@ -10,14 +10,14 @@ import Data.Txt
 import Data.JSON
 import GHC.Generics
 
-import Control.Lens.TH
+-- import Control.Lens.TH
 
 data Try a
   = Trying
   | Failed
   | Done a
   deriving (Eq,Ord,Read,Show,Generic,ToJSON,FromJSON)
-makePrisms ''Try
+-- makePrisms ''Try
 
 instance Functor Try where
   fmap f (Done a) = Done (f a)

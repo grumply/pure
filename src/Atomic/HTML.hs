@@ -51,8 +51,8 @@ pattern Blockquote fs cs <- HTML mn "blockquote" fs cs where
 pattern Body fs cs <- HTML mn "body" fs cs where
   Body fs cs = mkHTML "body" fs cs
 
-pattern B fs cs <- HTML mn "b" fs cs where
-  B fs cs = mkHTML "b" fs cs
+pattern Bold fs cs <- HTML mn "b" fs cs where
+  Bold fs cs = mkHTML "b" fs cs
 
 pattern Br fs cs <- HTML mn "br" fs cs where
   Br fs cs = mkHTML "br" fs cs

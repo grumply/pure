@@ -25,7 +25,7 @@ module Atomic
   , LazyByteString
   ) where
 
-import Ef.Base as Export hiding (As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End)
+import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End)
 
 #if MIN_VERSION_hashable(1,2,5)
 import Data.Hashable as Export hiding (hashed)
@@ -43,15 +43,18 @@ import GHC.Generics as Export (Generic)
 import Atomic.Component
 import Atomic.Service hiding (Base)
 
-import Control.Lens as Export hiding
-  (lazy,Empty,none,(<~),(.=),(<.>),Controller,Controller',Reversed,view)
-import qualified Control.Lens
-import Control.Lens.Extras as Export
+-- import Control.Lens as Export hiding
+--   (lazy,Empty,none,(<~),(.=),(<.>),Controller,Controller',Reversed,view)
+-- import qualified Control.Lens
+-- import Control.Lens.Extras as Export
 
+import Control.Arrow as Export hiding (left,right,(<+>))
+import Data.Traversable as Export
+import Data.Foldable as Export hiding (and,or,all)
+import Control.Applicative as Export
 import Control.Concurrent as Export hiding (yield)
 import Data.IORef as Export
 import Data.Function as Export hiding (on)
-import Data.Bifunctor as Export
 import Data.Bool as Export
 import Data.Maybe as Export
 import Data.Void as Export
@@ -102,10 +105,9 @@ import Atomic.WebSocket  as Export hiding (accept)
 
 import Data.ByteString as Export (ByteString)
 
-import Prelude as Export hiding (all,exponent,tan,lookup,reverse)
+import Prelude as Export hiding (and,or,all,exponent,tan,lookup,reverse)
 import qualified Prelude
 import Data.Monoid as Export hiding (Alt)
-import Data.Bifunctor as Export
 
 import Data.HashMap.Strict as Map hiding (null,map,update)
 import Data.Tree as Tree
@@ -206,45 +208,45 @@ ghcjs =
 type TxtLike as = Constrain '[FromTxt,ToTxt] as
 type JSON as = Constrain '[ToJSON,FromJSON,Typeable] as
 
--- Build a Getter through an intermediate type from an Iso.
--- This is equivalent to writing the often impossible combinator
---
--- > 'l . from l'
---
--- which, in general, produces a function equivalent to 'id'.
---
--- This is especially useful when l is overloaded via a typeclass
--- as is the case in 'txt'. Thus, a common use is:
---
--- > via txt
---
--- to go through a textual intermediary to produce a result, like when
--- turning some identifier (w) witnessing ToTxt into a Key for a controller:
---
--- > key = w ^. via txt
-via :: (Functor f, Profunctor p, Contravariant f) => Iso s a i i -> Optic' p f s a
-via f = to (withIso f $ \f t -> t . f)
+-- -- Build a Getter through an intermediate type from an Iso.
+-- -- This is equivalent to writing the often impossible combinator
+-- --
+-- -- > 'l . from l'
+-- --
+-- -- which, in general, produces a function equivalent to 'id'.
+-- --
+-- -- This is especially useful when l is overloaded via a typeclass
+-- -- as is the case in 'txt'. Thus, a common use is:
+-- --
+-- -- > via txt
+-- --
+-- -- to go through a textual intermediary to produce a result, like when
+-- -- turning some identifier (w) witnessing ToTxt into a Key for a controller:
+-- --
+-- -- > key = w ^. via txt
+-- via :: (Functor f, Profunctor p, Contravariant f) => Iso s a i i -> Optic' p f s a
+-- via f = to (withIso f $ \f t -> t . f)
 
--- translate is equivalent to 'via txt'
-translated :: (Functor f, Profunctor p, FromTxt a, ToTxt s, Contravariant f)
-           => Optic' p f s a
-translated = via txt
+-- -- translate is equivalent to 'via txt'
+-- translated :: (Functor f, Profunctor p, FromTxt a, ToTxt s, Contravariant f)
+--            => Optic' p f s a
+-- translated = via txt
 
-identified :: (Functor f, Identify a, Profunctor p, Contravariant f) => Optic' p f a (I a)
-identified = to identify
+-- identified :: (Functor f, Identify a, Profunctor p, Contravariant f) => Optic' p f a (I a)
+-- identified = to identify
 
-named :: (Functor f, Identify a, Profunctor p, Contravariant f) => Optic' p f a (I a)
-named = to identify
+-- named :: (Functor f, Identify a, Profunctor p, Contravariant f) => Optic' p f a (I a)
+-- named = to identify
 
-renamed :: (Functor f, Identify a, FromTxt x, Profunctor p, ToTxt (I a), Contravariant f)
-        => p x (f x) -> p a (f a)
-renamed = named . translated
+-- renamed :: (Functor f, Identify a, FromTxt x, Profunctor p, ToTxt (I a), Contravariant f)
+--         => p x (f x) -> p a (f a)
+-- renamed = named . translated
 
-txt :: (FromTxt t, ToTxt a) => Iso a t Txt Txt
-txt = iso toTxt fromTxt
+-- txt :: (FromTxt t, ToTxt a) => Iso a t Txt Txt
+-- txt = iso toTxt fromTxt
 
-pattern Txt a <- (Control.Lens.view txt -> a) where
-  Txt a = review txt a
+-- pattern Txt a <- (Control.Lens.view txt -> a) where
+--   Txt a = review txt a
 
 scoped :: (FromTxt x) => (?scope :: Txt) => Txt -> x
 scoped t = fromTxt (?scope <> t)

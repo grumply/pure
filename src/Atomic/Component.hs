@@ -11,7 +11,7 @@
 {-# language CPP #-}
 module Atomic.Component (module Atomic.Component, ENode, TNode, NNode, Win, Doc, Loc) where
 
-import Ef.Base hiding (Object,Client,After,Before,current,Lazy,Eager,construct,Index,observe,uncons,distribute,embed)
+import Ef.Base hiding (Object,Client,After,Before,child,current,Lazy,Eager,construct,Index,observe,uncons,distribute,embed)
 import qualified Ef.Base
 
 import Data.Txt as Txt hiding (replace,map,head,filter)
@@ -77,18 +77,18 @@ import System.Mem.StableName
 
 import qualified Data.HashMap.Strict as Map
 
-import Prelude hiding (div,head,span)
+import Prelude
 import Language.Haskell.TH hiding (Loc)
 import Language.Haskell.TH.Syntax hiding (Loc)
 
 import System.IO.Unsafe
 import Unsafe.Coerce
 
-import Control.Lens (Iso,iso,makePrisms,makeLenses,preview,review)
-import Control.Lens.Plated (Plated(..))
-import Control.Lens.At
-import Control.Lens.Prism
-import Control.Lens.Setter hiding ((.=))
+-- import Control.Lens (Iso,iso,makePrisms,makeLenses,preview,review)
+-- import Control.Lens.Plated (Plated(..))
+-- import Control.Lens.At
+-- import Control.Lens.Prism
+-- import Control.Lens.Setter hiding ((.=))
 
 import qualified GHC.Exts
 
@@ -255,9 +255,9 @@ forComponents :: (Typeable a, Typeable a', Typeable ms, Component a ms, Componen
               => [View ms] -> (a ms -> a' ms) -> [View ms]
 forComponents = flip mapComponents
 
-mappedComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
-                => Setter (View ms) (View ms) (a ms) (a' ms)
-mappedComponent = sets mapComponent
+-- mappedComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+--                 => Setter (View ms) (View ms) (a ms) (a' ms)
+-- mappedComponent = sets mapComponent
 
 data Mapping ms = forall a a'. (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
                 => Mapping (a ms -> a' ms)
@@ -582,38 +582,35 @@ mvc f = \as c ->
 hashed :: Hashable a => ([Feature e] -> [View e] -> View e) -> [Feature e] -> [(a,View e)] -> View e
 hashed x _attributes _keyed0 = list x _attributes (map (first hash) _keyed0)
 
-css :: CSS -> View e
+css :: Ef '[CSS_] Identity a -> View e
 css = css' False
 
-css' :: forall e. Bool -> CSS -> View e
-css' b = mkHTML "style" [ Property "type" "text/css", Property "scoped" (if b then "true" else "") ] . ((text "\n"):) . go False
+css' :: forall a e. Bool -> Ef '[CSS_] Identity a -> View e
+css' b = mkHTML "style" [ Property "type" "text/css", Property "scoped" (if b then "true" else "") ] . ((text "\n"):) . fst . go False []
   where
-    go :: Bool -> CSS -> [View e]
-    go b (Return _) = []
-    go b (Lift s) = go b (runIdentity s)
-    go b c@(Do msg) =
+    go :: forall a. Bool -> [View e] -> Ef '[CSS_] Identity a -> ([View e],a)
+    go b acc (Return a) = (acc,a)
+    go b acc (Lift s) = go b acc (runIdentity s)
+    go b acc c@(Do msg) =
       case prj msg of
-        Just (CSS3_ atRule sel mCSS k) ->
-          case mCSS of
-            Nothing ->
-              text (atRule <> sel <> ";\n")
-              : go False k
-            Just c' ->
-              ( text (atRule <> sel <> " {\n")
-              : go True c'
-              ) ++ ( text "\n}\n\n"
-                   : go False k
-                   )
+        Just (CSS3_ atRule sel css k) ->
+          case css of
+            Return a ->
+              go False (acc ++ [ text (atRule <> sel <> ";\n") ]) (k a)
+            _ ->
+              let (c,a) = go True [] css
+              in go False (acc ++ ( text (atRule <> sel <> " {\n") : c) ++ [ text "\n}\n\n" ]) (k a)
         Just (CSS_ sel ss r) ->
-          ( text ( (if b then "\t" else mempty)
-                     <> sel
-                     <> " {\n"
-                     <> (Txt.intercalate (if b then ";\n\t" else ";\n") $ renderStyles b ss)
-                     <> (if b then "\n\t}\n\n" else "\n}\n\n")
-                )
-          : go b r
-          )
-        _ -> []
+          let (s,a) = renderStyles b ss
+          in
+            go b  ( acc ++ [ text ( (if b then "\t" else mempty)
+                                      <> sel
+                                      <> " {\n"
+                                      <> (Txt.intercalate (if b then ";\n\t" else ";\n") s)
+                                      <> (if b then "\n\t}\n\n" else "\n}\n\n")
+                                  )
+                           ]
+                  ) (r a)
 
 scss :: StaticCSS -> View e
 scss = scss' False
@@ -621,18 +618,18 @@ scss = scss' False
 scss' :: Bool -> StaticCSS -> View e
 scss' b = raw (mkHTML "style") [ Property "type" "text/css", Property "scoped" (if b then "true" else "") ] . cssText
 
-styles :: CSS -> View e
-styles = css' True . classify
+inlineStyles :: Ef '[CSS_] Identity a -> View e
+inlineStyles = css' True . classify
   where
+    classify :: forall a. Ef '[CSS_] Identity a -> Ef '[CSS_] Identity a
     classify (Return r) = Return r
     classify (Lift sup) = Lift (fmap classify sup)
-    classify (Do e) =
-      case prj e of
-        Just (CSS_ sel ss k) ->
-          Do (inj (CSS_ (Txt.cons '.' sel) ss (classify k)))
-        Just (CSS3_ at sel mcss k) ->
-          Do (inj (CSS3_ at sel (fmap classify mcss) (classify k))) 
-        _ -> error "impossible"
+    classify (Send e) =
+      case e of
+        CSS_ sel ss k ->
+          Send (CSS_ (Txt.cons '.' sel) ss (classify . k))
+        CSS3_ at sel css k ->
+          Send (CSS3_ at sel (classify css) (classify . k))
 
 
 -- -- Useful for standalone contexts without a Component root.
@@ -849,7 +846,7 @@ instance ToTxt (Feature e) where
     "style=\""
       <> Txt.intercalate
            (Txt.singleton ';')
-           (renderStyles False (mapM_ (uncurry (=:)) pairs))
+           (fst $ renderStyles False (mapM_ (uncurry (=:)) pairs))
       <> "\""
 
   toTxt (LinkTo href _)    = "href=\"" <> href <> "\""
@@ -2507,5 +2504,5 @@ redirect redir = do
   return loc
 #endif
 
-makePrisms ''View
-makeLenses ''View
+-- makePrisms ''View
+-- makeLenses ''View

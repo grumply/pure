@@ -77,7 +77,7 @@ import Unsafe.Coerce
 
 import Data.ByteString.Lazy as BSL hiding (putStrLn)
 
-import Control.Lens as L
+-- import Control.Lens as L
 
 type LazyByteString = BSL.ByteString
 
@@ -1544,7 +1544,7 @@ import GHC.Prim
 
 import Data.ByteString.Lazy as BSL hiding (putStrLn)
 
-import Control.Lens as L
+-- import Control.Lens as L
 
 type LazyByteString = BSL.ByteString
 
@@ -2030,7 +2030,7 @@ send' m = go True
             Nothing -> return (Left InvalidSocketState)
             Just ws -> do
               let bs = either id toBS m
-                  (sbi,_,_) = GB.fromByteString $ view L.strict bs
+                  (sbi,_,_) = GB.fromByteString $ BSL.toStrict bs
                   sabi = GB.getArrayBuffer sbi
 #if defined(DEBUGWS) || defined(DEVEL)
               liftIO $ putStrLn $ "send' sending: " ++ show bs
@@ -2048,7 +2048,7 @@ send' m = go True
                   Nothing -> return () -- huh?
                   Just ws -> do
                     let bs = either id toBS m
-                        (sbi,_,_) = GB.fromByteString $ view L.strict bs
+                        (sbi,_,_) = GB.fromByteString $ BSL.toStrict bs
                         sabi = GB.getArrayBuffer sbi
 #if defined(DEBUGWS) || defined(DEVEL)
                     liftIO $ putStrLn $ "send' sending after websocket state changed: " ++ show bs
@@ -2074,7 +2074,7 @@ trySend' m = do
       case mws of
         Nothing -> return (Left WSUninitialized) -- not correct....
         Just ws -> do
-          let (sbi,_,_) = GB.fromByteString $ view L.strict $ either id toBS m
+          let (sbi,_,_) = GB.fromByteString $ BSL.toStrict $ either id toBS m
               sabi = GB.getArrayBuffer sbi
 #if defined(DEBUGWS) || defined(DEVEL)
           liftIO $ putStrLn $ "trySend' sending: " ++ show (fmap (encode . toJSON) m)

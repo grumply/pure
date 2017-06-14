@@ -25,7 +25,7 @@ onXL = atMedia (screenMinWidth (ems 90))
 -- a port of Kristofer Joseph's flexboxgrid css from: https://github.com/kristoferjoseph/flexboxgrid; Apache licensed
 grid :: StaticCSS
 grid =
-  $( let g = staticCSS $ do
+  $( let g = staticCSS $ void $ do
            select ".u-container, .u-container-fluid" $ do
              marginRight =: auto
              marginLeft  =: auto

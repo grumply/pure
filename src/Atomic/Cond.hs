@@ -6,9 +6,6 @@ module Atomic.Cond where
 
 import Ef
 
-import Control.Lens.Empty
-import Control.Lens.Prism
-
 import Data.Maybe
 import Data.Txt
 

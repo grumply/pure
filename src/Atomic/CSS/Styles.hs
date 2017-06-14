@@ -83,6 +83,12 @@ inherit = "inherit"
 auto :: Txt
 auto = "auto"
 
+forwards :: Txt
+forwards = "forwards"
+
+backwardsS :: Txt
+backwardsS = "backwards"
+
 center :: Txt
 center = "center"
 
@@ -443,8 +449,8 @@ display = "display"
 inline :: Txt
 inline = "inline"
 
-block :: Txt
-block = "block"
+blockS :: Txt
+blockS = "block"
 
 inlineBlock :: Txt
 inlineBlock = "inline-block"
@@ -676,6 +682,9 @@ textJustify = "text-justify"
 
 textOverflow :: Txt
 textOverflow = "text-overflow"
+
+ellipsis :: Txt
+ellipsis = "ellipsis"
 
 underline :: Txt
 underline = "underline"
@@ -911,38 +920,38 @@ matrix scX skY skX scY tX tY =
             <> int tX  <> ","
             <> int tY  <> ")"
 
-scale :: Double -> Txt
-scale opts1 = "scale(" <> dec opts1 <> ")"
+scale :: Txt -> Txt
+scale opts1 = "scale(" <> opts1 <> ")"
 
-scale2 :: Double -> Double -> Txt
-scale2 opts1 opts2 = "scale(" <> dec opts1 <> "," <> dec opts2 <> ")"
+scale2 :: Txt -> Txt -> Txt
+scale2 opts1 opts2 = "scale(" <> opts1 <> "," <> opts2 <> ")"
 
-scaleX :: Double -> Txt
-scaleX opts1 = "scaleX(" <> dec opts1 <> ")"
+scaleX :: Txt -> Txt
+scaleX opts1 = "scaleX(" <> opts1 <> ")"
 
-scaleY :: Double -> Txt
-scaleY opts1 = "scaleY(" <> dec opts1 <> ")"
+scaleY :: Txt -> Txt
+scaleY opts1 = "scaleY(" <> opts1 <> ")"
 
-scaleZ :: Double -> Txt
-scaleZ opts1 = "scaleZ(" <> dec opts1 <> ")"
+scaleZ :: Txt -> Txt
+scaleZ opts1 = "scaleZ(" <> opts1 <> ")"
 
-scale3d :: Double -> Double -> Txt
-scale3d opts1 opts2 = "scale3d(" <> dec opts1 <> "," <> dec opts2 <> ")"
+scale3d :: Txt -> Txt -> Txt
+scale3d opts1 opts2 = "scale3d(" <> opts1 <> "," <> opts2 <> ")"
 
-rotate :: Double -> Txt
-rotate opts = "rotate(" <> deg opts <> ")"
+rotate :: Txt -> Txt
+rotate opts = "rotate(" <> opts <> ")"
 
-translateS :: Double -> Double -> Txt
-translateS opts1 opts2 = "translate(" <> per opts1 <> "," <> per opts2 <> ")"
+translateS :: Txt -> Txt -> Txt
+translateS opts1 opts2 = "translate(" <> opts1 <> "," <> opts2 <> ")"
 
-translateX :: Double -> Txt
-translateX opts1 = "translateX(" <> per opts1 <> ")"
+translateX :: Txt -> Txt
+translateX opts1 = "translateX(" <> opts1 <> ")"
 
-translateY :: Double -> Txt
-translateY opts1 = "translateY(" <> per opts1 <> ")"
+translateY :: Txt -> Txt
+translateY opts1 = "translateY(" <> opts1 <> ")"
 
-translateZ :: Double -> Txt
-translateZ opts1 = "translateZ(" <> per opts1 <> ")"
+translateZ :: Txt -> Txt
+translateZ opts1 = "translateZ(" <> opts1 <> ")"
 
 translate3d :: Txt -> Txt -> Txt -> Txt
 translate3d o1 o2 o3 = "translate3d(" <> o1 <> "," <> o2 <> "," <> o3 <> ")"
@@ -1027,6 +1036,12 @@ linear = "linear"
 linearGradientS :: Txt -> Txt
 linearGradientS lg = "linear-gradient(" <> lg <> ")"
 
+willChange :: Txt
+willChange = "will-change"
+
+animation :: Txt
+animation = "animation"
+
 transformS :: Txt
 transformS = "transform"
 
@@ -1035,6 +1050,9 @@ transformStyle = "transform-style"
 
 transformOrigin :: Txt
 transformOrigin = "transform-origin"
+
+preserve3d :: Txt
+preserve3d = "preserve-3d"
 
 easeS :: Txt
 easeS = "ease"
@@ -1548,6 +1566,9 @@ flexStart = "flex-start"
 flexEnd :: Txt
 flexEnd = "flex-end"
 
+stretch :: Txt
+stretch = "stretch"
+
 endS :: Txt
 endS = "end"
 
@@ -1671,6 +1692,9 @@ bias = "bias"
 
 by :: Txt
 by = "by"
+
+parens :: Txt -> Txt
+parens p = "(" <> p <> ")"
 
 calc :: Txt -> Txt
 calc c = "calc(" <> c <> ")"
@@ -2407,6 +2431,9 @@ webkitAppearance = "-webkit-appearance"
 
 webkitTransition :: Txt
 webkitTransition = "-webkit-transition"
+
+webkitAnimation :: Txt
+webkitAnimation = "-webkit-animation"
 
 ----------------------------------------
 -- Mozilla
