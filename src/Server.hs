@@ -7,7 +7,7 @@ module Server (module Server, module Export) where
 import Ef.Base as Export hiding (As,Index,child,watch,transform,construct,uncons,distribute,embed,observe,End,Nat(..),maps)
 import qualified Ef.Event
 import qualified Ef.Base
-import Prelude as Export hiding (all,exponent,tan,lookup,reverse)
+import Prelude as Export hiding (and,or,all,exponent,tan,lookup,reverse)
 
 import Atomic as Export hiding (accept,Origin)
 

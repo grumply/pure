@@ -193,7 +193,7 @@ proxyLocalMessage s mty_proxy = do
                   Right (m :: message) ->
                     void $ lift $ sendSelfMessage s mty_proxy m
 #else
-                case fromBS (view L.lazy (fromTxt nv :: ByteString)) of
+                case fromBS (BSL.fromStrict (fromTxt nv :: ByteString)) of
                   Left _ -> liftIO $ Prelude.putStrLn "Bad message from storage event."
                   Right (m :: message) -> return ()
 #endif
