@@ -19,6 +19,8 @@ import Data.Functor.Identity
 import Data.Monoid
 import Data.Traversable
 
+import Data.String
+
 import qualified Data.List as L
 
 import Unsafe.Coerce
@@ -110,16 +112,16 @@ selects :: [Txt] -> Styles a -> CSS [a]
 selects sels ss = sequence $ Prelude.map (flip select ss) sels
 
 newtype Block = Block Txt
-  deriving (ToTxt,FromTxt,Show,Eq)
+  deriving (IsString,ToTxt,FromTxt,Show,Eq)
 
 newtype Element = Element Txt
-  deriving (ToTxt,FromTxt,Show,Eq)
+  deriving (IsString,ToTxt,FromTxt,Show,Eq)
 
 newtype Modifier = Modifier Txt
-  deriving (ToTxt,FromTxt,Show,Eq)
+  deriving (IsString,ToTxt,FromTxt,Show,Eq)
 
 newtype Utility = Utility Txt
-  deriving (ToTxt,FromTxt,Show,Eq)
+  deriving (IsString,ToTxt,FromTxt,Show,Eq)
 
 styles :: Styles a -> CSS a
 styles = select ""

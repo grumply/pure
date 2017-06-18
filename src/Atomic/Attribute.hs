@@ -100,78 +100,78 @@ instance Default Options where
 data Feature (ms :: [* -> *])
   = NullFeature
   | Attribute
-    { _attr :: Txt
-    , _value :: Txt
+    { _attr :: {-# UNPACK #-} !Txt
+    , _value :: {-# UNPACK #-} !Txt
     }
   | DelayedAttribute
-    { _attr :: Txt
-    , _value :: Txt
+    { _attr :: {-# UNPACK #-} !Txt
+    , _value :: {-# UNPACK #-} !Txt
     }
   | Property
-    { _prop :: Txt
-    , _value :: Txt
+    { _prop :: {-# UNPACK #-} !Txt
+    , _value :: {-# UNPACK #-} !Txt
     }
   | DelayedProperty
-    { _prop :: Txt
-    , _value :: Txt
+    { _prop :: {-# UNPACK #-} !Txt
+    , _value :: {-# UNPACK #-} !Txt
     }
   | StyleF
-    { _stylePairs :: [(Txt,Txt)] }
+    { _stylePairs :: ![(Txt,Txt)] }
   | OnE
-    { _eventName :: Txt
-    , _eventOptions :: Options
-    , _eventCreate :: (IO (),ENode,Obj) -> IO (Maybe (Ef ms IO ()))
-    , _eventListener :: Maybe (IO ())
+    { _eventName :: {-# UNPACK #-} !Txt
+    , _eventOptions :: {-# UNPACK #-} !Options
+    , _eventCreate :: !((IO (),ENode,Obj) -> IO (Maybe (Ef ms IO ())))
+    , _eventListener :: (Maybe (IO ()))
     }
   | OnWindow
-    { _eventName :: Txt
-    , _eventOptions :: Options
-    , _eventWinCreate :: (IO (),ENode,Win,Obj) -> IO (Maybe (Ef ms IO ()))
+    { _eventName :: {-# UNPACK #-} !Txt
+    , _eventOptions :: {-# UNPACK #-} !Options
+    , _eventWinCreate :: !((IO (),ENode,Win,Obj) -> IO (Maybe (Ef ms IO ())))
     , _eventListener :: Maybe (IO ())
     }
   | OnDocument
-    { _eventName :: Txt
-    , _eventOptions :: Options
-    , _eventDocCreate :: (IO (),ENode,Doc,Obj) -> IO (Maybe (Ef ms IO ()))
-    , _eventListener :: Maybe (IO ())
+    { _eventName :: {-# UNPACK #-} !Txt
+    , _eventOptions :: {-# UNPACK #-} !Options
+    , _eventDocCreate :: !((IO (),ENode,Doc,Obj) -> IO (Maybe (Ef ms IO ())))
+    , _eventListener :: !(Maybe (IO ()))
     }
   | OnFeatureAdd
-    { _featureAddEvent :: ENode -> Ef ms IO ()
+    { _featureAddEvent :: !(ENode -> Ef ms IO ())
     }
   | OnFeatureRemove
-    { _featureRemoveEvent :: ENode -> Ef ms IO ()
+    { _featureRemoveEvent :: !(ENode -> Ef ms IO ())
     }
   | OnWillMount
-    { _willMountEvent :: ENode -> IO ()
+    { _willMountEvent :: !(ENode -> IO ())
     }
   | OnDidMount
-    { _didMountEvent :: ENode -> IO ()
+    { _didMountEvent :: !(ENode -> IO ())
     }
   | forall model. Typeable model => OnModelChangeIO
-    { _updateModel :: model
-    , _updateEvent :: model -> model -> ENode -> IO ()
+    { _updateModel :: !model
+    , _updateEvent :: !(model -> model -> ENode -> IO ())
     }
   | forall model. Typeable model => OnModelChange
-    { _watchModel :: model
-    , _modelEvent :: model -> model -> ENode -> Ef ms IO ()
+    { _watchModel :: !model
+    , _modelEvent :: !(model -> model -> ENode -> Ef ms IO ())
     }
   | OnWillUnmount
-    { _willUnmountEvent :: ENode -> IO ()
+    { _willUnmountEvent :: !(ENode -> IO ())
     }
   | OnDidUnmount
-    { _didUnmountEvent :: ENode -> IO ()
+    { _didUnmountEvent :: !(ENode -> IO ())
     }
   | LinkTo
-    { _link :: Txt
-    , _eventListener :: Maybe (IO ())
+    { _link :: {-# UNPACK #-} !Txt
+    , _eventListener :: !(Maybe (IO ()))
     }
   | SVGLinkTo
-    { _link :: Txt
-    , _eventListener :: Maybe (IO ())
+    { _link :: {-# UNPACK #-} !Txt
+    , _eventListener :: !(Maybe (IO ()))
     }
   | XLink
-    { _attr :: Txt
-    , _value :: Txt
+    { _attr :: {-# UNPACK #-} !Txt
+    , _value :: {-# UNPACK #-} !Txt
     }
 
 instance ToJSON (Feature ms) where
@@ -451,8 +451,8 @@ pattern SVGLink l <- (SVGLinkTo l _) where
 -- makePrisms ''Options
 -- makeLenses ''Options
 
-pattern ClassList cs <- (Attribute "class" (T.splitOn " " -> cs)) where
-  ClassList cs = Attribute "class" $ T.intercalate " " cs
+pattern ClassList cs <- (Attribute "class" (T.splitOn " " -> !cs)) where
+  ClassList cs = Attribute "class" $! T.intercalate " " cs
 
 toBool :: Txt -> Bool
 toBool t = if t == "" then False else True
@@ -1831,4 +1831,3 @@ pattern CtrlKey o <- (ctrlModifier -> (Just True,o))
 
 metaModifier o = (parseMaybe (.: "metaKey") o,o)
 pattern MetaKey o <- (metaModifier -> (Just True,o))
-

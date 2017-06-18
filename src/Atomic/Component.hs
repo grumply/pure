@@ -159,66 +159,66 @@ foreign import javascript unsafe
 data View e where
   -- NullHTML must have a presence on the page for proper diffing
   NullHTML
-    :: { _node :: (Maybe ENode)
+    :: { _node :: !(Maybe ENode)
        } -> View e
 
   TextHTML
-    ::  { _tnode      :: (Maybe TNode)
-        , _content    :: Txt
+    ::  { _tnode      :: !(Maybe TNode)
+        , _content    :: {-# UNPACK #-} !Txt
         } -> View e
 
   RawHTML
-    :: { _node        :: (Maybe ENode)
-       , _tag         :: Txt
-       , _attributes  :: [Feature e]
-       , _content     :: Txt
+    :: { _node        :: !(Maybe ENode)
+       , _tag         :: {-# UNPACK #-} !Txt
+       , _attributes  :: ![Feature e]
+       , _content     :: {-# UNPACK #-} !Txt
        } -> View e
 
   HTML
-    ::  { _node       :: (Maybe ENode)
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _atoms      :: [View e]
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: {-# UNPACK #-} !Txt
+        , _attributes :: ![Feature e]
+        , _atoms      :: ![View e]
         } -> View e
   KHTML
-    ::  { _node       :: (Maybe ENode)
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _keyed      :: [(Int,View e)]
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: {-# UNPACK #-} !Txt
+        , _attributes :: ![Feature e]
+        , _keyed      :: ![(Int,View e)]
         } -> View e
 
   STHTML
-    :: { _stprops  :: props
-       , _stid     :: Int
-       , _ststate  :: st
-       , _strecord :: (Maybe (IORef (props,st,st -> ((st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
-       , _stview   :: (props -> st -> ((st -> st) -> IO () -> IO ()) -> View x)
-       , _stupdate :: ((st -> st) -> IO () -> IO ())
+    :: { _stprops  :: !props
+       , _stid     :: !Int
+       , _ststate  :: !st
+       , _strecord :: !(Maybe (IORef (props,st,st -> ((st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
+       , _stview   :: !(props -> st -> ((st -> st) -> IO () -> IO ()) -> View x)
+       , _stupdate :: !((st -> st) -> IO () -> IO ())
        } -> View e
 
   SVGHTML
-    ::  { _node       :: (Maybe ENode)
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _atoms      :: [View e]
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: {-# UNPACK #-} !Txt
+        , _attributes :: ![Feature e]
+        , _atoms      :: ![View e]
         } -> View e
 
   KSVGHTML
-    ::  { _node       :: (Maybe ENode)
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _keyed      :: [(Int,View e)]
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: {-# UNPACK #-} !Txt
+        , _attributes :: ![Feature e]
+        , _keyed      :: ![(Int,View e)]
         } -> View e
 
   Managed
-    ::  { _node       :: (Maybe ENode)
-        , _tag        :: Txt
-        , _attributes :: [Feature e]
-        , _constr     :: Constr
+    ::  { _node       :: !(Maybe ENode)
+        , _tag        :: {-# UNPACK #-} !Txt
+        , _attributes :: ![Feature e]
+        , _constr     :: {-# UNPACK #-} !Constr
         } -> View e
 
   View
-    :: (Component a e, Typeable a, Typeable e) => { renderable :: a e } -> View e
+    :: (Component a e, Typeable a, Typeable e) => { renderable :: !(a e) } -> View e
 
 pattern Component :: (Component a e, Typeable a, Typeable e) => a e -> View e
 pattern Component ams <- (View (cast -> Just ams)) where
@@ -1591,15 +1591,29 @@ diffHelper f doc ch isFG =
   where
 
     go :: View e -> View e -> View e -> IO (View e)
-    go old mid new = do
-      if reallyUnsafeEq mid new then do
+    go old mid@(View m) new@(View n) =
+      if reallyVeryUnsafeEq m n then do
+        putStrLn $ "Same Views! " <> show (typeOf n)
         return old
       else
-        go' old mid new
+        go' old (render m) (render n)
+
+    go old mid new = do
+      if reallyUnsafeEq mid new then do
+        putStrLn "Same!"
+        return old
+      else
+        go' old (render mid) (render new)
 
     go' :: View e -> View e -> View e -> IO (View e)
+    go' old mid new@(View n) = do
+      go old (render mid) (render new)
+
+    go' old mid@(View _) new =
+      go old (render mid) (render new)
+
     go' old@NullHTML{} _ new = do
-      case render new of
+      case new of
         NullHTML _ -> return old
         _          -> do
           new' <- buildHTML doc ch isFG f new
@@ -1609,7 +1623,7 @@ diffHelper f doc ch isFG =
           didUnmount
           return new'
 
-    go' old _ (render -> new@NullHTML{}) = do
+    go' old _ new@NullHTML{} = do
       new' <- buildHTML doc ch isFG f new
       replace old new'
       didUnmount <- cleanup f [old]
@@ -1617,23 +1631,19 @@ diffHelper f doc ch isFG =
       didUnmount
       return new'
 
-    -- go' old (render -> mid@(Component _)) (render -> new@(Component _)) =
-    --  go old (toView mid) (toView new)
-
-    -- dubious
-    -- go' old mid (render -> new@(Component _)) =
-    --  go' old mid (toView new)
-
-    go' old@HTML {} (render -> mid@HTML {}) (render -> new@HTML {}) = do
+    go' old@HTML {} mid@HTML {} new@HTML {} = do
+      putStrLn $ "Diffing " <> show (_tag old,_tag new)
       if prettyUnsafeEq (_tag old) (_tag new)
       then do
         let Just n = _node old
         (a',didMount) <-
               if reallyUnsafeEq (_attributes mid) (_attributes new) then do
+                putStrLn "Attributes the same"
                 return (_attributes old,return ())
               else
                 runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
         c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
+                putStrLn "Children the same"
                 return (_atoms old)
               else
                 diffChildren n (_atoms old) (_atoms mid) (_atoms new)
@@ -1646,7 +1656,7 @@ diffHelper f doc ch isFG =
               didUnmount
               return new'
 
-    go' old@STHTML {} _ (render -> new@STHTML {}) = do
+    go' old@STHTML {} _ new@STHTML {} = do
       case (old,new) of
         (STHTML p k s ~(Just r) v u,STHTML p' k' _ _ v' _) -> do
           if prettyUnsafeEq k k' then
@@ -1666,7 +1676,7 @@ diffHelper f doc ch isFG =
             didUnmount
             return new'
 
-    go' old@SVGHTML {} (render -> mid@SVGHTML {}) (render -> new@SVGHTML {}) =
+    go' old@SVGHTML {} mid@SVGHTML {} new@SVGHTML {} =
       if prettyUnsafeEq (_tag old) (_tag new)
       then do
         let Just n = _node old
@@ -1689,17 +1699,23 @@ diffHelper f doc ch isFG =
               return new'
 
     go' old@(KHTML old_node old_tag old_attributes old_keyed)
-      (render -> mid@(KHTML midAnode _ midAattributes midAkeyed))
-      (render -> new@(KHTML _ new_tag new_attributes new_keyed)) =
+      mid@(KHTML midAnode _ midAattributes midAkeyed)
+      new@(KHTML _ new_tag new_attributes new_keyed) = do
+      putStrLn $ "Diffing keyed " <> show (old_tag,new_tag)
       if prettyUnsafeEq old_tag new_tag
       then do
         let Just n = _node old
         (a',didMount) <-
-              if reallyUnsafeEq midAattributes new_attributes then
+              if reallyUnsafeEq midAattributes new_attributes then do
+                putStrLn "Keyed node attributes the same"
                 return (old_attributes,return ())
               else
                 runElementDiff f n old_attributes midAattributes new_attributes
-        c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
+        c' <- if reallyUnsafeEq midAkeyed new_keyed then do
+                putStrLn "Keyed children the same"
+                return old_keyed
+              else do
+                putStrLn "Diffing keyed children"
                 diffKeyedChildren n old_keyed midAkeyed new_keyed
         didMount
         return $ KHTML old_node old_tag a' c'
@@ -1711,8 +1727,8 @@ diffHelper f doc ch isFG =
               return new'
 
     go' old@(KSVGHTML old_node old_tag old_attributes old_keyed)
-      (render -> mid@(KSVGHTML midAnode _ midAattributes midAkeyed))
-      (render -> new@(KSVGHTML _ new_tag new_attributes new_keyed)) =
+      mid@(KSVGHTML midAnode _ midAattributes midAkeyed)
+      new@(KSVGHTML _ new_tag new_attributes new_keyed) =
       if prettyUnsafeEq old_tag new_tag
       then do
         let Just n = _node old
@@ -1732,14 +1748,14 @@ diffHelper f doc ch isFG =
               didUnmount
               return new'
 
-    go' txt@(TextHTML (Just t) cnt) (render -> mid@(TextHTML _ mcnt)) (render -> new@(TextHTML _ cnt')) =
+    go' txt@(TextHTML (Just t) cnt) mid@(TextHTML _ mcnt) new@(TextHTML _ cnt') =
       if prettyUnsafeEq mcnt cnt' then do
         return txt
       else do
         changeText t cnt'
         return $ TextHTML (Just t) cnt'
 
-    go' old@(RawHTML {}) (render -> mid@(RawHTML {})) (render -> new@(RawHTML {})) =
+    go' old@(RawHTML {}) mid@(RawHTML {}) new@(RawHTML {}) =
       if prettyUnsafeEq (_tag old) (_tag new) then do
         let Just n = _node old
         (a',didMount) <-
@@ -1761,7 +1777,7 @@ diffHelper f doc ch isFG =
               didUnmount
               return new'
 
-    go' old@(Managed {}) (render -> mid) new@(render -> newc@(Managed {})) =
+    go' old@(Managed {}) mid new@(newc@(Managed {})) =
       if    (_constr old) == (_constr newc)
         && prettyUnsafeEq (_tag old) (_tag newc)
       then do
@@ -1797,6 +1813,7 @@ diffHelper f doc ch isFG =
 
     diffChildren :: ENode -> [View e] -> [View e] -> [View e] -> IO [View e]
     diffChildren n olds mids news = do
+      putStrLn "Running diffChildren"
       withLatest olds mids news
       where
 
@@ -1828,31 +1845,9 @@ diffHelper f doc ch isFG =
                       withLatest olds mids news
                   return (up:upds)
 
-              in
-                if reallyUnsafeEq mid new then continue old else
-                  case (render mid,render new) of
-                    (NullHTML {},NullHTML {}) ->
-                      continue old
-
-                    (_,NullHTML {}) -> do
-                      new' <- buildHTML doc ch isFG f new
-                      replace old new'
-                      didUnmount <- cleanup f [old]
-                      delete old
-                      didUnmount
-                      continue new'
-
-                    (NullHTML{},_) -> do
-                      new' <- buildHTML doc ch isFG f new
-                      replace old new'
-                      didUnmount <- cleanup f [old]
-                      delete old
-                      didUnmount
-                      continue new'
-
-                    (m,n) -> do
-                      new <- go old mid new
-                      continue new
+              in do
+                new <- go old mid new
+                continue new
 
     -- note that keyed nodes are filtered for NullHTMLs during construction
     diffKeyedChildren :: ENode -> [(Int,View e)] -> [(Int,View e)] -> [(Int,View e)] -> IO [(Int,View e)]
@@ -1882,7 +1877,7 @@ diffHelper f doc ch isFG =
 
             go__ i old@((akey,a):as) mid@((mkey,m):ms) new@((bkey,b):bs)
               | prettyUnsafeEq akey bkey = do
-                  new <- go' a m b
+                  new <- go' a (render m) (render b)
                   let !i' = i + 1
                   rest <- go_ i' as ms bs
                   return $ (akey,new):rest
@@ -1892,8 +1887,8 @@ diffHelper f doc ch isFG =
                     ((akey',a'):as',(mkey',m'):ms',(bkey',b'):bs')
                       -- swap 2
                       | prettyUnsafeEq bkey akey' && prettyUnsafeEq akey bkey' -> do
-                          new1 <- go' a m b'
-                          new2 <- go' a' m' b
+                          new1 <- go' a (render m) (render b')
+                          new2 <- go' a' (render m') (render b)
                           let !i' = i + 2
                           rest <- go_ i' as' ms' bs'
                           return $ (akey',new1):(akey,new2):rest
@@ -1922,7 +1917,7 @@ diffHelper f doc ch isFG =
                             return $ (bkey,new):rest
 
                     _ | prettyUnsafeEq akey bkey -> do
-                          new <- go a m b
+                          new <- go' a (render m) (render b)
                           let !i' = i + 1
                           rest <- go_ i' as ms bs
                           return $ (akey,new):rest
@@ -1952,6 +1947,7 @@ applyStyleDiffs el olds0 news0 = do
 #ifndef __GHCJS__
   return news0
 #else
+  putStrLn "Applying style diffs"
   obj <- O.create
   res <- go obj olds0 news0
   setStyle_js el obj
@@ -2003,6 +1999,7 @@ runElementDiff f el os0 ms0 ns0 = do
 #ifndef __GHCJS__
     return (ns0,return ())
 #else
+    putStrLn "Diffing features."
     dm_ <- newIORef (return ())
     fs <- go dm_ os0 ms0 ns0
     dm <- readIORef dm_
@@ -2055,6 +2052,7 @@ runElementDiff f el os0 ms0 ns0 = do
 
       in
         if reallyUnsafeEq mid new then do
+          putStrLn "Same feature."
           continue old
         else
           case (mid,new) of
