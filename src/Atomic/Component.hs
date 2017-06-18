@@ -159,66 +159,66 @@ foreign import javascript unsafe
 data View e where
   -- NullHTML must have a presence on the page for proper diffing
   NullHTML
-    :: { _node :: !(Maybe ENode)
+    :: { _node :: (Maybe ENode)
        } -> View e
 
   TextHTML
-    ::  { _tnode      :: !(Maybe TNode)
-        , _content    :: {-# UNPACK #-} !Txt
+    ::  { _tnode      :: (Maybe TNode)
+        , _content    :: Txt
         } -> View e
 
   RawHTML
-    :: { _node        :: !(Maybe ENode)
-       , _tag         :: {-# UNPACK #-} !Txt
-       , _attributes  :: ![Feature e]
-       , _content     :: {-# UNPACK #-} !Txt
+    :: { _node        :: (Maybe ENode)
+       , _tag         :: Txt
+       , _attributes  :: [Feature e]
+       , _content     :: Txt
        } -> View e
 
   HTML
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: {-# UNPACK #-} !Txt
-        , _attributes :: ![Feature e]
-        , _atoms      :: ![View e]
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _atoms      :: [View e]
         } -> View e
   KHTML
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: {-# UNPACK #-} !Txt
-        , _attributes :: ![Feature e]
-        , _keyed      :: ![(Int,View e)]
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _keyed      :: [(Int,View e)]
         } -> View e
 
   STHTML
-    :: { _stprops  :: !props
-       , _stid     :: !Int
-       , _ststate  :: !st
-       , _strecord :: !(Maybe (IORef (props,st,st -> ((st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
-       , _stview   :: !(props -> st -> ((st -> st) -> IO () -> IO ()) -> View x)
-       , _stupdate :: !((st -> st) -> IO () -> IO ())
+    :: { _stprops  :: props
+       , _stid     :: Int
+       , _ststate  :: st
+       , _strecord :: (Maybe (IORef (props,st,st -> ((st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
+       , _stview   :: (props -> st -> ((st -> st) -> IO () -> IO ()) -> View x)
+       , _stupdate :: ((st -> st) -> IO () -> IO ())
        } -> View e
 
   SVGHTML
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: {-# UNPACK #-} !Txt
-        , _attributes :: ![Feature e]
-        , _atoms      :: ![View e]
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _atoms      :: [View e]
         } -> View e
 
   KSVGHTML
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: {-# UNPACK #-} !Txt
-        , _attributes :: ![Feature e]
-        , _keyed      :: ![(Int,View e)]
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _keyed      :: [(Int,View e)]
         } -> View e
 
   Managed
-    ::  { _node       :: !(Maybe ENode)
-        , _tag        :: {-# UNPACK #-} !Txt
-        , _attributes :: ![Feature e]
-        , _constr     :: {-# UNPACK #-} !Constr
+    ::  { _node       :: (Maybe ENode)
+        , _tag        :: Txt
+        , _attributes :: [Feature e]
+        , _constr     :: Constr
         } -> View e
 
   View
-    :: (Component a e, Typeable a, Typeable e) => { renderable :: !(a e) } -> View e
+    :: (Component a e, Typeable a, Typeable e) => { renderable :: a e } -> View e
 
 pattern Component :: (Component a e, Typeable a, Typeable e) => a e -> View e
 pattern Component ams <- (View (cast -> Just ams)) where
@@ -832,6 +832,8 @@ instance Eq Constr where
 
 instance ToTxt (Feature e) where
   toTxt NullFeature          = mempty
+
+  toTxt (DiffFeature _ f) = toTxt f
 
   toTxt (Attribute attr val) =
     if Txt.null val then
@@ -1593,14 +1595,12 @@ diffHelper f doc ch isFG =
     go :: View e -> View e -> View e -> IO (View e)
     go old mid@(View m) new@(View n) =
       if reallyVeryUnsafeEq m n then do
-        putStrLn $ "Same Views! " <> show (typeOf n)
         return old
       else
         go' old (render m) (render n)
 
     go old mid new = do
       if reallyUnsafeEq mid new then do
-        putStrLn "Same!"
         return old
       else
         go' old (render mid) (render new)
@@ -1632,18 +1632,15 @@ diffHelper f doc ch isFG =
       return new'
 
     go' old@HTML {} mid@HTML {} new@HTML {} = do
-      putStrLn $ "Diffing " <> show (_tag old,_tag new)
       if prettyUnsafeEq (_tag old) (_tag new)
       then do
         let Just n = _node old
         (a',didMount) <-
               if reallyUnsafeEq (_attributes mid) (_attributes new) then do
-                putStrLn "Attributes the same"
                 return (_attributes old,return ())
               else
                 runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
         c' <- if reallyUnsafeEq (_atoms mid) (_atoms new) then do
-                putStrLn "Children the same"
                 return (_atoms old)
               else
                 diffChildren n (_atoms old) (_atoms mid) (_atoms new)
@@ -1700,22 +1697,16 @@ diffHelper f doc ch isFG =
 
     go' old@(KHTML old_node old_tag old_attributes old_keyed)
       mid@(KHTML midAnode _ midAattributes midAkeyed)
-      new@(KHTML _ new_tag new_attributes new_keyed) = do
-      putStrLn $ "Diffing keyed " <> show (old_tag,new_tag)
+      new@(KHTML _ new_tag new_attributes new_keyed) =
       if prettyUnsafeEq old_tag new_tag
       then do
         let Just n = _node old
         (a',didMount) <-
-              if reallyUnsafeEq midAattributes new_attributes then do
-                putStrLn "Keyed node attributes the same"
+              if reallyUnsafeEq midAattributes new_attributes then
                 return (old_attributes,return ())
               else
                 runElementDiff f n old_attributes midAattributes new_attributes
-        c' <- if reallyUnsafeEq midAkeyed new_keyed then do
-                putStrLn "Keyed children the same"
-                return old_keyed
-              else do
-                putStrLn "Diffing keyed children"
+        c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
                 diffKeyedChildren n old_keyed midAkeyed new_keyed
         didMount
         return $ KHTML old_node old_tag a' c'
@@ -1813,7 +1804,6 @@ diffHelper f doc ch isFG =
 
     diffChildren :: ENode -> [View e] -> [View e] -> [View e] -> IO [View e]
     diffChildren n olds mids news = do
-      putStrLn "Running diffChildren"
       withLatest olds mids news
       where
 
@@ -1947,7 +1937,6 @@ applyStyleDiffs el olds0 news0 = do
 #ifndef __GHCJS__
   return news0
 #else
-  putStrLn "Applying style diffs"
   obj <- O.create
   res <- go obj olds0 news0
   setStyle_js el obj
@@ -1999,7 +1988,6 @@ runElementDiff f el os0 ms0 ns0 = do
 #ifndef __GHCJS__
     return (ns0,return ())
 #else
-    putStrLn "Diffing features."
     dm_ <- newIORef (return ())
     fs <- go dm_ os0 ms0 ns0
     dm <- readIORef dm_
@@ -2052,7 +2040,6 @@ runElementDiff f el os0 ms0 ns0 = do
 
       in
         if reallyUnsafeEq mid new then do
-          putStrLn "Same feature."
           continue old
         else
           case (mid,new) of
@@ -2062,6 +2049,12 @@ runElementDiff f el os0 ms0 ns0 = do
 
             (NullFeature,_) ->
               update
+
+            (DiffFeature m ft,DiffFeature m' ft') ->
+              if reallyVeryUnsafeEq m m' then
+                continue old
+              else
+                replace
 
             (Property nm oldV,Property nm' newV) ->
               if prettyUnsafeEq nm nm' then
@@ -2208,6 +2201,9 @@ removeAttribute_ f element attr =
   return ()
 #else
   case attr of
+    DiffFeature _ ft ->
+      removeAttribute_ f element ft
+
     Property nm _ ->
       set_element_property_null_js element nm
 
@@ -2289,6 +2285,10 @@ setAttribute_ c diffing element attr didMount =
   case attr of
     NullFeature ->
       return (NullFeature,didMount)
+
+    DiffFeature m f -> do
+      (f,dm) <- setAttribute_ c diffing element f didMount
+      return (DiffFeature m f,dm)
 
     Property nm v -> do
       set_property_js element nm v
@@ -2426,6 +2426,8 @@ cleanupAttr f element attr didUnmount =
     LinkTo _ unreg -> do
       forM_ unreg id
       return didUnmount
+    DiffFeature _ ft ->
+      cleanupAttr f element ft didUnmount
     OnE _ _ _ unreg -> do
       forM_ unreg id
       return didUnmount

@@ -100,78 +100,82 @@ instance Default Options where
 data Feature (ms :: [* -> *])
   = NullFeature
   | Attribute
-    { _attr :: {-# UNPACK #-} !Txt
-    , _value :: {-# UNPACK #-} !Txt
+    { _attr :: Txt
+    , _value :: Txt
     }
   | DelayedAttribute
-    { _attr :: {-# UNPACK #-} !Txt
-    , _value :: {-# UNPACK #-} !Txt
+    { _attr :: Txt
+    , _value :: Txt
     }
   | Property
-    { _prop :: {-# UNPACK #-} !Txt
-    , _value :: {-# UNPACK #-} !Txt
+    { _prop :: Txt
+    , _value :: Txt
     }
   | DelayedProperty
-    { _prop :: {-# UNPACK #-} !Txt
-    , _value :: {-# UNPACK #-} !Txt
+    { _prop :: Txt
+    , _value :: Txt
     }
   | StyleF
-    { _stylePairs :: ![(Txt,Txt)] }
+    { _stylePairs :: [(Txt,Txt)] }
   | OnE
-    { _eventName :: {-# UNPACK #-} !Txt
-    , _eventOptions :: {-# UNPACK #-} !Options
-    , _eventCreate :: !((IO (),ENode,Obj) -> IO (Maybe (Ef ms IO ())))
+    { _eventName :: Txt
+    , _eventOptions :: Options
+    , _eventCreate :: ((IO (),ENode,Obj) -> IO (Maybe (Ef ms IO ())))
     , _eventListener :: (Maybe (IO ()))
     }
   | OnWindow
-    { _eventName :: {-# UNPACK #-} !Txt
-    , _eventOptions :: {-# UNPACK #-} !Options
-    , _eventWinCreate :: !((IO (),ENode,Win,Obj) -> IO (Maybe (Ef ms IO ())))
+    { _eventName :: Txt
+    , _eventOptions :: Options
+    , _eventWinCreate :: ((IO (),ENode,Win,Obj) -> IO (Maybe (Ef ms IO ())))
     , _eventListener :: Maybe (IO ())
     }
   | OnDocument
-    { _eventName :: {-# UNPACK #-} !Txt
-    , _eventOptions :: {-# UNPACK #-} !Options
-    , _eventDocCreate :: !((IO (),ENode,Doc,Obj) -> IO (Maybe (Ef ms IO ())))
-    , _eventListener :: !(Maybe (IO ()))
+    { _eventName :: Txt
+    , _eventOptions :: Options
+    , _eventDocCreate :: ((IO (),ENode,Doc,Obj) -> IO (Maybe (Ef ms IO ())))
+    , _eventListener :: (Maybe (IO ()))
     }
   | OnFeatureAdd
-    { _featureAddEvent :: !(ENode -> Ef ms IO ())
+    { _featureAddEvent :: (ENode -> Ef ms IO ())
     }
   | OnFeatureRemove
-    { _featureRemoveEvent :: !(ENode -> Ef ms IO ())
+    { _featureRemoveEvent :: (ENode -> Ef ms IO ())
     }
   | OnWillMount
-    { _willMountEvent :: !(ENode -> IO ())
+    { _willMountEvent :: (ENode -> IO ())
     }
   | OnDidMount
-    { _didMountEvent :: !(ENode -> IO ())
+    { _didMountEvent :: (ENode -> IO ())
+    }
+  | forall model. Typeable model => DiffFeature
+    { _diffFeatureOn :: model
+    , _diffedFeature :: Feature ms
     }
   | forall model. Typeable model => OnModelChangeIO
-    { _updateModel :: !model
-    , _updateEvent :: !(model -> model -> ENode -> IO ())
+    { _updateModel :: model
+    , _updateEvent :: (model -> model -> ENode -> IO ())
     }
   | forall model. Typeable model => OnModelChange
-    { _watchModel :: !model
-    , _modelEvent :: !(model -> model -> ENode -> Ef ms IO ())
+    { _watchModel :: model
+    , _modelEvent :: (model -> model -> ENode -> Ef ms IO ())
     }
   | OnWillUnmount
-    { _willUnmountEvent :: !(ENode -> IO ())
+    { _willUnmountEvent :: (ENode -> IO ())
     }
   | OnDidUnmount
-    { _didUnmountEvent :: !(ENode -> IO ())
+    { _didUnmountEvent :: (ENode -> IO ())
     }
   | LinkTo
-    { _link :: {-# UNPACK #-} !Txt
-    , _eventListener :: !(Maybe (IO ()))
+    { _link :: Txt
+    , _eventListener :: (Maybe (IO ()))
     }
   | SVGLinkTo
-    { _link :: {-# UNPACK #-} !Txt
-    , _eventListener :: !(Maybe (IO ()))
+    { _link :: Txt
+    , _eventListener :: (Maybe (IO ()))
     }
   | XLink
-    { _attr :: {-# UNPACK #-} !Txt
-    , _value :: {-# UNPACK #-} !Txt
+    { _attr :: Txt
+    , _value :: Txt
     }
 
 instance ToJSON (Feature ms) where
@@ -190,6 +194,7 @@ instance ToJSON (Feature ms) where
       go (LinkTo e _) = object [ "type" .= ("link" :: Txt), "link" .= e]
       go (SVGLinkTo e _) = object [ "type" .= ("svglink" :: Txt), "link" .= e ]
       go (XLink k v) = object [ "type" .= ("xlink" :: Txt), "key" .= k, "val" .= v]
+      go (DiffFeature m f) = go f
       go _ = object []
 
 instance FromJSON (Feature ms) where
@@ -246,6 +251,8 @@ instance Eq (Feature ms) where
     prettyUnsafeEq a a' && prettyUnsafeEq v v'
   (==) (StyleF ss) (StyleF ss') =
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
+  (==) (DiffFeature m f) (DiffFeature m' f') =
+    reallyVeryUnsafeEq m m'
   (==) (OnE e os ev _) (OnE e' os' ev' _) =
     prettyUnsafeEq e e' && prettyUnsafeEq os os'
   (==) (OnWindow e os ev _) (OnWindow e' os' ev' _) =
@@ -357,6 +364,9 @@ pattern OnMounting f <- (OnWillMount f) where
 
 pattern OnMounted f <- (OnDidMount f) where
   OnMounted f = OnDidMount f
+
+pattern DiffOn model f <- DiffFeature model f where
+  DiffOn model f = DiffFeature model f
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
 -- make sure the body of the function will not change; must be totally static modulo the model/enode!
