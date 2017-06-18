@@ -30,8 +30,6 @@ import GHC.Exts
 import qualified Data.Function as F
 import Data.List (sortBy)
 
--- import Control.Lens (makePrisms,makeLenses)
-
 import Prelude
 
 #ifdef __GHCJS__
@@ -46,6 +44,8 @@ import qualified Data.Text as JSS
 import Data.Aeson (Value(..))
 import Data.Text.Read as T
 #endif
+
+import Unsafe.Coerce
 
 type Win =
 #ifdef __GHCJS__
@@ -151,6 +151,10 @@ data Feature (ms :: [* -> *])
     { _diffFeatureOn :: model
     , _diffedFeature :: Feature ms
     }
+  | forall model. (Typeable model, Eq model) => DiffEqFeature
+    { _diffEqFeatureOn :: model
+    , _diffEqFeature :: Feature ms
+    }
   | forall model. Typeable model => OnModelChangeIO
     { _updateModel :: model
     , _updateEvent :: (model -> model -> ENode -> IO ())
@@ -252,7 +256,9 @@ instance Eq (Feature ms) where
   (==) (StyleF ss) (StyleF ss') =
     reallyUnsafeEq ss ss' || (==) (sortBy (compare `F.on` fst) ss) (sortBy (compare `F.on` fst) ss')
   (==) (DiffFeature m f) (DiffFeature m' f') =
-    reallyVeryUnsafeEq m m'
+    typeOf m == typeOf m' && reallyVeryUnsafeEq m m'
+  (==) (DiffEqFeature m f) (DiffFeature m' f') =
+    typeOf m == typeOf m' && prettyUnsafeEq m (unsafeCoerce m')
   (==) (OnE e os ev _) (OnE e' os' ev' _) =
     prettyUnsafeEq e e' && prettyUnsafeEq os os'
   (==) (OnWindow e os ev _) (OnWindow e' os' ev' _) =
@@ -367,6 +373,9 @@ pattern OnMounted f <- (OnDidMount f) where
 
 pattern DiffOn model f <- DiffFeature model f where
   DiffOn model f = DiffFeature model f
+
+pattern DiffEq model f <- DiffEqFeature model f where
+  DiffEq model f = DiffEqFeature model f
 
 -- watches a model, as supplied, and calls the callback during feature diffing; top-down
 -- make sure the body of the function will not change; must be totally static modulo the model/enode!

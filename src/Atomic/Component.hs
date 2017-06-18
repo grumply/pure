@@ -217,6 +217,18 @@ data View e where
         , _constr     :: Constr
         } -> View e
 
+  DiffView
+    :: (Typeable model)
+    => { _diff_model :: model
+       , _diff_view :: View e
+       } -> View e
+
+  DiffEqView
+    :: (Typeable model, Eq model)
+    => { _diffEq_model :: model
+       , _diffEq_view :: View e
+       } -> View e
+
   View
     :: (Component a e, Typeable a, Typeable e) => { renderable :: a e } -> View e
 
@@ -320,6 +332,8 @@ instance Typeable e => ToJSON (View e) where
       go (KSVGHTML _ t as ks) = object [ "type" .= ("keyedsvg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks)]
       go (SVGHTML _ t as cs) = object [ "type" .= ("svg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map render cs) ]
       -- go (Component r) = go (render r)
+      go (DiffView _ v) = go v
+      go (DiffEqView _ v) = go v
       go _ = object [ "type" .= ("null" :: Txt) ]
 
 instance Typeable e => FromJSON (View e) where
@@ -390,8 +404,11 @@ instance Eq (View e) where
   (==) (Managed _ t fs c) (Managed _ t' fs' c') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq c c'
 
-  -- (==) (Component r) (Component r') =
-  --   reallyVeryUnsafeEq r r'
+  (==) (DiffView m v) (DiffView m' v') =
+    typeOf m == typeOf m' && reallyUnsafeEq m (unsafeCoerce m')
+
+  (==) (DiffEqView m v) (DiffEqView m' v') =
+    typeOf m == typeOf m' && prettyUnsafeEq m (unsafeCoerce m')
 
   (==) _ _ =
     False
@@ -410,102 +427,6 @@ instance {-# OVERLAPS #-} Typeable e => IsString [View e] where
 
 instance Typeable e => FromTxt [View e] where
   fromTxt t = [fromTxt t]
-
--- _atom :: Typeable e => ([Feature e] -> [View e] -> View e) -> Prism (View e) (View e) ([Feature e],[View e]) ([Feature e],[View e])
--- _atom x = prism (uncurry x) $ \a ->
---   case fromView $ x [] [] of
---     Just (HTML _ t _ _) ->
---       case a of
---         HTML _ t' fs as ->
---           if t == t' then
---             Right (fs,as)
---           else
---             Left a
---         _ -> Left a
---     _ -> Left a
-
--- _svg :: Typeable e => ([Feature e] -> [View e] -> View e) -> Prism (View e) (View e) ([Feature e],[View e]) ([Feature e],[View e])
--- _svg x = prism (uncurry x) $ \a ->
---   case fromView $ x [] [] of
---     Just (SVGHTML _ t _ _) ->
---       case a of
---         SVGHTML _ t' fs as ->
---           if t == t' then
---             Right (fs,as)
---           else
---             Left a
---         _ -> Left a
---     _ -> Left a
-
--- _list :: Typeable e => ([Feature e] -> [(Int,View e)] -> View e) -> Prism (View e) (View e) ([Feature e],[(Int,View e)]) ([Feature e],[(Int,View e)])
--- _list x = prism (uncurry x) $ \a ->
---   case fromView $ x [] [] of
---     Just (KHTML _ t _ _) ->
---       case a of
---         KHTML _ t' fs ks ->
---           if t == t' then
---             Right (fs,ks)
---           else
---             Left a
---         _ -> Left a
---     _ -> Left a
-
--- _svgList :: Typeable e => ([Feature e] -> [(Int,View e)] -> View e) -> Prism (View e) (View e) ([Feature e],[(Int,View e)]) ([Feature e],[(Int,View e)])
--- _svgList x = prism (uncurry x) $ \a ->
---   case fromView $ x [] [] of
---     Just (KSVGHTML _ t _ _) ->
---       case a of
---         KSVGHTML _ t' fs as ->
---           if t == t' then
---             Right (fs,as)
---           else
---             Left a
---         _ -> Left a
---     _ -> Left a
-
--- _raw :: Typeable e => ([Feature e] -> [View e] -> View e) -> Prism (View e) (View e) ([Feature e],Txt) ([Feature e],Txt)
--- _raw x = prism (uncurry (raw x)) $ \a ->
---   case fromView $ x [] [] of
---     Just (Raw _ t _ _) ->
---       case a of
---         Raw _ t' fs c ->
---           if t == t' then
---             Right (fs,c)
---           else
---             Left a
---         _ -> Left a
---     _ -> Left a
-
--- _nil :: Typeable e => Prism (View e) (View e) () ()
--- _nil = prism (const (NullHTML Nothing)) $ \a ->
---   case fromView a of
---     Just (NullHTML _) -> Right ()
---     _ -> Left a
-
--- _text :: Typeable e => Prism (View e) (View e) Txt Txt
--- _text = prism text $ \a ->
---   case fromView a of
---     Just (Text _ t) -> Right t
---     _ -> Left a
-
--- -- TODO: _st
-
--- _context :: Typeable e => ([Feature e] -> [View e] -> View e) -> Prism (View e) (View e) ([Feature e],Constr) ([Feature e],Constr)
--- _context x = prism build $ \a ->
---   case fromView $ context x [] (undefined :: Controller '[] ()) of
---     Just (Managed _ t _ _) ->
---       case a of
---         Managed _ t' fs c ->
---           if t == t' then
---             Right (fs,c)
---           else
---             Left a
---     _ -> Left a
---   where
---     build (fs,c) =
---       case context x [] (undefined :: Controller '[] ()) of
---         Managed _ t _ _ ->
---           Managed Nothing t fs c
 
 mkHTML :: Txt -> [Feature e] -> [View e] -> View e
 mkHTML _tag _attributes _atoms =
@@ -548,7 +469,6 @@ list x _attributes _keyed =
         KSVGHTML {..}
     _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGHTMLs"
 
-
 viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
 viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\_ _ -> return ())
 
@@ -578,6 +498,12 @@ mvc f = \as c ->
   case f [] [] of
     HTML _ t _ _ -> Managed Nothing t as (Controller' c)
     _ -> error "Incorrect usage of construct; Controllers may only be embedded in plain html HTMLs."
+
+diffView :: Typeable model => model -> View ms -> View ms
+diffView = DiffView
+
+diffEqView :: (Typeable model, Eq model) => model -> View ms -> View ms
+diffEqView = DiffEqView
 
 hashed :: Hashable a => ([Feature e] -> [View e] -> View e) -> [Feature e] -> [(a,View e)] -> View e
 hashed x _attributes _keyed0 = list x _attributes (map (first hash) _keyed0)
@@ -631,16 +557,6 @@ inlineStyles = css' True . classify
         CSS3_ at sel css k ->
           Send (CSS3_ at sel (classify css) (classify . k))
 
-
--- -- Useful for standalone contexts without a Component root.
--- renderController' :: IsController' ts ms m => Controller' ts ms m -> ENode -> HTML (Ef ms IO ()) -> IO (HTML (Ef ms IO ()))
--- renderController' a parent html = do
---   let f e = void $ with a e
---   doc <- getDocument
---   html' <- buildHTML doc f html
---   embed_ parent html'
---   return html'
-
 -- rebuild finds managed nodes and re-embeds them in case they were
 -- removed for other uses
 rebuild :: forall e. View e -> IO ()
@@ -659,6 +575,8 @@ rebuild h =
     go SVGHTML {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
     go KSVGHTML {..}  = mapM_ (go . snd) _keyed
+    go (DiffView _ v) = go v
+    go (DiffEqView _ v) = go v
     go m@Managed {..} = do
       case _constr of
         Controller' c -> do
@@ -671,7 +589,6 @@ rebuild h =
     go _ =
       return ()
 #endif
-
 
 triggerBackground :: forall m e. (MonadIO m) => View e -> m ()
 triggerBackground = go
@@ -695,6 +612,8 @@ triggerBackground = go
     go SVGHTML {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
     go KSVGHTML {..} = mapM_ (go . snd) _keyed
+    go (DiffView _ v) = go v
+    go (DiffEqView _ v) = go v
     go m@Managed {..} = case _constr of Controller' c -> bg (unsafeCoerce c)
     go _ = return ()
 
@@ -720,6 +639,8 @@ triggerForeground = go
     go SVGHTML {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
     go KSVGHTML {..} = mapM_ (go . snd) _keyed
+    go (DiffView _ v) = go v
+    go (DiffEqView _ v) = go v
     go m@Managed {..} = case _constr of Controller' c -> fg (unsafeCoerce c)
     go _ = return ()
 
@@ -834,6 +755,8 @@ instance ToTxt (Feature e) where
   toTxt NullFeature          = mempty
 
   toTxt (DiffFeature _ f) = toTxt f
+
+  toTxt (DiffEqFeature _ f) = toTxt f
 
   toTxt (Attribute attr val) =
     if Txt.null val then
@@ -1403,6 +1326,14 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
       forM_ mparent (flip appendChild el)
       return $ TextHTML _tnode _content
 
+    go mparent (DiffView m v) = do
+      n <- go mparent v
+      return (DiffView m n)
+
+    go mparent (DiffEqView m v) = do
+      n <- go mparent v
+      return (DiffEqView m n)
+
     go mparent m@Managed {..} =
       case _constr of
         Controller' a -> do
@@ -1456,6 +1387,8 @@ buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing
 getElement :: forall e. View e -> IO (Maybe ENode)
 getElement View {} = return Nothing
 getElement TextHTML {} = return Nothing
+getElement (DiffView _ v) = getElement v
+getElement (DiffEqView _ v) = getElement v
 getElement STHTML {..} =
   case _strecord of
     Nothing -> return Nothing
@@ -1466,6 +1399,8 @@ getElement n = return $ _node n
 
 getNode :: forall e. View e -> IO (Maybe NNode)
 getNode View {} = return Nothing
+getNode (DiffView _ v) = getNode v
+getNode (DiffEqView _ v) = getNode v
 getNode TextHTML {..} = forM _tnode toNode
 getNode STHTML {..} =
   case _strecord of
@@ -1480,9 +1415,13 @@ getAttributes TextHTML {} = []
 getAttributes STHTML {} = []
 getAttributes View {} = []
 getAttributes NullHTML {} = []
+getAttributes (DiffView _ v) = getAttributes v
+getAttributes (DiffEqView _ v) = getAttributes v
 getAttributes n = _attributes n
 
 getChildren :: forall e. View e -> IO [View e]
+getChildren (DiffView _ v) = getChildren v
+getChildren (DiffEqView _ v) = getChildren v
 getChildren STHTML {..} = do
   case _strecord of
     Nothing -> return []
@@ -1611,6 +1550,20 @@ diffHelper f doc ch isFG =
 
     go' old mid@(View _) new =
       go old (render mid) (render new)
+
+    go' old@(DiffView _ v_old) mid@(DiffView m v) new@(DiffView m' v') =
+      if typeOf m == typeOf m' && reallyVeryUnsafeEq m m' then
+        return old
+      else do
+        new <- go' v_old v v'
+        return (DiffView m' new)
+
+    go' old@(DiffEqView _ v_old) mid@(DiffEqView m v) new@(DiffEqView m' v') =
+      if typeOf m == typeOf m' && prettyUnsafeEq m (unsafeCoerce m') then
+        return old
+      else do
+        new <- go' v_old v v'
+        return (DiffEqView m' new)
 
     go' old@NullHTML{} _ new = do
       case new of
@@ -2051,7 +2004,13 @@ runElementDiff f el os0 ms0 ns0 = do
               update
 
             (DiffFeature m ft,DiffFeature m' ft') ->
-              if reallyVeryUnsafeEq m m' then
+              if typeOf m == typeOf m' && reallyVeryUnsafeEq m m' then
+                continue old
+              else
+                replace
+
+            (DiffEqFeature m ft,DiffEqFeature m' ft') ->
+              if typeOf m == typeOf m' && prettyUnsafeEq m (unsafeCoerce m') then
                 continue old
               else
                 replace
@@ -2204,6 +2163,9 @@ removeAttribute_ f element attr =
     DiffFeature _ ft ->
       removeAttribute_ f element ft
 
+    DiffEqFeature _ ft ->
+      removeAttribute_ f element ft
+
     Property nm _ ->
       set_element_property_null_js element nm
 
@@ -2289,6 +2251,10 @@ setAttribute_ c diffing element attr didMount =
     DiffFeature m f -> do
       (f,dm) <- setAttribute_ c diffing element f didMount
       return (DiffFeature m f,dm)
+
+    DiffEqFeature m f -> do
+      (f,dm) <- setAttribute_ c diffing element f didMount
+      return (DiffEqFeature m f,dm)
 
     Property nm v -> do
       set_property_js element nm v
@@ -2427,6 +2393,8 @@ cleanupAttr f element attr didUnmount =
       forM_ unreg id
       return didUnmount
     DiffFeature _ ft ->
+      cleanupAttr f element ft didUnmount
+    DiffEqFeature _ ft ->
       cleanupAttr f element ft didUnmount
     OnE _ _ _ unreg -> do
       forM_ unreg id
