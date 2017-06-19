@@ -42,6 +42,7 @@ import qualified GHCJS.DOM as DOM
 import qualified GHCJS.DOM.Element as E
 import qualified GHCJS.DOM.EventM as Ev
 import qualified GHCJS.DOM.EventTargetClosures as Ev
+import qualified GHCJS.DOM.JSFFI.Generated.EventTarget as Ev
 import qualified GHCJS.DOM.Document as D
 import qualified GHCJS.DOM.History as H
 import qualified GHCJS.DOM.Location as L
@@ -55,6 +56,8 @@ import GHCJS.DOM.Window (requestAnimationFrame)
 #else
 import Data.Aeson (Value(..))
 #endif
+
+import Control.Monad.Trans.Reader
 
 import Control.Concurrent
 import Data.Bifunctor
@@ -2239,6 +2242,47 @@ attribute node (DelayedAttribute k v) = E.setAttribute node k v
 #endif
 attribute _ _ = return ()
 
+#ifdef __GHCJS__
+addEventListenerOptions :: (MonadIO m, Ev.IsEventTarget self, T.ToJSString type')
+                        => self -> type' -> T.EventListener -> Obj -> m ()
+addEventListenerOptions self type' callback options =
+  liftIO $
+    js_addEventListenerOptions
+      (T.toEventTarget self)
+      (T.toJSString type')
+      callback
+      options
+
+removeEventListenerOptions :: (MonadIO m, Ev.IsEventTarget self, T.ToJSString type')
+                           => self -> type' -> T.EventListener -> Obj -> m ()
+removeEventListenerOptions self type' callback options =
+  liftIO $
+    js_removeEventListenerOptions
+      (T.toEventTarget self)
+      (T.toJSString type')
+      callback
+      options
+
+foreign import javascript unsafe
+        "$1[\"addEventListener\"]($2, $3,\n$4)" js_addEventListenerOptions
+        :: T.EventTarget -> JSString -> T.EventListener -> Obj -> IO ()
+
+foreign import javascript unsafe
+        "$1[\"removeEventListener\"]($2,\n$3, $4)" js_removeEventListenerOptions
+        :: T.EventTarget -> JSString -> T.EventListener -> Obj -> IO ()
+
+onWith :: forall t e. (T.IsEventTarget t, T.IsEvent e)
+       => Obj
+       -> t
+       -> Ev.EventName t e
+       -> Ev.EventM t e ()
+       -> IO (IO ())
+onWith options target (Ev.EventName eventName) callback = do
+  sl@(Ev.SaferEventListener l) :: Ev.SaferEventListener t e <- Ev.newListener callback
+  addEventListenerOptions target eventName l options
+  return (removeEventListenerOptions target eventName l options >> Ev.releaseListener sl)
+#endif
+
 setAttribute_ :: (Ef e IO () -> IO ()) -> Bool -> ENode -> Feature e -> IO () -> IO (Feature e,IO ())
 setAttribute_ c diffing element attr didMount =
 #ifndef __GHCJS__
@@ -2298,6 +2342,9 @@ setAttribute_ c diffing element attr didMount =
       stopper <- newIORef undefined
       stopListener <-
         Ev.on
+        -- enable when I have a polyfill or Edge/IE supports
+        -- onWith
+          -- (object (if _passive os then [ "passive" .= True ] else []))
           element
           (Ev.unsafeEventName ev :: Ev.EventName E.Element T.CustomEvent) -- for the type checking; actually just an object
             $ do ce <- Ev.event
@@ -2314,6 +2361,9 @@ setAttribute_ c diffing element attr didMount =
       doc <- getDocument
       stopListener <-
         Ev.on
+        -- enable when I have a polyfill or Edge/IE supports
+        -- onWith
+          -- (object (if _passive os then [ "passive" .= True ] else []))
           doc
           (Ev.unsafeEventName ev :: Ev.EventName Doc T.CustomEvent) -- for the type checking; actually just an object
             $ do ce <- Ev.event
@@ -2330,6 +2380,9 @@ setAttribute_ c diffing element attr didMount =
       win <- getWindow
       stopListener <-
         Ev.on
+        -- enable when I have a polyfill or Edge/IE supports
+        -- onWith
+          -- (object (if _passive os then [ "passive" .= True ] else []))
           win
           (Ev.unsafeEventName ev :: Ev.EventName Win T.CustomEvent) -- for the type checking; actually just an object
             $ do ce <- Ev.event

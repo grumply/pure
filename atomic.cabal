@@ -109,6 +109,7 @@ library
                       , template-haskell
                       , ghc-prim
                       , void
+                      , transformers
                       -- , lens
                       , containers
 
@@ -198,9 +199,10 @@ library
                       , aeson >= 0.9
                       , void
                       , template-haskell
+                      , transformers
                       -- , lens
                       , vector
-    else 
+    else
       build-depends:    base >=4.8
                       , ef-core >= 2.0
                       , ef-base >= 2.0
@@ -219,6 +221,7 @@ library
                       , aeson >= 0.9
                       , void
                       , template-haskell
+                      , transformers
                       -- , lens
                       , vector
 

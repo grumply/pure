@@ -92,10 +92,11 @@ type Loc =
 data Options = Options
   { _preventDef :: Bool
   , _stopProp   :: Bool
+  , _passive    :: Bool
   } deriving (Eq)
 
 instance Default Options where
-  def = Options False False
+  def = Options False False True
 
 data Feature (ms :: [* -> *])
   = NullFeature
@@ -402,45 +403,45 @@ pattern OnUnmounted f <- (OnDidUnmount f) where
   OnUnmounted f = OnDidUnmount f
 
 preventedDefault :: Feature ms -> (Bool,Feature ms)
-preventedDefault f@(OnE _ (Options True _) _ _) = (True,f)
-preventedDefault f@(OnDocument _ (Options True _) _ _) = (True,f)
-preventedDefault f@(OnWindow _ (Options True _) _ _) = (True,f)
+preventedDefault f@(OnE _ (Options True _ _) _ _) = (True,f)
+preventedDefault f@(OnDocument _ (Options True _ _) _ _) = (True,f)
+preventedDefault f@(OnWindow _ (Options True _ _) _ _) = (True,f)
 preventedDefault f = (False,f)
 
 preventDefault :: Feature ms -> Feature ms
-preventDefault (OnE ev os f m) = OnE ev (os { _preventDef = True }) f m
-preventDefault (OnDocument ev os f m) = OnDocument ev (os { _preventDef = True }) f m
-preventDefault (OnWindow ev os f m) = OnWindow ev (os { _preventDef = True }) f m
+preventDefault (OnE ev os f m) = OnE ev (os { _preventDef = True, _passive = False }) f m
+preventDefault (OnDocument ev os f m) = OnDocument ev (os { _preventDef = True, _passive = False }) f m
+preventDefault (OnWindow ev os f m) = OnWindow ev (os { _preventDef = True, _passive = False }) f m
 preventDefault f = f
 
 pattern PreventDefault f <- (preventedDefault -> (True,f)) where
   PreventDefault f = preventDefault f
 
 stoppedPropagation :: Feature ms -> (Bool,Feature ms)
-stoppedPropagation f@(OnE _ (Options _ True) _ _) = (True,f)
-stoppedPropagation f@(OnDocument _ (Options _ True) _ _) = (True,f)
-stoppedPropagation f@(OnWindow _ (Options _ True) _ _) = (True,f)
+stoppedPropagation f@(OnE _ (Options _ True _) _ _) = (True,f)
+stoppedPropagation f@(OnDocument _ (Options _ True _) _ _) = (True,f)
+stoppedPropagation f@(OnWindow _ (Options _ True _) _ _) = (True,f)
 stoppedPropagation f = (False,f)
 
 stopPropagation :: Feature ms -> Feature ms
-stopPropagation (OnE ev os f m) = OnE ev (os { _stopProp = True }) f m
-stopPropagation (OnDocument ev os f m) = OnDocument ev (os { _stopProp = True }) f m
-stopPropagation (OnWindow ev os f m) = OnWindow ev (os { _stopProp = True }) f m
+stopPropagation (OnE ev os f m) = OnE ev (os { _stopProp = True, _passive = False }) f m
+stopPropagation (OnDocument ev os f m) = OnDocument ev (os { _stopProp = True, _passive = False }) f m
+stopPropagation (OnWindow ev os f m) = OnWindow ev (os { _stopProp = True, _passive = False }) f m
 stopPropagation f = f
 
 pattern StopPropagation f <- (stoppedPropagation -> (True,f)) where
   StopPropagation f = stopPropagation f
 
 intercepted :: Feature ms -> (Bool,Feature ms)
-intercepted f@(OnE _ (Options True True) _ _) = (True,f)
-intercepted f@(OnDocument _ (Options True True) _ _) = (True,f)
-intercepted f@(OnWindow _ (Options True True) _ _) = (True,f)
+intercepted f@(OnE _ (Options True True _) _ _) = (True,f)
+intercepted f@(OnDocument _ (Options True True _) _ _) = (True,f)
+intercepted f@(OnWindow _ (Options True True _) _ _) = (True,f)
 intercepted f = (False,f)
 
 intercept :: Feature ms -> Feature ms
-intercept (OnE ev os f m) = OnE ev (os { _preventDef = True, _stopProp = True }) f m
-intercept (OnDocument ev os f m) = OnDocument ev (os { _preventDef = True, _stopProp = True }) f m
-intercept (OnWindow ev os f m) = OnWindow ev (os { _preventDef = True, _stopProp = True }) f m
+intercept (OnE ev os f m) = OnE ev (os { _preventDef = True, _stopProp = True, _passive = False }) f m
+intercept (OnDocument ev os f m) = OnDocument ev (os { _preventDef = True, _stopProp = True, _passive = False }) f m
+intercept (OnWindow ev os f m) = OnWindow ev (os { _preventDef = True, _stopProp = True, _passive = False }) f m
 intercept f = f
 
 pattern Intercept f <- (intercepted -> (True,f)) where
