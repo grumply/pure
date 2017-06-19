@@ -25,6 +25,10 @@ Flag devel
      Description: development debugging
      Default: False
 
+Flag passive
+     Description: passive event listeners by default; requires polyfill for IE/Edge
+     Default: False
+
 library
   ghc-options: -fconstraint-solver-iterations=0
 
@@ -33,6 +37,9 @@ library
 
   if flag(devel)
     cpp-options: -DGHCJS_BROWSER -DDEVEL
+
+  if flag(passive)
+    cpp-options: -DGHCJS_BROWSER -DPASSIVE_LISTENERS
 
   if (impl(ghcjs))
     exposed-modules:    Atomic

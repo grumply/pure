@@ -2326,7 +2326,13 @@ setAttribute_ c diffing element attr didMount =
     LinkTo href _ -> do
       E.setAttribute element ("href" :: Txt) href
       stopListener <-
+#ifdef PASSIVE_LISTENERS
+        -- enable by default when I have a polyfill or Edge/IE supports
+        onWith
+          (object (if _passive os then [ "passive" .= True ] else []))
+#else
         Ev.on
+#endif
           element
           (Ev.unsafeEventName "click" :: Ev.EventName E.Element T.MouseEvent)
             $ do Ev.preventDefault
@@ -2341,10 +2347,13 @@ setAttribute_ c diffing element attr didMount =
     OnE ev os f _ -> do
       stopper <- newIORef undefined
       stopListener <-
+#ifdef PASSIVE_LISTENERS
+        -- enable by default when I have a polyfill or Edge/IE supports
+        onWith
+          (object (if _passive os then [ "passive" .= True ] else []))
+#else
         Ev.on
-        -- enable when I have a polyfill or Edge/IE supports
-        -- onWith
-          -- (object (if _passive os then [ "passive" .= True ] else []))
+#endif
           element
           (Ev.unsafeEventName ev :: Ev.EventName E.Element T.CustomEvent) -- for the type checking; actually just an object
             $ do ce <- Ev.event
@@ -2360,10 +2369,13 @@ setAttribute_ c diffing element attr didMount =
       stopper <- newIORef undefined
       doc <- getDocument
       stopListener <-
+#ifdef PASSIVE_LISTENERS
+        -- enable by default when I have a polyfill or Edge/IE supports
+        onWith
+          (object (if _passive os then [ "passive" .= True ] else []))
+#else
         Ev.on
-        -- enable when I have a polyfill or Edge/IE supports
-        -- onWith
-          -- (object (if _passive os then [ "passive" .= True ] else []))
+#endif
           doc
           (Ev.unsafeEventName ev :: Ev.EventName Doc T.CustomEvent) -- for the type checking; actually just an object
             $ do ce <- Ev.event
@@ -2379,10 +2391,13 @@ setAttribute_ c diffing element attr didMount =
       stopper <- newIORef undefined
       win <- getWindow
       stopListener <-
+#ifdef PASSIVE_LISTENERS
+        -- enable by default when I have a polyfill or Edge/IE supports
+        onWith
+          (object (if _passive os then [ "passive" .= True ] else []))
+#else
         Ev.on
-        -- enable when I have a polyfill or Edge/IE supports
-        -- onWith
-          -- (object (if _passive os then [ "passive" .= True ] else []))
+#endif
           win
           (Ev.unsafeEventName ev :: Ev.EventName Win T.CustomEvent) -- for the type checking; actually just an object
             $ do ce <- Ev.event
