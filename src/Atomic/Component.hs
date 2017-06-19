@@ -1536,7 +1536,7 @@ diffHelper f doc ch isFG =
       if reallyVeryUnsafeEq m n then do
         return old
       else
-        go' old (render m) (render n)
+        go old (render m) (render n)
 
     go old mid new = do
       if reallyUnsafeEq mid new then do
