@@ -43,6 +43,7 @@ import qualified GHCJS.DOM.Element as E
 import qualified GHCJS.DOM.EventM as Ev
 import qualified GHCJS.DOM.EventTargetClosures as Ev
 import qualified GHCJS.DOM.JSFFI.Generated.EventTarget as Ev
+import qualified GHCJS.DOM.JSFFI.Generated.Event as Event
 import qualified GHCJS.DOM.Document as D
 import qualified GHCJS.DOM.History as H
 import qualified GHCJS.DOM.Location as L
@@ -652,7 +653,7 @@ onForeground :: ( MonadIO c, MonadIO c'
                 , '[State () ControllerHooks] <: ms'
                 , With w (Narrative (Messages ms') c') IO
                 )
-             => w -> Ef '[Event ()] (Ef ms c) () -> Ef ms c (Promise (IO ()))
+             => w -> Ef '[Ef.Base.Event ()] (Ef ms c) () -> Ef ms c (Promise (IO ()))
 onForeground c f = do
   connectWith c (get >>= \(ControllerHooks _ _ fg) -> return fg) $ \_ -> f
 
@@ -2360,7 +2361,13 @@ setAttribute_ c diffing element attr didMount =
                  when (_preventDef os) Ev.preventDefault
                  when (_stopProp os) Ev.stopPropagation
                  stop <- liftIO $ readIORef stopper
-                 liftIO $ f (stop,element,unsafeCoerce ce) >>= mapM_ c
+                 liftIO $ mapM_ c =<< f (Evt
+                   (unsafeCoerce ce)
+                   (Event.preventDefault ce)
+                   (Event.stopPropagation ce)
+                   (join $ readIORef stopper)
+                   element
+                   )
                  return ()
       writeIORef stopper stopListener
       return (OnE ev os f (Just stopListener),didMount)
@@ -2382,7 +2389,13 @@ setAttribute_ c diffing element attr didMount =
                  when (_preventDef os) Ev.preventDefault
                  when (_stopProp os) Ev.stopPropagation
                  stop <- liftIO $ readIORef stopper
-                 liftIO $ f (stop,element,doc,unsafeCoerce ce) >>= mapM_ c
+                 liftIO $ mapM_ c =<< f (Evt
+                   (unsafeCoerce ce)
+                   (Event.preventDefault ce)
+                   (Event.stopPropagation ce)
+                   (join $ readIORef stopper)
+                   element
+                   )
                  return ()
       writeIORef stopper stopListener
       return (OnDocument ev os f (Just stopListener),didMount)
@@ -2404,7 +2417,13 @@ setAttribute_ c diffing element attr didMount =
                  when (_preventDef os) Ev.preventDefault
                  when (_stopProp os) Ev.stopPropagation
                  stop <- liftIO $ readIORef stopper
-                 liftIO $ f (stop,element,win,unsafeCoerce ce) >>= mapM_ c
+                 liftIO $ mapM_ c =<< f (Evt
+                   (unsafeCoerce ce)
+                   (Event.preventDefault ce)
+                   (Event.stopPropagation ce)
+                   (join $ readIORef stopper)
+                   element
+                   )
                  return ()
       writeIORef stopper stopListener
       return (OnWindow ev os f (Just stopListener),didMount)

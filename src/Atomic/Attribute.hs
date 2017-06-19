@@ -95,6 +95,15 @@ data Options = Options
   , _passive    :: Bool
   } deriving (Eq)
 
+data Evt
+  = Evt
+    { evtObj :: Obj
+    , evtPreventDef :: IO ()
+    , evtStopProp :: IO ()
+    , evtRemoveListener :: IO ()
+    , evtSource :: ENode
+    }
+
 instance Default Options where
   def = Options False False True
 
@@ -121,19 +130,19 @@ data Feature (ms :: [* -> *])
   | OnE
     { _eventName :: Txt
     , _eventOptions :: Options
-    , _eventCreate :: ((IO (),ENode,Obj) -> IO (Maybe (Ef ms IO ())))
+    , _eventCreate :: (Evt -> IO (Maybe (Ef ms IO ())))
     , _eventListener :: (Maybe (IO ()))
     }
   | OnWindow
     { _eventName :: Txt
     , _eventOptions :: Options
-    , _eventWinCreate :: ((IO (),ENode,Win,Obj) -> IO (Maybe (Ef ms IO ())))
+    , _eventWinCreate :: (Evt -> IO (Maybe (Ef ms IO ())))
     , _eventListener :: Maybe (IO ())
     }
   | OnDocument
     { _eventName :: Txt
     , _eventOptions :: Options
-    , _eventDocCreate :: ((IO (),ENode,Doc,Obj) -> IO (Maybe (Ef ms IO ())))
+    , _eventDocCreate :: (Evt -> IO (Maybe (Ef ms IO ())))
     , _eventListener :: (Maybe (IO ()))
     }
   | OnFeatureAdd
@@ -1622,19 +1631,19 @@ pattern OnKeyPress f <- (OnE "keypress" _ f _) where
   OnKeyPress f = OnE "keypress" def f Nothing
 
 onInput :: (Txt -> Ef ms IO ()) -> Feature ms
-onInput f = On "input" $ \(_,_,o) -> return $ parse o $ \o -> do
+onInput f = On "input" $ \ev -> return $ parse (evtObj ev) $ \o -> do
   target <- o .: "target"
   value <- target .: "value"
   pure $ f value
 
 onInputChange :: (Txt -> Ef ms IO ()) -> Feature ms
-onInputChange f = On "change" $ \(_,_,o) -> return $ parse o $ \o -> do
+onInputChange f = On "change" $ \ev -> return $ parse (evtObj ev) $ \o -> do
   target <- o .: "target"
   value <- target .: "value"
   pure $ f value
 
 onCheck :: (Bool -> Ef ms IO ()) -> Feature ms
-onCheck f = On "change" $ \(_,_,o) -> return $ parse o $ \o -> do
+onCheck f = On "change" $ \ev -> return $ parse (evtObj ev) $ \o -> do
   target <- o .: "target"
   checked <- target .: "checked"
   pure $ f checked
@@ -1649,13 +1658,13 @@ onFocus :: Ef ms IO () -> Feature ms
 onFocus f = On "focus" $ \_ -> return $ Just f
 
 onKeyUp :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
-onKeyUp f = On "keyup" $ \(_,_,o) -> return $ f o
+onKeyUp f = On "keyup" $ \ev -> return $ f (evtObj ev)
 
 onKeyDown :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
-onKeyDown f = On "keydown" $ \(_,_,o) -> return $ f o
+onKeyDown f = On "keydown" $ \ev -> return $ f (evtObj ev)
 
 onKeyPress :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
-onKeyPress f = On "keypress" $ \(_,_,o) -> return $ f o
+onKeyPress f = On "keypress" $ \ev -> return $ f (evtObj ev)
 
 onClick :: Ef ms IO () -> Feature ms
 onClick f = On "click" $ \_ -> return $ Just f
@@ -1669,8 +1678,8 @@ ignoreClick = Intercept $ On "click" $ \_ -> return Nothing
 --------------------------------------------------------------------------------
 -- Keys
 
-keyCode :: Obj -> Maybe Int
-keyCode = parseMaybe (.: "keyCode")
+keyCode :: Evt -> Maybe Int
+keyCode = parseMaybe (.: "keyCode") . evtObj
 
 pattern Digit0 <- (keyCode -> Just 48)
 pattern Digit1 <- (keyCode -> Just 49)
@@ -1840,14 +1849,14 @@ pattern NumpadEqual <- (keyCode -> Just 12)
 pattern NumpadMultiply <- (keyCode -> Just 106)
 pattern NumpadSubtract <- (keyCode -> Just 109)
 
-shiftModifier o = (parseMaybe (.: "shiftKey") o,o)
+shiftModifier o = (parseMaybe (.: "shiftKey") (evtObj o),o)
 pattern ShiftKey o <- (shiftModifier -> (Just True,o))
 
-altModifier o = (parseMaybe (.: "altKey") o,o)
+altModifier o = (parseMaybe (.: "altKey") (evtObj o),o)
 pattern AltKey o <- (altModifier -> (Just True,o))
 
-ctrlModifier o = (parseMaybe (.: "ctrlKey") o,o)
+ctrlModifier o = (parseMaybe (.: "ctrlKey") (evtObj o),o)
 pattern CtrlKey o <- (ctrlModifier -> (Just True,o))
 
-metaModifier o = (parseMaybe (.: "metaKey") o,o)
+metaModifier o = (parseMaybe (.: "metaKey") (evtObj o),o)
 pattern MetaKey o <- (metaModifier -> (Just True,o))
