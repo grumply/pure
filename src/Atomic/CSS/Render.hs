@@ -10,6 +10,7 @@ import Ef.Base
 import Data.Txt
 
 import Data.Foldable as F
+import Control.Category as C
 
 import Atomic.Attribute
 import Atomic.ToTxt
@@ -34,6 +35,8 @@ import Data.Text as Txt
 #endif
 
 import Language.Haskell.TH.Syntax
+
+import Prelude hiding ((.),id)
 
 data Styles_ k where
   Style_ :: Txt -> Txt -> k -> Styles_ k
@@ -110,12 +113,6 @@ type CSS = Ef '[CSS_] Identity
 selector :: Txt -> Styles a -> CSS a
 selector sel ss = Send (CSS_ sel ss Return)
 
-selectors :: [Txt] -> Styles a -> CSS [a]
-selectors sels ss = sequence $ Prelude.map (flip selector ss) sels
-
-styles :: Styles a -> CSS a
-styles = selector ""
-
 apply :: Styles a -> CSS a
 apply = selector ""
 
@@ -142,8 +139,8 @@ extendable ss = do
   ss
   return (Extendable ss)
 
-nested :: Txt -> CSS a -> CSS a
-nested sel = go
+select :: Txt -> CSS a -> CSS a
+select sel = go
   where
     go (Return r) = Return r
     go (Lift s) = go (runIdentity s)
@@ -156,71 +153,57 @@ nested sel = go
         Just (CSS3_ at rule css rest) ->
           Send (CSS3_ at rule (go (unsafeCoerce css)) (go . (unsafeCoerce rest)))
 
-is :: Txt -> CSS a -> CSS a
-is = nested
-
-and :: (Txt -> CSS a -> CSS a) -> Txt -> CSS a -> CSS a
-and f sel css = f sel css
-
-andAny :: CSS a -> CSS a
-andAny = nested " * "
-
-isn't :: Txt -> CSS a -> CSS a
-isn't sel = nested (":not(" <> sel <> ")")
-
-notAttr :: Txt -> CSS a -> CSS a
-notAttr sel = nested (":not([" <> sel <> "])")
-
-notType :: Txt -> CSS a -> CSS a
-notType sel = notAttr ("type=" <> sel)
-
-oneOf :: Foldable t => t (CSS a -> CSS a) -> CSS a -> CSS a
-oneOf = F.foldr (flip (.)) id
-
 any :: Txt
 any = "*"
 
-after :: Txt
-after = "::after"
+active :: Txt
+active = ":active"
 
-before :: Txt
-before = "::before"
+hovered :: Txt
+hovered = ":hover"
 
-focused :: CSS a -> CSS a
-focused = nested ":focus"
+focused :: Txt
+focused = ":focus"
 
-hovered :: CSS a -> CSS a
-hovered = nested ":hover"
+disabled :: Txt
+disabled = "[disabled]"
 
-active :: CSS a -> CSS a
-active = nested ":active"
+is :: Txt -> CSS a -> CSS a
+is = select
+
+-- equivalent to id; purely for scanning purposes
+and :: (Txt -> CSS a -> CSS a) -> Txt -> CSS a -> CSS a
+and f sel css = f sel css
 
 or :: (Txt -> CSS a -> CSS a) -> Txt -> CSS a -> CSS a
 or f sel css = f (", " <> sel) css
 
-contains :: Txt -> CSS a -> CSS a
-contains sel = nested (" " <> sel)
+isn't :: Txt -> CSS a -> CSS a
+isn't sel = select (":not(" <> sel <> ")")
 
-has :: Txt -> CSS a -> CSS a
-has = contains
+compose :: (Category cat, Foldable t) => t (cat a a) -> cat a a
+compose = F.foldr (>>>) id
 
-select :: Txt -> CSS a -> CSS a
-select = contains
+use :: (Traversable t, Applicative f) => t (a -> f b) -> a -> f (t b)
+use fs x = for fs ($ x)
 
 pseudo :: Txt -> CSS a -> CSS a
-pseudo sel = nested (":" <> sel)
+pseudo sel = select (":" <> sel)
 
 attr :: Txt -> CSS a -> CSS a
-attr sel = nested ("[" <> sel <> "]")
+attr sel = select ("[" <> sel <> "]")
 
-hasChild :: Txt -> CSS a -> CSS a
-hasChild sel = nested (" > " <> sel)
+child :: Txt -> CSS a -> CSS a
+child sel = select (" > " <> sel)
 
-followedBy :: Txt -> CSS a -> CSS a
-followedBy sel = nested (" + " <> sel)
+has :: Txt -> CSS a -> CSS a
+has sel = select (" " <> sel)
 
-precededBy :: Txt -> CSS a -> CSS a
-precededBy sel = nested (" ~ " <> sel)
+next :: Txt -> CSS a -> CSS a
+next sel = select (" + " <> sel)
+
+nexts :: Txt -> CSS a -> CSS a
+nexts sel = select (" ~ " <> sel)
 
 atCharset :: Txt -> CSS ()
 atCharset cs = Send (CSS3_ "@charset " cs (Return ()) Return)

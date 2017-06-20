@@ -9,6 +9,8 @@ module Atomic.Grid where
 import Atomic.CSS
 import Atomic.ToTxt
 
+import Atomic.Component
+
 import Data.Txt (Txt)
 
 import Control.Monad
@@ -114,35 +116,35 @@ flexboxGrid = let c = classify in void $ do
     marginRight  =: neg (rems 0.5)
 
   is (c uRow) .> do
-    boxSizing          =: borderBox
-    display            =: webkitBox
-    display            =: msFlexBox
-    display            =: flex
-    webkitBoxFlex      =: zero
-    msFlex             =: zero <<>> one <<>> auto
-    flex               =: zero <<>> one <<>> auto
-    webkitBoxOrient    =: horizontal
-    webkitBoxDirection =: normal
-    msFlexDirection    =: rowS
-    flexDirection      =: rowS
-    msFlexWrap         =: wrapS
-    flexWrap           =: wrapS
-    marginRight        =: neg (rems 0.5)
-    marginLeft         =: neg (rems 0.5)
+    boxSizing               =: borderBox
+    display                 =: "-webkit-box"
+    display                 =: "-ms-flexbox"
+    display                 =: flex
+    "-webkit-box-flex"      =: zero
+    "-ms-flex"              =: zero <<>> one <<>> auto
+    flex                    =: zero <<>> one <<>> auto
+    "-webkit-box-orient"    =: horizontal
+    "-webkit-box-direction" =: normal
+    "-ms-flex-direction"    =: rowS
+    flexDirection           =: rowS
+    "-ms-flex-wrap"         =: wrapS
+    flexWrap                =: wrapS
+    marginRight             =: neg (rems 0.5)
+    marginLeft              =: neg (rems 0.5)
 
   is (c uRow) .
     and is (c uReverse) .> do
-      webkitBoxOrient    =: horizontal
-      webkitBoxDirection =: reverse
-      msFlexDirection    =: rowReverse
-      flexDirection      =: rowReverse
+      "-webkit-box-orient"    =: horizontal
+      "-webkit-box-direction" =: reverse
+      "-ms-flex-direction"    =: rowReverse
+      flexDirection           =: rowReverse
 
   is (c uCol) .
     and is (c uReverse) .> do
-      webkitBoxOrient    =: vertical
-      webkitBoxDirection =: reverse
-      msFlexDirection    =: columnReverse
-      flexDirection      =: columnReverse
+      "-webkit-box-orient"    =: vertical
+      "-webkit-box-direction" =: reverse
+      "-ms-flex-direction"    =: columnReverse
+      flexDirection           =: columnReverse
 
   is (c $ uHiddenUp Xs) .>
     display =: noneS
@@ -169,15 +171,14 @@ flexboxGrid = let c = classify in void $ do
 
       columns <-
         is (c $ uColsGrow sz) .
-          or is (c $ uColsOffset sz 0) .>
-            extendable (important $ do
-              boxSizing     =: borderBox
-              webkitBoxFlex =: zero
-              msFlex        =: zero <<>> zero <<>> auto
-              flex          =: zero <<>> zero <<>> auto
-              paddingRight  =: rems 0.5
-              paddingLeft   =: rems 0.5
-              )
+          or is (c $ uColsOffset sz 0) .> do
+            extendable $ important $ do
+              boxSizing          =: borderBox
+              "-webkit-box-flex" =: zero
+              "-ms-flex"         =: zero <<>> zero <<>> auto
+              flex               =: zero <<>> zero <<>> auto
+              paddingRight       =: rems 0.5
+              paddingLeft        =: rems 0.5
 
       is (c $ uCols sz 12) .>
         extends columns
@@ -188,85 +189,85 @@ flexboxGrid = let c = classify in void $ do
             extends columns
 
       is (c $ uColsGrow sz) .> do
-        webkitBoxFlex       =: one
-        msFlexPositive      =: one
-        flexGrow            =: one
-        msFlexPreferredSize =: zero
-        flexBasis           =: zero
-        maxWidth            =: per 100
+        "-webkit-box-flex"        =: one
+        "-ms-flex-positive"       =: one
+        flexGrow                  =: one
+        "-ms-flex-preferred-size" =: zero
+        flexBasis                 =: zero
+        maxWidth                  =: per 100
 
       is (c $ uColsOffset sz 0) .>
         marginLeft =: zero
 
       is (c $ uColsOffset sz 12) .> do
-        msFlexPreferredSize =: per 100
-        flexBasis           =: per 100
-        maxWidth            =: per 100
+        "-ms-flex-preferred-size" =: per 100
+        flexBasis                 =: per 100
+        maxWidth                  =: per 100
 
       is (c $ uCols sz 0) .> do
         overflow =: hiddenS
-        height =: per 0
+        height   =: per 0
 
       for [0..11] $ \i -> do
         -- close enough?
         let p = per (fromIntegral i * 8.33333333)
 
         is (c $ uCols sz i) .> do
-          msFlexPreferredSize =: p
-          flexBasis           =: p
-          maxWidth            =: p
+          "-ms-flex-preferred-size" =: p
+          flexBasis                 =: p
+          maxWidth                  =: p
 
         is (c $ uColsOffset sz i) .>
           marginLeft =: p
 
       is (c $ uStart sz) .> do
-        webkitBoxPack  =: startS
-        msFlexPack     =: startS
-        justifyContent =: flexStart
-        textAlign      =: startS
+        "-webkit-box-pack"  =: startS
+        "-ms-flex-pack"     =: startS
+        justifyContent      =: flexStart
+        textAlign           =: startS
 
       is (c $ uCenter sz) .> do
-        webkitBoxPack  =: center
-        msFlexPack     =: center
-        justifyContent =: center
-        textAlign      =: center
+        "-webkit-box-pack"  =: center
+        "-ms-flex-pack"     =: center
+        justifyContent      =: center
+        textAlign           =: center
 
       is (c $ uEnd sz) .> do
-        webkitBoxPack  =: endS
-        msFlexPack     =: endS
-        textAlign      =: endS
-        justifyContent =: flexEnd
+        "-webkit-box-pack"  =: endS
+        "-ms-flex-pack"     =: endS
+        textAlign           =: endS
+        justifyContent      =: flexEnd
 
       is (c $ uTop sz) .> do
-        webkitBoxAlign =: startS
-        msFlexAlign    =: startS
-        alignItems     =: flexStart
+        "-webkit-box-align" =: startS
+        "-ms-flex-align"    =: startS
+        alignItems          =: flexStart
 
       is (c $ uMiddle sz) .> do
-        webkitBoxAlign =: center
-        msFlexAlign    =: center
-        alignItems     =: center
+        "-webkit-box-align" =: center
+        "-ms-flex-align"    =: center
+        alignItems          =: center
 
       is (c $ uBottom sz) .> do
-        webkitBoxAlign =: endS
-        msFlexAlign    =: endS
-        alignItems     =: flexEnd
+        "-webkit-box-align" =: endS
+        "-ms-flex-align"    =: endS
+        alignItems          =: flexEnd
 
       is (c $ uAround sz) .> do
-        msFlexPack     =: distribute
-        justifyContent =: spaceAround
+        "-ms-flex-pack"     =: distribute
+        justifyContent      =: spaceAround
 
       is (c $ uBetween sz) .> do
-        webkitBoxPack  =: justify
-        msFlexPack     =: justify
-        justifyContent =: spaceBetween
+        "-webkit-box-pack"  =: justify
+        "-ms-flex-pack"     =: justify
+        justifyContent      =: spaceBetween
 
       is (c $ uFirst sz) .> do
-        webkitBoxOrdinalGroup =: zero
-        msFlexOrder           =: neg (int 1)
-        order                 =: neg (int 1)
+        "-webkit-box-ordinal-group" =: zero
+        "-ms-flex-order"            =: neg (int 1)
+        order                       =: neg (int 1)
 
       is (c $ uLast sz) .> do
-        webkitBoxOrdinalGroup =: int 2
-        msFlexOrder           =: one
-        order                 =: one
+        "-webkit-box-ordinal-group" =: int 2
+        "-ms-flex-order"            =: one
+        order                       =: one

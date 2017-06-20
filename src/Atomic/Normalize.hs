@@ -3,6 +3,7 @@
 module Atomic.Normalize where
 
 import Atomic.CSS
+import Atomic.Component
 
 import Data.Txt (Txt)
 
@@ -13,10 +14,10 @@ normalize :: StaticCSS
 normalize =
   $( let nrmlz = staticCSS $ do
           is "html" .> do
-            fontFamily =: "sans-serif"
-            lineHeight =: dec 1.15
-            msTextSizeAdjust =: per 100
-            webkitTextSizeAdjust =: per 100
+            fontFamily                 =: "sans-serif"
+            lineHeight                 =: dec 1.15
+            "-ms-text-size-adjust"     =: per 100
+            "-webkit-text-size-adjust" =: per 100
 
           is "body" .> do
             margin =: int 0
@@ -40,11 +41,11 @@ normalize =
             fontSize   =: ems 1
 
           is "a" .> do
-            backgroundColor          =: transparent
-            webkitTextDecorationSkip =: "objects"
+            backgroundColor                =: transparent
+            "-webkit-text-decoration-skip" =: "objects"
 
-          is "a" . active .
-            or is "a" . hovered .>
+          is "a" . and is active .
+            or is "a" . and is hovered .>
               outlineWidth =: int 0
 
           is "abbr" .
@@ -114,7 +115,7 @@ normalize =
           is "button" .
             or is "html"             . or is "[type=\"button\"]" .
             or is "[type=\"reset\"]" . or is "[type=\"submit\"]" .>
-              webkitAppearance =: buttonS
+              "-webkit-appearance" =: buttonS
 
           is "button" . and pseudo "-moz-focus-inner" .
             or is "[type=\"button\"]" . and pseudo "-moz-focus-inner" .
@@ -168,11 +169,11 @@ normalize =
             and pseudo "-webkit-search-cancel-button" .
               or is "[type=\"search\"]" .
                 and pseudo "-webkit-search-decoration" .>
-                  webkitAppearance =: noneS
+                  "-webkit-appearance" =: noneS
 
           pseudo "-webkit-file-upload-button" .> do
-            webkitAppearance =: buttonS
-            font             =: inherit
+            "-webkit-appearance" =: buttonS
+            font                 =: inherit
 
           is "details" .>
             display =: blockS

@@ -14,6 +14,8 @@ module Atomic.Component (module Atomic.Component, ENode, TNode, NNode, Win, Doc,
 import Ef.Base hiding (Object,Client,After,Before,child,current,Lazy,Eager,construct,Index,observe,uncons,distribute,embed)
 import qualified Ef.Base
 
+import qualified Data.Foldable as F
+
 import Data.Txt as Txt hiding (replace,map,head,filter)
 import Data.JSON
 

@@ -15,7 +15,7 @@ module Atomic
   , mvc
   , viewManager, constant
   , unindent
-  , css, css', scss, scss', styles
+  , css, css', scss, scss', apply
   , diff, setManualDiff, setEagerDiff
   , getModel, putModel, modifyModel
   , onModelChange, onOwnModelChange, onOwnModelChangeByProxy, ownHTML, currentHTML
