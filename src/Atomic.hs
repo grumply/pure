@@ -50,7 +50,7 @@ import Atomic.Service hiding (Base)
 
 import Control.Arrow as Export hiding (left,right,(<+>))
 import Data.Traversable as Export
-import Data.Foldable as Export hiding (and,or,all)
+import Data.Foldable as Export hiding (any,and,or,all)
 import Control.Applicative as Export
 import Control.Concurrent as Export hiding (yield)
 import Data.IORef as Export
@@ -105,7 +105,7 @@ import Atomic.WebSocket  as Export hiding (accept)
 
 import Data.ByteString as Export (ByteString)
 
-import Prelude as Export hiding (and,or,all,exponent,tan,lookup,reverse)
+import Prelude as Export hiding (any,and,or,all,exponent,tan,lookup,reverse)
 import qualified Prelude
 import Data.Monoid as Export hiding (Alt)
 

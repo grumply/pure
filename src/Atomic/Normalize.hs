@@ -4,117 +4,137 @@ module Atomic.Normalize where
 
 import Atomic.CSS
 
+import Data.Txt (Txt)
+
+import Prelude hiding (and,or)
+
 -- A port of Nicolas Gallagher's normalize.css from: https://github.com/necolas/normalize.css; MIT licensed
 normalize :: StaticCSS
 normalize =
   $( let nrmlz = staticCSS $ do
-          select "html" $ do
+          is "html" .> do
             fontFamily =: "sans-serif"
             lineHeight =: dec 1.15
             msTextSizeAdjust =: per 100
             webkitTextSizeAdjust =: per 100
 
-          select "body" $ do
+          is "body" .> do
             margin =: int 0
 
-          select "h1" $ do
+          is "h1" .> do
             fontSize =: ems 2
             margin   =: ems 0.67 <<>> int 0
 
-          select ("figcaption" <&>> "figure" <&>> "main") $ do
-            display =: blockS
+          is "figcaption" .
+            or is "figure" .
+              or is "main" .> do
+                display =: blockS
 
-          select "hr" $ do
+          is "hr" .> do
             boxSizing =: contentBox
             height    =: int 0
             overflow  =: visible
 
-          select "pre" $ do
+          is "pre" .> do
             fontFamily =: "monospace" <&>> "monospace"
             fontSize   =: ems 1
 
-          select "a" $ do
+          is "a" .> do
             backgroundColor          =: transparent
             webkitTextDecorationSkip =: "objects"
 
-          select ("a:active" <&>> "a:hover") $ do
-            outlineWidth =: int 0
+          is "a" . active .
+            or is "a" . hovered .>
+              outlineWidth =: int 0
 
-          select "abbr[title]" $ do
-            borderBottom   =: noneS
-            textDecoration =: underline
-            textDecoration =: underline <<>> dotted
+          is "abbr" .
+            and attr "title" .> do
+              borderBottom   =: noneS
+              textDecoration =: underline
+              textDecoration =: underline <<>> dotted
 
-          select ("b" <&>> "strong") $ do
-            fontWeight =: inherit
+          is "b" .
+            or is "strong" .>
+              fontWeight =: inherit
 
-          select ("b" <&>> "strong") $ do
-            fontWeight =: "bolder"
+          is "b" .
+            or is "strong" .>
+              fontWeight =: "bolder"
 
-          select ("code" <&>> "kbd" <&>> "samp") $ do
-            fontFamily =: "monospace" <&>> "monospace"
-            fontSize   =: ems 1
+          is "code" .
+            or is "kbd" .
+              or is "samp" .> do
+                fontFamily =: "monospace" <&>> "monospace"
+                fontSize   =: ems 1
 
-          select "dfn" $ do
+          is "dfn" .>
             fontStyle =: italic
 
-          select "mark" $ do
+          is "mark" .> do
             backgroundColor =: "#ff0"
             color           =: "#000"
 
-          select "small" $ do
+          is "small" .> do
             fontSize =: per 80
 
-          select ("sub" <&>> "sup") $ do
-            fontSize      =: per 75
-            lineHeight    =: int 0
-            position      =: relative
-            verticalAlign =: "baseline"
+          is "sub" .
+            or is "sup" .> do
+              fontSize      =: per 75
+              lineHeight    =: int 0
+              position      =: relative
+              verticalAlign =: "baseline"
 
-          select "sub" $ do
+          is "sub" .>
             bottom =: ems (-0.25)
 
-          select "sup" $ do
+          is "sup" .>
             top =: ems (-0.5)
 
-          select "img" $ do
+          is "img" .>
             borderStyle =: noneS
 
-          select "svg:not(:root)" $ do
-            overflow =: hiddenS
+          is "svg" .
+            and isn't ":root" .>
+              overflow =: hiddenS
 
-          select ("buton" <&>> "input" <&>> "optgroup" <&>> "select" <&>> "textarea") $ do
-            font   =: inherit
-            margin =: int 0
+          is "buton" .
+            or is "input"  . or is "optgroup" .
+            or is "select" . or is "textarea" .> do
+              font   =: inherit
+              margin =: int 0
 
-          select ("button" <&>> "input") $ do
-            overflow =: visible
+          is "button" .
+            or is "input" .>
+              overflow =: visible
 
-          select ("button" <&>> "select") $ do
-            textTransform =: noneS
+          is "button" .
+            or is "select" .>
+              textTransform =: noneS
 
-          select ("button" <&>> "html [type=\"button\"]" <&>> "[type=\"reset\"]" <&>> "[type=\"submit\"]") $ do
-            webkitAppearance =: buttonS
+          is "button" .
+            or is "html"             . or is "[type=\"button\"]" .
+            or is "[type=\"reset\"]" . or is "[type=\"submit\"]" .>
+              webkitAppearance =: buttonS
 
-          select ("button::-moz-focus-inner"
-                  <&>> "[type=\"button\"]::-moz-focus-inner"
-                  <&>> "[type=\"reset\"]::-moz-focus-inner"
-                  <&>> "[type=\"submit\"]::-moz-focus-inner") $ do
-            borderStyle =: noneS
-            padding     =: int 0
+          is "button" . and pseudo "-moz-focus-inner" .
+            or is "[type=\"button\"]" . and pseudo "-moz-focus-inner" .
+            or is "[type=\"reset\"]"  . and pseudo "-moz-focus-inner" .
+            or is "[type=\"submit\"]" . and pseudo "-moz-focus-inner" .> do
+              borderStyle =: noneS
+              padding     =: int 0
 
-          select ("button:-moz-focusring"
-                  <&>> "[type=\"button\"]:-moz-focusring"
-                  <&>> "[type=\"reset\"]:-moz-focusring"
-                  <&>> "[type=\"submit\"]:-moz-focusring") $ do
-            outline =: pxs 1 <<>> dotted <<>> "ButtonText"
+          is "button" . and pseudo "-moz-focusring" .
+            or is "[type=\"button\"]" . and pseudo "-moz-focusring" .
+            or is "[type=\"reset\"]"  . and pseudo "-moz-focusring" .
+            or is "[type=\"submit\"]" . and pseudo "-moz-focusring" .>
+              outline =: pxs 1 <<>> dotted <<>> "ButtonText"
 
-          select "fieldset" $ do
+          is "fieldset" .> do
             border  =: pxs 1 <<>> solid <<>> "#c0c0c0"
             margin  =: int 0 <<>> pxs 2
             padding =: ems 0.35 <<>> ems 0.625 <<>> ems 0.75
 
-          select "legend" $ do
+          is "legend" .> do
             boxSizing  =: borderBox
             color      =: inherit
             display    =: tableS
@@ -122,41 +142,47 @@ normalize =
             padding    =: int 0
             whiteSpace =: normal
 
-          select "progress" $ do
+          is "progress" .> do
             display       =: inlineBlock
             verticalAlign =: baseline
 
-          select "textarea" $ do
+          is "textarea" .>
             overflow =: auto
 
-          select ("[type=\"checkbox\"]" <&>> "[type=\"radio\"]") $ do
-            boxSizing =: borderBox
-            padding   =: int 0
+          is "[type=\"checkbox\"]" .
+            or is "[type=\"radio\"]" .> do
+              boxSizing =: borderBox
+              padding   =: int 0
 
-          select ("[type=\"number\"]::-webkit-inner-spin-button"
-                  <&>> "[type=\"number\"]::-webkit-outer-spin-button") $ do
-            height =: auto
+          is "[type=\"number\"]" .
+            and pseudo "-webkit-inner-spin-button" .
+              or is "[type=\"number\"]" .
+                and pseudo "-webkit-outer-spin-button" .>
+                  height =: auto
 
-          select "[type=\"search\"]" $ do
+          is "[type=\"search\"]" .> do
             "-webkit-appearance" =: "textfield"
             outlineOffset =: neg (pxs 2)
 
-          select ("[type=\"search\"]::-webkit-search-cancel-button"
-                  <&>> "[type=\"search\"]::-webkit-search-decoration") $ do
-            webkitAppearance =: noneS
+          is "[type=\"search\"]" .
+            and pseudo "-webkit-search-cancel-button" .
+              or is "[type=\"search\"]" .
+                and pseudo "-webkit-search-decoration" .>
+                  webkitAppearance =: noneS
 
-          select "::-webkit-file-upload-button" $ do
+          pseudo "-webkit-file-upload-button" .> do
             webkitAppearance =: buttonS
             font             =: inherit
 
-          select "details" $ do
+          is "details" .>
             display =: blockS
 
-          select "summary" $ do
+          is "summary" .> do
             display =: listItem
 
-          select "[hidden], template" $ do
-            display =: noneS
+          is "[hidden]" .
+            or is "template" .>
+              display =: noneS
 
      in [| nrmlz |]
    )

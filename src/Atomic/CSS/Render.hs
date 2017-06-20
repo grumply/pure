@@ -9,6 +9,8 @@ import Ef.Base
 
 import Data.Txt
 
+import Data.Foldable as F
+
 import Atomic.Attribute
 import Atomic.ToTxt
 import Atomic.FromTxt
@@ -105,134 +107,21 @@ instance Functor CSS_ where
 
 type CSS = Ef '[CSS_] Identity
 
-select :: Txt -> Styles a -> CSS a
-select sel ss = Send (CSS_ sel ss Return)
+selector :: Txt -> Styles a -> CSS a
+selector sel ss = Send (CSS_ sel ss Return)
 
-selects :: [Txt] -> Styles a -> CSS [a]
-selects sels ss = sequence $ Prelude.map (flip select ss) sels
-
-newtype Block = Block Txt
-  deriving (IsString,ToTxt,FromTxt,Show,Eq)
-
-newtype Element = Element Txt
-  deriving (IsString,ToTxt,FromTxt,Show,Eq)
-
-newtype Modifier = Modifier Txt
-  deriving (IsString,ToTxt,FromTxt,Show,Eq)
-
-newtype Utility = Utility Txt
-  deriving (IsString,ToTxt,FromTxt,Show,Eq)
+selectors :: [Txt] -> Styles a -> CSS [a]
+selectors sels ss = sequence $ Prelude.map (flip selector ss) sels
 
 styles :: Styles a -> CSS a
-styles = select ""
+styles = selector ""
 
-b :: Block -> Txt
-b = toTxt
+apply :: Styles a -> CSS a
+apply = selector ""
 
-be :: Block -> Element -> Txt
-be (Block b) (Element e) = b <> "__" <> e
-
-bm :: Block -> Modifier -> Txt
-bm (Block b) (Modifier m) = b <> "--" <> m
-
-bem :: Block -> Element -> Modifier -> Txt
-bem (Block b) (Element e) (Modifier m) = b <> "__" <> e <> "--" <> m
-
-u :: Utility -> Txt
-u (Utility u) = "u-" <> u
-
-block :: Block -> CSS a -> CSS a
-block (Block b) = nested ("." <> b)
-
-blocks :: [Block] -> CSS a -> CSS [a]
-blocks bs css = for bs $ \b -> block b css
-
-element :: Element -> CSS a -> CSS a
-element (Element e) = nested ("__" <> e)
-
-elements :: [Element] -> CSS a -> CSS [a]
-elements es css = for es $ \e -> element e css
-
-modifier :: Modifier -> Styles a -> CSS a
-modifier (Modifier m) = select ("--" <> m)
-
-modifiers :: [Modifier] -> Styles a -> CSS [a]
-modifiers ms css = for ms $ \m -> modifier m css
-
-utility :: Utility -> Styles a -> CSS a
-utility (Utility u) = select (".u-" <> u) . important
-
-utilities :: [Utility] -> Styles a -> CSS [a]
-utilities us css = for us $ \u -> utility u css
-
-getClass :: Txt -> Maybe Txt
-getClass c =
-  if Txt.length c > 0 && Txt.head c == '.' then
-    Just (Txt.tail c)
-  else
-    Nothing
-
-pattern Class c <- (getClass -> Just c) where
-  Class c = Txt.cons '.' c
-
-getB :: Txt -> Maybe Block
-getB t
-  | isNil t            = Nothing
-  | Txt.isInfixOf "__" t = Nothing
-  | Txt.isInfixOf "--" t = Nothing
-  | otherwise = Just (Block t)
-
-pattern B :: Block -> Txt
-pattern B b <- (getB -> Just b) where
-  B (Block b) = b
-
-splitBE :: Txt -> Maybe (Block,Element)
-splitBE t
-  | Txt.isInfixOf "--" t = Nothing
-  | otherwise =
-      let (b,em) = Txt.breakOn "__" t
-          (e,_) = Txt.breakOn "--" (Txt.drop 2 em)
-      in
-        if notNil b && notNil e then
-          Just (Block b,Element e)
-        else
-          Nothing
-
-pattern BE :: Block -> Element -> Txt
-pattern BE b e <- (splitBE -> Just (b,e)) where
-  BE b e = be b e
-
-splitBM :: Txt -> Maybe (Block,Modifier)
-splitBM t
-  | Txt.isInfixOf "__" t       = Nothing
-  | not (Txt.isInfixOf "--" t) = Nothing
-  | otherwise =
-      let (b,Txt.drop 2 -> m) = Txt.breakOn "--" t
-      in if notNil b && notNil m then
-          Just (Block b,Modifier m)
-        else
-          Nothing
-
-pattern BM :: Block -> Modifier -> Txt
-pattern BM b m <- (splitBM -> Just (b,m)) where
-  BM b m = bm b m
-
-splitBEM :: Txt -> Maybe (Block,Element,Modifier)
-splitBEM t
-  | not (Txt.isInfixOf "--" t) = Nothing
-  | not (Txt.isInfixOf "__" t) = Nothing
-  | otherwise =
-      let (b,Txt.drop 2 -> em) = Txt.breakOn "__" t
-          (e,Txt.drop 2 -> m) = Txt.breakOn "--" em
-      in
-        if notNil b && notNil e && notNil m then
-          Just (Block b,Element e,Modifier m)
-        else
-          Nothing
-
-pattern BEM :: Block -> Element -> Modifier -> Txt
-pattern BEM b e m <- (splitBEM -> Just (b,e,m)) where
-  BEM b e m = bem b e m
+infixr 1 .>
+(.>) :: (CSS a -> CSS a) -> Styles a -> CSS a
+(.>) f decls = f $ apply decls
 
 reusable :: Monad m => m a -> m (m a,a)
 reusable ma = do
@@ -267,23 +156,71 @@ nested sel = go
         Just (CSS3_ at rule css rest) ->
           Send (CSS3_ at rule (go (unsafeCoerce css)) (go . (unsafeCoerce rest)))
 
-and :: Txt -> CSS a -> CSS a
-and sel = nested sel
+is :: Txt -> CSS a -> CSS a
+is = nested
 
-or :: Txt -> CSS a -> CSS a
-or sel = nested (", " <> sel)
+and :: (Txt -> CSS a -> CSS a) -> Txt -> CSS a -> CSS a
+and f sel css = f sel css
 
-nest :: Txt -> CSS a -> CSS a
-nest sel = nested (" " <> sel)
+andAny :: CSS a -> CSS a
+andAny = nested " * "
 
-child :: Txt -> CSS a -> CSS a
-child sel = nested (" > " <> sel)
+isn't :: Txt -> CSS a -> CSS a
+isn't sel = nested (":not(" <> sel <> ")")
 
-predecessor :: Txt -> CSS a -> CSS a
-predecessor sel = nested (" + " <> sel)
+notAttr :: Txt -> CSS a -> CSS a
+notAttr sel = nested (":not([" <> sel <> "])")
 
-successor :: Txt -> CSS a -> CSS a
-successor sel = nested (" ~ " <> sel)
+notType :: Txt -> CSS a -> CSS a
+notType sel = notAttr ("type=" <> sel)
+
+oneOf :: Foldable t => t (CSS a -> CSS a) -> CSS a -> CSS a
+oneOf = F.foldr (flip (.)) id
+
+any :: Txt
+any = "*"
+
+after :: Txt
+after = "::after"
+
+before :: Txt
+before = "::before"
+
+focused :: CSS a -> CSS a
+focused = nested ":focus"
+
+hovered :: CSS a -> CSS a
+hovered = nested ":hover"
+
+active :: CSS a -> CSS a
+active = nested ":active"
+
+or :: (Txt -> CSS a -> CSS a) -> Txt -> CSS a -> CSS a
+or f sel css = f (", " <> sel) css
+
+contains :: Txt -> CSS a -> CSS a
+contains sel = nested (" " <> sel)
+
+has :: Txt -> CSS a -> CSS a
+has = contains
+
+select :: Txt -> CSS a -> CSS a
+select = contains
+
+pseudo :: Txt -> CSS a -> CSS a
+pseudo sel = nested (":" <> sel)
+
+attr :: Txt -> CSS a -> CSS a
+attr sel = nested ("[" <> sel <> "]")
+
+hasChild :: Txt -> CSS a -> CSS a
+hasChild sel = nested (" > " <> sel)
+
+followedBy :: Txt -> CSS a -> CSS a
+followedBy sel = nested (" + " <> sel)
+
+precededBy :: Txt -> CSS a -> CSS a
+precededBy sel = nested (" ~ " <> sel)
 
 atCharset :: Txt -> CSS ()
 atCharset cs = Send (CSS3_ "@charset " cs (Return ()) Return)

@@ -7,3 +7,6 @@ class Default a where
 
 instance (Monad c) => Default (Callback_ status result c) where
   def = Callback (\_ -> return ()) (\_ -> return ()) (\_ -> return ())
+
+instance (a ~ ()) => Default (IO a) where
+  def = return ()

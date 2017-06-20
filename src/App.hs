@@ -7,7 +7,7 @@ module App (module App,module Export) where
 import Ef.Base as Export hiding (As,Index,child,transform,watch,construct,uncons,distribute,embed,observe,End,Nat(..))
 import qualified Ef.Base
 import Ef.Reflect as Export
-import Prelude as Export hiding (and,or,all,exponent,div,head,span,tan,lookup,reverse)
+import Prelude as Export hiding (any,and,or,all,exponent,tan,lookup,reverse)
 
 import Data.Millis
 import Data.Txt (Txt)
@@ -339,4 +339,3 @@ goto f rts rt = do
   with f $ do
     crn <- getRouteSyndicate
     publish crn rt
-
