@@ -117,7 +117,7 @@ apply :: Styles a -> CSS a
 apply = selector ""
 
 infixr 1 .>
-(.>) :: (CSS a -> CSS a) -> Styles a -> CSS a
+(.>) :: (CSS a -> CSS b) -> Styles a -> CSS b
 (.>) f decls = f $ apply decls
 
 reusable :: Monad m => m a -> m (m a,a)
@@ -155,6 +155,12 @@ select sel = go
 
 any :: Txt
 any = "*"
+
+before :: Txt
+before = ":before"
+
+after :: Txt
+after = ":after"
 
 active :: Txt
 active = ":active"

@@ -128,6 +128,9 @@ import Unsafe.Coerce
 import qualified GHCJS.Types as T
 #endif
 
+grid :: StaticCSS
+grid = $( let g = staticCSS flexboxGrid in [| g |] )
+
 #ifdef __GHCJS__
 foreign import javascript unsafe
   "console.log($1);console.log($2);"

@@ -102,20 +102,20 @@ uLast (toTxt -> sz) = "u-last-" <> sz
 
 flexboxGrid = let c = classify in void $ do
   is (c uContainer) .
-    or is (c uContainerFluid) .> do
+    or is (c uContainerFluid) . apply . important $ do
       marginRight  =: auto
       marginLeft   =: auto
       maxWidth     =: calc(per 100 <<>> "-" <<>> rems 1)
       paddingLeft  =: rems 0.5
       paddingRight =: rems 0.5
 
-  is (c uContainerFluid) .> do
+  is (c uContainerFluid) . apply . important $ do
     paddingRight =: rems 2
     paddingLeft  =: rems 2
     marginLeft   =: neg (rems 0.5)
     marginRight  =: neg (rems 0.5)
 
-  is (c uRow) .> do
+  is (c uRow) . apply . important $ do
     boxSizing               =: borderBox
     display                 =: "-webkit-box"
     display                 =: "-ms-flexbox"
@@ -133,38 +133,38 @@ flexboxGrid = let c = classify in void $ do
     marginLeft              =: neg (rems 0.5)
 
   is (c uRow) .
-    and is (c uReverse) .> do
+    and is (c uReverse) . apply . important $ do
       "-webkit-box-orient"    =: horizontal
       "-webkit-box-direction" =: reverse
       "-ms-flex-direction"    =: rowReverse
       flexDirection           =: rowReverse
 
   is (c uCol) .
-    and is (c uReverse) .> do
+    and is (c uReverse) . apply . important $ do
       "-webkit-box-orient"    =: vertical
       "-webkit-box-direction" =: reverse
       "-ms-flex-direction"    =: columnReverse
       flexDirection           =: columnReverse
 
-  is (c $ uHiddenUp Xs) .>
+  is (c $ uHiddenUp Xs) . apply . important $
     display =: noneS
 
-  is (c $ uHiddenDown Xl) .>
+  is (c $ uHiddenDown Xl) . apply . important $
     display =: noneS
 
   for [(Xs,Nothing),(Sm,Just 48),(Md,Just 64),(Lg,Just 75),(Xl,Just 90)] $ \(sz,mn) -> do
 
     maybe id (atMedia . screenMaxWidth . ems) mn $
-      is (c $ uHiddenDown sz) .>
-        important (display =: noneS)
+      is (c $ uHiddenDown sz) . apply . important $
+        display =: noneS
 
     maybe id (atMedia . screenMinWidth . ems) mn $ do
 
-      is (c $ uHiddenUp sz) .>
-        important (display =: noneS)
+      is (c $ uHiddenUp sz) . apply . important $
+        display =: noneS
 
       for mn $ \n ->
-        is (c uContainer) .>
+        is (c uContainer) . apply . important $
           -- really, relative ems? Our breakpoint is em-based....
           -- I don't quite understand the interaction here.
           width =: rems (n + 1)
@@ -188,7 +188,7 @@ flexboxGrid = let c = classify in void $ do
           or is (c $ uColsOffset sz i) .>
             extends columns
 
-      is (c $ uColsGrow sz) .> do
+      is (c $ uColsGrow sz) . apply . important $ do
         "-webkit-box-flex"        =: one
         "-ms-flex-positive"       =: one
         flexGrow                  =: one
@@ -196,15 +196,15 @@ flexboxGrid = let c = classify in void $ do
         flexBasis                 =: zero
         maxWidth                  =: per 100
 
-      is (c $ uColsOffset sz 0) .>
+      is (c $ uColsOffset sz 0) . apply . important $
         marginLeft =: zero
 
-      is (c $ uColsOffset sz 12) .> do
+      is (c $ uColsOffset sz 12) . apply . important $ do
         "-ms-flex-preferred-size" =: per 100
         flexBasis                 =: per 100
         maxWidth                  =: per 100
 
-      is (c $ uCols sz 0) .> do
+      is (c $ uCols sz 0) . apply . important $ do
         overflow =: hiddenS
         height   =: per 0
 
@@ -212,62 +212,62 @@ flexboxGrid = let c = classify in void $ do
         -- close enough?
         let p = per (fromIntegral i * 8.33333333)
 
-        is (c $ uCols sz i) .> do
+        is (c $ uCols sz i) . apply . important $ do
           "-ms-flex-preferred-size" =: p
           flexBasis                 =: p
           maxWidth                  =: p
 
-        is (c $ uColsOffset sz i) .>
+        is (c $ uColsOffset sz i) . apply . important $
           marginLeft =: p
 
-      is (c $ uStart sz) .> do
+      is (c $ uStart sz) . apply . important $ do
         "-webkit-box-pack"  =: startS
         "-ms-flex-pack"     =: startS
         justifyContent      =: flexStart
         textAlign           =: startS
 
-      is (c $ uCenter sz) .> do
+      is (c $ uCenter sz) . apply . important $ do
         "-webkit-box-pack"  =: center
         "-ms-flex-pack"     =: center
         justifyContent      =: center
         textAlign           =: center
 
-      is (c $ uEnd sz) .> do
+      is (c $ uEnd sz) . apply . important $ do
         "-webkit-box-pack"  =: endS
         "-ms-flex-pack"     =: endS
         textAlign           =: endS
         justifyContent      =: flexEnd
 
-      is (c $ uTop sz) .> do
+      is (c $ uTop sz) . apply . important $ do
         "-webkit-box-align" =: startS
         "-ms-flex-align"    =: startS
         alignItems          =: flexStart
 
-      is (c $ uMiddle sz) .> do
+      is (c $ uMiddle sz) . apply . important $ do
         "-webkit-box-align" =: center
         "-ms-flex-align"    =: center
         alignItems          =: center
 
-      is (c $ uBottom sz) .> do
+      is (c $ uBottom sz) . apply . important $ do
         "-webkit-box-align" =: endS
         "-ms-flex-align"    =: endS
         alignItems          =: flexEnd
 
-      is (c $ uAround sz) .> do
+      is (c $ uAround sz) . apply . important $ do
         "-ms-flex-pack"     =: distribute
         justifyContent      =: spaceAround
 
-      is (c $ uBetween sz) .> do
+      is (c $ uBetween sz) . apply . important $ do
         "-webkit-box-pack"  =: justify
         "-ms-flex-pack"     =: justify
         justifyContent      =: spaceBetween
 
-      is (c $ uFirst sz) .> do
+      is (c $ uFirst sz) . apply . important $ do
         "-webkit-box-ordinal-group" =: zero
         "-ms-flex-order"            =: neg (int 1)
         order                       =: neg (int 1)
 
-      is (c $ uLast sz) .> do
+      is (c $ uLast sz) .apply . important $ do
         "-webkit-box-ordinal-group" =: int 2
         "-ms-flex-order"            =: one
         order                       =: one
