@@ -265,6 +265,10 @@ forComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component
              => View ms -> (a ms -> a' ms) -> View ms
 forComponent = flip mapComponent
 
+infixl 9 %
+(%) :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms) => View ms -> (a ms -> a' ms) -> View ms
+(%) = forComponent
+
 mapComponents :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
               => (a ms -> a' ms) -> [View ms] -> [View ms]
 mapComponents f as = map (mapComponent f) as
