@@ -314,6 +314,25 @@ pattern String s <- (TextHTML _ s) where
 pattern ST mdl i st v <- STHTML mdl i st _ v _ where
   ST mdl i st v = STHTML mdl i st Nothing v (\_ _ -> return ())
 
+weakRender (View a) = weakRender (render a)
+weakRender a = a
+
+addClass c = go False
+  where
+    go added [] = if added then [] else [ ClassList [ c ] ]
+    go added ((ClassList cs) : fs) = ClassList (c : cs) : go True fs
+    go added (f : fs) = f : go added fs
+
+updateFeatures f v =
+  case v of
+    HTML     {..} -> HTML     { _attributes = f _attributes, .. }
+    RawHTML  {..} -> RawHTML  { _attributes = f _attributes, .. }
+    KHTML    {..} -> KHTML    { _attributes = f _attributes, .. }
+    SVGHTML  {..} -> SVGHTML  { _attributes = f _attributes, .. }
+    KSVGHTML {..} -> KSVGHTML { _attributes = f _attributes, .. }
+    Managed  {..} -> Managed  { _attributes = f _attributes, .. }
+    _             -> v
+
 instance Default (View ms) where
   def = nil
 

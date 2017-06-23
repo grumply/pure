@@ -17,6 +17,7 @@ import Atomic.Default
 import Atomic.FromTxt
 import Atomic.ToTxt
 import Atomic.Cond
+import Atomic.Default
 import Atomic.UnsafeEq
 
 import Data.Data
@@ -301,6 +302,10 @@ instance Eq (Feature ms) where
 
 instance Cond (Feature ms) where
   nil = NullFeature
+  isNil = (== NullFeature)
+
+instance Default (Feature ms) where
+  def = NullFeature
 
 -- instance IsString (Feature ms) where
 --   fromString = Attribute "class" . fromString

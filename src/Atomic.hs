@@ -59,6 +59,8 @@ import Data.Bool as Export
 import Data.Maybe as Export
 import Data.Void as Export
 
+import GHC.Generics as Export (to,from)
+
 import qualified Data.Txt as Export (Txt(..))
 import Data.JSON         as Export hiding (defaultOptions,Options,(!),Alt,String,Null)
 import Data.Millis       as Export
