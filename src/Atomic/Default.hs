@@ -49,7 +49,7 @@ instance Default Value where
     Null
 #endif
 
-instance Default Obj where def = object []
+instance Default Obj where def = mempty
 
 instance Default Micros where def = 0
 instance Default Millis where def = 0

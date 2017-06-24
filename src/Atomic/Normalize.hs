@@ -10,11 +10,11 @@ import Data.Txt (Txt)
 import Prelude hiding (and,or)
 
 -- A port of Nicolas Gallagher's normalize.css from: https://github.com/necolas/normalize.css; MIT licensed
+-- Modified to remove support for IE 9-
 normalize :: StaticCSS
 normalize =
   $( let nrmlz = staticCSS $ do
           is "html" .> do
-            fontFamily                 =: "sans-serif"
             lineHeight                 =: dec 1.15
             "-ms-text-size-adjust"     =: per 100
             "-webkit-text-size-adjust" =: per 100
@@ -25,11 +25,6 @@ normalize =
           is "h1" .> do
             fontSize =: ems 2
             margin   =: ems 0.67 <<>> int 0
-
-          is "figcaption" .
-            or is "figure" .
-              or is "main" .> do
-                display =: blockS
 
           is "hr" .> do
             boxSizing =: contentBox
@@ -43,10 +38,6 @@ normalize =
           is "a" .> do
             backgroundColor                =: transparent
             "-webkit-text-decoration-skip" =: "objects"
-
-          is "a" . and is active .
-            or is "a" . and is hovered .>
-              outlineWidth =: int 0
 
           is "abbr" .
             and attr "title" .> do
@@ -71,10 +62,6 @@ normalize =
           is "dfn" .>
             fontStyle =: italic
 
-          is "mark" .> do
-            backgroundColor =: "#ff0"
-            color           =: "#000"
-
           is "small" .> do
             fontSize =: per 80
 
@@ -98,11 +85,13 @@ normalize =
             and isn't ":root" .>
               overflow =: hiddenS
 
-          is "buton" .
+          is "button" .
             or is "input"  . or is "optgroup" .
             or is "select" . or is "textarea" .> do
-              font   =: inherit
-              margin =: int 0
+              fontFamily =: "sans-serif"
+              fontSize   =: per 100
+              lineHeight =: dec 1.15
+              margin     =: int 0
 
           is "button" .
             or is "input" .>
@@ -113,38 +102,35 @@ normalize =
               textTransform =: noneS
 
           is "button" .
-            or is "html"             . or is "[type=\"button\"]" .
+            or is "html" . has "[type=\"button\"]" .
             or is "[type=\"reset\"]" . or is "[type=\"submit\"]" .>
               "-webkit-appearance" =: buttonS
 
-          is "button" . and pseudo "-moz-focus-inner" .
-            or is "[type=\"button\"]" . and pseudo "-moz-focus-inner" .
-            or is "[type=\"reset\"]"  . and pseudo "-moz-focus-inner" .
-            or is "[type=\"submit\"]" . and pseudo "-moz-focus-inner" .> do
+          is "button" . pseudo ":-moz-focus-inner" .
+            or is "[type=\"button\"]" . pseudo ":-moz-focus-inner" .
+            or is "[type=\"reset\"]"  . pseudo ":-moz-focus-inner" .
+            or is "[type=\"submit\"]" . pseudo ":-moz-focus-inner" .> do
               borderStyle =: noneS
               padding     =: int 0
 
-          is "button" . and pseudo "-moz-focusring" .
-            or is "[type=\"button\"]" . and pseudo "-moz-focusring" .
-            or is "[type=\"reset\"]"  . and pseudo "-moz-focusring" .
-            or is "[type=\"submit\"]" . and pseudo "-moz-focusring" .>
+          is "button" . pseudo "-moz-focusring" .
+            or is "[type=\"button\"]" . pseudo "-moz-focusring" .
+            or is "[type=\"reset\"]"  . pseudo "-moz-focusring" .
+            or is "[type=\"submit\"]" . pseudo "-moz-focusring" .>
               outline =: pxs 1 <<>> dotted <<>> "ButtonText"
 
           is "fieldset" .> do
-            border  =: pxs 1 <<>> solid <<>> "#c0c0c0"
-            margin  =: int 0 <<>> pxs 2
-            padding =: ems 0.35 <<>> ems 0.625 <<>> ems 0.75
+            padding =: ems3 0.35 0.75 0.625
 
           is "legend" .> do
             boxSizing  =: borderBox
             color      =: inherit
             display    =: tableS
             maxWidth   =: per 100
-            padding    =: int 0
+            padding    =: zero
             whiteSpace =: normal
 
           is "progress" .> do
-            display       =: inlineBlock
             verticalAlign =: baseline
 
           is "textarea" .>
@@ -153,37 +139,35 @@ normalize =
           is "[type=\"checkbox\"]" .
             or is "[type=\"radio\"]" .> do
               boxSizing =: borderBox
-              padding   =: int 0
+              padding   =: zero
 
-          is "[type=\"number\"]" .
-            and pseudo "-webkit-inner-spin-button" .
-              or is "[type=\"number\"]" .
-                and pseudo "-webkit-outer-spin-button" .>
-                  height =: auto
+          is "[type=\"number\"]" . pseudo ":-webkit-inner-spin-button" .
+            or is "[type=\"number\"]" . pseudo ":-webkit-outer-spin-button" .>
+              height =: auto
 
           is "[type=\"search\"]" .> do
             "-webkit-appearance" =: "textfield"
             outlineOffset =: neg (pxs 2)
 
-          is "[type=\"search\"]" .
-            and pseudo "-webkit-search-cancel-button" .
-              or is "[type=\"search\"]" .
-                and pseudo "-webkit-search-decoration" .>
-                  "-webkit-appearance" =: noneS
+          is "[type=\"search\"]" . pseudo ":-webkit-search-cancel-button" .
+            or is "[type=\"search\"]" . pseudo ":-webkit-search-decoration" .>
+              "-webkit-appearance" =: noneS
 
-          pseudo "-webkit-file-upload-button" .> do
+          pseudo ":-webkit-file-upload-button" .> do
             "-webkit-appearance" =: buttonS
             font                 =: inherit
 
           is "details" .>
             display =: blockS
 
-          is "summary" .> do
+          is "summary" .>
             display =: listItem
 
-          is "[hidden]" .
-            or is "template" .>
-              display =: noneS
+          is "template" .>
+            display =: noneS
+
+          is "[hidden]" .>
+            display =: noneS
 
      in [| nrmlz |]
    )

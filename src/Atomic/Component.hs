@@ -1588,7 +1588,7 @@ diffHelper f doc ch isFG =
         return (DiffView m' new)
 
     go' old@(DiffEqView _ v_old) mid@(DiffEqView m v) new@(DiffEqView m' v') =
-      if typeOf m == typeOf m' && prettyUnsafeEq m (unsafeCoerce m') then
+      if typeOf m == typeOf m' && prettyUnsafeEq m (unsafeCoerce m') then do
         return old
       else do
         new <- go' v_old v v'
@@ -1848,7 +1848,7 @@ diffHelper f doc ch isFG =
               return []
 
             go__ i old@((akey,a):as) mid@((mkey,m):ms) new@((bkey,b):bs)
-              | prettyUnsafeEq akey bkey = do
+              | akey == bkey = do
                   new <- go' a (render m) (render b)
                   let !i' = i + 1
                   rest <- go_ i' as ms bs
@@ -1858,7 +1858,7 @@ diffHelper f doc ch isFG =
                   case (as,ms,bs) of
                     ((akey',a'):as',(mkey',m'):ms',(bkey',b'):bs')
                       -- swap 2
-                      | prettyUnsafeEq bkey akey' && prettyUnsafeEq akey bkey' -> do
+                      | bkey == akey' && akey == bkey' -> do
                           new1 <- go' a (render m) (render b')
                           new2 <- go' a' (render m') (render b)
                           let !i' = i + 2
@@ -1866,7 +1866,7 @@ diffHelper f doc ch isFG =
                           return $ (akey',new1):(akey,new2):rest
 
                       -- insert
-                      | prettyUnsafeEq akey bkey' -> do
+                      | akey == bkey' -> do
                           new <- buildAndEmbedMaybe f doc ch isFG Nothing b
                           insertAt n i new
                           let !i' = i + 1
@@ -1878,7 +1878,7 @@ diffHelper f doc ch isFG =
                           didUnmount <- cleanup f [a]
                           delete a
                           didUnmount
-                          if prettyUnsafeEq bkey akey' then
+                          if bkey == akey' then
                             go_ i ((akey',a'):as) ((mkey',m'):ms) new
                           else do
                             -- replace
@@ -1888,7 +1888,7 @@ diffHelper f doc ch isFG =
                             rest <- go_ i' as ms bs
                             return $ (bkey,new):rest
 
-                    _ | prettyUnsafeEq akey bkey -> do
+                    _ | akey == bkey -> do
                           new <- go' a (render m) (render b)
                           let !i' = i + 1
                           rest <- go_ i' as ms bs
@@ -1897,7 +1897,7 @@ diffHelper f doc ch isFG =
                       | otherwise ->
                           case (old,new) of
                             ([_],(_:(bkey',b'):_)) ->
-                              if prettyUnsafeEq akey bkey' then do
+                              if akey == bkey' then do
                                 new <- buildAndEmbedMaybe f doc ch isFG Nothing b
                                 insertAt n i new
                                 let !i' = i + 1

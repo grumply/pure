@@ -128,7 +128,7 @@ instance Cond a => Cond (Dual a) where
   isNil (Dual a) = isNil a
 
 instance Cond Obj where
-  nil = object []
+  nil = mempty
   isNil o =
 #ifdef __GHCJS__
     Prelude.null $ objectAssocs o
