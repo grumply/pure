@@ -42,12 +42,6 @@ infixl 9 !?
 may :: Cond a => (b -> a) -> Maybe b -> a
 may = maybe nil
 
-cond :: (Cond x, Cond a) => x -> a -> a
-cond b t = b ? t $ nil
-
-(#) :: (Cond x, Cond a) => x -> a -> a
-(#) = cond
-
 instance Cond a => Cond (Ef ms IO a) where
   nil = Return nil
   isNil (Return a) = isNil a

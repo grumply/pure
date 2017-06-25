@@ -130,6 +130,12 @@ import Unsafe.Coerce
 import qualified GHCJS.Types as T
 #endif
 
+(#) :: (Cond x, Default a) => x -> a -> a
+(#) b t = b ? t $ def
+
+cond :: (Cond a, Default a) => a -> a
+cond a = a # a
+
 grid :: StaticCSS
 grid = $( let g = staticCSS flexboxGrid in [| g |] )
 
