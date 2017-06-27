@@ -941,8 +941,8 @@ scale3d opts1 opts2 = "scale3d(" <> opts1 <> "," <> opts2 <> ")"
 rotate :: Txt -> Txt
 rotate opts = "rotate(" <> opts <> ")"
 
-translateS :: Txt -> Txt -> Txt
-translateS opts1 opts2 = "translate(" <> opts1 <> "," <> opts2 <> ")"
+translateS :: Txt -> Txt
+translateS opts = "translate(" <> opts <> ")"
 
 translateX :: Txt -> Txt
 translateX opts1 = "translateX(" <> opts1 <> ")"
@@ -1029,6 +1029,9 @@ transitionProperty = "transition-property"
 
 transitionTimingFunction :: Txt
 transitionTimingFunction = "transition-timing-function"
+
+infinite :: Txt
+infinite = "infinite"
 
 linear :: Txt
 linear = "linear"
