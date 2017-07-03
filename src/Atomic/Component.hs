@@ -573,8 +573,8 @@ scss = scss' False
 scss' :: Bool -> StaticCSS -> View e
 scss' b = raw (mkHTML "style") [ Property "type" "text/css", Property "scoped" (if b then "true" else "") ] . cssText
 
-inline :: Ef '[CSS_] Identity a -> View e
-inline = css' True . classify
+inlineCSS :: Ef '[CSS_] Identity a -> View e
+inlineCSS = css' True . classify
   where
     classify :: forall a. Ef '[CSS_] Identity a -> Ef '[CSS_] Identity a
     classify (Return r) = Return r
@@ -2335,7 +2335,11 @@ setAttribute_ c diffing element attr didMount =
         set_property_js element nm v
         return (attr,didMount)
       else do
-        return (attr,set_property_js element nm v >> didMount)
+        rafCallback <- newRequestAnimationFrameCallback $ \_ ->
+          set_property_js element nm v
+        win <- getWindow
+        requestAnimationFrame win (Just rafCallback)
+        return (attr,didMount)
 
     -- optimize this; we're doing a little more work than necessary!
     Attribute nm val -> do
@@ -2346,8 +2350,12 @@ setAttribute_ c diffing element attr didMount =
       if diffing then do
         E.setAttribute element nm val
         return (attr,didMount)
-      else
-        return (attr,E.setAttribute element nm val >> didMount)
+      else do
+        rafCallback <- newRequestAnimationFrameCallback $ \_ ->
+          E.setAttribute element nm val
+        win <- getWindow
+        requestAnimationFrame win (Just rafCallback)
+        return (attr,didMount)
 
     LinkTo href _ -> do
       E.setAttribute element ("href" :: Txt) href

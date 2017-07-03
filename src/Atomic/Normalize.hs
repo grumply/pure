@@ -104,7 +104,7 @@ normalize =
           is "button" .
             or is "html" . has "[type=\"button\"]" .
             or is "[type=\"reset\"]" . or is "[type=\"submit\"]" .>
-              "-webkit-appearance" =: buttonS
+              "-webkit-appearance" =: button
 
           is "button" . pseudo ":-moz-focus-inner" .
             or is "[type=\"button\"]" . pseudo ":-moz-focus-inner" .
@@ -154,7 +154,7 @@ normalize =
               "-webkit-appearance" =: noneS
 
           pseudo ":-webkit-file-upload-button" .> do
-            "-webkit-appearance" =: buttonS
+            "-webkit-appearance" =: button
             font                 =: inherit
 
           is "details" .>
