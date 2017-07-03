@@ -573,8 +573,8 @@ scss = scss' False
 scss' :: Bool -> StaticCSS -> View e
 scss' b = raw (mkHTML "style") [ Property "type" "text/css", Property "scoped" (if b then "true" else "") ] . cssText
 
-inlineStyles :: Ef '[CSS_] Identity a -> View e
-inlineStyles = css' True . classify
+inline :: Ef '[CSS_] Identity a -> View e
+inline = css' True . classify
   where
     classify :: forall a. Ef '[CSS_] Identity a -> Ef '[CSS_] Identity a
     classify (Return r) = Return r

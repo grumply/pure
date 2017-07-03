@@ -59,8 +59,8 @@ valign = "valign"
 noneS :: Txt
 noneS = "none"
 
-buttonS :: Txt
-buttonS = "button"
+button :: Txt
+button = "button"
 
 zero :: Txt
 zero = "0"
@@ -956,12 +956,6 @@ translateZ opts1 = "translateZ(" <> opts1 <> ")"
 translate3d :: Txt -> Txt -> Txt -> Txt
 translate3d o1 o2 o3 = "translate3d(" <> o1 <> "," <> o2 <> "," <> o3 <> ")"
 
-pxTranslate3d :: Int -> Int -> Int -> Txt
-pxTranslate3d opts1 opts2 opts3 = translate3d (pxs opts1) (pxs opts2) (pxs opts3)
-
-perTranslate3d :: Double -> Double -> Double -> Txt
-perTranslate3d opts1 opts2 opts3 = translate3d (per opts1) (per opts2) (per opts3)
-
 matrix3d :: Double -> Double -> Double -> Double
          -> Double -> Double -> Double -> Double
          -> Double -> Double -> Double -> Double
@@ -1548,8 +1542,8 @@ whitesmoke = "whitesmoke"
 yellow :: Txt
 yellow = "yellow"
 
-yellowgree :: Txt
-yellowgree = "yellowgree"
+yellowgreen :: Txt
+yellowgreen = "yellowgreen"
 
 alignSelf :: Txt
 alignSelf = "align-self"
@@ -1735,8 +1729,8 @@ cx = "cx"
 cy :: Txt
 cy = "cy"
 
-dS :: Txt
-dS = "d"
+d :: Txt
+d = "d"
 
 decelerate :: Txt
 decelerate = "decelerate"
