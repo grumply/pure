@@ -2330,32 +2330,24 @@ setAttribute_ c diffing element attr didMount =
       set_property_js element nm v
       return (attr,didMount)
 
-    DelayedProperty nm v ->
-      if diffing then do
+    DelayedProperty nm v -> do
+      rafCallback <- newRequestAnimationFrameCallback $ \_ ->
         set_property_js element nm v
-        return (attr,didMount)
-      else do
-        rafCallback <- newRequestAnimationFrameCallback $ \_ ->
-          set_property_js element nm v
-        win <- getWindow
-        requestAnimationFrame win (Just rafCallback)
-        return (attr,didMount)
+      win <- getWindow
+      requestAnimationFrame win (Just rafCallback)
+      return (attr,didMount)
 
     -- optimize this; we're doing a little more work than necessary!
     Attribute nm val -> do
       E.setAttribute element nm val
       return (attr,didMount)
 
-    DelayedAttribute nm val ->
-      if diffing then do
+    DelayedAttribute nm val -> do
+      rafCallback <- newRequestAnimationFrameCallback $ \_ ->
         E.setAttribute element nm val
-        return (attr,didMount)
-      else do
-        rafCallback <- newRequestAnimationFrameCallback $ \_ ->
-          E.setAttribute element nm val
-        win <- getWindow
-        requestAnimationFrame win (Just rafCallback)
-        return (attr,didMount)
+      win <- getWindow
+      requestAnimationFrame win (Just rafCallback)
+      return (attr,didMount)
 
     LinkTo href _ -> do
       E.setAttribute element ("href" :: Txt) href
