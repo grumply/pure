@@ -461,8 +461,8 @@ intercept f = f
 pattern Intercept f <- (intercepted -> (True,f)) where
   Intercept f = intercept f
 
-pattern Styles ss <- (StyleF ss) where
-  Styles ss = StyleF ss
+pattern StyleList ss <- (StyleF ss) where
+  StyleList ss = StyleF ss
 
 -- l for local
 pattern Lref l <- (LinkTo l _) where
@@ -826,8 +826,8 @@ pattern Azimuth v <- (Attribute "azimuth" v) where
 pattern BaseFrequency v <- (Attribute "baseFrequency" v) where
   BaseFrequency v = Attribute "baseFrequency" v
 
-pattern BaslineShift v <- (Attribute "basline-shift" v) where
-  BaslineShift v = Attribute "basline-shift" v
+pattern BaselineShift v <- (Attribute "baseline-shift" v) where
+  BaselineShift v = Attribute "baseline-shift" v
 
 pattern BaseProfile v <- (Attribute "baseProfile" v) where
   BaseProfile v = Attribute "baseProfile" v
@@ -1116,8 +1116,8 @@ pattern MarkerUnits v <- (Attribute "markerUnits" v) where
 pattern MarkerWidth v <- (Attribute "markerWidth" v) where
   MarkerWidth v = Attribute "markerWidth" v
 
-pattern MaskA v <- (Attribute "maskA" v) where
-  MaskA v = Attribute "maskA" v
+pattern Mask v <- (Attribute "mask" v) where
+  Mask v = Attribute "mask" v
 
 pattern MaskContentUnits v <- (Attribute "maskContentUnits" v) where
   MaskContentUnits v = Attribute "maskContentUnits" v
@@ -1335,8 +1335,8 @@ pattern SpreadMethod v <- (Attribute "spreadMethod" v) where
 pattern StartOffset v <- (Attribute "startOffset" v) where
   StartOffset v = Attribute "startOffset" v
 
-pattern StdDeviationA v <- (Attribute "stdDeviationA" v) where
-  StdDeviationA v = Attribute "stdDeviationA" v
+pattern StdDeviation v <- (Attribute "stdDeviation" v) where
+  StdDeviation v = Attribute "stdDeviation" v
 
 pattern Stemh v <- (Attribute "stemh" v) where
   Stemh v = Attribute "stemh" v
@@ -1425,8 +1425,8 @@ pattern U1 v <- (Attribute "u1" v) where
 pattern U2 v <- (Attribute "u2" v) where
   U2 v = Attribute "u2" v
 
-pattern UnerlinePosition v <- (Attribute "unerline-position" v) where
-  UnerlinePosition v = Attribute "unerline-position" v
+pattern UnderlinePosition v <- (Attribute "underline-position" v) where
+  UnderlinePosition v = Attribute "underline-position" v
 
 pattern UnderlineThickness v <- (Attribute "underline-thickness" v) where
   UnderlineThickness v = Attribute "underline-thickness" v
@@ -1467,8 +1467,8 @@ pattern VertAdvY v <- (Attribute "vert-adv-y" v) where
 pattern VertOriginX v <- (Attribute "vert-origin-x" v) where
   VertOriginX v = Attribute "vert-origin-x" v
 
-pattern VerOriginY v <- (Attribute "ver-origin-y" v) where
-  VerOriginY v = Attribute "ver-origin-y" v
+pattern VertOriginY v <- (Attribute "vert-origin-y" v) where
+  VertOriginY v = Attribute "vert-origin-y" v
 
 pattern ViewBox v <- (Attribute "viewBox" v) where
   ViewBox v = Attribute "viewBox" v

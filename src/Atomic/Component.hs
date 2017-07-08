@@ -592,8 +592,8 @@ scss = scss' False
 scss' :: Bool -> StaticCSS -> View e
 scss' b = raw (mkHTML "style") [ Property "type" "text/css", Property "scoped" (if b then "true" else "") ] . cssText
 
-inlineStyles :: Ef '[CSS_] Identity a -> View e
-inlineStyles = css' True . classify
+inlineCSS :: Ef '[CSS_] Identity a -> View e
+inlineCSS = css' True . classify
   where
     classify :: forall a. Ef '[CSS_] Identity a -> Ef '[CSS_] Identity a
     classify (Return r) = Return r
@@ -2147,8 +2147,11 @@ runElementDiff f el os0 ms0 ns0 = do
 
             (OnModelChangeIO m g,OnModelChangeIO m' g') ->
               if typeOf m == typeOf m' then
-                if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
-                  continue old
+                if reallyVeryUnsafeEq m m' then
+                  if reallyVeryUnsafeEq g g' then
+                    continue old
+                  else
+                    replace
                 else do
                   g' (unsafeCoerce m) m' el
                   replace
@@ -2157,8 +2160,11 @@ runElementDiff f el os0 ms0 ns0 = do
 
             (OnModelChange m g,OnModelChange m' g') ->
               if typeOf m == typeOf m' then
-                if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
-                  continue old
+                if reallyVeryUnsafeEq m m' then
+                  if reallyVeryUnsafeEq g g' then
+                    continue old
+                  else
+                    replace
                 else do
                   f (g' (unsafeCoerce m) m' el)
                   replace
@@ -2349,24 +2355,24 @@ setAttribute_ c diffing element attr didMount =
       set_property_js element nm v
       return (attr,didMount)
 
-    DelayedProperty nm v ->
-      if diffing then do
+    DelayedProperty nm v -> do
+      rafCallback <- newRequestAnimationFrameCallback $ \_ ->
         set_property_js element nm v
-        return (attr,didMount)
-      else do
-        return (attr,set_property_js element nm v >> didMount)
+      win <- getWindow
+      requestAnimationFrame win (Just rafCallback)
+      return (attr,didMount)
 
     -- optimize this; we're doing a little more work than necessary!
     Attribute nm val -> do
       E.setAttribute element nm val
       return (attr,didMount)
 
-    DelayedAttribute nm val ->
-      if diffing then do
+    DelayedAttribute nm val -> do
+      rafCallback <- newRequestAnimationFrameCallback $ \_ ->
         E.setAttribute element nm val
-        return (attr,didMount)
-      else
-        return (attr,E.setAttribute element nm val >> didMount)
+      win <- getWindow
+      requestAnimationFrame win (Just rafCallback)
+      return (attr,didMount)
 
     LinkTo href _ -> do
       E.setAttribute element ("href" :: Txt) href

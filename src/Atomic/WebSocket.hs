@@ -469,7 +469,7 @@ initializeClientWS host port path = do
     connectWithExponentialBackoff n = do
 
       -- liftIO $ Prelude.putStrLn "Attempting connect."
- 
+
       let interval = 50000 -- 10 times fater than fusion; 1/20th second min. interval
 
       msock <- liftIO $ newClientSocket host port
@@ -1069,7 +1069,7 @@ requestWith srv rqty_proxy req f = do
                   putSyndicate syn (me,subs)
               else
                 putSyndicate syn (me,subs)
-             
+
         in f done (maybe (Left m) Right (decodeDispatch m))
 
   -- liftIO $ Prelude.putStrLn $ "Adding response handler in requestWith: " ++ show header
@@ -1139,7 +1139,7 @@ request :: forall c ms rqTy request rqI rsp.
          => Proxy rqTy
          -> request
          -> (Ef ms c () -> Either Dispatch rsp -> Ef '[Event Dispatch] (Ef ms c) ())
-         -> Ef ms c (Endpoint Dispatch) 
+         -> Ef ms c (Endpoint Dispatch)
 request rqty_proxy req f = do
   s_ <- liftIO $ newIORef undefined
   let header = responseHeader rqty_proxy req
@@ -1455,7 +1455,7 @@ onMessage mty_proxy f = do
       bhvr m =
         let done = do
               (syn,stopper) <- liftIO $ readIORef s_
-              liftIO stopper 
+              liftIO stopper
               (me,subs) <- takeSyndicate syn
               if Prelude.null subs then do
                 mhs_ <- getWSMsgHandlers
@@ -2129,7 +2129,7 @@ reconnectOnInterval interval = go
         WSOpened ->
           setWSReconnecting False
         _ -> do
-          let r = random (2 ^ n - 1) 
+          let r = random (2 ^ n - 1)
               i = interval * r
           void $ delay i $ reconnecter (min (n + 1) 12)
 
@@ -2205,7 +2205,7 @@ request :: forall c ms rqTy request rqI rsp.
          => Proxy rqTy
          -> request
          -> (Ef ms c () -> Either Dispatch rsp -> Ef '[Event Dispatch] (Ef ms c) ())
-         -> Ef ms c (Endpoint Dispatch) 
+         -> Ef ms c (Endpoint Dispatch)
 request rqty_proxy req f = do
   s_ <- liftIO $ newIORef undefined
   let header = responseHeader rqty_proxy req
@@ -2258,7 +2258,7 @@ apiRequest :: ( MonadIO c
           -> Proxy rqTy
           -> request
           -> (Ef ms c () -> Either Dispatch rsp -> Ef '[Event Dispatch] (Ef ms c) ())
-          -> Ef ms c (Endpoint Dispatch) 
+          -> Ef ms c (Endpoint Dispatch)
 apiRequest _ = request
 
 requestWith :: forall c c' ms ms' w rqTy request rqI rsp.
@@ -2433,7 +2433,7 @@ respond :: forall c ms rqTy request rqI rsp.
            , Identify request
            , I request ~ rqI
            , FromJSON request
- 
+
            , Rsp rqTy ~ rsp
            , ToJSON rsp
            )
@@ -2593,7 +2593,7 @@ onMessage :: forall c ms mTy msg.
              )
           => Proxy mTy
           -> (Ef ms c () -> Either Dispatch msg -> Ef '[Event Dispatch] (Ef ms c) ())
-          -> Ef ms c (Endpoint Dispatch) 
+          -> Ef ms c (Endpoint Dispatch)
 onMessage mty_proxy f = do
   s_ <- liftIO $ newIORef undefined
 
@@ -2602,7 +2602,7 @@ onMessage mty_proxy f = do
       bhvr m =
         let done = do
               (syn,stopper) <- liftIO $ readIORef s_
-              liftIO stopper 
+              liftIO stopper
               (me,subs) <- takeSyndicate syn
               if Prelude.null subs then do
                 mhs_ <- getWSMsgHandlers
