@@ -78,6 +78,7 @@ import Data.Traversable
 import Data.Typeable
 import Data.Void
 import Data.Unique
+import GHC.Generics
 import GHC.Prim
 import System.Mem.StableName
 
@@ -242,7 +243,7 @@ pattern Component :: (Component a e, Typeable a, Typeable e) => a e -> View e
 pattern Component ams <- (View (cast -> Just ams)) where
   Component ams = View ams
 
-class Component (a :: [* -> *] -> *) ms where
+class Component (a :: [* -> *] -> *) (ms :: [* -> *]) where
   -- TODO:
   --   build :: a ms -> IO (View ms)
   --   diff :: (Ef ms IO () -> IO ()) -> ENode -> View ms -> a ms -> a ms -> IO (View ms)
@@ -250,10 +251,28 @@ class Component (a :: [* -> *] -> *) ms where
   -- Great avenue for extensibility and modularity, but I don't see that the expressivity gained
   -- would currently justify the work; it's mostly just a refactoring, but it is a major refactoring.
   render :: a ms -> View ms
+  default render :: (Generic (a ms), GComponent (Rep (a ms)) ms) => a ms -> View ms
+  render = grender . from
 
 instance Component View ms where
   render (View a) = render a
   render a = a
+
+class GComponent a ms where
+  grender :: a x -> View ms
+
+instance GComponent GHC.Generics.U1 ms where
+  grender GHC.Generics.U1 = nil
+
+instance (Component a ms) => GComponent (GHC.Generics.K1 i (a ms)) ms where
+  grender (GHC.Generics.K1 k) = render k
+
+instance (GComponent a ms, GComponent b ms) => GComponent (a :*: b) ms where
+  grender (a :*: b) = mkHTML "div" [ ] [ grender a, grender b ]
+
+instance (GComponent a ms, GComponent b ms) => GComponent (a :+: b) ms where
+  grender (L1 a) = grender a
+  grender (R1 b) = grender b
 
 mapComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms) => (a ms -> a' ms) -> View ms -> View ms
 mapComponent f sa =
