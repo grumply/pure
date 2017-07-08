@@ -2128,8 +2128,11 @@ runElementDiff f el os0 ms0 ns0 = do
 
             (OnModelChangeIO m g,OnModelChangeIO m' g') ->
               if typeOf m == typeOf m' then
-                if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
-                  continue old
+                if reallyVeryUnsafeEq m m' then
+                  if reallyVeryUnsafeEq g g' then
+                    continue old
+                  else
+                    replace
                 else do
                   g' (unsafeCoerce m) m' el
                   replace
@@ -2138,8 +2141,11 @@ runElementDiff f el os0 ms0 ns0 = do
 
             (OnModelChange m g,OnModelChange m' g') ->
               if typeOf m == typeOf m' then
-                if reallyVeryUnsafeEq g g' && reallyVeryUnsafeEq m m' then
-                  continue old
+                if reallyVeryUnsafeEq m m' then
+                  if reallyVeryUnsafeEq g g' then
+                    continue old
+                  else
+                    replace
                 else do
                   f (g' (unsafeCoerce m) m' el)
                   replace
