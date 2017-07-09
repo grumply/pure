@@ -322,6 +322,10 @@ pattern Raw :: (Typeable ms) => Txt -> [Feature ms] -> Txt -> View ms
 pattern Raw t fs c <- (RawHTML _ t fs c) where
   Raw t fs c = RawHTML Nothing t fs c
 
+pattern Rendered :: (ToTxt t, FromTxt t) => t -> View ms
+pattern Rendered t <- (TextHTML _ (fromTxt -> t)) where
+  Rendered t = TextHTML Nothing (toTxt t)
+
 -- pattern Text :: (Typeable ms, FromTxt t, ToTxt t) => t -> View ms
 -- pattern Text t <- (fromView -> Just (TextHTML _ (forceToFromTxt -> t))) where
 --   Text t = toView (TextHTML Nothing (toTxt t))

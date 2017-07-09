@@ -60,9 +60,6 @@ type RequestAPI = API Request
 class ToAPI f es where
   toAPI :: PList es -> API f es
 
--- instance ToAPI f '[] where
---   toAPI _ = APINull
-
 instance ToAPI Request '[] where
   toAPI _ = APINull
 
@@ -127,65 +124,3 @@ api msgs reqs = API (toAPI msgs) (toAPI reqs)
         => FullAPI ms rs -> FullAPI ms' rs' -> FullAPI (Appended ms ms') (Appended rs rs')
 (<:+:>) (API msl rsl) (API msr rsr) =
   api (fromAPI msl <++> fromAPI msr) (fromAPI rsl <++> fromAPI rsr)
-
-{- Example API
-
-data Manager_ a
-manager :: Proxy Manager_
-manager = Proxy
-
-data Server_ a
-server :: Proxy Server_
-server = Proxy
-
-data Put_ a
-put :: Proxy Put_
-put = Proxy
-
-data Get_ a
-get :: Proxy 
-get = Proxy
-
-data Post_ a
-post :: Proxy Post_
-post = Proxy
-
-int :: Proxy Int
-int = Proxy
-
-double :: Proxy Double
-double = Proxy
-
--- type MAPI
---   = '[ Manager_ (Post_ Int)
---      , Manager_ (Put_ Int)
---      , Manager_ (Put_ Double)
---      , Server_ (Post_ Double)
---      , Server_ (Put_ Double)
---      ]
-
--- type NAPI
---   = '[ Manager_ (Get_ Int)
---      , Manager_ (Get_ Double)
---      , Server_ (Get_ Double)
---      ]
-
--- theAPI :: FullAPI MAPI NAPI
-
-theAPI = api mesages requests
-  where
-
-    messages =
-           manager |>
-                  post <&> put <| int
-             <++> only put <| double
-      <||> server |>
-            post <&> put <| double
-
-    requests =
-           manager |> get |>
-             int <&> double
-      <||> server |> get |>
-             only double
-
--}
