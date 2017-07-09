@@ -314,6 +314,38 @@ maps a mappings = Prelude.foldr tryMap a mappings
 forceToFromTxt :: (ToTxt t, FromTxt t) => Txt -> t
 forceToFromTxt = fromTxt
 
+witness :: View '[] -> View ms
+witness = unsafeCoerce
+
+witnesses :: [View '[]] -> [View ms]
+witnesses = unsafeCoerce
+
+styledComponent :: View ms -> Maybe ([Feature ms] -> [View ms] -> View ms,Styles (),[Feature ms],[View ms])
+styledComponent (HTML _ tag fs vs) =
+  case getStyles fs of
+    Just (ss,rest) -> Just (HTML Nothing tag,ss,rest,vs)
+    _ -> Nothing
+styledComponent (SVGHTML _ tag fs vs) =
+  case getStyles fs of
+    Just (ss,rest) -> Just (SVGHTML Nothing tag,ss,rest,vs)
+    _ -> Nothing
+
+getStyles :: [Feature ms] -> Maybe (Styles (),[Feature ms])
+getStyles = go (return ()) []
+  where
+    go ss fs [] =
+      case ss of
+        Return _ -> Nothing
+        _ -> Just (ss,Prelude.reverse fs)
+    go ss fs ((StyleList styles):rest) =
+      go (ss >> mapM_ (uncurry (=:)) styles) fs rest
+    go ss fs (x:rest) = go ss (x:fs) rest
+
+-- rudimentary; no CSS3
+pattern Styled :: ([Feature ms] -> [View ms] -> View ms) -> Styles () -> [Feature ms] -> [View ms] -> View ms
+pattern Styled f ss fs vs <- (styledComponent -> Just (f,ss,fs,vs)) where
+  Styled f ss fs vs = f (styled ss : fs) vs
+
 pattern Null :: Typeable ms => View ms
 pattern Null <- (NullHTML _) where
   Null = NullHTML Nothing
