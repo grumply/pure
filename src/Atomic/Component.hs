@@ -350,7 +350,7 @@ pattern Null :: Typeable ms => View ms
 pattern Null <- (NullHTML _) where
   Null = NullHTML Nothing
 
-pattern Raw :: (Typeable ms) => Txt -> [Feature ms] -> Txt -> View ms
+pattern Raw :: Txt -> [Feature ms] -> Txt -> View ms
 pattern Raw t fs c <- (RawHTML _ t fs c) where
   Raw t fs c = RawHTML Nothing t fs c
 
@@ -358,15 +358,15 @@ pattern Rendered :: (ToTxt t, FromTxt t) => t -> View ms
 pattern Rendered t <- (TextHTML _ (fromTxt -> t)) where
   Rendered t = TextHTML Nothing (toTxt t)
 
--- pattern Text :: (Typeable ms, FromTxt t, ToTxt t) => t -> View ms
--- pattern Text t <- (fromView -> Just (TextHTML _ (forceToFromTxt -> t))) where
---   Text t = toView (TextHTML Nothing (toTxt t))
+pattern Translated :: (ToTxt t, FromTxt t, ToTxt f, FromTxt f) => f -> t
+pattern Translated t <- (fromTxt . toTxt -> t) where
+  Translated f = fromTxt $ toTxt f
 
-pattern Text :: (FromTxt f, ToTxt f) => f -> Txt
-pattern Text f <- (fromTxt -> f) where
-  Text t = toTxt t
+-- Specialized to avoid type signatures.
+pattern Text :: (ToTxt t, FromTxt t) => t -> Txt
+pattern Text t = Translated t
 
-pattern String :: Typeable ms => Txt -> View ms
+pattern String :: Txt -> View ms
 pattern String s <- (TextHTML _ s) where
   String s = TextHTML Nothing s
 

@@ -128,12 +128,11 @@ breakRoute url =
             List.map (JSS.breakOn "=")
                      (JSS.splitOn "&" qps)
           _ -> []
+      safeTail x =
+        case JSS.uncons x of
+          Just (_,rest) -> rest
+          _ -> ""
   in (stripTrailingSlashes $ JSS.takeWhile (/= '#') path,params)
-
-safeTail x =
-  case JSS.uncons x of
-    Just (_,rest) -> rest
-    _ -> ""
 
 -- this is a very rough implementation in need of much love
 route :: forall ms c a.
