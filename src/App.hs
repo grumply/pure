@@ -150,11 +150,7 @@ run app@App {..} = do
     prime
     setupRouter (Proxy :: Proxy r)
 #ifdef __GHCJS__
-  driverPrintExceptions
-    ("App "
-     ++ show key
-     ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
-    )
+  driverPrintExceptions ("App exception (" ++ show key ++ "): ")
 #else
   driver
 #endif

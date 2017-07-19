@@ -1013,7 +1013,7 @@ mkController mkControllerAction c@Controller {..} = do
       connect constructShutdownSyndicate $ const (Ef.Base.lift shutdownSelf)
       prime
 #if (defined __GHCJS__) || (defined DEVEL)
-    driverPrintExceptions (show key ++ " - context exception: ")
+    driverPrintExceptions (" Controller exception (" ++ show key ++ "): ")
 #else
     driver
 #endif

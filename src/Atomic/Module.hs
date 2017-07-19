@@ -101,13 +101,8 @@ startModule (Shutdown sdn) lv rb Module {..} = do
                  connect sdn (const (lift shutdownSelf))
                  prime
 #ifdef __GHCJS__
-    driverPrintExceptions
-      ("Module "
-      ++ show key
-      ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
-      )
+    driverPrintExceptions ("Module exception (" ++ show key ++ "): ")
 #else
     driver
 #endif
       rb obj
-

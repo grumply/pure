@@ -1083,7 +1083,7 @@ requestWith srv rqty_proxy req f = do
 
     sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
-    let stopper = stop bhv >> leaveSyndicate n sub
+    let stopper = forkStop bhv >> leaveSyndicate n sub
 
     liftIO $ writeIORef s_ (n,stopper)
     sendRawWith srv $ toBS $ encodeDispatch (requestHeader rqty_proxy) req
@@ -1166,7 +1166,7 @@ request rqty_proxy req f = do
 
   sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
-  let stopper = stop bhv >> leaveSyndicate n sub
+  let stopper = forkStop bhv >> leaveSyndicate n sub
 
   liftIO $ writeIORef s_ (n,stopper)
   sendRaw $ toBS $ encodeDispatch (requestHeader rqty_proxy) req
@@ -1260,7 +1260,7 @@ respondWith srv rqty_proxy rr = do
 
     sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
-    let stopper = stop bhv >> leaveSyndicate n sub
+    let stopper = forkStop bhv >> leaveSyndicate n sub
 
     liftIO $ writeIORef s_ (n,stopper)
     fulfill pr (Endpoint header (unsafeCoerce sub) n)
@@ -1321,7 +1321,7 @@ respond rqty_proxy rr = do
 
   sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
-  let stopper = stop bhv >> leaveSyndicate n sub
+  let stopper = forkStop bhv >> leaveSyndicate n sub
 
   liftIO $ writeIORef s_ (n,stopper)
   return (Endpoint header (unsafeCoerce sub) n)
@@ -1432,7 +1432,7 @@ onMessageWith s mty_proxy f = do
 
     sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
-    let stopper = stop bhv >> leaveSyndicate n sub
+    let stopper = forkStop bhv >> leaveSyndicate n sub
 
     liftIO $ writeIORef s_ (n,stopper)
     fulfill pr (Endpoint header (unsafeCoerce sub) n)
@@ -1477,7 +1477,7 @@ onMessage mty_proxy f = do
 
   sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
-  let stopper = stop bhv >> leaveSyndicate n sub
+  let stopper = forkStop bhv >> leaveSyndicate n sub
 
   liftIO $ writeIORef s_ (n,stopper)
   return (Endpoint header (unsafeCoerce sub) n)
@@ -2232,7 +2232,7 @@ request rqty_proxy req f = do
 
   sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
-  let stopper = stop bhv >> leaveSyndicate n sub
+  let stopper = forkStop bhv >> leaveSyndicate n sub
 
   liftIO $ writeIORef s_ (n,stopper)
   send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
@@ -2320,7 +2320,7 @@ requestWith s rqty_proxy req f = do
 
     sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
-    let stopper = stop bhv >> leaveSyndicate n sub
+    let stopper = forkStop bhv >> leaveSyndicate n sub
 
     liftIO $ writeIORef s_ (n,stopper)
     send' $ Right (Dispatch (requestHeader rqty_proxy) (toJSON req))
@@ -2415,7 +2415,7 @@ respondWith s rqty_proxy rr = do
 
     sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
-    let stopper = stop bhv >> leaveSyndicate n sub
+    let stopper = forkStop bhv >> leaveSyndicate n sub
 
     liftIO $ writeIORef s_ (n,stopper)
     fulfill pr (Endpoint header (unsafeCoerce sub) n)
@@ -2469,7 +2469,7 @@ respond rqty_proxy rr = do
 
   sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
-  let stopper = stop bhv >> leaveSyndicate n sub
+  let stopper = forkStop bhv >> leaveSyndicate n sub
 
   liftIO $ writeIORef s_ (n,stopper)
   return (Endpoint header (unsafeCoerce sub) n)
@@ -2578,7 +2578,7 @@ onMessageWith s mty_proxy f = do
 
     sub :: Subscription (Ef ms c) Dispatch <- subscribe n (return buf)
     bhv <- listen sub bhvr
-    let stopper = stop bhv >> leaveSyndicate n sub
+    let stopper = forkStop bhv >> leaveSyndicate n sub
 
     liftIO $ writeIORef s_ (n,stopper)
     fulfill pr (Endpoint header (unsafeCoerce sub) n)
@@ -2624,7 +2624,7 @@ onMessage mty_proxy f = do
 
   sub :: Subscription (Ef ms c) Dispatch <- subscribe n get
   bhv <- listen sub bhvr
-  let stopper = stop bhv >> leaveSyndicate n sub
+  let stopper = forkStop bhv >> leaveSyndicate n sub
 
   liftIO $ writeIORef s_ (n,stopper)
   return (Endpoint header (unsafeCoerce sub) n)

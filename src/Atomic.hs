@@ -402,18 +402,24 @@ instance ToTxt (View e) where
       ">" <> _content <> "</" <> _tag <> ">"
 
   toTxt KHTML {..} =
-    "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
-      if selfClosing _tag then
-        "/>"
-      else
-        ">" <> Txt.concat (map (toTxt . render . snd) _keyed) <> "</" <> _tag <> ">"
+    if _tag == "?xml" then
+      "<?xml"  <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <> "?>"
+    else
+      "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
+        if selfClosing _tag then
+          "/>"
+        else
+          ">" <> Txt.concat (map (toTxt . render . snd) _keyed) <> "</" <> _tag <> ">"
 
   toTxt HTML {..} =
-    "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
-      if selfClosing _tag then
-        "/>"
-      else
-        ">" <> Txt.concat (map (toTxt . render) _atoms) <> "</" <> _tag <> ">"
+    if _tag == "?xml" then
+      "<?xml"  <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <> "?>"
+    else
+      "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
+        if selfClosing _tag then
+          "/>"
+        else
+          ">" <> Txt.concat (map (toTxt . render) _atoms) <> "</" <> _tag <> ">"
 
   toTxt STHTML {..} = toTxt $ render (_stview _stprops _ststate (\_ _ -> return ()))
 

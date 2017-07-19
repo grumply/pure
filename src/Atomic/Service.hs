@@ -104,11 +104,7 @@ startService rb Service {..} = do
       connect mediatorShutdownSyndicate $ const (Ef.Base.lift shutdownSelf)
       prime
 #ifdef __GHCJS__
-    driverPrintExceptions
-      ("Service "
-          ++ show key
-          ++ " blocked in eventloop; likely caused by cyclic with calls. The standard solution is a 'delay'ed call to 'demand'. "
-      )
+    driverPrintExceptions ( "Service exception (" ++ show key ++ "): " )
 #else
     driver
 #endif
