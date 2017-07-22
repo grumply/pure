@@ -61,44 +61,83 @@ uHiddenUp (toTxt -> sz) = "u-hidden-" <> sz <> "-up"
 uHiddenDown :: FlexSize -> Txt
 uHiddenDown (toTxt -> sz) = "u-hidden-" <> sz <> "-down"
 
-uCols :: FlexSize -> Int -> Txt
-uCols (toTxt -> sz) (toTxt -> n) = "u-col-" <> sz <> "-" <> n
+uColsAt :: FlexSize -> Int -> Txt
+uColsAt (toTxt -> sz) (toTxt -> n) = "u-col-" <> sz <> "-" <> n
 
-uColsGrow :: FlexSize -> Txt
-uColsGrow (toTxt -> sz) = "u-cols-" <> sz
+uCols :: Int -> Txt
+uCols = uColsAt Xs
 
-uColsOffset :: FlexSize -> Int -> Txt
-uColsOffset (toTxt -> sz) (toTxt -> n) = "u-col-" <> sz <> "-offset-" <> n
+uColsGrowAt :: FlexSize -> Txt
+uColsGrowAt (toTxt -> sz) = "u-cols-" <> sz
 
-uStart :: FlexSize -> Txt
-uStart (toTxt -> sz)= "u-start-" <> sz
+uColsGrow :: Txt
+uColsGrow = uColsGrowAt Xs
 
-uCenter :: FlexSize -> Txt
-uCenter (toTxt -> sz) = "u-center-" <> sz
+uColsOffsetAt :: FlexSize -> Int -> Txt
+uColsOffsetAt (toTxt -> sz) (toTxt -> n) = "u-col-" <> sz <> "-offset-" <> n
 
-uEnd :: FlexSize -> Txt
-uEnd (toTxt -> sz) = "u-end-" <> sz
+uColsOffset :: Int -> Txt
+uColsOffset = uColsOffsetAt Xs
 
-uTop :: FlexSize -> Txt
-uTop (toTxt -> sz) = "u-top-" <> sz
+uStartAt :: FlexSize -> Txt
+uStartAt (toTxt -> sz)= "u-start-" <> sz
 
-uMiddle :: FlexSize -> Txt
-uMiddle (toTxt -> sz) = "u-middle-" <> sz
+uStart :: Txt
+uStart = uStartAt Xs
 
-uBottom :: FlexSize -> Txt
-uBottom (toTxt -> sz) = "u-bottom-" <> sz
+uCenterAt :: FlexSize -> Txt
+uCenterAt (toTxt -> sz) = "u-center-" <> sz
 
-uAround :: FlexSize -> Txt
-uAround (toTxt -> sz) = "u-around-" <> sz
+uCenter :: Txt
+uCenter = uCenterAt Xs
 
-uBetween :: FlexSize -> Txt
-uBetween (toTxt -> sz) = "u-between-" <> sz
+uEndAt :: FlexSize -> Txt
+uEndAt (toTxt -> sz) = "u-end-" <> sz
 
-uFirst :: FlexSize -> Txt
-uFirst (toTxt -> sz) = "u-first-" <> sz
+uEnd :: Txt
+uEnd = uEndAt Xs
 
-uLast :: FlexSize -> Txt
-uLast (toTxt -> sz) = "u-last-" <> sz
+uTopAt :: FlexSize -> Txt
+uTopAt (toTxt -> sz) = "u-top-" <> sz
+
+uTop :: Txt
+uTop = uTopAt Xs
+
+uMiddleAt :: FlexSize -> Txt
+uMiddleAt (toTxt -> sz) = "u-middle-" <> sz
+
+uMiddle :: Txt
+uMiddle = uMiddleAt Xs
+
+uBottomAt :: FlexSize -> Txt
+uBottomAt (toTxt -> sz) = "u-bottom-" <> sz
+
+uBottom :: Txt
+uBottom = uBottomAt Xs
+
+uAroundAt :: FlexSize -> Txt
+uAroundAt (toTxt -> sz) = "u-around-" <> sz
+
+uAround :: Txt
+uAround = uAroundAt Xs
+
+uBetweenAt :: FlexSize -> Txt
+uBetweenAt (toTxt -> sz) = "u-between-" <> sz
+
+uBetween :: Txt
+uBetween = uBetweenAt Xs
+
+uFirstAt :: FlexSize -> Txt
+uFirstAt (toTxt -> sz) = "u-first-" <> sz
+
+uFirst :: Txt
+uFirst = uFirstAt Xs
+
+uLastAt :: FlexSize -> Txt
+uLastAt (toTxt -> sz) = "u-last-" <> sz
+
+uLast :: Txt
+uLast = uLastAt Xs
 
 flexboxGrid = let c = classify in void $ do
   is (c uContainer) .
@@ -170,8 +209,8 @@ flexboxGrid = let c = classify in void $ do
           width =: rems (n + 1)
 
       columns <-
-        is (c $ uColsGrow sz) .
-          or is (c $ uColsOffset sz 0) .> do
+        is (c $ uColsGrowAt sz) .
+          or is (c $ uColsOffsetAt sz 0) .> do
             extendable $ important $ do
               boxSizing          =: borderBox
               "-webkit-box-flex" =: zero
@@ -180,15 +219,15 @@ flexboxGrid = let c = classify in void $ do
               paddingRight       =: rems 0.5
               paddingLeft        =: rems 0.5
 
-      is (c $ uCols sz 12) .>
+      is (c $ uColsAt sz 12) .>
         extends columns
 
       for [1..11] $ \i ->
-        is (c $ uCols sz i) .
-          or is (c $ uColsOffset sz i) .>
+        is (c $ uColsAt sz i) .
+          or is (c $ uColsOffsetAt sz i) .>
             extends columns
 
-      is (c $ uColsGrow sz) . apply . important $ do
+      is (c $ uColsGrowAt sz) . apply . important $ do
         "-webkit-box-flex"        =: one
         "-ms-flex-positive"       =: one
         flexGrow                  =: one
@@ -196,15 +235,15 @@ flexboxGrid = let c = classify in void $ do
         flexBasis                 =: zero
         maxWidth                  =: per 100
 
-      is (c $ uColsOffset sz 0) . apply . important $
+      is (c $ uColsOffsetAt sz 0) . apply . important $
         marginLeft =: zero
 
-      is (c $ uColsOffset sz 12) . apply . important $ do
+      is (c $ uColsOffsetAt sz 12) . apply . important $ do
         "-ms-flex-preferred-size" =: per 100
         flexBasis                 =: per 100
         maxWidth                  =: per 100
 
-      is (c $ uCols sz 0) . apply . important $ do
+      is (c $ uColsAt sz 0) . apply . important $ do
         overflow =: hiddenS
         height   =: per 0
 
@@ -212,62 +251,62 @@ flexboxGrid = let c = classify in void $ do
         -- close enough?
         let p = per (fromIntegral i * 8.33333333)
 
-        is (c $ uCols sz i) . apply . important $ do
+        is (c $ uColsAt sz i) . apply . important $ do
           "-ms-flex-preferred-size" =: p
           flexBasis                 =: p
           maxWidth                  =: p
 
-        is (c $ uColsOffset sz i) . apply . important $
+        is (c $ uColsOffsetAt sz i) . apply . important $
           marginLeft =: p
 
-      is (c $ uStart sz) . apply . important $ do
+      is (c $ uStartAt sz) . apply . important $ do
         "-webkit-box-pack"  =: startS
         "-ms-flex-pack"     =: startS
         justifyContent      =: flexStart
         textAlign           =: startS
 
-      is (c $ uCenter sz) . apply . important $ do
+      is (c $ uCenterAt sz) . apply . important $ do
         "-webkit-box-pack"  =: center
         "-ms-flex-pack"     =: center
         justifyContent      =: center
         textAlign           =: center
 
-      is (c $ uEnd sz) . apply . important $ do
+      is (c $ uEndAt sz) . apply . important $ do
         "-webkit-box-pack"  =: endS
         "-ms-flex-pack"     =: endS
         textAlign           =: endS
         justifyContent      =: flexEnd
 
-      is (c $ uTop sz) . apply . important $ do
+      is (c $ uTopAt sz) . apply . important $ do
         "-webkit-box-align" =: startS
         "-ms-flex-align"    =: startS
         alignItems          =: flexStart
 
-      is (c $ uMiddle sz) . apply . important $ do
+      is (c $ uMiddleAt sz) . apply . important $ do
         "-webkit-box-align" =: center
         "-ms-flex-align"    =: center
         alignItems          =: center
 
-      is (c $ uBottom sz) . apply . important $ do
+      is (c $ uBottomAt sz) . apply . important $ do
         "-webkit-box-align" =: endS
         "-ms-flex-align"    =: endS
         alignItems          =: flexEnd
 
-      is (c $ uAround sz) . apply . important $ do
+      is (c $ uAroundAt sz) . apply . important $ do
         "-ms-flex-pack"     =: distribute
         justifyContent      =: spaceAround
 
-      is (c $ uBetween sz) . apply . important $ do
+      is (c $ uBetweenAt sz) . apply . important $ do
         "-webkit-box-pack"  =: justify
         "-ms-flex-pack"     =: justify
         justifyContent      =: spaceBetween
 
-      is (c $ uFirst sz) . apply . important $ do
+      is (c $ uFirstAt sz) . apply . important $ do
         "-webkit-box-ordinal-group" =: zero
         "-ms-flex-order"            =: neg (int 1)
         order                       =: neg (int 1)
 
-      is (c $ uLast sz) .apply . important $ do
+      is (c $ uLastAt sz) .apply . important $ do
         "-webkit-box-ordinal-group" =: int 2
         "-ms-flex-order"            =: one
         order                       =: one
