@@ -13,20 +13,20 @@ observable o = do
   onw <- syndicate
   return $ state (Observable o onw)
 
-updateO :: (MonadIO c, '[Observable m] <: ms) => (m -> m) -> Ef ms c ()
+updateO :: (MonadIO c, ms <: '[Observable m]) => (m -> m) -> Ef ms c ()
 updateO f = do
   m <- get
   let nm = f (observableState m)
   put $ m { observableState = nm }
   publish (observableUpdates m) nm
 
-setO :: (MonadIO c, '[Observable m] <: ms) => m -> Ef ms c ()
+setO :: (MonadIO c, ms <: '[Observable m]) => m -> Ef ms c ()
 setO nm = do
   m <- get
   put $ m { observableState = nm }
   publish (observableUpdates m) nm
 
-getO :: (Monad c, '[Observable m] <: ms) => Ef ms c m
+getO :: (Monad c, ms <: '[Observable m]) => Ef ms c m
 getO = do
   m <- get
   return (observableState m)
@@ -34,8 +34,8 @@ getO = do
 observe :: ( MonadIO c
            , MonadIO c'
            , With w (Ef ms c) IO
-           , '[Evented] <: ms'
-           , '[Observable m] <: ms
+           , ms' <: '[Evented]
+           , ms <: '[Observable m]
            )
         => w
         -> (m -> Ef '[Event m] (Ef ms' c') ())
@@ -53,8 +53,8 @@ observe c f = do
 observe' :: ( MonadIO c
             , MonadIO c'
             , With w (Ef ms c) IO
-            , '[Evented] <: ms'
-            , '[Observable m] <: ms
+            , ms' <: '[Evented]
+            , ms <: '[Observable m]
             )
         => w
         -> (m -> Ef ms' c' ())

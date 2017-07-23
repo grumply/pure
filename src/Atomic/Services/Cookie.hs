@@ -50,14 +50,13 @@ cookieS = Service {..}
 
     prime = return ()
 
-getCookies :: ('[State () (Map.HashMap Txt [Txt])] <: ms) => Ef ms IO (Map.HashMap Txt [Txt])
+getCookies :: ms <: '[State () (Map.HashMap Txt [Txt])] => Ef ms IO (Map.HashMap Txt [Txt])
 getCookies = get
 
-setCookies :: ('[State () (Map.HashMap Txt [Txt])] <: ms) => Map.HashMap Txt [Txt] -> Ef ms IO ()
+setCookies :: ms <: '[State () (Map.HashMap Txt [Txt])] => Map.HashMap Txt [Txt] -> Ef ms IO ()
 setCookies = put
 
-addCookie :: (Functor (Messages ms), MonadIO c)
-          => Txt -> Txt -> Ef ms c (Promise ())
+addCookie :: (ms <: '[], MonadIO c) => Txt -> Txt -> Ef ms c (Promise ())
 addCookie nm val =
   with cookieS $ do
     cs <- getCookies
@@ -72,8 +71,7 @@ addCookie nm val =
             _ -> dcs <> ";" <> nm <> "=" <> val
     setCookie_internal doc $ Just newdcs
 
-deleteCookie :: (Functor (Messages ms), MonadIO c)
-             => Txt -> Txt -> Ef ms c (Promise ())
+deleteCookie :: (ms <: '[], MonadIO c) => Txt -> Txt -> Ef ms c (Promise ())
 deleteCookie nm val =
   with cookieS $ do
     cs <- getCookies
@@ -83,8 +81,7 @@ deleteCookie nm val =
     doc <- getDocument
     setCookie_internal doc $ Just $ renderCookies newcs
 
-clearCookie :: (Functor (Messages ms), MonadIO c)
-            => Txt -> Ef ms c (Promise ())
+clearCookie :: (ms <: '[], MonadIO c) => Txt -> Ef ms c (Promise ())
 clearCookie nm =
   with cookieS $ do
     cs <- getCookies
@@ -93,8 +90,7 @@ clearCookie nm =
     doc <- getDocument
     setCookie_internal doc $ Just $ renderCookies newcs
 
-getCookie :: (Functor (Messages ms), MonadIO c)
-          => Txt -> Ef ms c (Promise [Txt])
+getCookie :: (ms <: '[], MonadIO c) => Txt -> Ef ms c (Promise [Txt])
 getCookie nm =
   with cookieS $ do
     cs <- getCookies

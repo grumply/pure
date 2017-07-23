@@ -19,13 +19,7 @@ import qualified GHCJS.DOM.Element as E
 
 -- Move this functionality into Frame or some animation library.
 
-scrollTo :: ( MonadIO c
-            , '[Evented] <: ms
-            )
-         => Ease
-         -> Double
-         -> View ms'
-         -> Ef ms c (Maybe (IO ()))
+scrollTo :: (MonadIO c, ms <: '[Evented]) => Ease -> Double -> View ms' -> Ef ms c (Maybe (IO ()))
 scrollTo ease duration {- milliseconds -} to = do
   me <- liftIO $ getElement to
   case me of
@@ -48,8 +42,7 @@ foreign import javascript unsafe
   scroll_to_js :: Double -> IO ()
 #endif
 
-easeScroll :: (MonadIO c)
-           => Win -> Ease -> Double -> Double -> ENode -> Double -> Double -> Ef '[Event Double] c ()
+easeScroll :: (MonadIO c, d ~ Double) => Win -> Ease -> d -> d -> ENode -> d -> d -> Ef '[Event d] c ()
 easeScroll win ease begin delta dest duration start = go begin start
   where
 

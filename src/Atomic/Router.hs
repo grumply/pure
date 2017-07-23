@@ -34,37 +34,37 @@ data Router r
       , routeSyndicate :: Syndicate r
       }
 
-getRouter :: (MonadIO c, '[State () (Router r)] <: ms) => Ef ms c (Ef '[Route] (Ef ms c) r)
+getRouter :: (MonadIO c, ms <: '[State () (Router r)], e ~ Ef ms c)
+          => e (Ef '[Route] e r)
 getRouter = router <$> get
 
-setRouter :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Ef '[Route] (Ef ms c) r -> Ef ms c ()
+setRouter :: forall r ms c e. (MonadIO c, ms <: '[State () (Router r)], e ~ Ef ms c)
+          => Ef '[Route] e r -> e ()
 setRouter r = void $ modify (\rtr -> (rtr { router = unsafeCoerce r } :: Router r,()))
 
-getRoute :: (MonadIO c, '[State () (Router r)] <: ms) => Ef ms c (Maybe r)
+getRoute :: (MonadIO c, ms <: '[State () (Router r)], e ~ Ef ms c)
+         => e (Maybe r)
 getRoute = currentRoute <$> get
 
-setRoute :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Maybe r -> Ef ms c ()
+setRoute :: (MonadIO c, ms <: '[State () (Router r)], e ~ Ef ms c)
+         => Maybe r -> Ef ms c ()
 setRoute mr = void $ modify (\rtr -> (rtr { currentRoute = mr },()))
 
-getRouteSyndicate :: (MonadIO c, '[State () (Router r)] <: ms) => Ef ms c (Syndicate r)
+getRouteSyndicate :: (MonadIO c, ms <: '[State () (Router r)], e ~ Ef ms c)
+                  => e (Syndicate r)
 getRouteSyndicate = routeSyndicate <$> get
 
-setRouteSyndicate :: forall r ms c. (MonadIO c, '[State () (Router r)] <: ms) => Syndicate r -> Ef ms c ()
+setRouteSyndicate :: forall r ms c e. (MonadIO c, ms <: '[State () (Router r)], e ~ Ef ms c)
+                  => Syndicate r -> e ()
 setRouteSyndicate rn = void $ modify (\rtr -> (rtr { routeSyndicate = rn } :: Router r,()))
 
-mkRouter :: forall ms c ts r.
-            ( Monad c
-            , Eq r
-            , '[State () (Router r)] <. ts
-            , '[State () (Router r)] <: ms
-            , Delta (Modules ts) (Messages ms)
-            )
-         => Syndicate r -> Ef '[Route] (Ef ms c) r -> State () (Router r) (Action ts c)
+mkRouter :: (Monad c, Eq r, rtr ~ State () (Router r), ts <. '[rtr], ms <: '[rtr], ts <=> ms)
+         => Syndicate r -> Ef '[Route] (Ef ms c) r -> rtr (Action ts c)
 mkRouter nw rtr = state (Router (unsafeCoerce rtr) Nothing nw)
 
--- Note that this /should not/ be called within the first 500 milliseconds
--- of the application loading or it may be ignored; this is to work around
--- a browser disparity in the triggering of popstate events on load.
+-- Note that `route` /should not/ be called within the first 500 milliseconds
+-- of the application loading or it may be ignored. This is to work around
+-- a browser disparity in the triggering of popstate events on page load.
 route :: MonadIO c => Txt -> c ()
 route rt = do
   pushPath rt
@@ -125,4 +125,3 @@ getSearch = do
 #else
   liftIO $ readIORef search_
 #endif
-

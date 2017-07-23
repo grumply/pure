@@ -50,10 +50,10 @@ instance Monoid Dict where
   mappend (Dict l _) (Dict r (Just ru)) = Dict (l <> r) (Just $ unsafeCoerce ru)
 instance GHC.Exts.IsList Dict where
   type Item Dict = (Txt,Val)
-  fromList xs = def { dict_map = Map.fromList xs } 
+  fromList xs = def { dict_map = Map.fromList xs }
   toList st = Map.toList (dict_map st)
 
-setDict :: ('[State () Dict] <: ms, Monad c) => Dict -> Ef ms c ()
+setDict :: (ms <: '[State () Dict], Monad c) => Dict -> Ef ms c ()
 setDict st = do
   st' <- get
   case dict_upd st' of
@@ -62,7 +62,7 @@ setDict st = do
 
 -- Guarantee a value exists in a `Dict`, i.e. insert if non-existent. Print a trace statement
 -- if debugging is enabled via DEBUGDICT or DEVEL.
-(%|) :: forall a c ms. ('[State () Dict] <: ms, Monad c, Typeable a) => Txt -> a -> Dict -> Ef ms c ()
+(%|) :: forall a c ms. (ms <: '[State () Dict], Monad c, Typeable a) => Txt -> a -> Dict -> Ef ms c ()
 (%|) k v (Dict st upd) =
   let new = Dict (Map.insert k (Val v) st) upd in
     -- prints a trace statement if the type of value at the given key index is unexpected
@@ -83,7 +83,7 @@ setDict st = do
 --
 -- > d &| ("name" =| nm) . ("pass" =| p)
 infixr 4 &|
-(&|) :: ('[State () Dict] <: ms, Monad c) => Dict -> (Dict -> Dict) -> Ef ms c ()
+(&|) :: (ms <: '[State () Dict], Monad c) => Dict -> (Dict -> Dict) -> Ef ms c ()
 (&|) st upd = setDict (upd st)
 
 -- Index a value in a `Dict`. Failure produces an error.
@@ -207,4 +207,3 @@ remove k (Dict st upd) = Dict (Map.delete k st) upd
 -- > d &| ("name" -|) . ("pass" -|)
 (-|) :: Txt -> Dict -> Dict
 (-|) = remove
-

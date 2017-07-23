@@ -42,12 +42,7 @@ data SyndicateVault where
 windowSyndicates__ :: SyndicateVault
 windowSyndicates__ = SyndicateVault (unsafePerformIO (newIORef Map.empty))
 
-getWindowSyndicate :: forall e c.
-                   ( IsEv e
-                   , MonadIO c
-                   )
-                => EVName Win e
-                -> c (Syndicate e)
+getWindowSyndicate :: (IsEv e, MonadIO c) => EVName Win e -> c (Syndicate e)
 getWindowSyndicate
 #ifdef __GHCJS__
   en@(ETC.EventName doms)
@@ -81,13 +76,10 @@ triggerWindowEvent ev e = do
   nw <- getWindowSyndicate ev
   publish nw e
 
-onWindowSyndicate :: ( IsEv e
-                   , MonadIO c
-                   , '[Evented] <: ms
-                   )
-                => EVName Win e
-                -> (e -> Ef '[Event e] (Ef ms c) ())
-                -> Ef ms c (IO ())
+onWindowSyndicate :: (IsEv e, MonadIO c, ms <: '[Evented])
+                  => EVName Win e
+                  -> (e -> Ef '[Event e] (Ef ms c) ())
+                  -> Ef ms c (IO ())
 onWindowSyndicate en f = do
   nw <- getWindowSyndicate en
   connect nw f
@@ -96,12 +88,7 @@ onWindowSyndicate en f = do
 documentSyndicates__ :: SyndicateVault
 documentSyndicates__ = SyndicateVault (unsafePerformIO (newIORef Map.empty))
 
-getDocumentSyndicate :: forall e c.
-                      ( IsEv e
-                      , MonadIO c
-                      )
-                    => EVName Doc e
-                    -> c (Syndicate e)
+getDocumentSyndicate :: (IsEv e, MonadIO c) => EVName Doc e -> c (Syndicate e)
 getDocumentSyndicate
 #ifdef __GHCJS__
   en@(ETC.EventName doms)
@@ -130,13 +117,10 @@ getDocumentSyndicate
               return nw
             Right nw -> return nw
 
-onDocumentSyndicate :: ( IsEv e
-                     , MonadIO c
-                     , '[Evented] <: ms
-                     )
-                  => EVName Doc e
-                  -> (e -> Ef '[Event e] (Ef ms c) ())
-                  -> Ef ms c (IO ())
+onDocumentSyndicate :: (IsEv e, MonadIO c, ms <: '[Evented])
+                    => EVName Doc e
+                    -> (e -> Ef '[Event e] (Ef ms c) ())
+                    -> Ef ms c (IO ())
 onDocumentSyndicate en f = do
   nw <- getDocumentSyndicate en
   connect nw f
@@ -145,8 +129,7 @@ onDocumentSyndicate en f = do
 windowSyndicatesPreventDefault__ :: SyndicateVault
 windowSyndicatesPreventDefault__ = SyndicateVault (unsafePerformIO (newIORef Map.empty))
 
-getWindowSyndicatePreventDefault :: (IsEv e, MonadIO c)
-                              => EVName Win e -> c (Syndicate e)
+getWindowSyndicatePreventDefault :: (IsEv e, MonadIO c) => EVName Win e -> c (Syndicate e)
 getWindowSyndicatePreventDefault
 #ifdef __GHCJS__
   en@(ETC.EventName doms)
@@ -176,13 +159,10 @@ getWindowSyndicatePreventDefault
               return nw
             Right nw -> return nw
 
-onWindowSyndicatePreventDefault :: ( IsEv e
-                                 , MonadIO c
-                                 , '[Evented] <: ms
-                                 )
-                              => EVName Win e
-                              -> (e -> Ef '[Event e] (Ef ms c) ())
-                              -> Ef ms c (IO ())
+onWindowSyndicatePreventDefault :: (IsEv e, MonadIO c, ms <: '[Evented])
+                                => EVName Win e
+                                -> (e -> Ef '[Event e] (Ef ms c) ())
+                                -> Ef ms c (IO ())
 onWindowSyndicatePreventDefault en f = do
   nw <- getWindowSyndicatePreventDefault en
   connect nw f
@@ -191,4 +171,3 @@ triggerWindowPreventDefaultEvent :: (IsEv e, MonadIO c) => EVName Win e -> e -> 
 triggerWindowPreventDefaultEvent ev e = do
   nw <- getWindowSyndicatePreventDefault ev
   publish nw e
-

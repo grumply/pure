@@ -60,7 +60,7 @@ instance (IsService' ts ms, MonadIO c) =>
       deleteService (key s)
 
 
-type IsService' ts ms = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms))
+type IsService' ts ms = (ms <: Base, ts <. Base, Delta (Modules ts) (Messages ms))
 type IsService ms = IsService' (Appended Base ms) (Appended Base ms)
 
 type Base = '[Evented,State () Vault,State () Shutdown]

@@ -8,19 +8,21 @@ import Atomic.WebSocket
 
 import Atomic.Vault
 
-type IsConnection' ts ms = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms))
+type Base = '[State () WebSocket,State () Origin,Evented,State () Vault,State () Shutdown]
+
+type IsConnection' ts ms = (ms <: Base, ts <. Base, ts <=> ms)
 type IsConnection ms = IsConnection' ms ms
 
 newtype Origin = Origin SockAddr
 
-type Base = '[State () WebSocket,State () Origin,Evented,State () Vault,State () Shutdown]
+type ConnectionBuilder ts = forall b a. (b ~ Appended ts Base, a ~ Action b IO)
+                          => Modules Base a -> IO (Modules b a)
 
-type ConnectionBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
-type ConnectionPrimer ms = Ef (Appended ms Base) IO ()
+type ConnectionPrimer ms = forall b. b ~ Appended ms Base => Ef b IO ()
 
 data Connection' ts ms =
   Connection
     { build :: !(Modules Base (Action ts IO) -> IO (Modules ts (Action ts IO)))
     , prime :: !(Ef ms IO ())
     }
-type Connection ms = Connection' (Appended ms Base) (Appended ms Base)
+type Connection ms = forall b. b ~ Appended ms Base => Connection' b b

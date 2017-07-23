@@ -43,14 +43,8 @@ import System.IO.Unsafe
 data ServerNotStarted = ServerNotStarted deriving Show
 instance Exception ServerNotStarted
 
-instance ( IsServer' ts ms c
-         , IsConnection' uTs uMs
-         , MonadIO c
-         , MonadIO c'
-         )
-  => With (Server' ts ms c uTs uMs)
-          (Ef ms c)
-          c'
+instance (IsServer' ts ms c, IsConnection' uTs uMs, MonadIO c, MonadIO c')
+    => With (Server' ts ms c uTs uMs) (Ef ms c) c'
   where
     using_ s = do
       mi_ <- lookupServer (key s)
@@ -70,13 +64,20 @@ instance ( IsServer' ts ms c
           myThreadId >>= killThread
       deleteServer (key s)
 
-type IsServer' ts ms c = (Base <: ms, Base <. ts, Delta (Modules ts) (Messages ms), MonadIO c)
+type IsServer' ts ms c = (ms <: Base, ts <. Base, ts <=> ms, MonadIO c)
+
 type IsServer ms = IsServer' ms ms IO
 
 type ServerKey ms = Key (Ef.Base.As (Ef (Appended ms Base) IO))
-type ServerBuilder ts = Modules Base (Action (Appended ts Base) IO) -> IO (Modules (Appended ts Base) (Action (Appended ts Base) IO))
+
+type ServerBuilder ts = forall b a. (b ~ Appended ts Base, a ~ Action b IO)
+                      => Modules Base a -> IO (Modules b a)
+
 type ServerPrimer ms = Ef (Appended ms Base) IO ()
-type ServerConnection pms ms = Ef.Base.As (Ef (Appended ms Base) IO) -> Connection' (Appended pms Connection.Base) (Appended pms Connection.Base)
+
+type ServerConnection pms ms
+  = forall b pb. (b ~ Appended ms Base, pb ~ Appended pms Connection.Base)
+  => Ef.Base.As (Ef b IO) -> Connection' pb pb
 
 newtype Connections = Connections (Syndicate (SockAddr,Socket,EvQueue))
 
@@ -106,7 +107,9 @@ data Server' ts ms c pts pms
     , prime      :: !(Ef ms c ())
     , connection :: !(Ef.Base.As (Ef ms c) -> Connection' pts pms)
     }
-type Server ms pms = Server' (Appended ms Base) (Appended ms Base) IO (Appended pms Connection.Base) (Appended pms Connection.Base)
+type Server ms pms
+  = forall b pb. (b ~ Appended ms Base, pb ~ Appended pms Connection.Base)
+  => Server' b b IO pb pb
 
 forkRun :: ( MonadIO c
            , IsConnection' uTs uMs
@@ -125,8 +128,7 @@ run :: forall ts ms c uTs uMs.
                                 -- something about the number of traits/messages since IsConnection contains
                                 -- `Connection_ m <: uMs` which terminates in Functor (Messages uMs)
        )
-    => Server' ts ms c uTs uMs
-    -> c ()
+    => Server' ts ms c uTs uMs -> c ()
 #ifdef SECURE
 run SecureServer {..} = void $ do
 
@@ -140,7 +142,7 @@ run SecureServer {..} = void $ do
   gs <- createVault
 
   connSignal
-    :: Signal ms c (State () WebSocket (Action uTs IO),SockAddr,EvQueue)
+    :: Signal ms c (WS (Action uTs IO),SockAddr,EvQueue)
     <- newSignal
 
   acSignal :: Syndicate (Syndicate uE) <- syndicate
@@ -189,7 +191,7 @@ run Server {..} = void $ do
   gs <- createVault
 
   connSignal
-    :: Signal ms c (State () WebSocket (Action uTs IO),SockAddr,EvQueue)
+    :: Signal ms c (WS (Action uTs IO),SockAddr,EvQueue)
     <- construct
 
   acSignal :: Syndicate (Syndicate uE) <- syndicate
@@ -230,7 +232,7 @@ eventloop :: forall ts ms c uTs uMs.
              )
           => Ef ms c ()
           -> Connection' uTs uMs
-          -> Signal ms c (State () WebSocket (Action uTs IO),SockAddr,EvQueue)
+          -> Signal ms c (WS (Action uTs IO),SockAddr,EvQueue)
           -> EvQueue
           -> Ef.Base.Object ts c
           -> c ()

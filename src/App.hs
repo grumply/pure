@@ -53,8 +53,7 @@ import qualified Atomic.Route as Route
 import System.IO.Unsafe
 import Unsafe.Coerce
 
-__timeInMicros :: (MonadIO c)
-               => c Integer
+__timeInMicros :: MonadIO c => c Integer
 __timeInMicros = getMicros <$> micros
 
 {-# NOINLINE __startTime__ #-}
@@ -64,16 +63,23 @@ __startTime__ = unsafePerformIO __timeInMicros
 hashWithStartTime :: Hashable a => a -> Int
 hashWithStartTime x = hash (__startTime__,x)
 
-type IsApp' ts ms c r = (Base r <: ms, Base r <. ts, Delta (Modules ts) (Messages ms), Eq r, MonadIO c)
+type IsApp' ts ms c r = (ms <: Base r, ts <. Base r, ts <=> ms, Eq r, MonadIO c)
+
 type IsApp ms r = IsApp' ms ms IO r
 
 type Base r = '[ State () (Router r), Evented, State () Shutdown ]
 
-type AppKey ms r = Key (Ef.Base.As (Ef (Appended ms (Base r)) IO))
-type AppBuilder ts r = Modules (Base r) (Action (Appended ts (Base r)) IO) -> IO (Modules (Appended ts (Base r)) (Action (Appended ts (Base r)) IO))
-type AppPrimer ms r = Ef (Appended ms (Base r)) IO ()
-type AppRouter ms r = Ef '[Route] (Ef (Appended ms (Base r)) IO) r
-type AppPages ms r = r -> Ef (Appended ms (Base r)) IO Page
+type AppKey ms r = forall ms' . ms' ~ Appended ms (Base r)  => Key (Ef.Base.As (Ef ms' IO))
+
+type AppBuilder ts r = forall b ts' a.
+                        (b ~ Base r, ts' ~ Appended ts b, a ~ Action ts' IO)
+                     => Modules b a -> IO (Modules ts' a)
+
+type AppPrimer ms r = forall ms'. ms' ~ Appended ms (Base r) => Ef ms' IO ()
+
+type AppRouter ms r = forall ms'. ms' ~ Appended ms (Base r) => Ef '[Route] (Ef ms' IO) r
+
+type AppPages ms r = forall ms'. ms' ~ Appended ms (Base r) => r -> Ef ms' IO Page
 
 data App' ts ms c r
   = App
@@ -84,7 +90,7 @@ data App' ts ms c r
     , routes  :: !(Ef '[Route] (Ef ms c) r)
     , pages   :: !(r -> Ef ms c Page)
     }
-type App ms r = App' (Appended ms (Base r)) (Appended ms (Base r)) IO r
+type App ms r = forall ms'. ms' ~ Appended ms (Base r) => App' ms' ms' IO r
 
 instance Eq (App' ts ms c r) where
   (==) (App s _ _ _ _ _) (App s' _ _ _ _ _) =
@@ -94,17 +100,19 @@ instance Eq (App' ts ms c r) where
          1# -> True
          _  -> k1 == k2
 
-simpleApp :: Ef '[Route] (Ef (Base r) IO) r -> (r -> Ef (Base r) IO Page) -> App '[] r
+simpleApp :: e ~ Ef (Base r) IO => Ef '[Route] e r -> (r -> e Page) -> App '[] r
 simpleApp = App "main" return (return ()) Nothing
 
 onRoute :: ( IsApp' ts ms IO r
-           , Monad c',  MonadIO c'
+           , Monad c'
+           , MonadIO c'
            , With (App' ts ms IO r) (Ef ms IO) IO
-           , '[Evented] <: ms'
+           , ms' <: '[Evented]
+           , e ~ Ef ms' c'
            )
          => App' ts ms IO r
-         -> (r -> Ef '[Event r] (Ef ms' c') ())
-         -> Ef ms' c' (IO ())
+         -> (r -> Ef '[Event r] e ())
+         -> e (IO ())
 onRoute fus rf = do
   buf <- get
   Just stopper <- demandMaybe =<< with fus (do
@@ -115,10 +123,7 @@ onRoute fus rf = do
 
 data Carrier where Carrier :: IORef (ControllerView ms m) -> Carrier
 
-run :: forall ts ms c r.
-       IsApp' ts ms c r
-    => App' ts ms c r
-    -> c ()
+run :: forall ts ms c r. IsApp' ts ms c r => App' ts ms c r -> c ()
 run app@App {..} = do
   doc     <- getDocument
   q       <- newEvQueue
@@ -231,7 +236,7 @@ run app@App {..} = do
             pg <- lift $ pages r
             go False ort doc b pg
 
-getAppRoot :: (MonadIO c) => Maybe Txt -> c ENode
+getAppRoot :: MonadIO c => Maybe Txt -> c ENode
 getAppRoot mt = do
   doc <- getDocument
 #ifdef __GHCJS__
@@ -249,12 +254,7 @@ getAppRoot mt = do
 data AppNotStarted = AppNotStarted deriving Show
 instance Exception AppNotStarted
 
-instance ( IsApp' ts ms c r
-         , MonadIO c
-         )
-  => With (App' ts ms c r)
-          (Ef ms c)
-          c
+instance (IsApp' ts ms c r, MonadIO c) => With (App' ts ms c r) (Ef ms c) c
   where
     using_ f = do
       mi_ <- lookupApp (key f)
@@ -278,24 +278,19 @@ instance ( IsApp' ts ms c r
 {-# NOINLINE organismVault__ #-}
 organismVault__ = Vault (unsafePerformIO (newMVar Map.empty))
 
-lookupApp :: (MonadIO c)
-         => Key phantom -> c (Maybe phantom)
+lookupApp :: MonadIO c => Key phantom -> c (Maybe phantom)
 lookupApp = vaultLookup organismVault__
 
-addApp :: (MonadIO c)
-      => Key phantom -> phantom -> c ()
+addApp :: MonadIO c => Key phantom -> phantom -> c ()
 addApp = vaultAdd organismVault__
 
-deleteApp :: (MonadIO c)
-             => Key phantom -> c ()
+deleteApp :: MonadIO c => Key phantom -> c ()
 deleteApp = vaultDelete organismVault__
 
-setupRouter :: forall ms c routeType.
-               (Eq routeType, MonadIO c, '[Evented,State () (Router routeType)] <: ms)
-            => Proxy routeType
-            -> Ef ms c (IO (),Promise (IO ()))
+setupRouter :: forall ms c rTy. (Eq rTy, MonadIO c, ms <: '[Evented,State () (Router rTy)])
+            => Proxy rTy -> Ef ms c (IO (),Promise (IO ()))
 setupRouter _ = do
-  crn :: Syndicate routeType <- getRouteSyndicate
+  crn :: Syndicate rTy <- getRouteSyndicate
   psn <- getWindowSyndicatePreventDefault popstate
   loc <- getLocation
   pn  <- getPathname
@@ -324,11 +319,7 @@ setupRouter _ = do
                   publish crn ncr
             become (go' p' mncr)
 
-goto :: ( MonadIO c
-        , With (App' ts ms IO r) (Ef ms IO) IO
-        , '[State () (Router r)] <: ms
-        , '[Evented] <: ms'
-        )
+goto :: (MonadIO c, With (App' ts ms IO r) (Ef ms IO) IO, ms <: '[State () (Router r)], ms' <: '[Evented])
      => App' ts ms IO r -> Txt -> r -> Ef ms' c (Promise ())
 goto f rts rt = do
   pushPath rts

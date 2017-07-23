@@ -342,14 +342,16 @@ change o m = void $ with o (setO m)
 newtype Observing m e = Observing (Maybe m)
 type Observer m = Controller '[] (Observing m)
 -- observer :: Observatory m -> ControllerKey '[] (Maybe m) -> (m -> HTML '[] m) -> Observer m
-observer :: forall m ms a w.
+observer :: forall m ms a w e b.
             ( Typeable m
-            , With w (Ef ms IO) (Ef (Base (Observing m)) IO)
-            , With w (Ef ms IO) IO
-            , '[Observable m] <: ms
-            , Component a (Base (Observing m))
+            , e ~ Ef ms IO
+            , b ~ Base (Observing m)
+            , With w e (Ef b IO)
+            , With w e IO
+            , ms <: '[Observable m]
+            , Component a b
             )
-         => w -> ControllerKey '[] (Observing m) -> (m -> a (Base (Observing m))) -> Observer m
+         => w -> ControllerKey '[] (Observing m) -> (m -> a b) -> Observer m
 observer s key0 view0 = Controller {..}
   where
     key = key0
@@ -360,11 +362,13 @@ observer s key0 view0 = Controller {..}
     view (Observing (Just m)) = render $ view0 m
 
 -- specialized to Observatory to avoid inline type signatures
-observes :: (Typeable m, MonadIO c, '[Evented] <: ms) => Observatory m -> (m -> Ef ms c ()) -> Ef ms c (Promise (IO ()))
+observes :: (Typeable m, MonadIO c, ms <: '[Evented], e ~ Ef ms c)
+         => Observatory m -> (m -> e ()) -> e (Promise (IO ()))
 observes o f = observe o (Export.lift . f)
 
 -- specialized to Observatory to avoid inline type signatures
-observes' :: (Typeable m, MonadIO c, '[Evented] <: ms) => Observatory m -> (m -> Ef ms c ()) -> Ef ms c (Promise (IO ()))
+observes' :: (Typeable m, MonadIO c, ms <: '[Evented], e ~ Ef ms c)
+          => Observatory m -> (m -> e ()) -> e (Promise (IO ()))
 observes' = observe'
 
 newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)

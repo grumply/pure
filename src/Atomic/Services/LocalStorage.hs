@@ -134,11 +134,8 @@ clearLocalStorage = do
 #endif
 
 -- This needs a home; it captures both localstorage events and sessionstorage events.
-onStorage :: ( MonadIO c
-             , '[Evented] <: ms
-             )
-          => (Obj -> Ef '[Event Obj] (Ef ms c) ())
-          -> Ef ms c (IO ())
+onStorage :: (MonadIO c, ms <: '[Evented], e ~ Ef ms c)
+          => (Obj -> Ef '[Event Obj] e ()) -> e (IO ())
 onStorage =
   onWindowSyndicate
 #ifdef __GHCJS__
@@ -147,34 +144,23 @@ onStorage =
     ("storage" :: EVName Win Obj)
 #endif
 
-localMessage :: ( MonadIO c
-                , Typeable messageType
-                , Message messageType
-                , M messageType ~ message
-                , ToJSON message
-                )
-            => Proxy messageType -> message -> c (Promise Bool)
+localMessage :: (MonadIO c, Typeable mTy, Message mTy, M mTy ~ m, ToJSON m)
+             => Proxy mTy -> m -> c (Promise Bool)
 localMessage mty_proxy = putLocalItem (messageHeader mty_proxy)
 
 
-proxyLocalMessage :: forall traits ms c msg message messageType.
+proxyLocalMessage :: forall ts ms c m mTy.
                       ( MonadIO c
-#ifdef __GHCJS__
-                      , '[WebSocket] <: ms
-#else
-                      , '[State () WebSocket] <: ms
-#endif
-                      , IsService' traits ms
-                      , Typeable messageType
-                      , Message messageType
-                      , M messageType ~ message
-                      , ToJSON message
-                      , FromBS message
-                      , FromJSON message
+                      , ms <: '[WS]
+                      , IsService' ts ms
+                      , Typeable mTy
+                      , Message mTy
+                      , M mTy ~ m
+                      , ToJSON m
+                      , FromBS m
+                      , FromJSON m
                       )
-                  => Service' traits ms
-                  -> Proxy messageType
-                  -> c (IO ())
+                  => Service' ts ms -> Proxy mTy -> c (IO ())
 proxyLocalMessage s mty_proxy = do
   let header = messageHeader mty_proxy
   Right a <- (=<<) demand $ with s $
@@ -190,31 +176,30 @@ proxyLocalMessage s mty_proxy = do
                 S.removeItem ls key
                 case fromBS (BSL.fromStrict (fromTxt nv :: ByteString)) of
                   Left _ -> liftIO $ Prelude.putStrLn "Bad message from storage event."
-                  Right (m :: message) ->
+                  Right (m :: m) ->
                     void $ lift $ sendSelfMessage s mty_proxy m
 #else
                 case fromBS (BSL.fromStrict (fromTxt nv :: ByteString)) of
                   Left _ -> liftIO $ Prelude.putStrLn "Bad message from storage event."
-                  Right (m :: message) -> return ()
+                  Right (m :: m) -> return ()
 #endif
             else
               pure (return ())
       forM_ mres id
   return a
 
-onLocalMessage :: forall ms c msg message messageType.
+onLocalMessage :: forall ms c m mTy e.
                   ( MonadIO c
-                  , Typeable messageType
-                  , Typeable message
-                  , Message messageType
-                  , M messageType ~ message
-                  , FromJSON message
-                  , FromBS message
-                  , '[Evented] <: ms
+                  , Typeable mTy
+                  , Typeable m
+                  , Message mTy
+                  , M mTy ~ m
+                  , FromJSON m
+                  , FromBS m
+                  , ms <: '[Evented]
+                  , e ~ Ef ms c
                   )
-               => Proxy messageType
-               -> (message -> Ef ms c ())
-               -> Ef ms c (IO ())
+               => Proxy mTy -> (m -> e ()) -> e (IO ())
 onLocalMessage mty_proxy f = do
   slf <- asSelf
   onStorage $ \se -> do
@@ -230,7 +215,7 @@ onLocalMessage mty_proxy f = do
 #endif
               case fromBS (BSL.fromStrict (fromTxt nv :: ByteString)) of
                 Left _ -> liftIO $ Prelude.putStrLn $ "Bad message from storage event: " ++ show (key,nv)
-                Right (m :: message) -> void $ runAs slf (f m)
+                Right (m :: m) -> void $ runAs slf (f m)
           else
             pure (return ())
     forM_ mres id

@@ -21,7 +21,7 @@ import Unsafe.Coerce
 
 type ModuleBase = '[Evented, State () Vault, State () Shutdown]
 
-type IsModule' ts ms = (ModuleBase <: ms, ModuleBase <. ts, Delta (Modules ts) (Messages ms))
+type IsModule' ts ms = (ms <: ModuleBase, ts <. ModuleBase, Delta (Modules ts) (Messages ms))
 type IsModule ms = IsModule' ms ms
 
 data Module' ts ms
@@ -42,7 +42,7 @@ instance Eq (Module' ts ms) where
 
 -- the enacting context, ms', must coincidentally witness
 -- the same base type as modules.
-instance (IsModule' ts ms, MonadIO c, ModuleBase <: ms')
+instance (IsModule' ts ms, MonadIO c, ms' <: ModuleBase)
   => With (Module' ts ms) (Ef ms IO) (Ef ms' c)
   where
     using_ c = do
