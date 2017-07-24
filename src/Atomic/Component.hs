@@ -198,9 +198,9 @@ data View e where
     :: { _stprops  :: props
        , _stid     :: Int
        , _ststate  :: st
-       , _strecord :: (Maybe (IORef (props,st,st -> ((st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
-       , _stview   :: (props -> st -> ((st -> st) -> IO () -> IO ()) -> View x)
-       , _stupdate :: ((st -> st) -> IO () -> IO ())
+       , _strecord :: (Maybe (IORef (props,st,st -> ((props -> st -> st) -> IO () -> IO ()) -> View x,View x,View x)))
+       , _stview   :: (props -> st -> ((props -> st -> st) -> IO () -> IO ()) -> View x)
+       , _stupdate :: ((props -> st -> st) -> IO () -> IO ())
        } -> View e
 
   SVGHTML
@@ -553,7 +553,7 @@ list x _attributes _keyed =
         KSVGHTML {..}
     _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGHTMLs"
 
-viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
+viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> ((props -> st -> st) -> IO () -> IO ()) -> View e) -> View e
 viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\_ _ -> return ())
 
 -- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
@@ -570,7 +570,7 @@ viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\
 --               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
 --               this problem. The solution is the good practice of keeping lists of views static
 --               or at the very least keep extensibility at the end of a view list.
-viewManager :: forall props st e. props -> st -> (props -> st -> ((st -> st) -> IO () -> IO ()) -> View e) -> View e
+viewManager :: forall props st e. props -> st -> (props -> st -> ((props -> st -> st) -> IO () -> IO ()) -> View e) -> View e
 viewManager props initial_st view = STHTML props 0 initial_st Nothing view (\_ _ -> return ())
 
 constant :: View e -> View e
@@ -1346,7 +1346,7 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
               mv <- newEmptyMVar
 #endif
               (props,st,sv,old,mid) <- readIORef strec
-              let st' = g st
+              let st' = g props st
               let new_mid = unsafeCoerce $ sv props st' upd
               new <- diffHelper f doc ch isFG old mid new_mid
               writeIORef strec (props,st',sv,new,new_mid)
