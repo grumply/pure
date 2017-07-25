@@ -80,7 +80,10 @@ import Data.Void
 import Data.Unique
 import GHC.Generics
 import GHC.Prim
-import System.Mem.StableName
+
+import qualified Data.Function as F
+
+import qualified Data.IntMap.Strict as IM
 
 import qualified Data.HashMap.Strict as Map
 
@@ -1334,11 +1337,13 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
       return $ HTML _node _tag _attributes _atoms
 
     go mparent STHTML {..} = do
+      barrier <- newMVar ()
       strec <- newIORef (_stprops,_ststate,_stview,nil,nil)
       let upd g cb = void $ do
             -- this won't work properly on GHC; look into using onFPS or something to
             -- replicate the rAF approach
 #ifdef __GHCJS__
+            () <- takeMVar barrier -- force sequentiality when using threads
             mv <- newEmptyMVar
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
 #endif
@@ -1350,6 +1355,7 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
               let new_mid = unsafeCoerce $ sv props st' upd
               new <- diffHelper f doc ch isFG old mid new_mid
               writeIORef strec (props,st',sv,new,new_mid)
+              putMVar barrier ()
               putMVar mv ()
 #ifdef __GHCJS__
             _ <- forkIO $
@@ -1859,37 +1865,62 @@ diffHelper f doc ch isFG =
                 new <- go old mid new
                 continue new
 
-    -- note that keyed nodes are filtered for NullHTMLs during construction
     diffKeyedChildren :: ENode -> [(Int,v)] -> [(Int,v)] -> [(Int,v)] -> IO [(Int,v)]
-    diffKeyedChildren n = go_ 0
+    diffKeyedChildren n = go_ 0 IM.empty
       where
 
-        go_ :: Int -> [(Int,v)] -> [(Int,v)] -> [(Int,v)] -> IO [(Int,v)]
-        go_ i a m b = do
+        go_ :: Int -> IM.IntMap v -> [(Int,v)] -> [(Int,v)] -> [(Int,v)] -> IO [(Int,v)]
+        go_ i store a m b = do
           if reallyUnsafeEq m b then do
+            mapM_ cleanupElement store
             return a
           else
-            go__ i a m b
+            go__ i store a m b
           where
 
-            go__ :: Int -> [(Int,v)] -> [(Int,v)] -> [(Int,v)] -> IO [(Int,v)]
-            go__ _ [] _ news = do
-              forM news $ \(bkey,b) -> do
-                new <- buildAndEmbedMaybe f doc ch isFG (Just n) b
-                return (bkey,new)
+            getFromStore :: IM.IntMap v -> Int -> (Maybe v,IM.IntMap v)
+            getFromStore store i = IM.updateLookupWithKey (\_ _ -> Nothing) i store
 
-            go__ _ olds _ [] = do
-              forM_ olds $ \(_,a) -> do
-                didUnmount <- cleanup f [a]
-                delete a
-                didUnmount
+            cleanupElement :: v -> IO ()
+            cleanupElement v = do
+              didUnmount <- cleanup f [v]
+              delete v
+              didUnmount
+
+            go__ :: Int -> IM.IntMap v -> [(Int,v)] -> [(Int,v)] -> [(Int,v)] -> IO [(Int,v)]
+            go__ _ store [] _ [] = do
+              Prelude.putStrLn "1"
+              mapM_ cleanupElement store
               return []
 
-            go__ i old@((akey,a):as) mid@((mkey,m):ms) new@((bkey,b):bs)
+            go__ i store [] _ ((bkey,b):bs) = do
+              Prelude.putStrLn "2"
+              (child,store') <-
+                case getFromStore store bkey of
+                  (Nothing,_) -> do
+                    Prelude.putStrLn "2a"
+                    new <- buildAndEmbedMaybe f doc ch isFG Nothing b
+                    insertAt n i new
+                    return (new,store)
+                  (Just prebuilt_b,store') -> do
+                    Prelude.putStrLn "2b"
+                    insertAt n i prebuilt_b
+                    return (prebuilt_b,store')
+              rest <- go__ (i + 1) store' [] [] bs
+              return $ (bkey,child) : rest
+
+            go__ _ store olds _ [] = do
+              Prelude.putStrLn "3"
+              mapM_ (cleanupElement . snd) olds
+              mapM_ cleanupElement store
+              return []
+
+            go__ i store old@((akey,a):as) mid@((mkey,m):ms) new@((bkey,b):bs)
               | akey == bkey = do
+                  Prelude.putStrLn "4"
                   new <- go' a (render m) (render b)
                   let !i' = i + 1
-                  rest <- go_ i' as ms bs
+                  rest <- go_ i' store as ms bs
                   return $ (akey,new):rest
 
               | otherwise =
@@ -1897,60 +1928,66 @@ diffHelper f doc ch isFG =
                     ((akey',a'):as',(mkey',m'):ms',(bkey',b'):bs')
                       -- swap 2
                       | bkey == akey' && akey == bkey' -> do
+                          Prelude.putStrLn "5"
                           new1 <- go' a (render m) (render b')
                           new2 <- go' a' (render m') (render b)
+                          insertAt n i new2
                           let !i' = i + 2
-                          rest <- go_ i' as' ms' bs'
+                          rest <- go_ i' store as' ms' bs'
                           return $ (akey',new1):(akey,new2):rest
 
                       -- insert
                       | akey == bkey' -> do
-                          new <- buildAndEmbedMaybe f doc ch isFG Nothing b
-                          insertAt n i new
-                          let !i' = i + 1
-                          rest <- go_ i' old mid bs
-                          return $ (bkey,new):rest
+                          case getFromStore store bkey of
+                            -- haven't seen bkey yet, check for it later in the old list
+                            (Nothing,_) -> do
+                              case List.lookup bkey as of
+                                -- bkey was not used later in the list, create it
+                                Nothing -> do
+                                  Prelude.putStrLn "6"
+                                  new <- buildAndEmbedMaybe f doc ch isFG Nothing b
+                                  insertAt n i new
+                                  let !i' = i + 1
+                                  rest <- go_ i' store old mid bs
+                                  return $ (bkey,new):rest
+                                -- bkey was used later in the list, move it
+                                Just prebuilt_b -> do
+                                  Prelude.putStrLn "7"
+                                  -- this path defeats reallyUnsafeEq
+                                  insertAt n i prebuilt_b
+                                  let !i' = i + 1
+                                      old' = List.deleteFirstsBy ((==) `F.on` fst) [(bkey,prebuilt_b)] old
+                                      mid' = List.deleteFirstsBy ((==) `F.on` fst) [(bkey,prebuilt_b)] mid
+                                  rest <- go_ i' store old' mid' bs
+                                  return $ (bkey,prebuilt_b):rest
+                            -- bkey was seen earlier, move it
+                            (Just prebuilt_b,store') -> do
+                              Prelude.putStrLn "8"
+                              insertAt n i prebuilt_b
+                              let !i' = i + 1
+                              rest <- go_ i' store' old mid bs
+                              return $ (bkey,prebuilt_b):rest
 
                       -- delete
                       | otherwise -> do
-                          didUnmount <- cleanup f [a]
-                          delete a
-                          didUnmount
-                          if bkey == akey' then
-                            go_ i ((akey',a'):as) ((mkey',m'):ms) new
-                          else do
-                            -- replace
-                            new <- buildAndEmbedMaybe f doc ch isFG Nothing b
-                            insertAt n i new
-                            let !i' = i + 1
-                            rest <- go_ i' as ms bs
-                            return $ (bkey,new):rest
+                          Prelude.putStrLn "9"
+                          -- simply add akey to the store and continue
+                          let !store' = IM.insert akey a store
+                              !i' = i + 1
+                          go_ i' store' as ms new
 
                     _ | akey == bkey -> do
+                          Prelude.putStrLn "10"
                           new <- go' a (render m) (render b)
                           let !i' = i + 1
-                          rest <- go_ i' as ms bs
+                          rest <- go_ i' store as ms bs
                           return $ (akey,new):rest
 
-                      | otherwise ->
-                          case (old,new) of
-                            ([_],(_:(bkey',b'):_)) ->
-                              if akey == bkey' then do
-                                new <- buildAndEmbedMaybe f doc ch isFG Nothing b
-                                insertAt n i new
-                                let !i' = i + 1
-                                rest <- go_ i' old mid bs
-                                return $ (bkey,new):rest
-                              else do
-                                didUnmount <- cleanup f [a]
-                                delete a
-                                didUnmount
-                                go_ i as ms ((bkey,b):bs)
-                            _ -> do
-                              didUnmount <- cleanup f [a]
-                              delete a
-                              didUnmount
-                              go_ i as ms ((bkey,b):bs)
+                      | otherwise -> do
+                          Prelude.putStrLn "11"
+                          let !store' = IM.insert akey a store
+                              !i' = i + 1
+                          go_ i' store' as ms new
 
 applyStyleDiffs :: ENode -> [(Txt,Txt)] -> [(Txt,Txt)] -> IO [(Txt,Txt)]
 applyStyleDiffs el olds0 news0 = do
