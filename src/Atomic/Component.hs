@@ -242,7 +242,7 @@ data View e where
   View
     :: (Component a e, Typeable a, Typeable e) => { renderable :: a e } -> View e
 
-type StateUpdate ms props st = (props -> st -> IO (Maybe st, Either (Ef ms IO ()) (IO ()))) -> IO ()
+type StateUpdate ms props st = ((Ef ms IO () -> IO ()) -> props -> st -> IO (Maybe st, IO ())) -> IO ()
 
 pattern Component :: (Component a e, Typeable a, Typeable e) => a e -> View e
 pattern Component ams <- (View (cast -> Just ams)) where
@@ -1346,12 +1346,13 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
 #endif
               (props,st,sv,old,mid) <- readIORef strec
-              (mst,cb) <- g props st
+              (mst,cb) <- g f props st
               forM_ mst $ \st' -> do
                 let new_mid = unsafeCoerce $ sv props st' upd
                 new <- diffHelper f doc ch isFG old mid new_mid
                 writeIORef strec (props,st',sv,new,new_mid)
-              either f id cb
+
+              cb
 #ifdef __GHCJS__
             win <- getWindow
             requestAnimationFrame win (Just rafCallback)
@@ -1681,7 +1682,7 @@ diffHelper f doc ch isFG =
             else do
               (_,st,sv,old,mid) <- readIORef r
               writeIORef r (unsafeCoerce p',st,sv,old,mid)
-              u (\_ _ -> return (Just $ unsafeCoerce st,Right def))
+              u (\_ _ _ -> return (Just $ unsafeCoerce st,def))
               return $ STHTML p' k' (unsafeCoerce s) (Just $ unsafeCoerce r) v' (unsafeCoerce u)
           else do
             (_,_,_,a,_) <- readIORef r
