@@ -202,7 +202,7 @@ data View e where
        , _stid     :: Int
        , _ststate  :: st
        , _strecord :: (Maybe (IORef (props,st,props -> st -> StateUpdate e props st -> View x,View x,View x)))
-       , _stview   :: (props -> st -> StateUpdate e props st -> View x)
+       , _stview   :: (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View x)
        , _stupdate :: StateUpdate e props st
        } -> View e
 
@@ -242,7 +242,7 @@ data View e where
   View
     :: (Component a e, Typeable a, Typeable e) => { renderable :: a e } -> View e
 
-type StateUpdate ms props st = ((Ef ms IO () -> IO ()) -> props -> st -> IO (Maybe st, IO ())) -> IO ()
+type StateUpdate ms props st = (props -> st -> IO (Maybe st, IO ())) -> IO ()
 
 pattern Component :: (Component a e, Typeable a, Typeable e) => a e -> View e
 pattern Component ams <- (View (cast -> Just ams)) where
@@ -558,7 +558,7 @@ list x _attributes _keyed =
         KSVGHTML {..}
     _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGHTMLs"
 
-viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> StateUpdate e props st -> View e) -> View e
+viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View e) -> View e
 viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\_ -> return ())
 
 -- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
@@ -575,11 +575,11 @@ viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\
 --               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
 --               this problem. The solution is the good practice of keeping lists of views static
 --               or at the very least keep extensibility at the end of a view list.
-viewManager :: forall props st e. props -> st -> (props -> st -> StateUpdate e props st -> View e) -> View e
+viewManager :: forall props st e. props -> st -> (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View e) -> View e
 viewManager props initial_st view = STHTML props 0 initial_st Nothing view (\_ -> return ())
 
 constant :: View e -> View e
-constant a = viewManager () () $ \_ _ _ -> a
+constant a = viewManager () () $ \_ _ _ _ -> a
 
 mvc :: ([Feature e] -> [View e] -> View e)
     -> (forall ts' ms' m. (IsController' ts' ms' m) => [Feature e] -> Controller' ts' ms' m -> View e)
@@ -1346,9 +1346,9 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
             rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
 #endif
               (props,st,sv,old,mid) <- readIORef strec
-              (mst,cb) <- g f props st
+              (mst,cb) <- g props st
               forM_ mst $ \st' -> do
-                let new_mid = unsafeCoerce $ sv props st' upd
+                let new_mid = unsafeCoerce $ sv props st' f upd
                 new <- diffHelper f doc ch isFG old mid new_mid
                 writeIORef strec (props,st',sv,new,new_mid)
 
@@ -1358,7 +1358,7 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
             requestAnimationFrame win (Just rafCallback)
 #endif
 
-      let mid = _stview _stprops _ststate upd
+      let mid = _stview _stprops _ststate f upd
       new <- go mparent (unsafeCoerce $ render mid)
       writeIORef strec (_stprops,_ststate,_stview,new,unsafeCoerce mid)
       return $ STHTML _stprops _stid _ststate (Just $ unsafeCoerce strec) _stview upd
@@ -1682,7 +1682,7 @@ diffHelper f doc ch isFG =
             else do
               (_,st,sv,old,mid) <- readIORef r
               writeIORef r (unsafeCoerce p',st,sv,old,mid)
-              u (\_ _ _ -> return (Just $ unsafeCoerce st,def))
+              u (\_ _ -> return (Just $ unsafeCoerce st,def))
               return $ STHTML p' k' (unsafeCoerce s) (Just $ unsafeCoerce r) v' (unsafeCoerce u)
           else do
             (_,_,_,a,_) <- readIORef r
