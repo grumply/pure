@@ -9,6 +9,8 @@
 {-# language ViewPatterns #-}
 {-# language MagicHash #-}
 {-# language CPP #-}
+
+{-# language ImplicitParams #-}
 module Atomic.Component (module Atomic.Component, ENode, TNode, NNode, Win, Doc, Loc) where
 
 import Ef.Base hiding (Object,Client,After,Before,child,current,Lazy,Eager,construct,Index,observe,uncons,distribute,embed)
@@ -59,8 +61,6 @@ import GHCJS.DOM.Window (requestAnimationFrame)
 #else
 import Data.Aeson (Value(..))
 #endif
-
-import Control.Monad.Trans.Reader
 
 import Control.Concurrent
 import Data.Bifunctor
@@ -166,6 +166,388 @@ foreign import javascript unsafe
   "$1[$2] = $3" set_property_js :: E.Element -> Txt -> Txt -> IO ()
 #endif
 
+newtype Old a = Old { getOld :: a }
+
+data Private
+private :: Proxy Private
+private = Proxy
+
+data UpdateFlags = UpdateFlags
+  { stateDidChange :: Bool
+  , componentDidChange :: Bool
+  } deriving (Generic,Default)
+
+setStateDidChange :: (Monad c, ms <: '[State Private UpdateFlags]) => Ef ms c ()
+setStateDidChange =
+  void $ modifyp private $ \uf -> (uf { stateDidChange = True },())
+
+setComponentDidChange :: (Monad c, ms <: '[State Private UpdateFlags]) => Ef ms c ()
+setComponentDidChange =
+  void $ modifyp private $ \uf -> (uf { componentDidChange = True },())
+
+modifyComponent ::
+  ( Comment "Modify the current Component; any future use of the Component"
+        ::: "will use the updated methods. This method is available everywhere"
+        ::: "except willUnmount."
+  , Comment "Tags the current Component as updated."
+  , component ~ Component parent props state
+  , ?this :: Proxy component
+      ::: "Implicit access to the Component object."
+  , this ~ State component component
+  , flags ~ State Private UpdateFlags
+  , ms <: '[this,flags]
+  , Monad c
+  ) => (component -> component) -> Ef ms c ()
+modifyComponent f = do
+  _ <- modifyp ?this $ \c -> (f c,())
+  setComponentDidChange
+
+getState ::
+  ( Comment "Access the current state; this method is available in all"
+        ::: "methods except getInitialState where it is not yet"
+        ::: "initialized and willUnmount where it is read-only."
+  , ?state :: Proxy state
+      ::: "Implicit access to the current state reference."
+  , ms <: '[State state state]
+  , Monad c
+  ) => Ef ms c state
+getState = getp ?state
+
+getOldState ::
+  ( Comment "Access to the old state; this method is available only"
+        ::: "in shouldUpdate and willUnmount."
+  , ?state :: Proxy state
+      ::: "Implicit access to the current state reference."
+  , ms <: '[Reader state state]
+  , Monad c
+  ) => Ef ms c state
+getOldState = askp ?state
+
+setState ::
+  ( Comment "Set new state; this method is not available in"
+        ::: "getDefaultState when state is uninitialized and"
+        ::: "not available in willUnmount where state is read-only."
+  , Comment "Tags the current component as updated."
+  , ?state :: Proxy state
+      ::: "Implicit access to the current state reference."
+  , flags ~ State Private UpdateFlags
+  , ms <: '[State state state, flags]
+  , Monad c
+  ) => state ::: "New, updated state."
+    -> Ef ms c ()
+setState newState = do
+  putp ?state newState
+  setStateDidChange
+
+modifyState ::
+  ( Comment "Modify the current state; this method is not"
+        ::: "available in getDefaultState when state is"
+        ::: "uninitialized and it is not available in willUnmount"
+        ::: "where state is read-only."
+  , Comment "Tags the current component as updated."
+  , ?state :: Proxy state
+      ::: "Implicit access to the current state reference."
+  , flags ~ State Private UpdateFlags
+  , ms <: '[State state state,flags]
+  , Monad c
+  ) => (state -> state) ::: "State transformer."
+    -> Ef ms c ()
+modifyState f = do
+  _ <- modifyp ?state $ \s -> (f s,())
+  setStateDidChange
+
+getProps ::
+  ( Comment "Access the current or new properties."
+  , ?props :: Proxy props
+      ::: "Implicit access to the current property environment."
+  , ms <: '[Reader props props]
+  , Monad c
+  ) => Ef ms c props
+getProps = askp ?props
+
+getOldProps ::
+  ( Comment "Access the old properties in shouldUpdate."
+  , ?props :: Proxy props
+      ::: "Implicit access to the old property environment."
+  , ms <: '[Reader props (Old props)]
+  , Monad c
+  ) => Ef ms c props
+getOldProps = asksp ?props getOld
+
+newtype Parent (ms :: [* -> *]) = Parent (As (Ef ms IO))
+
+parent :: forall component parent props state ms c a.
+  ( Comment "Since this is simply a context, not an evented context,"
+        ::: "the result is a Promise, and not a Callback. Callbacks"
+        ::: "are only supported in Services, Controllers, Modules,"
+        ::: "Servers, and Apps."
+  , component ~ Component parent props state
+  , ?this :: Proxy component
+  , ms <: '[Reader parent (Parent parent)]
+  , MonadIO c
+  ) => Ef parent IO a ::: "Callback"
+    -> Ef ms c
+        (Promise a ::: "Callback result; demanding the result will block.")
+parent f = do -- may have a problem here with type inference....
+  let parentShape = Proxy :: Proxy parent
+  Parent parent <- askp parentShape
+  runAs parent f
+
+data Component (parent :: [* -> *]) (props :: *) (state :: *) =
+    ( Comment "For each method, props are available via ask, but are wrapped in"
+          ::: "Old and New in willReceiveProps and shouldUpdate."
+          ::: "State is available via get/put with previous state available via"
+          ::: "ask in shouldUpdate. Current state is only available via ask in"
+          ::: "willUnmount."
+    )
+  => Component
+    { props :: props
+
+    , getDefaultState :: forall component.
+        ( Comment "Construct the initial state, effectfully,"
+              ::: "with access to the initial properties. Only runs once."
+        , component ~ Component parent props state
+        , ?props :: Proxy props
+        , ?this  :: Proxy component
+        ) => Ef '[ Reader props props
+                     ::: "Initial properties as passed from parent."
+
+                 , State component component
+                     ::: "Allow changes to Component fields."
+
+                 , Reader parent (Parent parent)
+                     ::: "Asynchronous access to the embedding context."
+
+                 , State Private UpdateFlags
+                     ::: "Internal update flags that determine update path."
+                 ]
+                 IO
+                 ( state ::: "Initial constructed state." )
+
+    , willMount :: forall component.
+        ( Comment "Effectful computation to run before first render."
+              ::: "Only runs once."
+        , component ~ Component parent props state
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        , ?this  :: Proxy component
+        ) => Ef '[ Reader props props
+                     ::: "Initial properties."
+
+                 , State state state
+                     ::: "Default State; updatable."
+
+                 , State component component
+                     ::: "Allows changes to Component fields."
+
+                 , Reader parent (Parent parent)
+                     ::: "Asynchronous access to the embedding context."
+
+                 , State Private UpdateFlags
+                     ::: "Internal update flags that determine update path."
+                 ]
+                 IO
+                 ()
+
+    , didMount :: forall component.
+        ( Comment "Called after first render, before any updates;"
+              ::: "allows access to ENodes. Useful for setting up timers."
+              ::: "Only runs once."
+        , component ~ Component parent props state
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        , ?this  :: Proxy component
+        ) => Ef '[ Reader props props
+                     ::: "Initial properties."
+
+                 , State state state
+                      ::: "State after call to willMount"
+                      ::: "Changes force re-render."
+
+                 , State component component
+                      ::: "Allows changes to Component fields."
+
+                 , Reader parent (Parent parent)
+                     ::: "Asynchronous access to the embedding context."
+
+                 , State Private UpdateFlags
+                     ::: "Internal update flags that determine update path."
+                 ]
+                 IO
+                 ()
+
+    , willReceiveProps :: forall component.
+        ( Comment "Called when properties are updated; only triggers from"
+              ::: "an external update to properties. Useful for changing"
+              ::: "state upon property updates."
+        , component ~ Component parent props state
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        , ?this  :: Proxy component
+        ) => Ef '[ Reader props (Old props)
+                      ::: "Old properties before external update was triggered."
+
+                 , Reader props props
+                      ::: "New properties, soon to be applied to a render."
+
+                 , State state state
+                      ::: "Current state."
+
+                 , State component component
+                      ::: "Allows changes to Component fields."
+
+                 , Reader parent (Parent parent)
+                     ::: "Asynchronous access to the embedding context."
+
+                 , State Private UpdateFlags
+                     ::: "Internal update flags that determine update path."
+
+                 ]
+                 IO
+                 ()
+
+    , shouldUpdate :: forall component.
+        ( Comment "Called on each property or state change; if returing False,"
+              ::: "no diffing will happen."
+        , component ~ Component parent props state
+        , ?oldProps :: Proxy (Old props)
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        , ?this  :: Proxy component
+        ) => Ef '[ Reader (Old props) (Old props)
+                      ::: "Properties previous to this update."
+
+                 , Reader props props
+                      ::: "New properties; might be the same as old properties."
+
+                 , Reader state (Old state)
+                      ::: "State previous to this update; read-only."
+
+                 , State state state
+                      ::: "New state; might be unchanged; read/write."
+
+                 , State component component
+                      ::: "Allows changes to Component fields."
+
+                 , Reader parent (Parent parent)
+                     ::: "Asynchronous access to the embedding context."
+
+                 , State Private UpdateFlags
+                     ::: "Internal update flags that determine update path."
+                 ]
+                 IO
+                 Bool
+
+    , willUpdate :: forall component.
+        ( Comment "Called before a call to render at the beginning of an"
+              ::: "animation frame."
+        , component ~ Component parent props state
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        , ?this  :: Proxy component
+        ) => Ef '[ Reader props props
+                      ::: "Current properties."
+
+                 , State state state
+                      ::: "Current state; read-writable."
+                      ::: "Changes force re-render in the current frame."
+
+                 , State component component
+                      ::: "Allows changes to Component fields."
+
+                 , Reader parent (Parent parent)
+                     ::: "Asynchronous access to the embedding context."
+
+                 , State Private UpdateFlags
+                     ::: "Internal update flags that determine update path."
+
+                 ]
+                 IO
+                 ()
+
+    , didUpdate :: forall component.
+        ( Comment "Called after a call to render before the end of an"
+              ::: "animation frame."
+        , component ~ Component parent props state
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        , ?this  :: Proxy component
+        ) => Ef '[ Reader props props
+                      ::: "Current properties."
+
+                 , State state state
+                      ::: "Current state; read-writable."
+                      ::: "Changes force re-render in the current frame."
+
+                 , State component component
+                      ::: "Allows changes to Component fields."
+
+                 , Reader parent (Parent parent)
+                     ::: "Asynchronous access to the embedding context."
+
+                 , State Private UpdateFlags
+                     ::: "Internal update flags that determine update path."
+                 ]
+                 IO
+                 ()
+
+    , willUnmount ::
+        ( Comment "Called before the Component is unmounted."
+              ::: "Runs before any cleanup declarations."
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        ) => Ef '[ Reader props props
+                     ::: "Current properties."
+
+                 , Reader state state
+                     ::: "Current state; read-only."
+
+                 , Reader parent (Parent parent)
+                     ::: "Asynchronous access to the embedding context."
+                 ]
+                 IO
+                 ()
+
+    , renderer :: forall component.
+        ( Comment "Renderer for the current properties and state."
+        , component ~ Component parent props state
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        , ?this  :: Proxy component
+        )
+        => Ef '[ Reader props props
+                  ::: "Current properties."
+
+               , State state state
+                  ::: "Current state; read-writable."
+
+               , State component component
+                  ::: "Allows changes to Component fields."
+
+               , State Private UpdateFlags
+                  ::: "Internal update flags that determine update path."
+               ]
+               IO
+               (View parent)
+    }
+
+instance Default (Component parent props state) where
+  def =
+    Component
+      { renderer = return nil
+      , willUnmount = def
+      , didUpdate = def
+      , willUpdate = def
+      , shouldUpdate = return True
+      , willReceiveProps = def
+      , didMount = def
+      , willMount = def
+      , getDefaultState = error "Component.getDefaultState: state not initialized."
+      , props = error "Component.props: properties not initialized."
+      }
+
+type StateUpdate props state = (props -> state -> IO (Maybe state,IO ())) -> IO ()
+
 data View e where
   -- NullHTML must have a presence on the page for proper diffing
   NullHTML
@@ -200,10 +582,9 @@ data View e where
   STHTML
     :: { _stprops  :: props
        , _stid     :: Int
-       , _ststate  :: st
-       , _strecord :: (Maybe (IORef (props,st,props -> st -> StateUpdate e props st -> View x,View x,View x)))
-       , _stview   :: (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View x)
-       , _stupdate :: StateUpdate e props st
+       , _strecord :: (Maybe (IORef (props,st,Component e props st,View x,View x)))
+       , _stview   :: As (Ef e IO) -> StateUpdate props st -> Component e props st
+       , _stupdate :: StateUpdate props st
        } -> View e
 
   SVGHTML
@@ -240,15 +621,13 @@ data View e where
        } -> View e
 
   View
-    :: (Component a e, Typeable a, Typeable e) => { renderable :: a e } -> View e
+    :: (Renderable a e, Typeable a, Typeable e) => { renderable :: a e } -> View e
 
-type StateUpdate ms props st = (props -> st -> IO (Maybe st, IO ())) -> IO ()
+pattern Rendered :: (Renderable a e, Typeable a, Typeable e) => a e -> View e
+pattern Rendered ams <- (View (cast -> Just ams)) where
+  Rendered ams = View ams
 
-pattern Component :: (Component a e, Typeable a, Typeable e) => a e -> View e
-pattern Component ams <- (View (cast -> Just ams)) where
-  Component ams = View ams
-
-class Component (a :: [* -> *] -> *) (ms :: [* -> *]) where
+class Renderable (a :: [* -> *] -> *) (ms :: [* -> *]) where
   -- TODO:
   --   build :: a ms -> IO (View ms)
   --   diff :: (Ef ms IO () -> IO ()) -> ENode -> View ms -> a ms -> a ms -> IO (View ms)
@@ -256,56 +635,52 @@ class Component (a :: [* -> *] -> *) (ms :: [* -> *]) where
   -- Great avenue for extensibility and modularity, but I don't see that the expressivity gained
   -- would currently justify the work; it's mostly just a refactoring, but it is a major refactoring.
   render :: a ms -> View ms
-  default render :: (Generic (a ms), GComponent (Rep (a ms)) ms) => a ms -> View ms
+  default render :: (Generic (a ms), GRenderable (Rep (a ms)) ms) => a ms -> View ms
   render = grender . from
 
-instance Component View ms where
+instance Renderable View ms where
   render (View a) = render a
   render a = a
 
-class GComponent a ms where
+class GRenderable a ms where
   grender :: a x -> View ms
 
-instance GComponent GHC.Generics.U1 ms where
+instance GRenderable GHC.Generics.U1 ms where
   grender GHC.Generics.U1 = nil
 
-instance (Component a ms) => GComponent (GHC.Generics.K1 i (a ms)) ms where
+instance (Renderable a ms) => GRenderable (GHC.Generics.K1 i (a ms)) ms where
   grender (GHC.Generics.K1 k) = render k
 
-instance (GComponent a ms, GComponent b ms) => GComponent (a :*: b) ms where
+instance (GRenderable a ms, GRenderable b ms) => GRenderable (a :*: b) ms where
   grender (a :*: b) = mkHTML "div" [ ] [ grender a, grender b ]
 
-instance (GComponent a ms, GComponent b ms) => GComponent (a :+: b) ms where
+instance (GRenderable a ms, GRenderable b ms) => GRenderable (a :+: b) ms where
   grender (L1 a) = grender a
   grender (R1 b) = grender b
 
-mapComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms) => (a ms -> a' ms) -> View ms -> View ms
-mapComponent f sa =
+mapRenderable :: (Typeable a, Typeable a', Typeable ms, Renderable a ms, Renderable a' ms) => (a ms -> a' ms) -> View ms -> View ms
+mapRenderable f sa =
   case sa of
-    Component a -> Component (f a)
+    Rendered a -> Rendered (f a)
     _ -> sa
 
-forComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+forRenderable :: (Typeable a, Typeable a', Typeable ms, Renderable a ms, Renderable a' ms)
              => View ms -> (a ms -> a' ms) -> View ms
-forComponent = flip mapComponent
+forRenderable = flip mapRenderable
 
 infixl 9 %
-(%) :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms) => View ms -> (a ms -> a' ms) -> View ms
-(%) = forComponent
+(%) :: (Typeable a, Typeable a', Typeable ms, Renderable a ms, Renderable a' ms) => View ms -> (a ms -> a' ms) -> View ms
+(%) = forRenderable
 
-mapComponents :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+mapRenderables :: (Typeable a, Typeable a', Typeable ms, Renderable a ms, Renderable a' ms)
               => (a ms -> a' ms) -> [View ms] -> [View ms]
-mapComponents f as = map (mapComponent f) as
+mapRenderables f as = map (mapRenderable f) as
 
-forComponents :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+forRenderables :: (Typeable a, Typeable a', Typeable ms, Renderable a ms, Renderable a' ms)
               => [View ms] -> (a ms -> a' ms) -> [View ms]
-forComponents = flip mapComponents
+forRenderables = flip mapRenderables
 
--- mappedComponent :: (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
---                 => Setter (View ms) (View ms) (a ms) (a' ms)
--- mappedComponent = sets mapComponent
-
-data Mapping ms = forall a a'. (Typeable a, Typeable a', Typeable ms, Component a ms, Component a' ms)
+data Mapping ms = forall a a'. (Typeable a, Typeable a', Typeable ms, Renderable a ms, Renderable a' ms)
                 => Mapping (a ms -> a' ms)
 
 maps :: View ms -> [Mapping ms] -> View ms
@@ -313,7 +688,7 @@ maps a mappings = Prelude.foldr tryMap a mappings
   where
     tryMap (Mapping m) res =
       case a of
-        Component a -> Component (m a)
+        Rendered a -> Rendered (m a)
         _ -> res
 
 forceToFromTxt :: (ToTxt t, FromTxt t) => Txt -> t
@@ -325,12 +700,12 @@ witness = unsafeCoerce
 witnesses :: [View '[]] -> [View ms]
 witnesses = unsafeCoerce
 
-styledComponent :: View ms -> Maybe ([Feature ms] -> [View ms] -> View ms,Styles (),[Feature ms],[View ms])
-styledComponent (HTML _ tag fs vs) =
+styledRenderable :: View ms -> Maybe ([Feature ms] -> [View ms] -> View ms,Styles (),[Feature ms],[View ms])
+styledRenderable (HTML _ tag fs vs) =
   case getStyles fs of
     Just (ss,rest) -> Just (HTML Nothing tag,ss,rest,vs)
     _ -> Nothing
-styledComponent (SVGHTML _ tag fs vs) =
+styledRenderable (SVGHTML _ tag fs vs) =
   case getStyles fs of
     Just (ss,rest) -> Just (SVGHTML Nothing tag,ss,rest,vs)
     _ -> Nothing
@@ -348,7 +723,7 @@ getStyles = go (return ()) []
 
 -- rudimentary; no CSS3
 pattern Styled :: ([Feature ms] -> [View ms] -> View ms) -> Styles () -> [Feature ms] -> [View ms] -> View ms
-pattern Styled f ss fs vs <- (styledComponent -> Just (f,ss,fs,vs)) where
+pattern Styled f ss fs vs <- (styledRenderable -> Just (f,ss,fs,vs)) where
   Styled f ss fs vs = f (styled ss : fs) vs
 
 pattern Null :: Typeable ms => View ms
@@ -359,10 +734,6 @@ pattern Raw :: Txt -> [Feature ms] -> Txt -> View ms
 pattern Raw t fs c <- (RawHTML _ t fs c) where
   Raw t fs c = RawHTML Nothing t fs c
 
-pattern Rendered :: (ToTxt t, FromTxt t) => t -> View ms
-pattern Rendered t <- (TextHTML _ (fromTxt -> t)) where
-  Rendered t = TextHTML Nothing (toTxt t)
-
 pattern Translated :: (ToTxt t, FromTxt t, ToTxt f, FromTxt f) => f -> t
 pattern Translated t <- (fromTxt . toTxt -> t) where
   Translated f = fromTxt $ toTxt f
@@ -371,12 +742,12 @@ pattern Translated t <- (fromTxt . toTxt -> t) where
 pattern Text :: (ToTxt t, FromTxt t) => t -> Txt
 pattern Text t = Translated t
 
-pattern String :: Txt -> View ms
-pattern String s <- (TextHTML _ s) where
-  String s = TextHTML Nothing s
+pattern String :: (ToTxt t, FromTxt t) => t -> View ms
+pattern String t <- (TextHTML _ (fromTxt -> t)) where
+  String t = TextHTML Nothing (toTxt t)
 
-pattern ST mdl i st v <- STHTML mdl i st _ v _ where
-  ST mdl i st v = STHTML mdl i st Nothing v (\_ -> return ())
+pattern ST p i v <- STHTML p i _ v _ where
+  ST p i v = STHTML p i Nothing v (\_ -> return ())
 
 weakRender (View a) = weakRender (render a)
 weakRender a = a
@@ -407,13 +778,76 @@ instance Typeable e => ToJSON (View e) where
 #endif
       go a
     where
-      go (STHTML props _ st iorec v _) =
-        go $ render $ (unsafeCoerce :: forall x. x -> View e) $
+      go (STHTML props _ iorec v _) =
+        go $ render $
           case iorec of
-            Nothing -> v props st (\_ -> return ())
+            Nothing -> unsafePerformIO $ do
+              -- I guess you might call this non-idiomatic.
+              -- I know it's ugly, but if it works....
+
+              let built :: forall props state.
+                           ( Component e props state
+                           )
+                  built@(component,thisproxy,propsproxy,stateproxy) =
+                    -- have to unsafeCoerce to bypass type-checking of props
+                    -- should be safe
+                    ( v (unsafeCoerce $ parent component) (\_ -> return ())
+                    )
+
+                  ?this :: Proxy (Component e props state)
+                  ?this = Proxy
+
+              let ?props :: Proxy props
+                  ?props = Proxy
+                  ?state = stateproxy
+                  ?parent = Proxy :: Proxy e
+
+              let parent :: Component e props st -> Parent e
+                  parent _ = error "Component.toJSON: unclaimed child"
+
+              let obj :: forall component e props state.
+                         (component ~ Component e props state)
+                      => props
+                      -> Parent e
+                      -> component
+                      -> Ef.Base.Object
+                           '[ Reader props props
+                            , State component component
+                            , Reader e (Parent e)
+                            , State Private UpdateFlags
+                            ] IO
+                  obj porps parent component = Ef.Base.Object $
+                    readerp ?props props
+                    *:* statep ?this component
+                    *:* readerp ?parent parent
+                    *:* statep private (UpdateFlags False False)
+
+              (_,state) <- (obj props (parent component) component) Ef.Base.! getDefaultState
+
+              let obj :: forall component parent props state.
+                         props
+                      -> state
+                      -> component
+                      -> Ef.Base.Object
+                           '[ Reader props props
+                            , State state state
+                            , State component component
+                            , State Private UpdateFlags
+                            ] IO
+                  obj props state parent component = Ef.Base.Object $
+                    readerp ?props props
+                    *:* statep ?state state
+                    *:* statep ?this component
+                    *:* statep private (UpdateFlags False False)
+
+              (_,rendered) <- (obj props state component) Ef.Base.! renderer
+
+              return rendered
+
             Just ref ->
-              let (props,st,_,_,_) = unsafePerformIO (readIORef ref)
-              in v props st (\_ -> return ())
+              let (_,_,_,cur,_) = unsafePerformIO (readIORef ref)
+              in cur
+
       go (TextHTML _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
       go (RawHTML _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
       go (KHTML _ t as ks) = object [ "type" .= ("keyed" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks) ]
@@ -557,27 +991,27 @@ list x _attributes _keyed =
       in
         KSVGHTML {..}
     _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGHTMLs"
-
-viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View e) -> View e
-viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\_ -> return ())
-
--- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
--- for changes; if any of the variables within the model are updated, a diff will be performed.
--- This is how changes external to a `viewManager` are injected; if a `viewManager` uses state
--- from a `Controller`s model and that state is untracked in the `viewManager`, changes to the
--- `Controller`s model will not be injected. The same rules apply to nesting/inheriting
--- `viewManager` models.
 --
--- Major caveat: If the list of elements holding a viewManager changes such that the diff algorithm
---               must recreate the element, it will be reset to its original state. This would
---               happen if the position of the st element within the list changes. If a variable
---               length list of children is required, either careful placement for the st element,
---               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
---               this problem. The solution is the good practice of keeping lists of views static
---               or at the very least keep extensibility at the end of a view list.
-viewManager :: forall props st e. props -> st -> (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View e) -> View e
-viewManager props initial_st view = STHTML props 0 initial_st Nothing view (\_ -> return ())
-
+-- viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View e) -> View e
+-- viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\_ -> return ())
+--
+-- -- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
+-- -- for changes; if any of the variables within the model are updated, a diff will be performed.
+-- -- This is how changes external to a `viewManager` are injected; if a `viewManager` uses state
+-- -- from a `Controller`s model and that state is untracked in the `viewManager`, changes to the
+-- -- `Controller`s model will not be injected. The same rules apply to nesting/inheriting
+-- -- `viewManager` models.
+-- --
+-- -- Major caveat: If the list of elements holding a viewManager changes such that the diff algorithm
+-- --               must recreate the element, it will be reset to its original state. This would
+-- --               happen if the position of the st element within the list changes. If a variable
+-- --               length list of children is required, either careful placement for the st element,
+-- --               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
+-- --               this problem. The solution is the good practice of keeping lists of views static
+-- --               or at the very least keep extensibility at the end of a view list.
+-- viewManager :: forall props st e. props -> st -> (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View e) -> View e
+-- viewManager props initial_st view = STHTML props 0 initial_st Nothing view (\_ -> return ())
+--
 constant :: View e -> View e
 constant a = viewManager () () $ \_ _ _ _ -> a
 
@@ -766,7 +1200,7 @@ reflect c =
 data DiffStrategy = Eager | Manual deriving (Eq)
 
 type Differ ms m =
-    forall a. Component a ms =>
+    forall a. Renderable a ms =>
        (m ms -> a ms)
     -> IO ()
     -> (Ef ms IO () -> IO ())
@@ -780,12 +1214,12 @@ data AState m =
     }
 
 data ControllerPatch m =
-  forall ms a. Component a ms =>
+  forall ms a. Renderable a ms =>
   APatch
       -- only modify ap_AState with atomicModifyIORef
     { ap_send         :: Ef ms IO () -> IO ()
     , ap_AState       :: IORef (Maybe (AState m),Bool) -- an AState record for manipulation; nullable by context to stop a patch.
-    , ap_patchComponent    :: (m ms -> a ms)
+    , ap_patchRenderable    :: (m ms -> a ms)
     , ap_viewTrigger  :: IO ()
     , ap_hooks        :: ControllerHooks
     }
@@ -794,7 +1228,7 @@ type IsController' ts ms m = (ms <: Base m, ts <. Base m, Delta (Modules ts) (Me
 type IsController ms m = IsController' ms ms m
 
 data ControllerHooks = ControllerHooks
-  { chComponents      :: Syndicate ()
+  { chRenderables      :: Syndicate ()
   , chForeground :: Syndicate ()
   , chBackground :: Syndicate ()
   }
@@ -881,7 +1315,7 @@ type ControllerKey ms m = Key (ControllerRecord (Appended ms (Base m)) m)
 type ControllerBuilder ts m = Modules (Base m) (Action (Appended ts (Base m)) IO) -> IO (Modules (Appended ts (Base m)) (Action (Appended ts (Base m)) IO))
 type ControllerPrimer ms m = Ef (Appended ms (Base m)) IO ()
 
-data Controller' ts ms m = forall a. Component a ms => Controller
+data Controller' ts ms m = forall a. Renderable a ms => Controller
   { key       :: !(Key (ControllerRecord ms m))
   , build     :: !(Modules (Base m) (Action ts IO) -> IO (Modules ts (Action ts IO)))
   , prime     :: !(Ef ms IO ())
@@ -1004,7 +1438,7 @@ mkController mkControllerAction c@Controller {..} = do
   forkIO $ do
     built <- build $ state (ControllerState
                                 Nothing
-                                (differ view (publish (chComponents ch) ()) sendEv)
+                                (differ view (publish (chRenderables ch) ()) sendEv)
                                 Eager
                                 us
                                 model
@@ -1513,7 +1947,7 @@ diff_ APatch {..} = do
       Just (AState as_live !as_model) -> do
         doc <- getDocument
         ControllerView !raw_html !live_html live_m isFG <- readIORef as_live
-        let !new_html = render $ ap_patchComponent as_model
+        let !new_html = render $ ap_patchRenderable as_model
         new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
         writeIORef as_live $ ControllerView new_html new_live_html as_model isFG
         ap_viewTrigger
@@ -1528,7 +1962,7 @@ diff_ APatch {..} = do
     Just (AState as_live !as_model) -> do
       doc <- getDocument
       ControllerView !raw_html !live_html live_m isFG <- readIORef as_live
-      let !new_html = render $ ap_patchComponent as_model
+      let !new_html = render $ ap_patchRenderable as_model
       new_live_html <- diffHelper ap_send doc ap_hooks isFG live_html raw_html new_html
       writeIORef as_live $ ControllerView new_html new_live_html as_model isFG
       ap_viewTrigger
