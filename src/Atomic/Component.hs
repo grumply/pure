@@ -81,8 +81,6 @@ import Data.Unique
 import GHC.Generics
 import GHC.Prim
 
-import Debug.Trace
-
 import qualified Data.Function as F
 
 import qualified Data.IntMap.Strict as IM
@@ -2024,7 +2022,7 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
                   let new_mid = runRenderer props st' c'' updateStateInternal
                   new <- diffHelper f doc ch isFG old mid new_mid
                   (c''',mst) <- runDidUpdate parent props st' c''
-                  writeIORef strec (props,st',c'',old,mid)
+                  writeIORef strec (props,st',c'',new,new_mid)
 
                   -- make sure to leave this animation frame
                   -- before calling the next update
@@ -2459,7 +2457,7 @@ diffHelper f doc ch isFG =
 
     go' txt@(TextView (Just t) cnt) mid@(TextView _ mcnt) new@(TextView _ cnt') =
       if prettyUnsafeEq mcnt cnt' then do
-        trace (show ("prttyUnsafeEq txt" :: String,mcnt,cnt')) $ return txt
+        return txt
       else do
         changeText t cnt'
         return $ TextView (Just t) cnt'
