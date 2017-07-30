@@ -167,10 +167,13 @@ foreign import javascript unsafe
 #endif
 
 newtype Old a = Old { getOld :: a }
+newtype Props props = Props { getP :: props }
+newtype St state = St { getS :: state }
 
 data Private
 private :: Proxy Private
 private = Proxy
+
 
 data UpdateFlags = UpdateFlags
   { stateDidChange :: Bool
@@ -208,20 +211,20 @@ getState ::
         ::: "initialized and willUnmount where it is read-only."
   , ?state :: Proxy state
       ::: "Implicit access to the current state reference."
-  , ms <: '[State state state]
+  , ms <: '[State state (St state)]
   , Monad c
   ) => Ef ms c state
-getState = getp ?state
+getState = getS <$> getp ?state
 
 getOldState ::
   ( Comment "Access to the old state; this method is available only"
         ::: "in shouldUpdate and willUnmount."
   , ?state :: Proxy state
       ::: "Implicit access to the current state reference."
-  , ms <: '[Reader state state]
+  , ms <: '[Reader state (St state)]
   , Monad c
   ) => Ef ms c state
-getOldState = askp ?state
+getOldState = asksp ?state getS
 
 setState ::
   ( Comment "Set new state; this method is not available in"
@@ -231,12 +234,12 @@ setState ::
   , ?state :: Proxy state
       ::: "Implicit access to the current state reference."
   , flags ~ State Private UpdateFlags
-  , ms <: '[State state state, flags]
+  , ms <: '[State state (St state), flags]
   , Monad c
   ) => state ::: "New, updated state."
     -> Ef ms c ()
 setState newState = do
-  putp ?state newState
+  putp ?state (St newState)
   setStateDidChange
 
 modifyState ::
@@ -248,22 +251,22 @@ modifyState ::
   , ?state :: Proxy state
       ::: "Implicit access to the current state reference."
   , flags ~ State Private UpdateFlags
-  , ms <: '[State state state,flags]
+  , ms <: '[State state (St state),flags]
   , Monad c
   ) => (state -> state) ::: "State transformer."
     -> Ef ms c ()
 modifyState f = do
-  _ <- modifyp ?state $ \s -> (f s,())
+  _ <- modifyp ?state $ \(St s) -> (St (f s),())
   setStateDidChange
 
 getProps ::
   ( Comment "Access the current or new properties."
   , ?props :: Proxy props
       ::: "Implicit access to the current property environment."
-  , ms <: '[Reader props props]
+  , ms <: '[Reader props (Props props)]
   , Monad c
   ) => Ef ms c props
-getProps = askp ?props
+getProps = asksp ?props getP
 
 getOldProps ::
   ( Comment "Access the old properties in shouldUpdate."
@@ -309,7 +312,7 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         , component ~ Component parent props state
         , ?props :: Proxy props
         , ?this  :: Proxy component
-        ) => Ef '[ Reader props props
+        ) => Ef '[ Reader props (Props props)
                      ::: "Initial properties as passed from parent."
 
                  , State component component
@@ -331,10 +334,10 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         , ?props :: Proxy props
         , ?state :: Proxy state
         , ?this  :: Proxy component
-        ) => Ef '[ Reader props props
+        ) => Ef '[ Reader props (Props props)
                      ::: "Initial properties."
 
-                 , State state state
+                 , State state (St state)
                      ::: "Default State; updatable."
 
                  , State component component
@@ -357,10 +360,10 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         , ?props :: Proxy props
         , ?state :: Proxy state
         , ?this  :: Proxy component
-        ) => Ef '[ Reader props props
+        ) => Ef '[ Reader props (Props props)
                      ::: "Initial properties."
 
-                 , State state state
+                 , State state (St state)
                       ::: "State after call to willMount"
                       ::: "Changes force re-render."
 
@@ -387,10 +390,10 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         ) => Ef '[ Reader props (Old props)
                       ::: "Old properties before external update was triggered."
 
-                 , Reader props props
+                 , Reader props (Props props)
                       ::: "New properties, soon to be applied to a render."
 
-                 , State state state
+                 , State state (St state)
                       ::: "Current state."
 
                  , State component component
@@ -410,20 +413,19 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         ( Comment "Called on each property or state change; if returing False,"
               ::: "no diffing will happen."
         , component ~ Component parent props state
-        , ?oldProps :: Proxy (Old props)
         , ?props :: Proxy props
         , ?state :: Proxy state
         , ?this  :: Proxy component
-        ) => Ef '[ Reader (Old props) (Old props)
+        ) => Ef '[ Reader props (Old props)
                       ::: "Properties previous to this update."
 
-                 , Reader props props
+                 , Reader props (Props props)
                       ::: "New properties; might be the same as old properties."
 
                  , Reader state (Old state)
                       ::: "State previous to this update; read-only."
 
-                 , State state state
+                 , State state (St state)
                       ::: "New state; might be unchanged; read/write."
 
                  , State component component
@@ -445,10 +447,10 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         , ?props :: Proxy props
         , ?state :: Proxy state
         , ?this  :: Proxy component
-        ) => Ef '[ Reader props props
+        ) => Ef '[ Reader props (Props props)
                       ::: "Current properties."
 
-                 , State state state
+                 , State state (St state)
                       ::: "Current state; read-writable."
                       ::: "Changes force re-render in the current frame."
 
@@ -472,10 +474,10 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         , ?props :: Proxy props
         , ?state :: Proxy state
         , ?this  :: Proxy component
-        ) => Ef '[ Reader props props
+        ) => Ef '[ Reader props (Props props)
                       ::: "Current properties."
 
-                 , State state state
+                 , State state (St state)
                       ::: "Current state; read-writable."
                       ::: "Changes force re-render in the current frame."
 
@@ -496,10 +498,10 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
               ::: "Runs before any cleanup declarations."
         , ?props :: Proxy props
         , ?state :: Proxy state
-        ) => Ef '[ Reader props props
+        ) => Ef '[ Reader props (Props props)
                      ::: "Current properties."
 
-                 , Reader state state
+                 , Reader state (St state)
                      ::: "Current state; read-only."
 
                  , Reader parent (Parent parent)
@@ -515,10 +517,10 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         , ?state :: Proxy state
         , ?this  :: Proxy component
         )
-        => Ef '[ Reader props props
+        => Ef '[ Reader props (Props props)
                   ::: "Current properties."
 
-               , State state state
+               , State state (St state)
                   ::: "Current state; read-writable."
 
                , State component component
@@ -585,6 +587,9 @@ data View e where
        , _strecord :: (Maybe (IORef (props,st,Component e props st,View x,View x)))
        , _stview   :: As (Ef e IO) -> StateUpdate props st -> Component e props st
        , _stupdate :: StateUpdate props st
+       , _stateproxy :: Proxy st
+       , _propsproxy :: Proxy props
+       , _thisproxy :: Proxy (Component e props st)
        } -> View e
 
   SVGHTML
@@ -746,8 +751,8 @@ pattern String :: (ToTxt t, FromTxt t) => t -> View ms
 pattern String t <- (TextHTML _ (fromTxt -> t)) where
   String t = TextHTML Nothing (toTxt t)
 
-pattern ST p i v <- STHTML p i _ v _ where
-  ST p i v = STHTML p i Nothing v (\_ -> return ())
+pattern ST p i v <- STHTML p i _ v _ _ _ _ where
+  ST p i v = STHTML p i Nothing v (\_ -> return ()) Proxy Proxy Proxy
 
 weakRender (View a) = weakRender (render a)
 weakRender a = a
@@ -778,76 +783,42 @@ instance Typeable e => ToJSON (View e) where
 #endif
       go a
     where
-      go (STHTML props _ iorec v _) =
-        go $ render $
-          case iorec of
-            Nothing -> unsafePerformIO $ do
-              -- I guess you might call this non-idiomatic.
-              -- I know it's ugly, but if it works....
+      go (STHTML props _ iorec v _ state_proxy props_proxy this_proxy) =
+        let ?this = this_proxy
+        in let ?state = state_proxy
+        in let ?props = props_proxy
+        in
+          unsafeCoerce go $
+            case iorec of
+              Nothing -> unsafePerformIO $ do
+                let parent = error "Component.toJSON: unclaimed child"
+                    c = v parent (\_ -> def)
 
-              let built :: forall props state.
-                           ( Component e props state
-                           )
-                  built@(component,thisproxy,propsproxy,stateproxy) =
-                    -- have to unsafeCoerce to bypass type-checking of props
-                    -- should be safe
-                    ( v (unsafeCoerce $ parent component) (\_ -> return ())
-                    )
+                let obj = Ef.Base.Object $
+                      readerp ?props (Props props)
+                      *:* statep ?this c
+                      *:* readerp Proxy parent
+                      *:* statep private (UpdateFlags False False)
+                      *:* Ef.Base.Empty
 
-                  ?this :: Proxy (Component e props state)
-                  ?this = Proxy
+                (_,state) <- obj Ef.Base.! (getDefaultState c)
 
-              let ?props :: Proxy props
-                  ?props = Proxy
-                  ?state = stateproxy
-                  ?parent = Proxy :: Proxy e
+                let obj = Ef.Base.Object $
+                      readerp ?props (Props props)
+                      *:* statep ?state (St state)
+                      *:* statep ?this c
+                      *:* statep private (UpdateFlags False False)
+                      *:* Ef.Base.Empty
 
-              let parent :: Component e props st -> Parent e
-                  parent _ = error "Component.toJSON: unclaimed child"
+                (_,rendered) <- obj Ef.Base.! (renderer c)
 
-              let obj :: forall component e props state.
-                         (component ~ Component e props state)
-                      => props
-                      -> Parent e
-                      -> component
-                      -> Ef.Base.Object
-                           '[ Reader props props
-                            , State component component
-                            , Reader e (Parent e)
-                            , State Private UpdateFlags
-                            ] IO
-                  obj porps parent component = Ef.Base.Object $
-                    readerp ?props props
-                    *:* statep ?this component
-                    *:* readerp ?parent parent
-                    *:* statep private (UpdateFlags False False)
+                return rendered
 
-              (_,state) <- (obj props (parent component) component) Ef.Base.! getDefaultState
+              Just ref ->
+                let (_,_,_,cur,_) = unsafePerformIO (readIORef ref)
+                in unsafeCoerce cur
 
-              let obj :: forall component parent props state.
-                         props
-                      -> state
-                      -> component
-                      -> Ef.Base.Object
-                           '[ Reader props props
-                            , State state state
-                            , State component component
-                            , State Private UpdateFlags
-                            ] IO
-                  obj props state parent component = Ef.Base.Object $
-                    readerp ?props props
-                    *:* statep ?state state
-                    *:* statep ?this component
-                    *:* statep private (UpdateFlags False False)
-
-              (_,rendered) <- (obj props state component) Ef.Base.! renderer
-
-              return rendered
-
-            Just ref ->
-              let (_,_,_,cur,_) = unsafePerformIO (readIORef ref)
-              in cur
-
+      go (View v) = go (render v)
       go (TextHTML _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
       go (RawHTML _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
       go (KHTML _ t as ks) = object [ "type" .= ("keyed" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks) ]
