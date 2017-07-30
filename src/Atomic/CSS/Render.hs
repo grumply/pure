@@ -223,15 +223,15 @@ iso885915Charset = atCharset "iso-8859-15"
 atImport :: Txt -> CSS ()
 atImport i = Send (CSS3_ "@import " i (Return ()) Return)
 
-data Namespace = XHTML | SVG
+data Namespace = XHTMLNS | SVGNS
 
 atNamespace :: Namespace -> Maybe Txt -> CSS ()
 atNamespace ns mnsv = Send (CSS3_ namespace_ ns_ (Return ()) Return)
   where
     ns_ =
       case ns of
-        XHTML -> "url(http://www.w3.org/1999/xhtml)"
-        SVG   -> "url(http://www.w3.org/2000/svg)"
+        XHTMLNS -> "url(http://www.w3.org/1999/xhtml)"
+        SVGNS   -> "url(http://www.w3.org/2000/svg)"
 
     namespace_ =
       maybe "@namespace" ("@namespace " <>) mnsv

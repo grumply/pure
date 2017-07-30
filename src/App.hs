@@ -4,7 +4,7 @@
 {-# language CPP #-}
 module App (module App,module Export) where
 
-import Ef.Base as Export hiding (As,Index,child,transform,watch,construct,uncons,distribute,embed,observe,End,Nat(..))
+import Ef.Base as Export hiding (As,Index,child,transform,watch,construct,uncons,distribute,embed,observe,End,Nat(..),initialize)
 import qualified Ef.Base
 import Ef.Reflect as Export
 import Prelude as Export hiding (any,and,or,all,exponent,tan,lookup,reverse)
@@ -130,8 +130,8 @@ run app@App {..} = do
   ort     <- getAppRoot root
   Just ph <- liftIO $ createElement doc "template"
   liftIO $ appendChild ort ph
-  rt'     <- liftIO $ newIORef (ControllerView (NullHTML (Just ph) :: View '[])
-                                            (NullHTML $ Just ph)
+  rt'     <- liftIO $ newIORef (ControllerView (NullView (Just ph) :: View '[])
+                                            (NullView $ Just ph)
                                             (Const ())
                                             True
                                )
@@ -201,7 +201,7 @@ run app@App {..} = do
 #else
                 h <- return ()
 #endif
-                mkController (Replace (NullHTML (Just h))) hc
+                mkController (Replace (NullView (Just h))) hc
               Just ControllerRecord {..} -> do
 #ifdef __GHCJS__
                 Just h_ <- D.getHead doc
@@ -211,7 +211,7 @@ run app@App {..} = do
 #endif
                 ControllerView _ new _ _ <- readIORef crView
                 rebuild new
-                replace (NullHTML $ Just h) new
+                replace (NullView $ Just h) new
             mb_ <- lookupController (Component.key b)
             case mb_ of
               Nothing -> do

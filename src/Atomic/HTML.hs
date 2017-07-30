@@ -363,284 +363,284 @@ pattern Wbr fs cs <- HTML mn "wbr" fs cs where
 --------------------------------------------------------------------------------
 -- SVG
 
-pattern SVGA fs cs <- SVGHTML mn "a" fs cs where
+pattern SVGA fs cs <- SVG mn "a" fs cs where
   SVGA fs cs = mkSVG "a" fs cs
 
-pattern SVGAudio fs cs <- SVGHTML mn "audio" fs cs where
+pattern SVGAudio fs cs <- SVG mn "audio" fs cs where
   SVGAudio fs cs = mkSVG "audio" fs cs
 
-pattern SVGAltGlyph fs cs <- SVGHTML mn "altGlyph" fs cs where
+pattern SVGAltGlyph fs cs <- SVG mn "altGlyph" fs cs where
   SVGAltGlyph fs cs = mkSVG "altGlyph" fs cs
 
-pattern SVGAltGlyphDef fs cs <- SVGHTML mn "altGlyphDef" fs cs where
+pattern SVGAltGlyphDef fs cs <- SVG mn "altGlyphDef" fs cs where
   SVGAltGlyphDef fs cs = mkSVG "altGlyphDef" fs cs
 
-pattern SVGAltGlyphItem fs cs <- SVGHTML mn "altGlyphItem" fs cs where
+pattern SVGAltGlyphItem fs cs <- SVG mn "altGlyphItem" fs cs where
   SVGAltGlyphItem fs cs = mkSVG "altGlyphItem" fs cs
 
-pattern SVGAnimate fs cs <- SVGHTML mn "animate" fs cs where
+pattern SVGAnimate fs cs <- SVG mn "animate" fs cs where
   SVGAnimate fs cs = mkSVG "animate" fs cs
 
-pattern SVGAnimateColor fs cs <- SVGHTML mn "animateColor" fs cs where
+pattern SVGAnimateColor fs cs <- SVG mn "animateColor" fs cs where
   SVGAnimateColor fs cs = mkSVG "animateColor" fs cs
 
-pattern SVGAnimateMotion fs cs <- SVGHTML mn "animateMotion" fs cs where
+pattern SVGAnimateMotion fs cs <- SVG mn "animateMotion" fs cs where
   SVGAnimateMotion fs cs = mkSVG "animateMotion" fs cs
 
-pattern SVGAnimateTransform fs cs <- SVGHTML mn "animateTransform" fs cs where
+pattern SVGAnimateTransform fs cs <- SVG mn "animateTransform" fs cs where
   SVGAnimateTransform fs cs = mkSVG "animateTransform" fs cs
 
-pattern SVGCanvas fs cs <- SVGHTML mn "canvas" fs cs where
+pattern SVGCanvas fs cs <- SVG mn "canvas" fs cs where
   SVGCanvas fs cs = mkSVG "canvas" fs cs
 
-pattern SVGCircle fs cs <- SVGHTML mn "circle" fs cs where
+pattern SVGCircle fs cs <- SVG mn "circle" fs cs where
   SVGCircle fs cs = mkSVG "circle" fs cs
 
-pattern SVGClipPath fs cs <- SVGHTML mn "clipPath" fs cs where
+pattern SVGClipPath fs cs <- SVG mn "clipPath" fs cs where
   SVGClipPath fs cs = mkSVG "clipPath" fs cs
 
-pattern SVGColorProfile fs cs <- SVGHTML mn "color-profile" fs cs where
+pattern SVGColorProfile fs cs <- SVG mn "color-profile" fs cs where
   SVGColorProfile fs cs = mkSVG "color-profile" fs cs
 
-pattern SVGCursor fs cs <- SVGHTML mn "cursor" fs cs where
+pattern SVGCursor fs cs <- SVG mn "cursor" fs cs where
   SVGCursor fs cs = mkSVG "cursor" fs cs
 
-pattern SVGDefs fs cs <- SVGHTML mn "defs" fs cs where
+pattern SVGDefs fs cs <- SVG mn "defs" fs cs where
   SVGDefs fs cs = mkSVG "defs" fs cs
 
-pattern SVGDesc fs cs <- SVGHTML mn "desc" fs cs where
+pattern SVGDesc fs cs <- SVG mn "desc" fs cs where
   SVGDesc fs cs = mkSVG "desc" fs cs
 
-pattern SVGDiscard fs cs <- SVGHTML mn "discard" fs cs where
+pattern SVGDiscard fs cs <- SVG mn "discard" fs cs where
   SVGDiscard fs cs = mkSVG "discard" fs cs
 
-pattern SVGEllipse fs cs <- SVGHTML mn "ellipse" fs cs where
+pattern SVGEllipse fs cs <- SVG mn "ellipse" fs cs where
   SVGEllipse fs cs = mkSVG "ellipse" fs cs
 
-pattern SVGFeBlend fs cs <- SVGHTML mn "feBlend" fs cs where
+pattern SVGFeBlend fs cs <- SVG mn "feBlend" fs cs where
   SVGFeBlend fs cs = mkSVG "feBlend" fs cs
 
-pattern SVGFeColorMatrix fs cs <- SVGHTML mn "feColorMatrix" fs cs where
+pattern SVGFeColorMatrix fs cs <- SVG mn "feColorMatrix" fs cs where
   SVGFeColorMatrix fs cs = mkSVG "feColorMatrix" fs cs
 
-pattern SVGFeComponentTransfer fs cs <- SVGHTML mn "feComponentTransfer" fs cs where
+pattern SVGFeComponentTransfer fs cs <- SVG mn "feComponentTransfer" fs cs where
   SVGFeComponentTransfer fs cs = mkSVG "feComponentTransfer" fs cs
 
-pattern SVGFeComposite fs cs <- SVGHTML mn "feComposite" fs cs where
+pattern SVGFeComposite fs cs <- SVG mn "feComposite" fs cs where
   SVGFeComposite fs cs = mkSVG "feComposite" fs cs
 
-pattern SVGFeConvolveMatrix fs cs <- SVGHTML mn "feConvolveMatrix" fs cs where
+pattern SVGFeConvolveMatrix fs cs <- SVG mn "feConvolveMatrix" fs cs where
   SVGFeConvolveMatrix fs cs = mkSVG "feConvolveMatrix" fs cs
 
-pattern SVGFeDiffuseLighting fs cs <- SVGHTML mn "feDiffuseLighting" fs cs where
+pattern SVGFeDiffuseLighting fs cs <- SVG mn "feDiffuseLighting" fs cs where
   SVGFeDiffuseLighting fs cs = mkSVG "feDiffuseLighting" fs cs
 
-pattern SVGFeDisplacementMap fs cs <- SVGHTML mn "feDisplacementMap" fs cs where
+pattern SVGFeDisplacementMap fs cs <- SVG mn "feDisplacementMap" fs cs where
   SVGFeDisplacementMap fs cs = mkSVG "feDisplacementMap" fs cs
 
-pattern SVGFeDistantLight fs cs <- SVGHTML mn "feDistantLight" fs cs where
+pattern SVGFeDistantLight fs cs <- SVG mn "feDistantLight" fs cs where
   SVGFeDistantLight fs cs = mkSVG "feDistantLight" fs cs
 
-pattern SVGFeDropShadow fs cs <- SVGHTML mn "feDropShadow" fs cs where
+pattern SVGFeDropShadow fs cs <- SVG mn "feDropShadow" fs cs where
   SVGFeDropShadow fs cs = mkSVG "feDropShadow" fs cs
 
-pattern SVGFeFlood fs cs <- SVGHTML mn "feFlood" fs cs where
+pattern SVGFeFlood fs cs <- SVG mn "feFlood" fs cs where
   SVGFeFlood fs cs = mkSVG "feFlood" fs cs
 
-pattern SVGFeFuncA fs cs <- SVGHTML mn "feFuncA" fs cs where
+pattern SVGFeFuncA fs cs <- SVG mn "feFuncA" fs cs where
   SVGFeFuncA fs cs = mkSVG "feFuncA" fs cs
 
-pattern SVGFeFuncB fs cs <- SVGHTML mn "feFuncB" fs cs where
+pattern SVGFeFuncB fs cs <- SVG mn "feFuncB" fs cs where
   SVGFeFuncB fs cs = mkSVG "feFuncB" fs cs
 
-pattern SVGFeFuncG fs cs <- SVGHTML mn "feFuncG" fs cs where
+pattern SVGFeFuncG fs cs <- SVG mn "feFuncG" fs cs where
   SVGFeFuncG fs cs = mkSVG "feFuncG" fs cs
 
-pattern SVGFeFuncR fs cs <- SVGHTML mn "feFuncR" fs cs where
+pattern SVGFeFuncR fs cs <- SVG mn "feFuncR" fs cs where
   SVGFeFuncR fs cs = mkSVG "feFuncR" fs cs
 
-pattern SVGFeGaussianBlur fs cs <- SVGHTML mn "feGaussianBlur" fs cs where
+pattern SVGFeGaussianBlur fs cs <- SVG mn "feGaussianBlur" fs cs where
   SVGFeGaussianBlur fs cs = mkSVG "feGaussianBlur" fs cs
 
-pattern SVGFeImage fs cs <- SVGHTML mn "feImage" fs cs where
+pattern SVGFeImage fs cs <- SVG mn "feImage" fs cs where
   SVGFeImage fs cs = mkSVG "feImage" fs cs
 
-pattern SVGFeMerge fs cs <- SVGHTML mn "feMerge" fs cs where
+pattern SVGFeMerge fs cs <- SVG mn "feMerge" fs cs where
   SVGFeMerge fs cs = mkSVG "feMerge" fs cs
 
-pattern SVGFeMergeNode fs cs <- SVGHTML mn "feMergeNode" fs cs where
+pattern SVGFeMergeNode fs cs <- SVG mn "feMergeNode" fs cs where
   SVGFeMergeNode fs cs = mkSVG "feMergeNode" fs cs
 
-pattern SVGFeMorphology fs cs <- SVGHTML mn "feMorphology" fs cs where
+pattern SVGFeMorphology fs cs <- SVG mn "feMorphology" fs cs where
   SVGFeMorphology fs cs = mkSVG "feMorphology" fs cs
 
-pattern SVGFeOffset fs cs <- SVGHTML mn "feOffset" fs cs where
+pattern SVGFeOffset fs cs <- SVG mn "feOffset" fs cs where
   SVGFeOffset fs cs = mkSVG "feOffset" fs cs
 
-pattern SVGFePointLight fs cs <- SVGHTML mn "fePointLight" fs cs where
+pattern SVGFePointLight fs cs <- SVG mn "fePointLight" fs cs where
   SVGFePointLight fs cs = mkSVG "fePointLight" fs cs
 
-pattern SVGFeSpecularLighting fs cs <- SVGHTML mn "feSpecularLighting" fs cs where
+pattern SVGFeSpecularLighting fs cs <- SVG mn "feSpecularLighting" fs cs where
   SVGFeSpecularLighting fs cs = mkSVG "feSpecularLighting" fs cs
 
-pattern SVGFeSpotLight fs cs <- SVGHTML mn "feSpotLight" fs cs where
+pattern SVGFeSpotLight fs cs <- SVG mn "feSpotLight" fs cs where
   SVGFeSpotLight fs cs = mkSVG "feSpotLight" fs cs
 
-pattern SVGFeTile fs cs <- SVGHTML mn "feTile" fs cs where
+pattern SVGFeTile fs cs <- SVG mn "feTile" fs cs where
   SVGFeTile fs cs = mkSVG "feTile" fs cs
 
-pattern SVGFeTurbulence fs cs <- SVGHTML mn "feTurbulence" fs cs where
+pattern SVGFeTurbulence fs cs <- SVG mn "feTurbulence" fs cs where
   SVGFeTurbulence fs cs = mkSVG "feTurbulence" fs cs
 
-pattern SVGFilter fs cs <- SVGHTML mn "filter" fs cs where
+pattern SVGFilter fs cs <- SVG mn "filter" fs cs where
   SVGFilter fs cs = mkSVG "filter" fs cs
 
-pattern SVGFont fs cs <- SVGHTML mn "font" fs cs where
+pattern SVGFont fs cs <- SVG mn "font" fs cs where
   SVGFont fs cs = mkSVG "font" fs cs
 
-pattern SVGFontFace fs cs <- SVGHTML mn "font-face" fs cs where
+pattern SVGFontFace fs cs <- SVG mn "font-face" fs cs where
   SVGFontFace fs cs = mkSVG "font-face" fs cs
 
-pattern SVGFontFaceFormat fs cs <- SVGHTML mn "font-face-format" fs cs where
+pattern SVGFontFaceFormat fs cs <- SVG mn "font-face-format" fs cs where
   SVGFontFaceFormat fs cs = mkSVG "font-face-format" fs cs
 
-pattern SVGFontFaceName fs cs <- SVGHTML mn "font-face-name" fs cs where
+pattern SVGFontFaceName fs cs <- SVG mn "font-face-name" fs cs where
   SVGFontFaceName fs cs = mkSVG "font-face-name" fs cs
 
-pattern SVGFontFaceSrc fs cs <- SVGHTML mn "font-face-src" fs cs where
+pattern SVGFontFaceSrc fs cs <- SVG mn "font-face-src" fs cs where
   SVGFontFaceSrc fs cs = mkSVG "font-face-src" fs cs
 
-pattern SVGFontFaceURI fs cs <- SVGHTML mn "font-face-uri" fs cs where
+pattern SVGFontFaceURI fs cs <- SVG mn "font-face-uri" fs cs where
   SVGFontFaceURI fs cs = mkSVG "font-face-uri" fs cs
 
-pattern SVGForeignObject fs cs <- SVGHTML mn "foreignObject" fs cs where
+pattern SVGForeignObject fs cs <- SVG mn "foreignObject" fs cs where
   SVGForeignObject fs cs = mkSVG "foreignObject" fs cs
 
-pattern SVGG fs cs <- SVGHTML mn "g" fs cs where
+pattern SVGG fs cs <- SVG mn "g" fs cs where
   SVGG fs cs = mkSVG "g" fs cs
 
-pattern SVGGlyph fs cs <- SVGHTML mn "glyph" fs cs where
+pattern SVGGlyph fs cs <- SVG mn "glyph" fs cs where
   SVGGlyph fs cs = mkSVG "glyph" fs cs
 
-pattern SVGGlyphRef fs cs <- SVGHTML mn "glyphRef" fs cs where
+pattern SVGGlyphRef fs cs <- SVG mn "glyphRef" fs cs where
   SVGGlyphRef fs cs = mkSVG "glyphRef" fs cs
 
-pattern SVGHatch fs cs <- SVGHTML mn "hatch" fs cs where
+pattern SVGHatch fs cs <- SVG mn "hatch" fs cs where
   SVGHatch fs cs = mkSVG "hatch" fs cs
 
-pattern SVGHatchpath fs cs <- SVGHTML mn "hatchpath" fs cs where
+pattern SVGHatchpath fs cs <- SVG mn "hatchpath" fs cs where
   SVGHatchpath fs cs = mkSVG "hatchpath" fs cs
 
-pattern SVGHkern fs cs <- SVGHTML mn "hkern" fs cs where
+pattern SVGHkern fs cs <- SVG mn "hkern" fs cs where
   SVGHkern fs cs = mkSVG "hkern" fs cs
 
-pattern SVGIframe fs cs <- SVGHTML mn "iframe" fs cs where
+pattern SVGIframe fs cs <- SVG mn "iframe" fs cs where
   SVGIframe fs cs = mkSVG "iframe" fs cs
 
-pattern SVGImage fs cs <- SVGHTML mn "image" fs cs where
+pattern SVGImage fs cs <- SVG mn "image" fs cs where
   SVGImage fs cs = mkSVG "image" fs cs
 
-pattern SVGLine fs cs <- SVGHTML mn "line" fs cs where
+pattern SVGLine fs cs <- SVG mn "line" fs cs where
   SVGLine fs cs = mkSVG "line" fs cs
 
-pattern SVGLinearGradient fs cs <- SVGHTML mn "linearGradient" fs cs where
+pattern SVGLinearGradient fs cs <- SVG mn "linearGradient" fs cs where
   SVGLinearGradient fs cs = mkSVG "linearGradient" fs cs
 
-pattern SVGMarker fs cs <- SVGHTML mn "marker" fs cs where
+pattern SVGMarker fs cs <- SVG mn "marker" fs cs where
   SVGMarker fs cs = mkSVG "marker" fs cs
 
-pattern SVGMask fs cs <- SVGHTML mn "mask" fs cs where
+pattern SVGMask fs cs <- SVG mn "mask" fs cs where
   SVGMask fs cs = mkSVG "mask" fs cs
 
-pattern SVGMesh fs cs <- SVGHTML mn "mesh" fs cs where
+pattern SVGMesh fs cs <- SVG mn "mesh" fs cs where
   SVGMesh fs cs = mkSVG "mesh" fs cs
 
-pattern SVGMeshgradient fs cs <- SVGHTML mn "meshgradient" fs cs where
+pattern SVGMeshgradient fs cs <- SVG mn "meshgradient" fs cs where
   SVGMeshgradient fs cs = mkSVG "meshgradient" fs cs
 
-pattern SVGMeshpatch fs cs <- SVGHTML mn "meshpatch" fs cs where
+pattern SVGMeshpatch fs cs <- SVG mn "meshpatch" fs cs where
   SVGMeshpatch fs cs = mkSVG "meshpatch" fs cs
 
-pattern SVGMeshrow fs cs <- SVGHTML mn "meshrow" fs cs where
+pattern SVGMeshrow fs cs <- SVG mn "meshrow" fs cs where
   SVGMeshrow fs cs = mkSVG "meshrow" fs cs
 
-pattern SVGMetadata fs cs <- SVGHTML mn "metadata" fs cs where
+pattern SVGMetadata fs cs <- SVG mn "metadata" fs cs where
   SVGMetadata fs cs = mkSVG "metadata" fs cs
 
-pattern SVGMissingGlyph fs cs <- SVGHTML mn "missing-glyph" fs cs where
+pattern SVGMissingGlyph fs cs <- SVG mn "missing-glyph" fs cs where
   SVGMissingGlyph fs cs = mkSVG "missing-glyph" fs cs
 
-pattern SVGMpath fs cs <- SVGHTML mn "mpath" fs cs where
+pattern SVGMpath fs cs <- SVG mn "mpath" fs cs where
   SVGMpath fs cs = mkSVG "mpath" fs cs
 
-pattern SVGPath fs cs <- SVGHTML mn "path" fs cs where
+pattern SVGPath fs cs <- SVG mn "path" fs cs where
   SVGPath fs cs = mkSVG "path" fs cs
 
-pattern SVGPattern fs cs <- SVGHTML mn "pattern" fs cs where
+pattern SVGPattern fs cs <- SVG mn "pattern" fs cs where
   SVGPattern fs cs = mkSVG "pattern" fs cs
 
-pattern SVGPolygon fs cs <- SVGHTML mn "polygon" fs cs where
+pattern SVGPolygon fs cs <- SVG mn "polygon" fs cs where
   SVGPolygon fs cs = mkSVG "polygon" fs cs
 
-pattern SVGPolyline fs cs <- SVGHTML mn "polyline" fs cs where
+pattern SVGPolyline fs cs <- SVG mn "polyline" fs cs where
   SVGPolyline fs cs = mkSVG "polyline" fs cs
 
-pattern SVGRadialGradient fs cs <- SVGHTML mn "radialGradient" fs cs where
+pattern SVGRadialGradient fs cs <- SVG mn "radialGradient" fs cs where
   SVGRadialGradient fs cs = mkSVG "radialGradient" fs cs
 
-pattern SVGRect fs cs <- SVGHTML mn "rect" fs cs where
+pattern SVGRect fs cs <- SVG mn "rect" fs cs where
   SVGRect fs cs = mkSVG "rect" fs cs
 
-pattern SVGScript fs cs <- SVGHTML mn "script" fs cs where
+pattern SVGScript fs cs <- SVG mn "script" fs cs where
   SVGScript fs cs = mkSVG "script" fs cs
 
-pattern SVGSet fs cs <- SVGHTML mn "set" fs cs where
+pattern SVGSet fs cs <- SVG mn "set" fs cs where
   SVGSet fs cs = mkSVG "set" fs cs
 
-pattern SVGSolidcolor fs cs <- SVGHTML mn "solidcolor" fs cs where
+pattern SVGSolidcolor fs cs <- SVG mn "solidcolor" fs cs where
   SVGSolidcolor fs cs = mkSVG "solidcolor" fs cs
 
-pattern SVGStop fs cs <- SVGHTML mn "stop" fs cs where
+pattern SVGStop fs cs <- SVG mn "stop" fs cs where
   SVGStop fs cs = mkSVG "stop" fs cs
 
-pattern SVGStyle fs cs <- SVGHTML mn "style" fs cs where
+pattern SVGStyle fs cs <- SVG mn "style" fs cs where
   SVGStyle fs cs = mkSVG "style" fs cs
 
-pattern SVGSvg fs cs <- SVGHTML mn "svg" fs cs where
+pattern SVGSvg fs cs <- SVG mn "svg" fs cs where
   SVGSvg fs cs = mkSVG "svg" fs cs
 
-pattern SVGSwitch fs cs <- SVGHTML mn "switch" fs cs where
+pattern SVGSwitch fs cs <- SVG mn "switch" fs cs where
   SVGSwitch fs cs = mkSVG "switch" fs cs
 
-pattern SVGSymbol fs cs <- SVGHTML mn "symbol" fs cs where
+pattern SVGSymbol fs cs <- SVG mn "symbol" fs cs where
   SVGSymbol fs cs = mkSVG "symbol" fs cs
 
-pattern SVGText fs cs <- SVGHTML mn "text" fs cs where
+pattern SVGText fs cs <- SVG mn "text" fs cs where
   SVGText fs cs = mkSVG "text" fs cs
 
-pattern SVGTextPath fs cs <- SVGHTML mn "textPath" fs cs where
+pattern SVGTextPath fs cs <- SVG mn "textPath" fs cs where
   SVGTextPath fs cs = mkSVG "textPath" fs cs
 
-pattern SVGTitle fs cs <- SVGHTML mn "title" fs cs where
+pattern SVGTitle fs cs <- SVG mn "title" fs cs where
   SVGTitle fs cs = mkSVG "title" fs cs
 
-pattern SVGTref fs cs <- SVGHTML mn "tref" fs cs where
+pattern SVGTref fs cs <- SVG mn "tref" fs cs where
   SVGTref fs cs = mkSVG "tref" fs cs
 
-pattern SVGTspan fs cs <- SVGHTML mn "tspan" fs cs where
+pattern SVGTspan fs cs <- SVG mn "tspan" fs cs where
   SVGTspan fs cs = mkSVG "tspan" fs cs
 
-pattern SVGUnknown fs cs <- SVGHTML mn "unknown" fs cs where
+pattern SVGUnknown fs cs <- SVG mn "unknown" fs cs where
   SVGUnknown fs cs = mkSVG "unknown" fs cs
 
-pattern SVGUse fs cs <- SVGHTML mn "use" fs cs where
+pattern SVGUse fs cs <- SVG mn "use" fs cs where
   SVGUse fs cs = mkSVG "use" fs cs
 
-pattern SVGVideo fs cs <- SVGHTML mn "video" fs cs where
+pattern SVGVideo fs cs <- SVG mn "video" fs cs where
   SVGVideo fs cs = mkSVG "video" fs cs
 
-pattern SVGView fs cs <- SVGHTML mn "view" fs cs where
+pattern SVGView fs cs <- SVG mn "view" fs cs where
   SVGView fs cs = mkSVG "view" fs cs
 
-pattern SVGVkern fs cs <- SVGHTML mn "vkern" fs cs where
+pattern SVGVkern fs cs <- SVG mn "vkern" fs cs where
   SVGVkern fs cs = mkSVG "vkern" fs cs

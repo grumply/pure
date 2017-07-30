@@ -10,10 +10,11 @@ module Atomic
   , module Export
   , View
   , list, hashed
+  , Renderable(..)
   , Component(..)
   , Controller(..)
   , mvc
-  , viewManager, constant
+  -- , viewManager, constant
   , unindent
   , css, css', scss, scss', apply
   , diff, setManualDiff, setEagerDiff
@@ -25,7 +26,7 @@ module Atomic
   , LazyByteString
   ) where
 
-import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End)
+import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End,initialize)
 
 #if MIN_VERSION_hashable(1,2,5)
 import Data.Hashable as Export hiding (hashed)
@@ -62,7 +63,7 @@ import Data.Void as Export
 import GHC.Generics as Export (to,from)
 
 import qualified Data.Txt as Export (Txt(..))
-import Data.JSON         as Export hiding (defaultOptions,Options,(!),Alt,String,Null)
+import Data.JSON         as Export hiding (defaultOptions,Options,(!),Alt,String,Null,Result)
 import Data.Millis       as Export
 import Data.Micros       as Export
 import Atomic.API        as Export hiding (Index)
@@ -349,7 +350,7 @@ observer :: forall m ms a w e b.
             , With w e (Ef b IO)
             , With w e IO
             , ms <: '[Observable m]
-            , Component a b
+            , Renderable a b
             )
          => w -> ControllerKey '[] (Observing m) -> (m -> a b) -> Observer m
 observer s key0 view0 = Controller {..}
@@ -397,11 +398,11 @@ selfClosing tag = tag `elem` selfclosing
       ]
 
 instance ToTxt (View e) where
-  toTxt NullHTML {} = mempty
+  toTxt NullView {} = mempty
 
-  toTxt TextHTML {..} = _content
+  toTxt TextView {..} = _content
 
-  toTxt RawHTML {..} =
+  toTxt RawView {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       ">" <> _content <> "</" <> _tag <> ">"
 
@@ -424,17 +425,17 @@ instance ToTxt (View e) where
           "/>"
         else
           ">" <> Txt.concat (map (toTxt . render) _atoms) <> "</" <> _tag <> ">"
-
-  toTxt STHTML {..} = toTxt $ render (_stview _stprops _ststate (\_ -> return ()) (\_ -> return ()))
-
-  toTxt SVGHTML {..} =
+  --
+  -- toTxt STView {..} = toTxt $ render (_stview _stprops _ststate (\_ -> return ()) (\_ -> return ()))
+  --
+  toTxt SVG {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
       else
         ">" <> Txt.concat (map (toTxt . render) _atoms) <> "</" <> _tag <> ">"
 
-  toTxt KSVGHTML {..} =
+  toTxt KSVG {..} =
     "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes)) <>
       if selfClosing _tag then
         "/>"
@@ -574,11 +575,11 @@ renderDynamicPageBootstrap (Partial (Controller' c)) mainScript = do
 renderDynamicHTML :: forall e. Typeable e => View e -> IO Txt
 renderDynamicHTML h =
   case h of
-    NullHTML {} -> return mempty
+    NullView {} -> return mempty
 
-    TextHTML {..} -> return _content
+    TextView {..} -> return _content
 
-    RawHTML {..} ->
+    RawView {..} ->
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
           <> ">"<> _content <> "</" <> _tag <> ">"
@@ -600,16 +601,16 @@ renderDynamicHTML h =
               "/>"
             else
               ">" <> Txt.concat cs <> "</" <> _tag <> ">"
-
-    STHTML {..} -> do
-      case _strecord of
-        Nothing ->
-          return $ toTxt $ render $ _stview _stprops _ststate (\_ -> return ()) (\_ -> return ())
-        Just str -> do
-          (_,_,_,a,_) <- readIORef str
-          renderDynamicHTML (unsafeCoerce a :: View e)
-
-    SVGHTML {..} -> do
+    --
+    -- STView {..} -> do
+    --   case _strecord of
+    --     Nothing ->
+    --       return $ toTxt $ render $ _stview _stprops _ststate (\_ -> return ()) (\_ -> return ())
+    --     Just str -> do
+    --       (_,_,_,a,_) <- readIORef str
+    --       renderDynamicHTML (unsafeCoerce a :: View e)
+    --
+    SVG {..} -> do
       cs <- mapM renderDynamicHTML _atoms
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))
@@ -618,7 +619,7 @@ renderDynamicHTML h =
              else
                ">" <> Txt.concat cs <> "</" <> _tag <> ">"
 
-    KSVGHTML {..} -> do
+    KSVG {..} -> do
       cs <- mapM (\(_,c) -> renderDynamicHTML c) _keyed
       return $
         "<" <> _tag <> (if null _attributes then "" else " " <> Txt.intercalate " " (map toTxt _attributes))

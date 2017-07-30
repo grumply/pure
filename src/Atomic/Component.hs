@@ -13,13 +13,13 @@
 {-# language ImplicitParams #-}
 module Atomic.Component (module Atomic.Component, ENode, TNode, NNode, Win, Doc, Loc) where
 
-import Ef.Base hiding (Object,Client,After,Before,child,current,Lazy,Eager,construct,Index,observe,uncons,distribute,embed)
+import Ef.Base hiding (Object,Client,After,Before,child,current,Lazy,Eager,construct,Index,observe,uncons,distribute,embed,initialize)
 import qualified Ef.Base
 
 import qualified Data.Foldable as F
 
 import Data.Txt as Txt hiding (replace,map,head,filter)
-import Data.JSON
+import Data.JSON hiding (Result)
 
 import Atomic.Attribute
 import Atomic.Cond
@@ -80,6 +80,8 @@ import Data.Void
 import Data.Unique
 import GHC.Generics
 import GHC.Prim
+
+import Debug.Trace
 
 import qualified Data.Function as F
 
@@ -174,7 +176,6 @@ data Private
 private :: Proxy Private
 private = Proxy
 
-
 data UpdateFlags = UpdateFlags
   { stateDidChange :: Bool
   , componentDidChange :: Bool
@@ -216,19 +217,29 @@ getState ::
   ) => Ef ms c state
 getState = getS <$> getp ?state
 
-getOldState ::
-  ( Comment "Access to the old state; this method is available only"
-        ::: "in shouldUpdate and willUnmount."
+askState :: forall state ms c.
+  ( Comment "Access to a read-only new state; this method is available only"
+        ::: "in shouldUpdate."
   , ?state :: Proxy state
       ::: "Implicit access to the current state reference."
   , ms <: '[Reader state (St state)]
   , Monad c
   ) => Ef ms c state
-getOldState = asksp ?state getS
+askState = asksp ?state getS
+
+askOldState :: forall state ms c.
+  ( Comment "Access to the old state; this method is available in willUnmount"
+        ::: "and shouldUpdate."
+  , ?state :: Proxy state
+      ::: "Implicit access to the current state reference."
+  , ms <: '[Reader state (Old (St state))]
+  , Monad c
+  ) => Ef ms c state
+askOldState = asksp ?state (getS . getOld)
 
 setState ::
   ( Comment "Set new state; this method is not available in"
-        ::: "getDefaultState when state is uninitialized and"
+        ::: "getInitialState when state is uninitialized and"
         ::: "not available in willUnmount where state is read-only."
   , Comment "Tags the current component as updated."
   , ?state :: Proxy state
@@ -244,7 +255,7 @@ setState newState = do
 
 modifyState ::
   ( Comment "Modify the current state; this method is not"
-        ::: "available in getDefaultState when state is"
+        ::: "available in getInitialState when state is"
         ::: "uninitialized and it is not available in willUnmount"
         ::: "where state is read-only."
   , Comment "Tags the current component as updated."
@@ -259,25 +270,25 @@ modifyState f = do
   _ <- modifyp ?state $ \(St s) -> (St (f s),())
   setStateDidChange
 
-getProps ::
+askProps ::
   ( Comment "Access the current or new properties."
   , ?props :: Proxy props
       ::: "Implicit access to the current property environment."
   , ms <: '[Reader props (Props props)]
   , Monad c
   ) => Ef ms c props
-getProps = asksp ?props getP
+askProps = asksp ?props getP
 
-getOldProps ::
-  ( Comment "Access the old properties in shouldUpdate."
+askOldProps :: forall props ms c.
+  ( Comment "Access the old properties in willUnmount and shouldUpdate."
   , ?props :: Proxy props
       ::: "Implicit access to the old property environment."
-  , ms <: '[Reader props (Old props)]
+  , ms <: '[Reader props (Old (Props props))]
   , Monad c
   ) => Ef ms c props
-getOldProps = asksp ?props getOld
+askOldProps = asksp ?props (getP . getOld)
 
-newtype Parent (ms :: [* -> *]) = Parent (As (Ef ms IO))
+newtype Parent (ms :: [* -> *]) = Parent (Ef ms IO () -> IO ())
 
 parent :: forall component parent props state ms c a.
   ( Comment "Since this is simply a context, not an evented context,"
@@ -286,15 +297,19 @@ parent :: forall component parent props state ms c a.
         ::: "Servers, and Apps."
   , component ~ Component parent props state
   , ?this :: Proxy component
+  , ?parent :: Proxy parent
   , ms <: '[Reader parent (Parent parent)]
+  , parent <: '[]
+       ::: "Require nothing of the parent."
   , MonadIO c
   ) => Ef parent IO a ::: "Callback"
     -> Ef ms c
         (Promise a ::: "Callback result; demanding the result will block.")
 parent f = do -- may have a problem here with type inference....
-  let parentShape = Proxy :: Proxy parent
-  Parent parent <- askp parentShape
-  runAs parent f
+  Parent parent <- askp ?parent
+  p <- promise
+  liftIO $ parent (f >>= void . fulfill p)
+  return p
 
 data Component (parent :: [* -> *]) (props :: *) (state :: *) =
     ( Comment "For each method, props are available via ask, but are wrapped in"
@@ -304,11 +319,10 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
           ::: "willUnmount."
     )
   => Component
-    { props :: props
-
-    , getDefaultState :: forall component.
+    { getInitialState :: forall component.
         ( Comment "Construct the initial state, effectfully,"
               ::: "with access to the initial properties. Only runs once."
+        , Disallows "Access to parent context to allow error-free server-side rendering without access to a parent context, e.g. when called with toJSON for caching or network transfer."
         , component ~ Component parent props state
         , ?props :: Proxy props
         , ?this  :: Proxy component
@@ -317,19 +331,30 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
 
                  , State component component
                      ::: "Allow changes to Component fields."
-
-                 , Reader parent (Parent parent)
-                     ::: "Asynchronous access to the embedding context."
-
-                 , State Private UpdateFlags
-                     ::: "Internal update flags that determine update path."
                  ]
                  IO
                  ( state ::: "Initial constructed state." )
 
+    , initialize :: forall component.
+        ( Comment "Allows loading data before rendering."
+        , Note "This is a server-side only method that helps improve dynamic rendering without requiring timeout fickleness."
+        , Disallows "Access to parent context since server-side rendering doesn't guarantee access to a parent context, e.g. when called via toJSON for caching or network transfer."
+        , component ~ Component parent props state
+        , ?props :: Proxy props
+        , ?state :: Proxy state
+        , ?this :: Proxy component
+        ) => Ef '[ Reader props (Props props)
+                 , State state (St state)
+                 , State component component
+                 ]
+                 IO
+                 ()
+
     , willMount :: forall component.
         ( Comment "Effectful computation to run before first render."
               ::: "Only runs once."
+        , Disallows "Access to parent context to allow error-free server-side rendering."
+        , Disallows "State update, like setState and modifyState."
         , component ~ Component parent props state
         , ?props :: Proxy props
         , ?state :: Proxy state
@@ -337,14 +362,11 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         ) => Ef '[ Reader props (Props props)
                      ::: "Initial properties."
 
-                 , State state (St state)
+                 , Reader state (St state)
                      ::: "Default State; updatable."
 
                  , State component component
                      ::: "Allows changes to Component fields."
-
-                 , Reader parent (Parent parent)
-                     ::: "Asynchronous access to the embedding context."
 
                  , State Private UpdateFlags
                      ::: "Internal update flags that determine update path."
@@ -387,7 +409,7 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         , ?props :: Proxy props
         , ?state :: Proxy state
         , ?this  :: Proxy component
-        ) => Ef '[ Reader props (Old props)
+        ) => Ef '[ Reader props (Old (Props props))
                       ::: "Old properties before external update was triggered."
 
                  , Reader props (Props props)
@@ -411,22 +433,24 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
 
     , shouldUpdate :: forall component.
         ( Comment "Called on each property or state change; if returing False,"
-              ::: "no diffing will happen."
+              ::: "no diffing will happen. This is largely a method for render"
+              ::: "optimization."
+        , Result "A boolean that determines if a re-rendering is required."
         , component ~ Component parent props state
         , ?props :: Proxy props
         , ?state :: Proxy state
         , ?this  :: Proxy component
-        ) => Ef '[ Reader props (Old props)
+        ) => Ef '[ Reader props (Old (Props props))
                       ::: "Properties previous to this update."
 
                  , Reader props (Props props)
                       ::: "New properties; might be the same as old properties."
 
-                 , Reader state (Old state)
+                 , Reader state (Old (St state))
                       ::: "State previous to this update; read-only."
 
-                 , State state (St state)
-                      ::: "New state; might be unchanged; read/write."
+                 , Reader state (St state)
+                      ::: "New state; might be unchanged; read-only."
 
                  , State component component
                       ::: "Allows changes to Component fields."
@@ -450,9 +474,8 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
         ) => Ef '[ Reader props (Props props)
                       ::: "Current properties."
 
-                 , State state (St state)
-                      ::: "Current state; read-writable."
-                      ::: "Changes force re-render in the current frame."
+                 , Reader state (St state)
+                      ::: "Current state; read-only."
 
                  , State component component
                       ::: "Allows changes to Component fields."
@@ -510,33 +533,23 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
                  IO
                  ()
 
-    , renderer :: forall component.
-        ( Comment "Renderer for the current properties and state."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?this  :: Proxy component
+    , renderer ::
+        ( Comment "Pure renderer for the current properties and state, given"
+        , Comment "an update method that can be called from within the View."
+        , Param props "Current props for this render cycle."
+        , Param state "Current state for this render cycle."
+        , Param (StateUpdate props state) "State update method usable within the rendered View."
+        , Result "A pure rendered View with access to the parent context."
+        , Forbids "IO"
         )
-        => Ef '[ Reader props (Props props)
-                  ::: "Current properties."
+        => props -> state -> StateUpdate props state -> View parent
 
-               , State state (St state)
-                  ::: "Current state; read-writable."
-
-               , State component component
-                  ::: "Allows changes to Component fields."
-
-               , State Private UpdateFlags
-                  ::: "Internal update flags that determine update path."
-               ]
-               IO
-               (View parent)
     }
 
 instance Default (Component parent props state) where
   def =
     Component
-      { renderer = return nil
+      { renderer = \_ _ _ -> nil
       , willUnmount = def
       , didUpdate = def
       , willUpdate = def
@@ -544,24 +557,238 @@ instance Default (Component parent props state) where
       , willReceiveProps = def
       , didMount = def
       , willMount = def
-      , getDefaultState = error "Component.getDefaultState: state not initialized."
-      , props = error "Component.props: properties not initialized."
+      , initialize = def
+      , getInitialState = error "Component.getInitialState: state not initialized."
       }
 
+runGetInitialState
+  :: ( Typeable parent, Typeable props, Typeable state
+     , parent <: '[]
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?this :: Proxy component
+     ) => props -> component -> IO (component,state)
+runGetInitialState props comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Props props)
+              *:* statep ?this comp
+              *:* Ef.Base.Empty
+  (_,(comp',state)) <- obj Ef.Base.! do
+    state <- getInitialState comp
+    comp' <- getp ?this
+    return (comp',state)
+  return (comp',state)
+
+runInitialize
+  :: ( Typeable parent, Typeable props, Typeable state
+     , parent <: '[]
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?state :: Proxy state
+     , ?this :: Proxy component
+     ) => props -> state -> component -> IO (component,state)
+runInitialize props state comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Props props)
+              *:* statep ?state (St state)
+              *:* statep ?this comp
+              *:* Ef.Base.Empty
+  (_,(comp',st)) <- obj Ef.Base.! do
+    initialize comp
+    c' <- getp ?this
+    St st <- getp ?state
+    return (c',st)
+  return (comp',st)
+
+runWillMount
+  :: ( Typeable parent, Typeable props, Typeable state
+     , parent <: '[]
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?state :: Proxy state
+     , ?this :: Proxy component
+     ) => props -> state -> component -> IO component
+runWillMount props state comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Props props)
+              *:* readerp ?state (St state)
+              *:* statep ?this comp
+              *:* statep private def
+              *:* Ef.Base.Empty
+  (_,comp') <- obj Ef.Base.! do
+    willMount comp
+    getp ?this
+  return comp'
+
+runDidMount
+  :: ( Typeable parent, Typeable props, Typeable state
+     , parent <: '[]
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?state :: Proxy state
+     , ?parent :: Proxy parent
+     , ?this :: Proxy component
+     ) => Parent parent -> props -> state -> component -> IO (component,Maybe state)
+runDidMount parent props state comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Props props)
+              *:* statep ?state (St state)
+              *:* statep ?this comp
+              *:* readerp ?parent parent
+              *:* statep private (UpdateFlags def def)
+              *:* Ef.Base.Empty
+  (_,(comp',mst)) <- obj Ef.Base.! do
+    didMount comp
+    c' <- getp ?this
+    UpdateFlags didStateChange _ <- getp private
+    if didStateChange then do
+      St st <- getp ?state
+      return (c',Just st)
+    else
+      return (c',Nothing)
+  return (comp',mst)
+
+runRenderer :: props -> state -> Component parent props state -> StateUpdate props state -> View parent
+runRenderer props state Component {..} upd = renderer props state upd
+
+runWillReceiveProps
+  :: ( Typeable parent, Typeable props, Typeable state
+     , parent <: '[]
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?state :: Proxy state
+     , ?this :: Proxy component
+     , ?parent :: Proxy parent
+     ) => Parent parent -> props -> props -> state -> component -> IO (component,Maybe state)
+runWillReceiveProps parent old_props new_props state comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Old (Props old_props))
+              *:* readerp ?props (Props new_props)
+              *:* statep ?state (St state)
+              *:* statep ?this comp
+              *:* readerp ?parent parent
+              *:* statep private (UpdateFlags def def)
+              *:* Ef.Base.Empty
+  (_,(comp',mst)) <- obj Ef.Base.! do
+    willReceiveProps comp
+    c' <- getp ?this
+    UpdateFlags didStateChange _ <- getp private
+    if didStateChange then do
+      St st <- getp ?state
+      return (c',Just st)
+    else
+      return (c',Nothing)
+  return (comp',mst)
+
+-- One too many traits for GHC again?
+runShouldUpdate
+  :: forall parent props state component.
+     ( Typeable parent, Typeable props, Typeable state
+     , parent <: '[]
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?state :: Proxy state
+     , ?this :: Proxy component
+     , ?parent :: Proxy parent
+     ) => Parent parent -> props -> props -> state -> state -> component -> IO (component,Bool)
+runShouldUpdate parent old_props new_props old_state new_state comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Old (Props old_props))
+              *:* readerp ?props (Props new_props)
+              *:* readerp ?state (Old (St old_state))
+              *:* readerp ?state (St new_state)
+              *:* statep ?this comp
+              *:* readerp ?parent parent
+              *:* statep private (UpdateFlags def def)
+              *:* Ef.Base.Empty
+  (_,(c',shouldUpd)) <- obj Ef.Base.! do
+    shouldUpd <- shouldUpdate comp
+    comp' <- getp ?this
+    return (comp',shouldUpd)
+  return (c',shouldUpd)
+
+runWillUpdate
+  :: ( Typeable parent, Typeable props, Typeable state
+     , parent <: '[]
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?state :: Proxy state
+     , ?this :: Proxy component
+     , ?parent :: Proxy parent
+     ) => Parent parent -> props -> state -> component -> IO component
+runWillUpdate parent props state comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Props props)
+              *:* readerp ?state (St state)
+              *:* statep ?this comp
+              *:* readerp ?parent parent
+              *:* statep private (UpdateFlags def def)
+              *:* Ef.Base.Empty
+  (_,c') <- obj Ef.Base.! do
+    willUpdate comp
+    getp ?this
+  return c'
+
+runDidUpdate
+  :: ( Typeable parent, Typeable props, Typeable state
+     , parent <: '[]
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?state :: Proxy state
+     , ?this :: Proxy component
+     , ?parent :: Proxy parent
+     ) => Parent parent -> props -> state -> component -> IO (component,Maybe state)
+runDidUpdate parent props state comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Props props)
+              *:* statep ?state (St state)
+              *:* statep ?this comp
+              *:* readerp ?parent parent
+              *:* statep private (UpdateFlags def def)
+              *:* Ef.Base.Empty
+  (_,(c',mst)) <- obj Ef.Base.! do
+    didUpdate comp
+    c' <- getp ?this
+    UpdateFlags didStateChange _ <- getp private
+    if didStateChange then do
+      St st <- getp ?state
+      return (c',Just st)
+    else
+      return (c',Nothing)
+  return (c',mst)
+
+runWillUnmount
+  :: ( Typeable parent, Typeable props, Typeable state
+     , component ~ Component parent props state
+     , ?props :: Proxy props
+     , ?state :: Proxy state
+     , ?parent :: Proxy parent
+     ) => Parent parent -> props -> state -> component -> IO ()
+runWillUnmount parent props state comp = do
+  let obj = Ef.Base.Object $
+              readerp ?props (Props props)
+              *:* readerp ?state (St state)
+              *:* readerp ?parent parent
+              *:* Ef.Base.Empty
+  _ <- obj Ef.Base.! (willUnmount comp)
+  return ()
+
 type StateUpdate props state = (props -> state -> IO (Maybe state,IO ())) -> IO ()
+type PropsUpdate props = props -> IO ()
+type UnmountAction = IO ()
 
 data View e where
-  -- NullHTML must have a presence on the page for proper diffing
-  NullHTML
+  -- NullView must have a presence on the page for proper diffing
+  NullView
     :: { _node :: (Maybe ENode)
        } -> View e
 
-  TextHTML
+  TextView
     ::  { _tnode      :: (Maybe TNode)
         , _content    :: Txt
         } -> View e
 
-  RawHTML
+  RawView
     :: { _node        :: (Maybe ENode)
        , _tag         :: Txt
        , _attributes  :: [Feature e]
@@ -581,25 +808,28 @@ data View e where
         , _keyed      :: [(Int,View e)]
         } -> View e
 
-  STHTML
-    :: { _stprops  :: props
+  STView
+    :: (Typeable props,Typeable st) =>
+       { _stprops  :: props
        , _stid     :: Int
        , _strecord :: (Maybe (IORef (props,st,Component e props st,View x,View x)))
-       , _stview   :: As (Ef e IO) -> StateUpdate props st -> Component e props st
+       , _stview   :: Component e props st
        , _stupdate :: StateUpdate props st
+       , _psupdate :: PropsUpdate props
+       , _unmount  :: UnmountAction
        , _stateproxy :: Proxy st
        , _propsproxy :: Proxy props
        , _thisproxy :: Proxy (Component e props st)
        } -> View e
 
-  SVGHTML
+  SVG
     ::  { _node       :: (Maybe ENode)
         , _tag        :: Txt
         , _attributes :: [Feature e]
         , _atoms      :: [View e]
         } -> View e
 
-  KSVGHTML
+  KSVG
     ::  { _node       :: (Maybe ENode)
         , _tag        :: Txt
         , _attributes :: [Feature e]
@@ -636,7 +866,7 @@ class Renderable (a :: [* -> *] -> *) (ms :: [* -> *]) where
   -- TODO:
   --   build :: a ms -> IO (View ms)
   --   diff :: (Ef ms IO () -> IO ()) -> ENode -> View ms -> a ms -> a ms -> IO (View ms)
-  -- With build and diff the only primitive view elements would be HTML, SVGHTML, Managed, and View.
+  -- With build and diff the only primitive view elements would be HTML, SVG, Managed, and View.
   -- Great avenue for extensibility and modularity, but I don't see that the expressivity gained
   -- would currently justify the work; it's mostly just a refactoring, but it is a major refactoring.
   render :: a ms -> View ms
@@ -710,9 +940,9 @@ styledRenderable (HTML _ tag fs vs) =
   case getStyles fs of
     Just (ss,rest) -> Just (HTML Nothing tag,ss,rest,vs)
     _ -> Nothing
-styledRenderable (SVGHTML _ tag fs vs) =
+styledRenderable (SVG _ tag fs vs) =
   case getStyles fs of
-    Just (ss,rest) -> Just (SVGHTML Nothing tag,ss,rest,vs)
+    Just (ss,rest) -> Just (SVG Nothing tag,ss,rest,vs)
     _ -> Nothing
 
 getStyles :: [Feature ms] -> Maybe (Styles (),[Feature ms])
@@ -732,12 +962,12 @@ pattern Styled f ss fs vs <- (styledRenderable -> Just (f,ss,fs,vs)) where
   Styled f ss fs vs = f (styled ss : fs) vs
 
 pattern Null :: Typeable ms => View ms
-pattern Null <- (NullHTML _) where
-  Null = NullHTML Nothing
+pattern Null <- (NullView _) where
+  Null = NullView Nothing
 
 pattern Raw :: Txt -> [Feature ms] -> Txt -> View ms
-pattern Raw t fs c <- (RawHTML _ t fs c) where
-  Raw t fs c = RawHTML Nothing t fs c
+pattern Raw t fs c <- (RawView _ t fs c) where
+  Raw t fs c = RawView Nothing t fs c
 
 pattern Translated :: (ToTxt t, FromTxt t, ToTxt f, FromTxt f) => f -> t
 pattern Translated t <- (fromTxt . toTxt -> t) where
@@ -748,11 +978,11 @@ pattern Text :: (ToTxt t, FromTxt t) => t -> Txt
 pattern Text t = Translated t
 
 pattern String :: (ToTxt t, FromTxt t) => t -> View ms
-pattern String t <- (TextHTML _ (fromTxt -> t)) where
-  String t = TextHTML Nothing (toTxt t)
+pattern String t <- (TextView _ (fromTxt -> t)) where
+  String t = TextView Nothing (toTxt t)
 
-pattern ST p i v <- STHTML p i _ v _ _ _ _ where
-  ST p i v = STHTML p i Nothing v (\_ -> return ()) Proxy Proxy Proxy
+pattern ST p v <- STView p 0 _ v _ _ _ _ _ _ where
+  ST p v = STView p 0 Nothing v (\_ -> return ()) (\_ -> return ()) def Proxy Proxy Proxy
 
 weakRender (View a) = weakRender (render a)
 weakRender a = a
@@ -766,24 +996,25 @@ addClass c = go False
 updateFeatures f v =
   case v of
     HTML     {..} -> HTML     { _attributes = f _attributes, .. }
-    RawHTML  {..} -> RawHTML  { _attributes = f _attributes, .. }
+    RawView  {..} -> RawView  { _attributes = f _attributes, .. }
     KHTML    {..} -> KHTML    { _attributes = f _attributes, .. }
-    SVGHTML  {..} -> SVGHTML  { _attributes = f _attributes, .. }
-    KSVGHTML {..} -> KSVGHTML { _attributes = f _attributes, .. }
+    SVG  {..} -> SVG  { _attributes = f _attributes, .. }
+    KSVG {..} -> KSVG { _attributes = f _attributes, .. }
     Managed  {..} -> Managed  { _attributes = f _attributes, .. }
     _             -> v
 
 instance Default (View ms) where
   def = nil
 
-instance Typeable e => ToJSON (View e) where
+-- toJSON for View will server-side render components, but not controllers.
+instance (e <: '[]) => ToJSON (View e) where
   toJSON a =
 #ifdef __GHCJS__
     objectValue $
 #endif
       go a
     where
-      go (STHTML props _ iorec v _ state_proxy props_proxy this_proxy) =
+      go (STView props _ iorec c _ _ _ state_proxy props_proxy this_proxy) =
         let ?this = this_proxy
         in let ?state = state_proxy
         in let ?props = props_proxy
@@ -791,43 +1022,35 @@ instance Typeable e => ToJSON (View e) where
           unsafeCoerce go $
             case iorec of
               Nothing -> unsafePerformIO $ do
-                let parent = error "Component.toJSON: unclaimed child"
-                    c = v parent (\_ -> def)
-
-                let obj = Ef.Base.Object $
-                      readerp ?props (Props props)
-                      *:* statep ?this c
-                      *:* readerp Proxy parent
-                      *:* statep private (UpdateFlags False False)
-                      *:* Ef.Base.Empty
-
-                (_,state) <- obj Ef.Base.! (getDefaultState c)
-
-                let obj = Ef.Base.Object $
-                      readerp ?props (Props props)
-                      *:* statep ?state (St state)
-                      *:* statep ?this c
-                      *:* statep private (UpdateFlags False False)
-                      *:* Ef.Base.Empty
-
-                (_,rendered) <- obj Ef.Base.! (renderer c)
-
-                return rendered
+                (c',state) <- runGetInitialState props c
+                (c'',state') <- runInitialize props state c'
+                return $ runRenderer props (state' `asTypeOf` state) c''
 
               Just ref ->
                 let (_,_,_,cur,_) = unsafePerformIO (readIORef ref)
                 in unsafeCoerce cur
 
       go (View v) = go (render v)
-      go (TextHTML _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
-      go (RawHTML _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
+      go (TextView _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
+      go (RawView _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
       go (KHTML _ t as ks) = object [ "type" .= ("keyed" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks) ]
       go (HTML _ t as cs) = object [ "type" .= ("atom" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map render cs) ]
-      go (KSVGHTML _ t as ks) = object [ "type" .= ("keyedsvg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks)]
-      go (SVGHTML _ t as cs) = object [ "type" .= ("svg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map render cs) ]
+      go (KSVG _ t as ks) = object [ "type" .= ("keyedsvg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks)]
+      go (SVG _ t as cs) = object [ "type" .= ("svg" :: Txt), "tag" .= t, "attrs" .= toJSON as, "children" .= toJSON (map render cs) ]
       -- go (Component r) = go (render r)
       go (DiffView _ v) = go v
       go (DiffEqView _ v) = go v
+
+      -- Need a better approach here.
+      go (Managed mn t as (Controller' c)) =
+        let !v = unsafePerformIO $ do
+                  with c (return ())
+                  Just (ControllerRecord {..}) <- lookupController (key c)
+                  v <- readIORef crView
+                  shutdown c
+                  return $ cvCurrent v
+        in go (HTML mn t as [unsafeCoerce v])
+
       go _ = object [ "type" .= ("null" :: Txt) ]
 
 instance Typeable e => FromJSON (View e) where
@@ -841,12 +1064,12 @@ instance Typeable e => FromJSON (View e) where
       case t :: Txt of
         "text" -> do
           c <- o .: "content"
-          pure $ TextHTML Nothing c
+          pure $ TextView Nothing c
         "raw" -> do
           t <- o .: "tag"
           as <- o .: "attrs"
           c <- o .: "content"
-          pure $ RawHTML Nothing t as c
+          pure $ RawView Nothing t as c
         "keyed" -> do
           t <- o .: "tag"
           as <- o .: "attrs"
@@ -861,23 +1084,23 @@ instance Typeable e => FromJSON (View e) where
           t <- o .: "tag"
           as <- o .: "attrs"
           ks <- o .: "keyed"
-          pure $ KSVGHTML Nothing t as ks
+          pure $ KSVG Nothing t as ks
         "svg" -> do
           t <- o .: "tag"
           as <- o .: "attrs"
           cs <- o .: "children"
-          pure $ SVGHTML Nothing t as cs
-        "null" -> pure $ NullHTML Nothing
+          pure $ SVG Nothing t as cs
+        "null" -> pure $ NullView Nothing
         _ -> Ef.Base.empty
 
 instance Eq (View e) where
-  (==) (NullHTML _) (NullHTML _) =
+  (==) (NullView _) (NullView _) =
     True
 
-  (==) (TextHTML _ t) (TextHTML _ t') =
+  (==) (TextView _ t) (TextView _ t') =
     prettyUnsafeEq t t'
 
-  (==) (RawHTML _ t fs c) (RawHTML _ t' fs' c') =
+  (==) (RawView _ t fs c) (RawView _ t' fs' c') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && prettyUnsafeEq c c'
 
   (==) (KHTML _ t fs ks) (KHTML _ t' fs' ks') =
@@ -886,13 +1109,13 @@ instance Eq (View e) where
   (==) (HTML _ t fs cs) (HTML _ t' fs' cs') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq cs cs'
 
-  (==) (STHTML m k st _ v _) (STHTML m' k' st' _ v' _) =
-    k == k' && reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq st st' && reallyVeryUnsafeEq v v'
+  (==) (STView m k _ v _ _ _ _ _ _) (STView m' k' _ v' _ _ _ _ _ _) =
+    k == k' && reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq v v'
 
-  (==) (KSVGHTML _ t fs ks) (KSVGHTML _ t' fs' ks') =
+  (==) (KSVG _ t fs ks) (KSVG _ t' fs' ks') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq ks ks'
 
-  (==) (SVGHTML _ t fs cs) (SVGHTML _ t' fs' cs') =
+  (==) (SVG _ t fs cs) (SVG _ t' fs' cs') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq cs cs'
 
   (==) (Managed _ t fs c) (Managed _ t' fs' c') =
@@ -908,7 +1131,7 @@ instance Eq (View e) where
     False
 
 instance Cond (View e) where
-  nil = NullHTML Nothing
+  nil = NullView Nothing
 
 instance Typeable e => IsString (View e) where
   fromString = text . fromString
@@ -930,23 +1153,23 @@ mkHTML _tag _attributes _atoms =
 mkSVG :: Txt -> [Feature e] -> [View e] -> View e
 mkSVG _tag _attributes _atoms =
   let _node = Nothing
-  in SVGHTML {..}
+  in SVG {..}
 
 text :: Txt -> View e
 text _content =
   let _tnode = Nothing
-  in TextHTML {..}
+  in TextView {..}
 
 raw :: ([Feature e] -> [View e] -> View e) -> [Feature e] -> Txt -> View e
 raw x _attributes _content =
   case x [] [] of
     HTML _ _tag _ _ ->
       let _node = Nothing
-      in RawHTML {..}
-    SVGHTML _ _tag _ _ ->
+      in RawView {..}
+    SVG _ _tag _ _ ->
       let _node = Nothing
-      in RawHTML {..}
-    _ -> error "HTMLic.Controller.raw: raw atoms may only be built from HTMLs and SVGHTMLs"
+      in RawView {..}
+    _ -> error "HTMLic.Controller.raw: raw atoms may only be built from HTMLs and SVGs"
 
 list :: ([Feature e] -> [View e] -> View e) -> [Feature e] -> [(Int,View e)] -> View e
 list x _attributes _keyed =
@@ -956,15 +1179,15 @@ list x _attributes _keyed =
         _node = Nothing
       in
         KHTML {..}
-    SVGHTML _ _tag _ _ ->
+    SVG _ _tag _ _ ->
       let
         _node = Nothing
       in
-        KSVGHTML {..}
-    _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGHTMLs"
+        KSVG {..}
+    _ -> error "HTMLic.Controller.list: lists may only be built from HTMLs and SVGs"
 --
 -- viewManager_ :: forall props st e. Int -> props -> st -> (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View e) -> View e
--- viewManager_ k props initial_st view = STHTML props k initial_st Nothing view (\_ -> return ())
+-- viewManager_ k props initial_st view = STView props k initial_st Nothing view (\_ -> return ())
 --
 -- -- The hacks used to implement this atom type are somewhat finicky. The model tracks variables
 -- -- for changes; if any of the variables within the model are updated, a diff will be performed.
@@ -977,15 +1200,15 @@ list x _attributes _keyed =
 -- --               must recreate the element, it will be reset to its original state. This would
 -- --               happen if the position of the st element within the list changes. If a variable
 -- --               length list of children is required, either careful placement for the st element,
--- --               or the use of NullHTMLs as placeholders, or some uses of keyed atoms can overcome
+-- --               or the use of NullViews as placeholders, or some uses of keyed atoms can overcome
 -- --               this problem. The solution is the good practice of keeping lists of views static
 -- --               or at the very least keep extensibility at the end of a view list.
 -- viewManager :: forall props st e. props -> st -> (props -> st -> (Ef e IO () -> IO ()) -> StateUpdate e props st -> View e) -> View e
--- viewManager props initial_st view = STHTML props 0 initial_st Nothing view (\_ -> return ())
+-- viewManager props initial_st view = STView props 0 initial_st Nothing view (\_ -> return ())
 --
-constant :: View e -> View e
-constant a = viewManager () () $ \_ _ _ _ -> a
-
+-- constant :: View e -> View e
+-- constant a = viewManager () () $ \_ _ _ _ -> a
+--
 mvc :: ([Feature e] -> [View e] -> View e)
     -> (forall ts' ms' m. (IsController' ts' ms' m) => [Feature e] -> Controller' ts' ms' m -> View e)
 mvc f = \as c ->
@@ -1061,14 +1284,14 @@ rebuild h =
     go h
   where
     go :: View e -> IO ()
-    go STHTML {..}  = do
+    go STView {..}  = do
       forM_ _strecord $ \ref -> do
         (_,_,_,a,_) <- readIORef ref
         rebuild (unsafeCoerce a :: View e)
     go HTML {..}    = mapM_ go _atoms
-    go SVGHTML {..} = mapM_ go _atoms
+    go SVG {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
-    go KSVGHTML {..}  = mapM_ (go . snd) _keyed
+    go KSVG {..}  = mapM_ (go . snd) _keyed
     go (DiffView _ v) = go v
     go (DiffEqView _ v) = go v
     go m@Managed {..} = do
@@ -1098,14 +1321,14 @@ triggerBackground = go
           go $ unsafeCoerce cvCurrentLive
 
     go :: View e -> m ()
-    go STHTML {..}  =
+    go STView {..}  =
       forM_ _strecord $ \ref -> do
         (_,_,_,a,_) <- liftIO $ readIORef ref
         go (unsafeCoerce a)
     go HTML {..}    = mapM_ go _atoms
-    go SVGHTML {..} = mapM_ go _atoms
+    go SVG {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
-    go KSVGHTML {..} = mapM_ (go . snd) _keyed
+    go KSVG {..} = mapM_ (go . snd) _keyed
     go (DiffView _ v) = go v
     go (DiffEqView _ v) = go v
     go m@Managed {..} = case _constr of Controller' c -> bg (unsafeCoerce c)
@@ -1125,14 +1348,14 @@ triggerForeground = go
           go (unsafeCoerce cvCurrentLive)
 
     go :: View e -> m ()
-    go STHTML {..}  =
+    go STView {..}  =
       forM_ _strecord $ \ref -> do
         (_,_,_,a,_) <- liftIO $ readIORef ref
         go (unsafeCoerce a)
     go HTML {..}    = mapM_ go _atoms
-    go SVGHTML {..} = mapM_ go _atoms
+    go SVG {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
-    go KSVGHTML {..} = mapM_ (go . snd) _keyed
+    go KSVG {..} = mapM_ (go . snd) _keyed
     go (DiffView _ v) = go v
     go (DiffEqView _ v) = go v
     go m@Managed {..} = case _constr of Controller' c -> fg (unsafeCoerce c)
@@ -1185,7 +1408,7 @@ data AState m =
     }
 
 data ControllerPatch m =
-  forall ms a. Renderable a ms =>
+  forall ms a. (Renderable a ms, ms <: '[]) =>
   APatch
       -- only modify ap_AState with atomicModifyIORef
     { ap_send         :: Ef ms IO () -> IO ()
@@ -1378,6 +1601,7 @@ mkController :: forall ms ts m.
        -> Controller' ts ms m
        -> IO (ControllerRecord ms m)
 mkController mkControllerAction c@Controller {..} = do
+  -- TODO: simply render a nil View and then call diff to force building in rAF?
   let !raw = render $ view model
   doc <- getDocument
   buf <- newEvQueue
@@ -1675,11 +1899,11 @@ swapContent t e =
 #endif
 
 embed_ :: forall e. ENode -> View e -> IO ()
-embed_ parent STHTML {..} = do
+embed_ parent STView {..} = do
   forM_ _strecord $ \ref -> do
     (_,_,_,a,_) <- readIORef ref
     embed_ parent (unsafeCoerce a :: View e)
-embed_ parent TextHTML {..} =
+embed_ parent TextView {..} =
   forM_ _tnode $ \node -> do
     ae <- isAlreadyEmbeddedText node parent
     unless ae (void $ appendChild parent node)
@@ -1715,25 +1939,25 @@ setAttributes as f diffing el = do
 -- and this: https://stackoverflow.com/questions/8913419/is-chromes-appendchild-really-that-slow
 -- Would a bottom-up, display='none' -> display='' solution work globally?
 -- Does the fact that this runs in a rAF resolve any of this a priori?
-buildAndEmbedMaybe :: forall e. (Ef e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (View e)
+buildAndEmbedMaybe :: forall e. (e <: '[]) => (Ef e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (View e)
 buildAndEmbedMaybe f doc ch isFG mn v = do
   go mn $ render v
   where
     go :: Maybe ENode -> View e -> IO (View e)
     go mparent (View c) = go mparent (render c)
 
-    go mparent nn@NullHTML {..} = do
+    go mparent nn@NullView {..} = do
       _cond@(Just el) <- createElement doc "template"
       forM_ mparent (flip appendChild el)
-      return $ NullHTML _cond
+      return $ NullView _cond
 
-    go mparent RawHTML {..} = do
+    go mparent RawView {..} = do
       _node@(Just el) <- createElement doc _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       setInnerHTML el _content
       forM_ mparent $ \parent -> appendChild parent el
       didMount
-      return $ RawHTML _node _tag _attributes _content
+      return $ RawView _node _tag _attributes _content
 
     go mparent HTML {..} = do
       _node@(Just el) <- createElement doc _tag
@@ -1743,38 +1967,108 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
       didMount
       return $ HTML _node _tag _attributes _atoms
 
-    go mparent STHTML {..} = do
-      strec <- newIORef (_stprops,_ststate,_stview,nil,nil)
-      let upd g = void $ do
-            -- this gets funky on GHC - find something better
+    go mparent STView {..} =
+      let ?this = _thisproxy
+      in let ?state = _stateproxy
+      in let ?props = _propsproxy
+      in let ?parent = Proxy :: Proxy e
+      in let parent = Parent f
+      in do
+        let rAF f = void $ do
 #ifdef __GHCJS__
-            rafCallback <- newRequestAnimationFrameCallback $ \_ -> do
+              rafCallback <- newRequestAnimationFrameCallback $ \_ -> f
+              win <- getWindow
+              requestAnimationFrame win (Just rafCallback)
+#else
+              f
 #endif
-              (props,st,sv,old,mid) <- readIORef strec
+
+        strec <- newIORef undefined
+
+        let updateStateInternal g = do
+              (props,st,c,old,mid) <- readIORef strec
               (mst,cb) <- g props st
-              forM_ mst $ \st' -> do
-                let new_mid = unsafeCoerce $ sv props st' f upd
-                new <- diffHelper f doc ch isFG old mid new_mid
-                writeIORef strec (props,st',sv,new,new_mid)
+              let updateState mst cb =
+                    case mst of
+                      Nothing  -> cb
+                      Just st' -> do
+                        done <- newEmptyMVar
+                        _ <- forkIO $ join $ takeMVar done
+                        (c',shouldUpd) <- runShouldUpdate parent props props st st' c
+                        if shouldUpd then do
+                          c'' <- runWillUpdate parent props st' c'
+                          rAF $ do
+                            let new_mid = runRenderer props st' c updateStateInternal
+                            new <- diffHelper f doc ch isFG old mid new_mid
+                            (c''',mst) <- runDidUpdate parent props st' c''
+                            writeIORef strec (props,st',c''',new,new_mid)
 
-              cb
-#ifdef __GHCJS__
-            win <- getWindow
-            requestAnimationFrame win (Just rafCallback)
-#endif
+                            -- make sure to leave this animation frame
+                            -- before calling the next update
+                            putMVar done (cb >> updateState mst def)
+                        else do
+                          writeIORef strec (props,st',c',old,mid)
+                          putMVar done cb
+              updateState mst cb
 
-      let mid = _stview _stprops _ststate f upd
-      new <- go mparent (unsafeCoerce $ render mid)
-      writeIORef strec (_stprops,_ststate,_stview,new,unsafeCoerce mid)
-      return $ STHTML _stprops _stid _ststate (Just $ unsafeCoerce strec) _stview upd
+            updatePropsInternal props = do
+              (old_props,st,c,old,mid) <- readIORef strec
+              done <- newEmptyMVar
+              _ <- forkIO $ join $ takeMVar done
+              (c',mst') <- runWillReceiveProps parent old_props props st c
+              let st' = fromMaybe st mst'
+              (c'',shouldUpd) <- runShouldUpdate parent old_props props st st' c'
+              if shouldUpd then do
+                c'' <- runWillUpdate parent props st' c''
+                rAF $ do
+                  let new_mid = runRenderer props st' c'' updateStateInternal
+                  new <- diffHelper f doc ch isFG old mid new_mid
+                  (c''',mst) <- runDidUpdate parent props st' c''
+                  writeIORef strec (props,st',c'',old,mid)
 
-    go mparent SVGHTML {..} = do
+                  -- make sure to leave this animation frame
+                  -- before calling the next update
+                  putMVar done $
+                    forM_ mst $ \st' ->
+                      updateStateInternal (\_ _ -> return (Just st',def))
+
+              else do
+                writeIORef strec (props,st',c'',old,mid)
+                putMVar done def
+
+            unmountInternal = void $ do
+              (props,st,c,old,mid) <- readIORef strec
+              runWillUnmount parent props st c
+              return ()
+
+        (c',state) <- runGetInitialState _stprops _stview
+        c'' <- runWillMount _stprops state c'
+        let mid = runRenderer _stprops state c'' updateStateInternal
+        new <- go mparent (unsafeCoerce $ render mid)
+        (c''',mst) <- runDidMount parent _stprops state c''
+        let st' = fromMaybe state mst
+        writeIORef strec (_stprops,st',c''',new,unsafeCoerce mid)
+
+        return $
+          STView
+            _stprops
+            _stid
+            (Just $ unsafeCoerce strec)
+            c'''
+            updateStateInternal
+            updatePropsInternal
+            unmountInternal
+            ?state
+            ?props
+            ?this
+
+    go mparent SVG {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       _atoms <- mapM (go (Just el)) _atoms
       forM_ mparent $ \parent -> appendChild parent el
       didMount
-      return $ SVGHTML _node _tag _attributes _atoms
+      return $ SVG _node _tag _attributes _atoms
 
     go mparent KHTML {..} = do
       _node@(Just el) <- createElement doc _tag
@@ -1784,18 +2078,18 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
       didMount
       return $ KHTML _node _tag _attributes _keyed
 
-    go mparent KSVGHTML {..} = do
+    go mparent KSVG {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
       (_attributes,didMount) <- setAttributes _attributes f False el
       _keyed <- mapM (\(k,x) -> go (Just el) (render x) >>= \y -> return (k,y)) _keyed
       forM_ mparent $ \parent -> appendChild parent el
       didMount
-      return $ KSVGHTML _node _tag _attributes _keyed
+      return $ KSVG _node _tag _attributes _keyed
 
-    go mparent TextHTML {..} = do
+    go mparent TextView {..} = do
       _tnode@(Just el) <- createTextNode doc _content
       forM_ mparent (flip appendChild el)
-      return $ TextHTML _tnode _content
+      return $ TextView _tnode _content
 
     go mparent (DiffView m v) = do
       n <- go mparent v
@@ -1852,15 +2146,15 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
                   embed_ e cvCurrentLive
                   return m
 
-buildHTML :: Doc -> ControllerHooks -> Bool -> (Ef e IO () -> IO ()) -> View e -> IO (View e)
+buildHTML :: e <: '[] => Doc -> ControllerHooks -> Bool -> (Ef e IO () -> IO ()) -> View e -> IO (View e)
 buildHTML doc ch isFG f = buildAndEmbedMaybe f doc ch isFG Nothing
 
 getElement :: forall e. View e -> IO (Maybe ENode)
 getElement View {} = return Nothing
-getElement TextHTML {} = return Nothing
+getElement TextView {} = return Nothing
 getElement (DiffView _ v) = getElement v
 getElement (DiffEqView _ v) = getElement v
-getElement STHTML {..} =
+getElement STView {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
@@ -1872,8 +2166,8 @@ getNode :: forall e. View e -> IO (Maybe NNode)
 getNode View {} = return Nothing
 getNode (DiffView _ v) = getNode v
 getNode (DiffEqView _ v) = getNode v
-getNode TextHTML {..} = forM _tnode toNode
-getNode STHTML {..} =
+getNode TextView {..} = forM _tnode toNode
+getNode STView {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
@@ -1882,10 +2176,10 @@ getNode STHTML {..} =
 getNode n = forM (_node n) toNode
 
 getAttributes :: View e -> [Feature e]
-getAttributes TextHTML {} = []
-getAttributes STHTML {} = []
+getAttributes TextView {} = []
+getAttributes STView {} = []
 getAttributes View {} = []
-getAttributes NullHTML {} = []
+getAttributes NullView {} = []
 getAttributes (DiffView _ v) = getAttributes v
 getAttributes (DiffEqView _ v) = getAttributes v
 getAttributes n = _attributes n
@@ -1893,16 +2187,16 @@ getAttributes n = _attributes n
 getChildren :: forall e. View e -> IO [View e]
 getChildren (DiffView _ v) = getChildren v
 getChildren (DiffEqView _ v) = getChildren v
-getChildren STHTML {..} = do
+getChildren STView {..} = do
   case _strecord of
     Nothing -> return []
     Just ref -> do
       (_,_,_,a,_) <- readIORef ref
       return [unsafeCoerce a :: View e]
 getChildren HTML {..} = return _atoms
-getChildren SVGHTML {..} = return _atoms
+getChildren SVG {..} = return _atoms
 getChildren KHTML {..} = return $ map snd _keyed
-getChildren KSVGHTML {..} = return $ map snd _keyed
+getChildren KSVG {..} = return $ map snd _keyed
 getChildren _ = return []
 
 diff_ :: ControllerPatch m -> IO ()
@@ -1993,7 +2287,7 @@ insertBefore_ parent child new = do
   void $ N.insertBefore parent mnn mcn
 #endif
 
-diffHelper :: forall e v. (v ~ View e)
+diffHelper :: forall e v. (v ~ View e, e <: '[])
            => (Ef e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> v -> v -> v -> IO v
 diffHelper f doc ch isFG =
 #ifdef __GHCJS__
@@ -2037,9 +2331,9 @@ diffHelper f doc ch isFG =
         new <- go' v_old v v'
         return (DiffEqView m' new)
 
-    go' old@NullHTML{} _ new = do
+    go' old@NullView{} _ new = do
       case new of
-        NullHTML _ -> return old
+        NullView _ -> return old
         _          -> do
           new' <- buildHTML doc ch isFG f new
           replace old new'
@@ -2048,7 +2342,7 @@ diffHelper f doc ch isFG =
           didUnmount
           return new'
 
-    go' old _ new@NullHTML{} = do
+    go' old _ new@NullView{} = do
       new' <- buildHTML doc ch isFG f new
       replace old new'
       didUnmount <- cleanup f [old]
@@ -2078,27 +2372,26 @@ diffHelper f doc ch isFG =
               didUnmount
               return new'
 
-    go' old@STHTML {} _ new@STHTML {} = do
+    go' old@STView {} _ new@STView {} = do
       case (old,new) of
-        (STHTML p k s ~(Just r) v u,STHTML p' k' _ _ v' _) -> do
+        (STView p k ~(Just r) c upds updp unm sp pp tp,STView p' k' _ _ _ _ _ _ _ _) -> do
           if prettyUnsafeEq k k' then
             if reallyVeryUnsafeEq p p' then do
               return old
             else do
-              (_,st,sv,old,mid) <- readIORef r
-              writeIORef r (unsafeCoerce p',st,sv,old,mid)
-              u (\_ _ -> return (Just $ unsafeCoerce st,def))
-              return $ STHTML p' k' (unsafeCoerce s) (Just $ unsafeCoerce r) v' (unsafeCoerce u)
+              updp (unsafeCoerce p')
+              return $ STView (unsafeCoerce p') k (Just r) c upds updp unm sp pp tp
           else do
             (_,_,_,a,_) <- readIORef r
             new' <- buildHTML doc ch isFG f new
+            unm
             replace a new'
             didUnmount <- cleanup f [unsafeCoerce a]
             delete a
             didUnmount
             return new'
 
-    go' old@SVGHTML {} mid@SVGHTML {} new@SVGHTML {} =
+    go' old@SVG {} mid@SVG {} new@SVG {} =
       if prettyUnsafeEq (_tag old) (_tag new)
       then do
         let Just n = _node old
@@ -2112,7 +2405,7 @@ diffHelper f doc ch isFG =
               else do
                 diffChildren n (_atoms old) (_atoms mid) (_atoms new)
         didMount
-        return $ SVGHTML (_node old) (_tag old) a' c'
+        return $ SVG (_node old) (_tag old) a' c'
       else do new' <- buildHTML doc ch isFG f new
               replace old new'
               didUnmount <- cleanup f [old]
@@ -2142,9 +2435,9 @@ diffHelper f doc ch isFG =
               didUnmount
               return new'
 
-    go' old@(KSVGHTML old_node old_tag old_attributes old_keyed)
-      mid@(KSVGHTML midAnode _ midAattributes midAkeyed)
-      new@(KSVGHTML _ new_tag new_attributes new_keyed) =
+    go' old@(KSVG old_node old_tag old_attributes old_keyed)
+      mid@(KSVG midAnode _ midAattributes midAkeyed)
+      new@(KSVG _ new_tag new_attributes new_keyed) =
       if prettyUnsafeEq old_tag new_tag
       then do
         let Just n = _node old
@@ -2156,7 +2449,7 @@ diffHelper f doc ch isFG =
         c' <- if reallyUnsafeEq midAkeyed new_keyed then return old_keyed else
                 diffKeyedChildren n old_keyed midAkeyed new_keyed
         didMount
-        return $ KSVGHTML old_node old_tag a' c'
+        return $ KSVG old_node old_tag a' c'
       else do new' <- buildHTML doc ch isFG f new
               replace old new'
               didUnmount <- cleanup f [old]
@@ -2164,14 +2457,14 @@ diffHelper f doc ch isFG =
               didUnmount
               return new'
 
-    go' txt@(TextHTML (Just t) cnt) mid@(TextHTML _ mcnt) new@(TextHTML _ cnt') =
+    go' txt@(TextView (Just t) cnt) mid@(TextView _ mcnt) new@(TextView _ cnt') =
       if prettyUnsafeEq mcnt cnt' then do
-        return txt
+        trace (show ("prttyUnsafeEq txt" :: String,mcnt,cnt')) $ return txt
       else do
         changeText t cnt'
-        return $ TextHTML (Just t) cnt'
+        return $ TextView (Just t) cnt'
 
-    go' old@(RawHTML {}) mid@(RawHTML {}) new@(RawHTML {}) =
+    go' old@(RawView {}) mid@(RawView {}) new@(RawView {}) =
       if prettyUnsafeEq (_tag old) (_tag new) then do
         let Just n = _node old
         (a',didMount) <-
@@ -2181,11 +2474,11 @@ diffHelper f doc ch isFG =
                   runElementDiff f n (_attributes old) (_attributes mid) (_attributes new)
         if prettyUnsafeEq (_content mid) (_content new) then do
           didMount
-          return $ RawHTML (_node old) (_tag old) a' (_content old)
+          return $ RawView (_node old) (_tag old) a' (_content old)
         else do
           setInnerHTML n (_content new)
           didMount
-          return $ RawHTML (_node old) (_tag old) a' (_content new)
+          return $ RawView (_node old) (_tag old) a' (_content new)
       else do new' <- buildHTML doc ch isFG f new
               replace old new'
               didUnmount <- cleanup f [old]
@@ -2218,7 +2511,7 @@ diffHelper f doc ch isFG =
     go' old _ n = do
       n' <- buildAndEmbedMaybe f doc ch isFG Nothing n
       case old of
-        t@(TextHTML (Just o) _) ->
+        t@(TextView (Just o) _) ->
           forM_ (_node n') (swapContent o)
         _ -> do
           replace old n'
