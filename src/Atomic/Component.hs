@@ -170,144 +170,49 @@ newtype Old a = Old { getOld :: a }
 newtype Props props = Props { getP :: props }
 newtype St state = St { getS :: state }
 
-data Private
-private :: Proxy Private
-private = Proxy
-
-data UpdateFlags = UpdateFlags
-  { stateDidChange :: Bool
-  , componentDidChange :: Bool
-  } deriving (Generic,Default)
-
-setStateDidChange :: (Monad c, ms <: '[State Private UpdateFlags]) => Ef ms c ()
-setStateDidChange =
-  void $ modifyp private $ \uf -> (uf { stateDidChange = True },())
-
-setComponentDidChange :: (Monad c, ms <: '[State Private UpdateFlags]) => Ef ms c ()
-setComponentDidChange =
-  void $ modifyp private $ \uf -> (uf { componentDidChange = True },())
-
-modifyComponent ::
-  ( Comment "Modify the current Component; any future use of the Component"
-        ::: "will use the updated methods. This method is available everywhere"
-        ::: "except willUnmount."
-  , Comment "Tags the current Component as updated."
-  , component ~ Component parent props state
-  , ?this :: Proxy component
-      ::: "Implicit access to the Component object."
-  , this ~ State component component
-  , flags ~ State Private UpdateFlags
-  , ms <: '[this,flags]
+st ::
+  ( ms <: '[Reader () (St state)]
   , Monad c
-  ) => (component -> component) -> Ef ms c ()
-modifyComponent f = do
-  _ <- modifyp ?this $ \c -> (f c,())
-  setComponentDidChange
+  ) => Ef ms c state
+st = asks getS
+
+oldState ::
+  ( ms <: '[Reader () (Old (St state))]
+  , Monad c
+  ) => Ef ms c state
+oldState = asks (getS . getOld)
 
 getState ::
-  ( Comment "Access the current state; this method is available in all"
-        ::: "methods except getInitialState where it is not yet"
-        ::: "initialized and willUnmount where it is read-only."
-  , ?state :: Proxy state
-      ::: "Implicit access to the current state reference."
-  , ms <: '[State state (St state)]
+  ( ms <: '[State () (St state)]
   , Monad c
   ) => Ef ms c state
-getState = getS <$> getp ?state
-
-askState :: forall state ms c.
-  ( Comment "Access to a read-only new state; this method is available only"
-        ::: "in shouldUpdate."
-  , ?state :: Proxy state
-      ::: "Implicit access to the current state reference."
-  , ms <: '[Reader state (St state)]
-  , Monad c
-  ) => Ef ms c state
-askState = asksp ?state getS
-
-askOldState :: forall state ms c.
-  ( Comment "Access to the old state; this method is available in willUnmount"
-        ::: "and shouldUpdate."
-  , ?state :: Proxy state
-      ::: "Implicit access to the current state reference."
-  , ms <: '[Reader state (Old (St state))]
-  , Monad c
-  ) => Ef ms c state
-askOldState = asksp ?state (getS . getOld)
+getState = getS <$> get
 
 setState ::
-  ( Comment "Set new state; this method is not available in"
-        ::: "getInitialState when state is uninitialized and"
-        ::: "not available in willUnmount where state is read-only."
-  , Comment "Tags the current component as updated."
-  , ?state :: Proxy state
-      ::: "Implicit access to the current state reference."
-  , flags ~ State Private UpdateFlags
-  , ms <: '[State state (St state), flags]
+  ( ms <: '[State () (St state)]
   , Monad c
-  ) => state ::: "New, updated state."
+  ) => state
     -> Ef ms c ()
-setState newState = do
-  putp ?state (St newState)
-  setStateDidChange
+setState = put . St
 
 modifyState ::
-  ( Comment "Modify the current state; this method is not"
-        ::: "available in getInitialState when state is"
-        ::: "uninitialized and it is not available in willUnmount"
-        ::: "where state is read-only."
-  , Comment "Tags the current component as updated."
-  , ?state :: Proxy state
-      ::: "Implicit access to the current state reference."
-  , flags ~ State Private UpdateFlags
-  , ms <: '[State state (St state),flags]
+  ( ms <: '[State () (St state)]
   , Monad c
-  ) => (state -> state) ::: "State transformer."
+  ) => (state -> state)
     -> Ef ms c ()
-modifyState f = do
-  _ <- modifyp ?state $ \(St s) -> (St (f s),())
-  setStateDidChange
+modifyState f = void $ modify $ \(St s) -> (St (f s),())
 
-askProps ::
-  ( Comment "Access the current or new properties."
-  , ?props :: Proxy props
-      ::: "Implicit access to the current property environment."
-  , ms <: '[Reader props (Props props)]
+props ::
+  ( ms <: '[Reader () (Props props)]
   , Monad c
   ) => Ef ms c props
-askProps = asksp ?props getP
+props = asks getP
 
-askOldProps :: forall props ms c.
-  ( Comment "Access the old properties in willUnmount and shouldUpdate."
-  , ?props :: Proxy props
-      ::: "Implicit access to the old property environment."
-  , ms <: '[Reader props (Old (Props props))]
+oldProps ::
+  ( ms <: '[Reader () (Old (Props props))]
   , Monad c
   ) => Ef ms c props
-askOldProps = asksp ?props (getP . getOld)
-
-newtype Parent (ms :: [* -> *]) = Parent (Ef ms IO () -> IO ())
-
-parent :: forall component parent props state ms c a.
-  ( Comment "Since this is simply a context, not an evented context,"
-        ::: "the result is a Promise, and not a Callback. Callbacks"
-        ::: "are only supported in Services, Controllers, Modules,"
-        ::: "Servers, and Apps."
-  , component ~ Component parent props state
-  , ?this :: Proxy component
-  , ?parent :: Proxy parent
-  , ms <: '[Reader parent (Parent parent)]
-  , parent <: '[]
-       ::: "Require nothing of the parent."
-  , MonadIO c
-  ) => Ef parent IO a ::: "Callback"
-    -> Ef ms c
-        (Promise a ::: "Callback result; demanding the result will block.")
-parent f = do -- may have a problem here with type inference....
-  Parent parent <- askp ?parent
-  p <- promise
-  liftIO $ parent (f >>= void . fulfill p)
-  return p
+oldProps = asks (getP . getOld)
 
 getDOMTree :: ( ?parent :: Proxy parent
               , ms <: '[Reader parent (View parent)]
@@ -333,238 +238,61 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
           ::: "willUnmount."
     )
   => Component
-    { getInitialState :: forall component.
-        ( Comment "Construct the initial state, effectfully,"
-              ::: "with access to the initial properties. Only runs once."
-        , Disallows "Access to parent context to allow error-free server-side rendering without access to a parent context, e.g. when called with toJSON for caching or network transfer."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?this  :: Proxy component
-        ) => Ef '[ Reader props (Props props)
-                     ::: "Initial properties as passed from parent."
+    { getInitialState
+        :: Ef '[ Reader () (Props props) ] IO state
 
-                 , State component component
-                     ::: "Allow changes to Component fields."
-                 ]
-                 IO
-                 ( state ::: "Initial constructed state." )
+    , initialize
+        :: Ef '[ Reader () (Props props)
+               , State () (St state)
+               ] IO ()
 
-    , initialize :: forall component.
-        ( Comment "Allows loading data before rendering."
-        , Note "This is a server-side only method that helps improve dynamic rendering without requiring timeout fickleness."
-        , Disallows "Access to parent context since server-side rendering doesn't guarantee access to a parent context, e.g. when called via toJSON for caching or network transfer."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?this :: Proxy component
-        ) => Ef '[ Reader props (Props props)
-                 , State state (St state)
-                 , State component component
-                 ]
-                 IO
-                 ()
+    , willMount
+        :: Ef '[ Reader () (Props props)
+               , Reader () (St state)
+               ] IO ()
 
-    , willMount :: forall component.
-        ( Comment "Effectful computation to run before first render."
-              ::: "Only runs once."
-        , Disallows "Access to parent context to allow error-free server-side rendering."
-        , Disallows "State update, like setState and modifyState."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?this  :: Proxy component
-        ) => Ef '[ Reader props (Props props)
-                     ::: "Initial properties."
+    , didMount
+        :: ( ?parent :: Proxy parent
+           ) => Ef '[ Reader () (Props props)
+                    , Reader () (St state)
+                    , Reader parent (View parent)
+                    ] IO ()
 
-                 , Reader state (St state)
-                     ::: "Default State; updatable."
+    , willReceiveProps
+        :: ( ?parent :: Proxy parent
+           ) => Ef '[ Reader () (Old (Props props))
+                    , Reader () (Props props)
+                    , Reader () (St state)
+                    , Reader parent (View parent)
+                    ] IO ()
 
-                 , State component component
-                     ::: "Allows changes to Component fields."
+    , shouldUpdate
+        :: ( ?parent :: Proxy parent
+           ) => Ef '[ Reader () (Old (Props props))
+                    , Reader () (Props props)
+                    , Reader () (Old (St state))
+                    , Reader () (St state)
+                    , Reader parent (View parent)
+                    ] IO Bool
 
-                 , State Private UpdateFlags
-                     ::: "Internal update flags that determine update path."
-                 ]
-                 IO
-                 ()
+    , willUpdate
+        :: ( ?parent :: Proxy parent
+           ) => Ef '[ Reader () (Props props)
+                    , Reader () (St state)
+                    , Reader parent (View parent)
+                    ] IO ()
 
-    , didMount :: forall component.
-        ( Comment "Called after first render, before any updates;"
-              ::: "allows access to ENodes. Useful for setting up timers."
-              ::: "Only runs once."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?this  :: Proxy component
-        , ?parent :: Proxy parent
-        ) => Ef '[ Reader props (Props props)
-                     ::: "Initial properties."
+    , didUpdate
+        :: ( ?parent :: Proxy parent
+           ) => Ef '[ Reader () (Props props)
+                    , Reader () (St state)
+                    , Reader parent (View parent)
+                    ] IO ()
 
-                 , State state (St state)
-                      ::: "State after call to willMount"
-                      ::: "Changes force re-render."
-
-                 , State component component
-                      ::: "Allows changes to Component fields."
-
-                 , Reader parent (Parent parent)
-                     ::: "Asynchronous access to the embedding context."
-
-                 , State Private UpdateFlags
-                     ::: "Internal update flags that determine update path."
-
-                 , Reader parent (View parent)
-                     ::: "DOM Tree for this component."
-                 ]
-                 IO
-                 ()
-
-    , willReceiveProps :: forall component.
-        ( Comment "Called when properties are updated; only triggers from"
-              ::: "an external update to properties. Useful for changing"
-              ::: "state upon property updates."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?this  :: Proxy component
-        , ?parent :: Proxy parent
-        ) => Ef '[ Reader props (Old (Props props))
-                      ::: "Old properties before external update was triggered."
-
-                 , Reader props (Props props)
-                      ::: "New properties, soon to be applied to a render."
-
-                 , State state (St state)
-                      ::: "Current state."
-
-                 , State component component
-                      ::: "Allows changes to Component fields."
-
-                 , Reader parent (Parent parent)
-                     ::: "Asynchronous access to the embedding context."
-
-                 , State Private UpdateFlags
-                     ::: "Internal update flags that determine update path."
-
-                 , Reader parent (View parent)
-                     ::: "DOM Tree for this component."
-                 ]
-                 IO
-                 ()
-
-    , shouldUpdate :: forall component.
-        ( Comment "Called on each property or state change; if returing False,"
-              ::: "no diffing will happen. This is largely a method for render"
-              ::: "optimization."
-        , Result "A boolean that determines if a re-rendering is required."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?this  :: Proxy component
-        , ?parent :: Proxy parent
-        ) => Ef '[ Reader props (Old (Props props))
-                      ::: "Properties previous to this update."
-
-                 , Reader props (Props props)
-                      ::: "New properties; might be the same as old properties."
-
-                 , Reader state (Old (St state))
-                      ::: "State previous to this update; read-only."
-
-                 , Reader state (St state)
-                      ::: "New state; might be unchanged; read-only."
-
-                 , State component component
-                      ::: "Allows changes to Component fields."
-
-                 , Reader parent (Parent parent)
-                     ::: "Asynchronous access to the embedding context."
-
-                 , State Private UpdateFlags
-                     ::: "Internal update flags that determine update path."
-
-                 , Reader parent (View parent)
-                     ::: "DOM Tree for this component."
-                 ]
-                 IO
-                 Bool
-
-    , willUpdate :: forall component.
-        ( Comment "Called before a call to render at the beginning of an"
-              ::: "animation frame."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?this  :: Proxy component
-        , ?parent :: Proxy parent
-        ) => Ef '[ Reader props (Props props)
-                      ::: "Current properties."
-
-                 , Reader state (St state)
-                      ::: "Current state; read-only."
-
-                 , State component component
-                      ::: "Allows changes to Component fields."
-
-                 , Reader parent (Parent parent)
-                     ::: "Asynchronous access to the embedding context."
-
-                 , State Private UpdateFlags
-                     ::: "Internal update flags that determine update path."
-
-                 , Reader parent (View parent)
-                     ::: "DOM Tree for this component."
-                 ]
-                 IO
-                 ()
-
-    , didUpdate :: forall component.
-        ( Comment "Called after a call to render before the end of an"
-              ::: "animation frame."
-        , component ~ Component parent props state
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?this  :: Proxy component
-        , ?parent :: Proxy parent
-        ) => Ef '[ Reader props (Props props)
-                      ::: "Current properties."
-
-                 , State state (St state)
-                      ::: "Current state; read-writable."
-                      ::: "Changes force re-render in the current frame."
-
-                 , State component component
-                      ::: "Allows changes to Component fields."
-
-                 , Reader parent (Parent parent)
-                     ::: "Asynchronous access to the embedding context."
-
-                 , State Private UpdateFlags
-                     ::: "Internal update flags that determine update path."
-
-                 , Reader parent (View parent)
-                     ::: "DOM Tree for this component."
-                 ]
-                 IO
-                 ()
-
-    , willUnmount ::
-        ( Comment "Called before the Component is unmounted."
-              ::: "Runs before any cleanup declarations."
-        , ?props :: Proxy props
-        , ?state :: Proxy state
-        , ?parent :: Proxy parent
-        ) => Ef '[ Reader props (Props props)
-                     ::: "Current properties."
-
-                 , Reader state (St state)
-                     ::: "Current state; read-only."
-
-                 , Reader parent (Parent parent)
-                     ::: "Asynchronous access to the embedding context."
-                 ]
-                 IO
-                 ()
+    , willUnmount
+        :: Ef '[ Reader () (Props props)
+               , Reader () (St state)
+               ] IO ()
 
     , renderer ::
         ( Comment "Pure renderer for the current properties and state, given"
@@ -598,89 +326,56 @@ runGetInitialState
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?this :: Proxy component
-     ) => props -> component -> IO (component,state)
+     ) => props -> component -> IO state
 runGetInitialState props comp = do
   let obj = Ef.Base.Object $
-              readerp ?props (Props props)
-              *:* statep ?this comp
+              reader (Props props)
               *:* Ef.Base.Empty
-  (_,(comp',state)) <- obj Ef.Base.! do
-    state <- getInitialState comp
-    comp' <- getp ?this
-    return (comp',state)
-  return (comp',state)
+  (_,state) <- obj Ef.Base.! getInitialState comp
+  return state
 
 runInitialize
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?state :: Proxy state
-     , ?this :: Proxy component
-     ) => props -> state -> component -> IO (component,state)
+     ) => props -> state -> component -> IO state
 runInitialize props state comp = do
   let obj = Ef.Base.Object $
-              readerp ?props (Props props)
-              *:* statep ?state (St state)
-              *:* statep ?this comp
+              reader (Props props)
+              *:* Ef.Base.state (St state)
               *:* Ef.Base.Empty
-  (_,(comp',st)) <- obj Ef.Base.! do
+  (_,st) <- obj Ef.Base.! do
     initialize comp
-    c' <- getp ?this
-    St st <- getp ?state
-    return (c',st)
-  return (comp',st)
+    getS <$> get
+  return st
 
 runWillMount
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?state :: Proxy state
-     , ?this :: Proxy component
-     ) => props -> state -> component -> IO component
+     ) => props -> state -> component -> IO ()
 runWillMount props state comp = do
   let obj = Ef.Base.Object $
-              readerp ?props (Props props)
-              *:* readerp ?state (St state)
-              *:* statep ?this comp
-              *:* statep private def
+              reader (Props props)
+              *:* reader (St state)
               *:* Ef.Base.Empty
-  (_,comp') <- obj Ef.Base.! do
-    willMount comp
-    getp ?this
-  return comp'
+  _ <- obj Ef.Base.! willMount comp
+  return ()
 
 runDidMount
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?state :: Proxy state
      , ?parent :: Proxy parent
-     , ?this :: Proxy component
-     ) => Parent parent -> props -> state -> component -> View parent -> IO (component,Maybe state)
-runDidMount parent props state comp view = do
+     ) => props -> state -> component -> View parent -> IO ()
+runDidMount props state comp view = do
   let obj = Ef.Base.Object $
-              readerp ?props (Props props)
-              *:* statep ?state (St state)
-              *:* statep ?this comp
-              *:* readerp ?parent parent
-              *:* statep private (UpdateFlags def def)
+              reader (Props props)
+              *:* reader (St state)
               *:* readerp ?parent view
               *:* Ef.Base.Empty
-  (_,(comp',mst)) <- obj Ef.Base.! do
-    didMount comp
-    c' <- getp ?this
-    UpdateFlags didStateChange _ <- getp private
-    if didStateChange then do
-      St st <- getp ?state
-      return (c',Just st)
-    else
-      return (c',Nothing)
-  return (comp',mst)
+  _ <- obj Ef.Base.! didMount comp
+  return ()
 
 runRenderer :: props -> state -> Component parent props state -> StateUpdate props state -> View parent
 runRenderer props state Component {..} upd = renderer props state upd
@@ -689,31 +384,17 @@ runWillReceiveProps
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?state :: Proxy state
-     , ?this :: Proxy component
      , ?parent :: Proxy parent
-     ) => Parent parent -> props -> props -> state -> component -> View parent -> IO (component,Maybe state)
-runWillReceiveProps parent old_props new_props state comp view = do
+     ) => props -> props -> state -> component -> View parent -> IO ()
+runWillReceiveProps old_props new_props state comp view = do
   let obj = Ef.Base.Object $
-              readerp ?props (Old (Props old_props))
-              *:* readerp ?props (Props new_props)
-              *:* statep ?state (St state)
-              *:* statep ?this comp
-              *:* readerp ?parent parent
-              *:* statep private (UpdateFlags def def)
+              reader (Old (Props old_props))
+              *:* reader (Props new_props)
+              *:* reader (St state)
               *:* readerp ?parent view
               *:* Ef.Base.Empty
-  (_,(comp',mst)) <- obj Ef.Base.! do
-    willReceiveProps comp
-    c' <- getp ?this
-    UpdateFlags didStateChange _ <- getp private
-    if didStateChange then do
-      St st <- getp ?state
-      return (c',Just st)
-    else
-      return (c',Nothing)
-  return (comp',mst)
+  _ <- obj Ef.Base.! willReceiveProps comp
+  return ()
 
 -- One too many traits for GHC again?
 runShouldUpdate
@@ -721,92 +402,58 @@ runShouldUpdate
      ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?state :: Proxy state
-     , ?this :: Proxy component
      , ?parent :: Proxy parent
-     ) => Parent parent -> props -> props -> state -> state -> component -> View parent -> IO (component,Bool)
-runShouldUpdate parent old_props new_props old_state new_state comp view = do
+     ) => props -> props -> state -> state -> component -> View parent -> IO Bool
+runShouldUpdate old_props new_props old_state new_state comp view = do
   let obj = Ef.Base.Object $
-              readerp ?props (Old (Props old_props))
-              *:* readerp ?props (Props new_props)
-              *:* readerp ?state (Old (St old_state))
-              *:* readerp ?state (St new_state)
-              *:* statep ?this comp
-              *:* readerp ?parent parent
-              *:* statep private (UpdateFlags def def)
+              reader (Old (Props old_props))
+              *:* reader (Props new_props)
+              *:* reader (Old (St old_state))
+              *:* reader (St new_state)
               *:* readerp ?parent view
               *:* Ef.Base.Empty
-  (_,(c',shouldUpd)) <- obj Ef.Base.! do
-    shouldUpd <- shouldUpdate comp
-    comp' <- getp ?this
-    return (comp',shouldUpd)
-  return (c',shouldUpd)
+  (_,shouldUpd) <- obj Ef.Base.! shouldUpdate comp
+  return shouldUpd
 
 runWillUpdate
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?state :: Proxy state
-     , ?this :: Proxy component
      , ?parent :: Proxy parent
-     ) => Parent parent -> props -> state -> component -> View parent -> IO component
-runWillUpdate parent props state comp view = do
+     ) => props -> state -> component -> View parent -> IO ()
+runWillUpdate props state comp view = do
   let obj = Ef.Base.Object $
-              readerp ?props (Props props)
-              *:* readerp ?state (St state)
-              *:* statep ?this comp
-              *:* readerp ?parent parent
-              *:* statep private (UpdateFlags def def)
+              reader (Props props)
+              *:* reader (St state)
               *:* readerp ?parent view
               *:* Ef.Base.Empty
-  (_,c') <- obj Ef.Base.! do
-    willUpdate comp
-    getp ?this
-  return c'
+  _ <- obj Ef.Base.! willUpdate comp
+  return ()
 
 runDidUpdate
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?state :: Proxy state
-     , ?this :: Proxy component
      , ?parent :: Proxy parent
-     ) => Parent parent -> props -> state -> component -> View parent -> IO (component,Maybe state)
-runDidUpdate parent props state comp view = do
+     ) => props -> state -> component -> View parent -> IO ()
+runDidUpdate props state comp view = do
   let obj = Ef.Base.Object $
-              readerp ?props (Props props)
-              *:* statep ?state (St state)
-              *:* statep ?this comp
-              *:* readerp ?parent parent
-              *:* statep private (UpdateFlags def def)
+              reader (Props props)
+              *:* reader (St state)
               *:* readerp ?parent view
               *:* Ef.Base.Empty
-  (_,(c',mst)) <- obj Ef.Base.! do
-    didUpdate comp
-    c' <- getp ?this
-    UpdateFlags didStateChange _ <- getp private
-    if didStateChange then do
-      St st <- getp ?state
-      return (c',Just st)
-    else
-      return (c',Nothing)
-  return (c',mst)
+  _ <- obj Ef.Base.! didUpdate comp
+  return ()
 
-runWillUnmount
-  :: ( Typeable parent, Typeable props, Typeable state
-     , component ~ Component parent props state
-     , ?props :: Proxy props
-     , ?state :: Proxy state
-     , ?parent :: Proxy parent
-     ) => Parent parent -> props -> state -> component -> IO ()
-runWillUnmount parent props state comp = do
+runWillUnmount :: ( Typeable props
+                  , Typeable state
+                  , component ~ Component parent props state
+                  )
+               => props -> state -> component -> IO ()
+runWillUnmount props state comp = do
   let obj = Ef.Base.Object $
-              readerp ?props (Props props)
-              *:* readerp ?state (St state)
-              *:* readerp ?parent parent
+              reader (Props props)
+              *:* reader (St state)
               *:* Ef.Base.Empty
   _ <- obj Ef.Base.! (willUnmount comp)
   return ()
@@ -856,9 +503,6 @@ data View e where
        , _stupdate :: StateUpdate props st
        , _psupdate :: PropsUpdate props
        , _unmount  :: UnmountAction
-       , _stateproxy :: Proxy st
-       , _propsproxy :: Proxy props
-       , _thisproxy :: Proxy (Component e props st)
        } -> View e
 
   SVG
@@ -1020,8 +664,8 @@ pattern String :: (ToTxt t, FromTxt t) => t -> View ms
 pattern String t <- (TextView _ (fromTxt -> t)) where
   String t = TextView Nothing (toTxt t)
 
-pattern ST p v <- STView p 0 _ v _ _ _ _ _ _ where
-  ST p v = STView p 0 Nothing v (\_ -> return ()) (\_ -> return ()) def Proxy Proxy Proxy
+pattern ST p v <- STView p 0 _ v _ _ _ where
+  ST p v = STView p 0 Nothing v (\_ -> return ()) (\_ -> return ()) def
 
 weakRender (View a) = weakRender (render a)
 weakRender a = a
@@ -1053,17 +697,14 @@ instance (e <: '[]) => ToJSON (View e) where
 #endif
       go a
     where
-      go (STView props _ iorec c _ _ _ state_proxy props_proxy this_proxy) =
-        let ?this = this_proxy
-        in let ?state = state_proxy
-        in let ?props = props_proxy
-        in
+      go (STView props _ iorec c _ _ _) =
           unsafeCoerce go $
             case iorec of
               Nothing -> unsafePerformIO $ do
-                (c',state) <- runGetInitialState props (c (\_ -> return ()) (\_ -> return ()))
-                (c'',state') <- runInitialize props state c'
-                return $ runRenderer props (state' `asTypeOf` state) c''
+                let comp = c (\_ -> return ()) (\_ -> return ())
+                state <- runGetInitialState props comp
+                state' <- runInitialize props state comp
+                return $ runRenderer props (state' `asTypeOf` state) comp
 
               Just ref ->
                 let (_,_,_,cur,_) = unsafePerformIO (readIORef ref)
@@ -1148,7 +789,7 @@ instance Eq (View e) where
   (==) (HTML _ t fs cs) (HTML _ t' fs' cs') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq cs cs'
 
-  (==) (STView m k _ v _ _ _ _ _ _) (STView m' k' _ v' _ _ _ _ _ _) =
+  (==) (STView m k _ v _ _ _) (STView m' k' _ v' _ _ _) =
     k == k' && reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq v v'
 
   (==) (KSVG _ t fs ks) (KSVG _ t' fs' ks') =
@@ -1670,7 +1311,8 @@ mkController mkControllerAction c@Controller {..} = do
   -- keep out of forkIO to prevent double-initialization
   addController key cr
   forkIO $ do
-    built <- build $ state (ControllerState
+    built <- build $ Ef.Base.state
+                            (ControllerState
                                 Nothing
                                 (differ view (publish (chRenderables ch) ()) sendEv)
                                 Eager
@@ -1678,9 +1320,9 @@ mkController mkControllerAction c@Controller {..} = do
                                 model
                                 (crView cr)
                             )
-                    *:* state ch
-                    *:* state sdn
-                    *:* state buf
+                    *:* Ef.Base.state ch
+                    *:* Ef.Base.state sdn
+                    *:* Ef.Base.state buf
                     *:* Empty
     (obj',_) <- Ef.Base.Object built Ef.Base.! do
       connect constructShutdownSyndicate $ const (Ef.Base.lift shutdownSelf)
@@ -2007,11 +1649,7 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
       return $ HTML _node _tag _attributes _atoms
 
     go mparent STView {..} =
-      let ?this = _thisproxy
-      in let ?state = _stateproxy
-      in let ?props = _propsproxy
-      in let ?parent = Proxy :: Proxy e
-      in let parent = Parent f
+      let ?parent = Proxy :: Proxy e
       in do
         let rAF f = void $ do
 #ifdef __GHCJS__
@@ -2036,65 +1674,61 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
                         if should_raf then do
                           done <- newEmptyMVar
                           _ <- forkIO $ join $ takeMVar done
-                          (c',shouldUpd) <- runShouldUpdate parent props props st st' c old
+                          shouldUpd <- runShouldUpdate props props st st' c old
                           if shouldUpd then do
-                            c'' <- runWillUpdate parent props st' c' old
+                            runWillUpdate props st c old
                             rAF $ do
                               let new_mid = runRenderer props st' c (updateStateInternal True)
                               new <- diffHelper f doc ch isFG old mid new_mid
-                              (c''',mst) <- runDidUpdate parent props st' c'' new
-                              writeIORef strec (props,st',c''',new,new_mid)
+                              runDidUpdate props st' c new
+                              writeIORef strec (props,st',c,new,new_mid)
 
                               putMVar done (cb >> updateState mst def)
                           else do
-                            writeIORef strec (props,st',c',old,mid)
+                            writeIORef strec (props,st',c,old,mid)
                             putMVar done cb
                         else do
-                          (c',shouldUpd) <- runShouldUpdate parent props props st st' c old
+                          shouldUpd <- runShouldUpdate props props st st' c old
                           if shouldUpd then do
-                            c'' <- runWillUpdate parent props st' c' old
-                            let new_mid = runRenderer props st' c (updateStateInternal False)
+                            runWillUpdate props st c old
+                            let new_mid = runRenderer props st c (updateStateInternal False)
                             new <- diffHelper f doc ch isFG old mid new_mid
-                            (c''',mst) <- runDidUpdate parent props st' c'' new
-                            writeIORef strec (props,st',c''',new,new_mid)
+                            runDidUpdate props st c new
+                            writeIORef strec (props,st',c,new,new_mid)
                             cb
                             updateState mst def
                           else do
-                            writeIORef strec (props,st',c',old,mid)
+                            writeIORef strec (props,st',c,old,mid)
                             cb
 
               updateState mst cb
 
             updatePropsInternal props = do
               (old_props,st,c,old,mid) <- readIORef strec
-              (c',mst') <- runWillReceiveProps parent old_props props st c old
-              let st' = fromMaybe st mst'
-              (c'',shouldUpd) <- runShouldUpdate parent old_props props st st' c' old
+              runWillReceiveProps old_props props st c old
+              shouldUpd <- runShouldUpdate old_props props st st c old
               if shouldUpd then do
-                c'' <- runWillUpdate parent props st' c'' old
-                let new_mid = runRenderer props st' c'' (updateStateInternal False)
+                runWillUpdate props st c old
+                let new_mid = runRenderer props st c (updateStateInternal False)
                 new <- diffHelper f doc ch isFG old mid new_mid
-                (c''',mst) <- runDidUpdate parent props st' c'' new
-                writeIORef strec (props,st',c'',new,new_mid)
-
-                updateStateInternal False (\_ _ -> return (Just st',def))
+                mst <- runDidUpdate props st c new
+                writeIORef strec (props,st,c,new,new_mid)
 
               else
-                writeIORef strec (props,st',c'',old,mid)
+                writeIORef strec (props,st,c,old,mid)
 
             unmountInternal = void $ do
               (props,st,c,old,mid) <- readIORef strec
-              runWillUnmount parent props st c
+              runWillUnmount props st c
               return ()
 
-        (c',state) <- runGetInitialState _stprops (_stview f (updateStateInternal True))
-        c'' <- runWillMount _stprops state c'
-        let mid = runRenderer _stprops state c'' (updateStateInternal False)
+        let comp = _stview f (updateStateInternal True)
+        state <- runGetInitialState _stprops comp
+        runWillMount _stprops state comp
+        let mid = runRenderer _stprops state comp (updateStateInternal False)
         new <- go mparent (unsafeCoerce $ render mid)
-        (c''',mst) <- runDidMount parent _stprops state c'' new
-        let st' = fromMaybe state mst
-        writeIORef strec (_stprops,st',c''',new,unsafeCoerce mid)
-        forM_ mst $ \st' -> updateStateInternal False (\_ _ -> return (Just st',def))
+        runDidMount _stprops state comp new
+        writeIORef strec (_stprops,state,comp,new,unsafeCoerce mid)
 
         return $
           STView
@@ -2105,9 +1739,6 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
             (updateStateInternal False)
             updatePropsInternal
             unmountInternal
-            ?state
-            ?props
-            ?this
 
     go mparent SVG {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
@@ -2421,13 +2052,13 @@ diffHelper f doc ch isFG =
 
     go' old@STView {} _ new@STView {} = do
       case (old,new) of
-        (STView p k ~(Just r) c upds updp unm sp pp tp,STView p' k' _ _ _ _ _ _ _ _) -> do
+        (STView p k ~(Just r) c upds updp unm,STView p' k' _ _ _ _ _) -> do
           if prettyUnsafeEq k k' then
             if reallyVeryUnsafeEq p p' then do
               return old
             else do
               updp (unsafeCoerce p')
-              return $ STView (unsafeCoerce p') k (Just r) c upds updp unm sp pp tp
+              return $ STView (unsafeCoerce p') k (Just r) c upds updp unm
           else do
             (_,_,_,a,_) <- readIORef r
             new' <- buildHTML doc ch isFG f new
