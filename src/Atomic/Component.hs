@@ -170,26 +170,30 @@ newtype Old a = Old { getOld :: a }
 newtype Props props = Props { getP :: props }
 newtype St state = St { getS :: state }
 
-st ::
-  ( ms <: '[Reader () (St state)]
+askState ::
+  ( ?state :: Proxy state
+  , ms <: '[Reader () (St state)]
   , Monad c
   ) => Ef ms c state
-st = asks getS
+askState = asks getS
 
-oldState ::
-  ( ms <: '[Reader () (Old (St state))]
+askOldState ::
+  ( ?state :: Proxy state
+  , ms <: '[Reader () (Old (St state))]
   , Monad c
   ) => Ef ms c state
-oldState = asks (getS . getOld)
+askOldState = asks (getS . getOld)
 
 getState ::
-  ( ms <: '[State () (St state)]
+  ( ?state :: Proxy state
+  , ms <: '[State () (St state)]
   , Monad c
   ) => Ef ms c state
 getState = getS <$> get
 
 setState ::
-  ( ms <: '[State () (St state)]
+  ( ?state :: Proxy state
+  , ms <: '[State () (St state)]
   , Monad c
   ) => state
     -> Ef ms c ()
@@ -214,21 +218,11 @@ oldProps ::
   ) => Ef ms c props
 oldProps = asks (getP . getOld)
 
-getDOMTree :: ( ?parent :: Proxy parent
-              , ms <: '[Reader parent (View parent)]
+getDOMTree :: ( ms <: '[Reader () (View parent)]
               , parent <: '[]
               , ms <: '[]
               ) => Ef ms IO (View parent)
-getDOMTree = askp ?parent
-
-getDOMNode :: ( ?parent :: Proxy parent
-              , ms <: '[Reader parent (View parent)]
-              , parent <: '[]
-              , ms <: '[]
-              ) => Ef ms IO (Maybe ENode)
-getDOMNode = do
-  v <- getDOMTree
-  liftIO $ getElement v
+getDOMTree = ask
 
 data Component (parent :: [* -> *]) (props :: *) (state :: *) =
     ( Comment "For each method, props are available via ask, but are wrapped in"
@@ -238,72 +232,85 @@ data Component (parent :: [* -> *]) (props :: *) (state :: *) =
           ::: "willUnmount."
     )
   => Component
-    { getInitialState
-        :: Ef '[ Reader () (Props props) ] IO state
+    { constructor ::
+        ( Method "constructor"
+            '[ Description '[ "One-time initialization with access to props." ]
+             , Use '[ "Use constructor to initialize state defaults." ]
+             , Errors '[ "State update in constructor is an error." ]
+             ]
+        ) => Ef '[ Reader () (Props props) ] IO state
 
-    , initialize
-        :: Ef '[ Reader () (Props props)
-               , State () (St state)
-               ] IO ()
+    , initialize ::
+        ( Method "initialize"
+            '[ Description '[ "A version of willMount that only runs on the server." ]
+             , Use '[ "Use initialize for synchronous component seeding." ]
+             , Errors '[ "State update in initialize is an error." ]
+             ]
+        ) => Ef '[ Reader () (Props props)
+                , State () (St state)
+                ] IO ()
 
-    , willMount
-        :: Ef '[ Reader () (Props props)
-               , Reader () (St state)
-               ] IO ()
+    , willMount ::
+        (
 
-    , didMount
-        :: ( ?parent :: Proxy parent
-           ) => Ef '[ Reader () (Props props)
-                    , Reader () (St state)
-                    , Reader parent (View parent)
-                    ] IO ()
+        ) => Ef '[ Reader () (Props props)
+                 , Reader () (St state)
+                 ] IO ()
 
-    , willReceiveProps
-        :: ( ?parent :: Proxy parent
-           ) => Ef '[ Reader () (Old (Props props))
-                    , Reader () (Props props)
-                    , Reader () (St state)
-                    , Reader parent (View parent)
-                    ] IO ()
+    , didMount ::
+        (
 
-    , shouldUpdate
-        :: ( ?parent :: Proxy parent
-           ) => Ef '[ Reader () (Old (Props props))
-                    , Reader () (Props props)
-                    , Reader () (Old (St state))
-                    , Reader () (St state)
-                    , Reader parent (View parent)
-                    ] IO Bool
+        ) => Ef '[ Reader () (Props props)
+                 , Reader () (St state)
+                 , Reader () (View parent)
+                 ] IO ()
 
-    , willUpdate
-        :: ( ?parent :: Proxy parent
-           ) => Ef '[ Reader () (Props props)
-                    , Reader () (St state)
-                    , Reader parent (View parent)
-                    ] IO ()
+    , willReceiveProps ::
+        (
 
-    , didUpdate
-        :: ( ?parent :: Proxy parent
-           ) => Ef '[ Reader () (Props props)
-                    , Reader () (St state)
-                    , Reader parent (View parent)
-                    ] IO ()
+        ) => Ef '[ Reader () (Old (Props props))
+                 , Reader () (Props props)
+                 , State () (St state)
+                 , Reader () (View parent)
+                 ] IO ()
 
-    , willUnmount
-        :: Ef '[ Reader () (Props props)
-               , Reader () (St state)
-               ] IO ()
+    , shouldUpdate ::
+        (
+
+        ) => Ef '[ Reader () (Old (Props props))
+                 , Reader () (Props props)
+                 , Reader () (Old (St state))
+                 , Reader () (St state)
+                 , Reader () (View parent)
+                 ] IO Bool
+
+    , willUpdate ::
+        (
+
+        ) => Ef '[ Reader () (Props props)
+                 , Reader () (St state)
+                 , Reader () (View parent)
+                 ] IO ()
+
+    , didUpdate ::
+        (
+
+        ) => Ef '[ Reader () (Props props)
+                 , Reader () (St state)
+                 , Reader () (View parent)
+                 ] IO ()
+
+    , willUnmount ::
+        (
+
+        ) => Ef '[ Reader () (Props props)
+                 , Reader () (St state)
+                 ] IO ()
 
     , renderer ::
-        ( Comment "Pure renderer for the current properties and state, given"
-        , Comment "an update method that can be called from within the View."
-        , Param props "Current props for this render cycle."
-        , Param state "Current state for this render cycle."
-        , Param (StateUpdate props state) "State update method usable within the rendered View."
-        , Result "A pure rendered View with access to the parent context."
-        , Forbids "IO"
-        )
-        => props -> state -> StateUpdate props state -> View parent
+        (
+
+        ) => props -> state -> StateUpdate props state -> View parent
 
     }
 
@@ -319,19 +326,19 @@ instance Default (Component parent props state) where
       , didMount = def
       , willMount = def
       , initialize = def
-      , getInitialState = error "Component.getInitialState: state not initialized."
+      , constructor = error "Component.constructor: state not initialized."
       }
 
-runGetInitialState
+runConstructor
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
      ) => props -> component -> IO state
-runGetInitialState props comp = do
+runConstructor props comp = do
   let obj = Ef.Base.Object $
               reader (Props props)
               *:* Ef.Base.Empty
-  (_,state) <- obj Ef.Base.! getInitialState comp
+  (_,state) <- obj Ef.Base.! constructor comp
   return state
 
 runInitialize
@@ -366,13 +373,12 @@ runDidMount
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?parent :: Proxy parent
      ) => props -> state -> component -> View parent -> IO ()
 runDidMount props state comp view = do
   let obj = Ef.Base.Object $
               reader (Props props)
               *:* reader (St state)
-              *:* readerp ?parent view
+              *:* reader view
               *:* Ef.Base.Empty
   _ <- obj Ef.Base.! didMount comp
   return ()
@@ -384,17 +390,19 @@ runWillReceiveProps
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?parent :: Proxy parent
-     ) => props -> props -> state -> component -> View parent -> IO ()
+     , ?state :: Proxy state
+     ) => props -> props -> state -> component -> View parent -> IO state
 runWillReceiveProps old_props new_props state comp view = do
   let obj = Ef.Base.Object $
               reader (Old (Props old_props))
               *:* reader (Props new_props)
-              *:* reader (St state)
-              *:* readerp ?parent view
+              *:* Ef.Base.state (St state)
+              *:* reader view
               *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! willReceiveProps comp
-  return ()
+  (_,st) <- obj Ef.Base.! do
+    willReceiveProps comp
+    getS <$> get
+  return st
 
 -- One too many traits for GHC again?
 runShouldUpdate
@@ -402,7 +410,6 @@ runShouldUpdate
      ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?parent :: Proxy parent
      ) => props -> props -> state -> state -> component -> View parent -> IO Bool
 runShouldUpdate old_props new_props old_state new_state comp view = do
   let obj = Ef.Base.Object $
@@ -410,7 +417,7 @@ runShouldUpdate old_props new_props old_state new_state comp view = do
               *:* reader (Props new_props)
               *:* reader (Old (St old_state))
               *:* reader (St new_state)
-              *:* readerp ?parent view
+              *:* reader view
               *:* Ef.Base.Empty
   (_,shouldUpd) <- obj Ef.Base.! shouldUpdate comp
   return shouldUpd
@@ -419,13 +426,12 @@ runWillUpdate
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?parent :: Proxy parent
      ) => props -> state -> component -> View parent -> IO ()
 runWillUpdate props state comp view = do
   let obj = Ef.Base.Object $
               reader (Props props)
               *:* reader (St state)
-              *:* readerp ?parent view
+              *:* reader view
               *:* Ef.Base.Empty
   _ <- obj Ef.Base.! willUpdate comp
   return ()
@@ -434,13 +440,12 @@ runDidUpdate
   :: ( Typeable parent, Typeable props, Typeable state
      , parent <: '[]
      , component ~ Component parent props state
-     , ?parent :: Proxy parent
      ) => props -> state -> component -> View parent -> IO ()
 runDidUpdate props state comp view = do
   let obj = Ef.Base.Object $
               reader (Props props)
               *:* reader (St state)
-              *:* readerp ?parent view
+              *:* reader view
               *:* Ef.Base.Empty
   _ <- obj Ef.Base.! didUpdate comp
   return ()
@@ -498,11 +503,12 @@ data View e where
     :: (Typeable props,Typeable st) =>
        { _stprops  :: props
        , _stid     :: Int
-       , _strecord :: (Maybe (IORef (props,st,Component e props st,View x,View x)))
+       , _strecord :: (Maybe (MVar (props,st,Component e props st,View x,View x)))
        , _stview   :: Lifter e -> StateUpdate props st -> Component e props st
        , _stupdate :: StateUpdate props st
        , _psupdate :: PropsUpdate props
        , _unmount  :: UnmountAction
+       , _stateProxy :: Proxy st
        } -> View e
 
   SVG
@@ -664,8 +670,8 @@ pattern String :: (ToTxt t, FromTxt t) => t -> View ms
 pattern String t <- (TextView _ (fromTxt -> t)) where
   String t = TextView Nothing (toTxt t)
 
-pattern ST p v <- STView p 0 _ v _ _ _ where
-  ST p v = STView p 0 Nothing v (\_ -> return ()) (\_ -> return ()) def
+pattern ST p v <- STView p 0 _ v _ _ _ _ where
+  ST p v = STView p 0 Nothing v (\_ -> return ()) (\_ -> return ()) def Proxy
 
 weakRender (View a) = weakRender (render a)
 weakRender a = a
@@ -697,17 +703,17 @@ instance (e <: '[]) => ToJSON (View e) where
 #endif
       go a
     where
-      go (STView props _ iorec c _ _ _) =
+      go (STView props _ iorec c _ _ _ sp) =
           unsafeCoerce go $
             case iorec of
               Nothing -> unsafePerformIO $ do
-                let comp = c (\_ -> return ()) (\_ -> return ())
-                state <- runGetInitialState props comp
+                let comp = let ?state = sp in c (\_ -> return ()) (\_ -> return ())
+                state <- runConstructor props comp
                 state' <- runInitialize props state comp
                 return $ runRenderer props (state' `asTypeOf` state) comp
 
               Just ref ->
-                let (_,_,_,cur,_) = unsafePerformIO (readIORef ref)
+                let (_,_,_,cur,_) = unsafePerformIO (readMVar ref)
                 in unsafeCoerce cur
 
       go (View v) = go (render v)
@@ -789,8 +795,8 @@ instance Eq (View e) where
   (==) (HTML _ t fs cs) (HTML _ t' fs' cs') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq cs cs'
 
-  (==) (STView m k _ v _ _ _) (STView m' k' _ v' _ _ _) =
-    k == k' && reallyVeryUnsafeEq m m' && reallyVeryUnsafeEq v v'
+  (==) (STView p k _ _ _ _ _ sp) (STView p' k' _ _ _ _ _ sp') =
+    k == k' && reallyVeryUnsafeEq p p' && reallyVeryUnsafeEq sp sp'
 
   (==) (KSVG _ t fs ks) (KSVG _ t' fs' ks') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq ks ks'
@@ -966,7 +972,7 @@ rebuild h =
     go :: View e -> IO ()
     go STView {..}  = do
       forM_ _strecord $ \ref -> do
-        (_,_,_,a,_) <- readIORef ref
+        (_,_,_,a,_) <- readMVar ref
         rebuild (unsafeCoerce a :: View e)
     go HTML {..}    = mapM_ go _atoms
     go SVG {..} = mapM_ go _atoms
@@ -1003,7 +1009,7 @@ triggerBackground = go
     go :: View e -> m ()
     go STView {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,_,a,_) <- liftIO $ readIORef ref
+        (_,_,_,a,_) <- liftIO $ readMVar ref
         go (unsafeCoerce a)
     go HTML {..}    = mapM_ go _atoms
     go SVG {..} = mapM_ go _atoms
@@ -1030,7 +1036,7 @@ triggerForeground = go
     go :: View e -> m ()
     go STView {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,_,a,_) <- liftIO $ readIORef ref
+        (_,_,_,a,_) <- liftIO $ readMVar ref
         go (unsafeCoerce a)
     go HTML {..}    = mapM_ go _atoms
     go SVG {..} = mapM_ go _atoms
@@ -1582,7 +1588,7 @@ swapContent t e =
 embed_ :: forall e. ENode -> View e -> IO ()
 embed_ parent STView {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,_,a,_) <- readIORef ref
+    (_,_,_,a,_) <- readMVar ref
     embed_ parent (unsafeCoerce a :: View e)
 embed_ parent TextView {..} =
   forM_ _tnode $ \node -> do
@@ -1615,6 +1621,216 @@ setAttributes as f diffing el = do
 #else
   return (as,return ())
 #endif
+
+newtype ComponentPatchQueue e props state
+  = ComponentPatchQueue (MVar [CPatch e props state])
+
+type WillUpdate e props state =
+       props ::: "Next properties to be fed to the patcher."
+    -> state ::: "Next state to be fed to the patcher."
+    -> Ef '[ Reader () props ::: "Current properties."
+           , Reader () state ::: "Current state; writable."
+           ]
+           IO
+           ()
+
+type DidUpdate e props state =
+      props ::: "Previous properties from before patch."
+   -> state ::: "Previous state from before patch."
+   -> Ef '[ Reader () props ::: "Current, new properties after patch."
+          , Reader () state ::: "Current, new state after patch; read-only."
+          ]
+          IO
+          ()
+
+data CPatch e props state = CPatch
+  { cpProps :: props
+  , cpState :: state
+  , update :: Either props (props -> state -> IO (state,IO ()))
+  , willUpdate :: WillUpdate e props state
+  , didUpdate :: DidUpdate e props state
+  }
+
+queueComponentPatch
+  :: ( patch ~ CPatch e props state
+     , queue ~ ComponentPatchQueue e prosp state
+     , Describe 'queueComponentPatch
+         '[ Param patch
+              '[ "A CPatch that contains two continuations to run before and"
+               , "after the patch is applied."
+               ]
+          , Param queue
+              '[ "An MVar containing a list of patches in reverse order."
+               ]
+          , About
+              '[ "If no existing patch is queued, this method will fork one."
+               ]
+          ]
+     )
+  => patch -> queue -> IO ()
+queueComponentPatch p cpq@(ComponentPatchQueue q_) = do
+  join . modifyMVar q_ $ \q ->
+    case q of
+      [] -> return ([q],void . forkIO $ runComponentPatch cpq)
+      ps -> return (p:ps,return ())
+
+runComponentPatch
+  :: ( queue ~ ComponentPatchQueue e props state
+     , cstate ~ ComponentState e props state
+     , Describe 'runComponentPatch
+         '[ Param queue
+              '[ "An MVar containing a list of patches in reverse order." ]
+          , About
+              '[ "The existing queue will be locked and reset"
+               , "If executed in the browse, runComponentPatch will request a"
+               , "new animation frame to perform a patch."
+               , "The existing queue will be reset"]
+          , About
+              '[ "All willUpdate methods are chained together with their state"
+               , "results being passed down the chain. After each willUpdate,"
+               , "the corresponding didUpdate will be constructed from the"
+               , "result and turned into an IO action and added to a queue"
+               , "to be executed with (sequence_ . reverse) at the end of the"
+               , "patch."
+               ]
+          ]
+     ) => state -> queue -> IO ()
+runComponentPatch (ComponentPatchQueue cpq) =
+  rAF $ do
+    patches    <- getPatches
+    didUpdates <- chainWillUpdates patches
+    runDidUpdates didUpdates
+  where
+    getPatches =
+      reverse <$> swapMVar cpq []
+
+    chainWillUpdates = reverse . chainWU
+      where
+        chainWU [] = []
+        chainWU (CPatch {..} : cps) = do
+
+
+
+rAF f = void $ do
+#ifdef __GHCJS__
+  rafCallback <- newRequestAnimationFrameCallback $ \_ -> f
+  win <- getWindow
+  requestAnimationFrame win (Just rafCallback)
+#else
+  f
+#endif
+
+buildComponent :: forall e. (Ef e IO () -> IO ()) -> Maybe ENode -> View e -> IO (View e)
+buildComponent f mparent STView {..} = do
+  let ?parent = Proxy :: Proxy e
+  in let ?state = _stateProxy
+  in do
+    let rAF f = void $ do
+#ifdef __GHCJS__
+          rafCallback <- newRequestAnimationFrameCallback $ \_ -> f
+          win <- getWindow
+          requestAnimationFrame win (Just rafCallback)
+#else
+          f
+#endif
+
+    propUpdater <- newEmptyMVar
+
+    strec <- newEmptyMVar
+
+    let
+      updateStateInternal should_raf g = void $ forkIO $ do
+          -- putStrLn "7"
+          (props,st,c,old,mid) <- takeMVar strec
+          -- putStrLn "8"
+          (mst,cb) <- g props st
+          -- putStrLn "9"
+          let
+            updateState props c old mid st mst cb = do
+                -- putStrLn "10"
+                case mst of
+                  Nothing  -> do
+                    -- putStrLn "11"
+                    putMVar strec (props,st,c,old,mid)
+                    cb
+                  Just st' -> do
+                    -- putStrLn "12"
+                    shouldUpd <- runShouldUpdate props props st st' c old
+
+                    -- putStrLn "13"
+                    when shouldUpd $ runWillUpdate props st' c old
+
+                    if shouldUpd then do
+                      (if should_raf then rAF else id) $ do
+                        -- putStrLn "14"
+                        let new_mid = runRenderer props st' c (updateStateInternal False)
+                        new <- diffHelper f doc ch isFG old mid new_mid
+                        -- putStrLn "15"
+                        runDidUpdate props st' c new
+                        putMVar strec (props,st',c,new,new_mid)
+                        cb
+                    else do
+                      -- putStrLn "16"
+                      putMVar strec (props,st',c,old,mid)
+                      cb
+
+          updateState props c old mid st mst cb
+
+
+      updatePropsInternal props = forkIO $ do
+        -- putStrLn "17"
+        (old_props,st,c,old,mid) <- takeMVar strec
+        -- putStrLn "18"
+        st' <- runWillReceiveProps old_props props st c old
+        -- putStrLn "19"
+        shouldUpd <- runShouldUpdate old_props props st st' c old
+        -- putStrLn "20"
+        if shouldUpd then do
+          -- putStrLn "21"
+          runWillUpdate props st' c old
+          let new_mid = runRenderer props st' c (updateStateInternal True)
+          -- putStrLn "22"
+          new <- diffHelper f doc ch isFG old mid new_mid
+          -- putStrLn "23"
+          mst <- runDidUpdate props st' c new
+          -- putStrLn "24"
+          putMVar strec (props,st',c,new,new_mid)
+
+        else do
+          -- putStrLn "25"
+          putMVar strec (props,st',c,old,mid)
+
+      unmountInternal = void $ do
+        (props,st,c,old,mid) <- takeMVar strec
+        runWillUnmount props st c
+        return ()
+
+    let comp = _stview f (updateStateInternal True)
+    -- putStrLn "1"
+    st <- runConstructor _stprops comp
+    -- putStrLn "2"
+    putMVar strec (_stprops,st,comp,nil,nil)
+    -- putStrLn "3"
+    runWillMount _stprops st comp
+    let mid = runRenderer _stprops st comp (updateStateInternal False)
+    -- putStrLn "4"
+    new <- go mparent (render mid)
+    -- putStrLn "5"
+    runDidMount _stprops st comp new
+    -- putStrLn "6"
+    modifyMVar strec $ \(props,st,comp,_,_) -> return ((props,st,comp,new,mid),())
+
+    return $
+      STView
+        _stprops
+        _stid
+        (Just strec)
+        _stview
+        (updateStateInternal False)
+        updatePropsInternal
+        unmountInternal
+        _stateProxy
+
 
 -- consider this: https://github.com/spicyj/innerhtml-vs-createelement-vs-clonenode
 -- and this: https://stackoverflow.com/questions/8913419/is-chromes-appendchild-really-that-slow
@@ -1650,6 +1866,7 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
 
     go mparent STView {..} =
       let ?parent = Proxy :: Proxy e
+      in let ?state = _stateProxy
       in do
         let rAF f = void $ do
 #ifdef __GHCJS__
@@ -1660,85 +1877,102 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
               f
 #endif
 
-        strec <- newIORef undefined
+        propUpdater <- newEmptyMVar
 
-        let updateStateInternal should_raf g = do
-              (props,st,c,old,mid) <- readIORef strec
+        strec <- newEmptyMVar
+
+        let
+          updateStateInternal should_raf g = void $ forkIO $ do
+              -- putStrLn "7"
+              (props,st,c,old,mid) <- takeMVar strec
+              -- putStrLn "8"
               (mst,cb) <- g props st
-              let updateState mst cb = do
-                    (props,st,c,old,mid) <- readIORef strec
-                    (mst,cb) <- g props st
+              -- putStrLn "9"
+              let
+                updateState props c old mid st mst cb = do
+                    -- putStrLn "10"
                     case mst of
-                      Nothing  -> cb
+                      Nothing  -> do
+                        -- putStrLn "11"
+                        putMVar strec (props,st,c,old,mid)
+                        cb
                       Just st' -> do
-                        if should_raf then do
-                          done <- newEmptyMVar
-                          _ <- forkIO $ join $ takeMVar done
-                          shouldUpd <- runShouldUpdate props props st st' c old
-                          if shouldUpd then do
-                            runWillUpdate props st c old
-                            rAF $ do
-                              let new_mid = runRenderer props st' c (updateStateInternal True)
-                              new <- diffHelper f doc ch isFG old mid new_mid
-                              runDidUpdate props st' c new
-                              writeIORef strec (props,st',c,new,new_mid)
+                        -- putStrLn "12"
+                        shouldUpd <- runShouldUpdate props props st st' c old
 
-                              putMVar done (cb >> updateState mst def)
-                          else do
-                            writeIORef strec (props,st',c,old,mid)
-                            putMVar done cb
-                        else do
-                          shouldUpd <- runShouldUpdate props props st st' c old
-                          if shouldUpd then do
-                            runWillUpdate props st c old
-                            let new_mid = runRenderer props st c (updateStateInternal False)
+                        -- putStrLn "13"
+                        when shouldUpd $ runWillUpdate props st' c old
+
+                        if shouldUpd then do
+                          (if should_raf then rAF else id) $ do
+                            -- putStrLn "14"
+                            let new_mid = runRenderer props st' c (updateStateInternal False)
                             new <- diffHelper f doc ch isFG old mid new_mid
-                            runDidUpdate props st c new
-                            writeIORef strec (props,st',c,new,new_mid)
+                            -- putStrLn "15"
+                            runDidUpdate props st' c new
+                            putMVar strec (props,st',c,new,new_mid)
                             cb
-                            updateState mst def
-                          else do
-                            writeIORef strec (props,st',c,old,mid)
-                            cb
+                        else do
+                          -- putStrLn "16"
+                          putMVar strec (props,st',c,old,mid)
+                          cb
 
-              updateState mst cb
+              updateState props c old mid st mst cb
 
-            updatePropsInternal props = do
-              (old_props,st,c,old,mid) <- readIORef strec
-              runWillReceiveProps old_props props st c old
-              shouldUpd <- runShouldUpdate old_props props st st c old
-              if shouldUpd then do
-                runWillUpdate props st c old
-                let new_mid = runRenderer props st c (updateStateInternal False)
-                new <- diffHelper f doc ch isFG old mid new_mid
-                mst <- runDidUpdate props st c new
-                writeIORef strec (props,st,c,new,new_mid)
 
-              else
-                writeIORef strec (props,st,c,old,mid)
+          updatePropsInternal props = forkIO $ do
+            -- putStrLn "17"
+            (old_props,st,c,old,mid) <- takeMVar strec
+            -- putStrLn "18"
+            st' <- runWillReceiveProps old_props props st c old
+            -- putStrLn "19"
+            shouldUpd <- runShouldUpdate old_props props st st' c old
+            -- putStrLn "20"
+            if shouldUpd then do
+              -- putStrLn "21"
+              runWillUpdate props st' c old
+              let new_mid = runRenderer props st' c (updateStateInternal True)
+              -- putStrLn "22"
+              new <- diffHelper f doc ch isFG old mid new_mid
+              -- putStrLn "23"
+              mst <- runDidUpdate props st' c new
+              -- putStrLn "24"
+              putMVar strec (props,st',c,new,new_mid)
 
-            unmountInternal = void $ do
-              (props,st,c,old,mid) <- readIORef strec
-              runWillUnmount props st c
-              return ()
+            else do
+              -- putStrLn "25"
+              putMVar strec (props,st',c,old,mid)
+
+          unmountInternal = void $ do
+            (props,st,c,old,mid) <- takeMVar strec
+            runWillUnmount props st c
+            return ()
 
         let comp = _stview f (updateStateInternal True)
-        state <- runGetInitialState _stprops comp
-        runWillMount _stprops state comp
-        let mid = runRenderer _stprops state comp (updateStateInternal False)
-        new <- go mparent (unsafeCoerce $ render mid)
-        runDidMount _stprops state comp new
-        writeIORef strec (_stprops,state,comp,new,unsafeCoerce mid)
+        -- putStrLn "1"
+        st <- runConstructor _stprops comp
+        -- putStrLn "2"
+        putMVar strec (_stprops,st,comp,nil,nil)
+        -- putStrLn "3"
+        runWillMount _stprops st comp
+        let mid = runRenderer _stprops st comp (updateStateInternal False)
+        -- putStrLn "4"
+        new <- go mparent (render mid)
+        -- putStrLn "5"
+        runDidMount _stprops st comp new
+        -- putStrLn "6"
+        modifyMVar strec $ \(props,st,comp,_,_) -> return ((props,st,comp,new,mid),())
 
         return $
           STView
             _stprops
             _stid
-            (Just $ unsafeCoerce strec)
+            (Just strec)
             _stview
             (updateStateInternal False)
             updatePropsInternal
             unmountInternal
+            _stateProxy
 
     go mparent SVG {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
@@ -1836,7 +2070,7 @@ getElement STView {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,_,a,_) <- readIORef ref
+      (_,_,_,a,_) <- readMVar ref
       getElement (unsafeCoerce a :: View e)
 getElement n = return $ _node n
 
@@ -1849,7 +2083,7 @@ getNode STView {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,_,a,_) <- readIORef ref
+      (_,_,_,a,_) <- readMVar ref
       getNode (unsafeCoerce a :: View e)
 getNode n = forM (_node n) toNode
 
@@ -1869,7 +2103,7 @@ getChildren STView {..} = do
   case _strecord of
     Nothing -> return []
     Just ref -> do
-      (_,_,_,a,_) <- readIORef ref
+      (_,_,_,a,_) <- readMVar ref
       return [unsafeCoerce a :: View e]
 getChildren HTML {..} = return _atoms
 getChildren SVG {..} = return _atoms
@@ -2052,15 +2286,15 @@ diffHelper f doc ch isFG =
 
     go' old@STView {} _ new@STView {} = do
       case (old,new) of
-        (STView p k ~(Just r) c upds updp unm,STView p' k' _ _ _ _ _) -> do
+        (STView p k ~(Just r) c upds updp unm sp,STView p' k' _ _ _ _ _ _) -> do
           if prettyUnsafeEq k k' then
             if reallyVeryUnsafeEq p p' then do
               return old
             else do
               updp (unsafeCoerce p')
-              return $ STView (unsafeCoerce p') k (Just r) c upds updp unm
+              return $ STView (unsafeCoerce p') k (Just r) c upds updp unm sp
           else do
-            (_,_,_,a,_) <- readIORef r
+            (_,_,_,a,_) <- readMVar r
             new' <- buildHTML doc ch isFG f new
             unm
             replace a new'
