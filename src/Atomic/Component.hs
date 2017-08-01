@@ -78,7 +78,7 @@ import Data.Traversable
 import Data.Typeable
 import Data.Void
 import Data.Unique
-import GHC.Generics
+import GHC.Generics hiding (Constructor)
 import GHC.Prim
 
 import qualified Data.Function as F
@@ -166,307 +166,26 @@ foreign import javascript unsafe
   "$1[$2] = $3" set_property_js :: E.Element -> Txt -> Txt -> IO ()
 #endif
 
-newtype Old a = Old { getOld :: a }
-newtype Props props = Props { getP :: props }
-newtype St state = St { getS :: state }
+type StateUpdater e ps st = (ps -> st -> IO (Maybe st,IO ())) -> IO ()
 
-askState ::
-  ( ?state :: Proxy state
-  , ms <: '[Reader () (St state)]
-  , Monad c
-  ) => Ef ms c state
-askState = asks getS
+type Lifter e = Ef e IO () -> IO ()
 
-askOldState ::
-  ( ?state :: Proxy state
-  , ms <: '[Reader () (Old (St state))]
-  , Monad c
-  ) => Ef ms c state
-askOldState = asks (getS . getOld)
+type PropsUpdater props = props -> IO ()
 
-getState ::
-  ( ?state :: Proxy state
-  , ms <: '[State () (St state)]
-  , Monad c
-  ) => Ef ms c state
-getState = getS <$> get
+type Unmounter = IO ()
 
-setState ::
-  ( ?state :: Proxy state
-  , ms <: '[State () (St state)]
-  , Monad c
-  ) => state
-    -> Ef ms c ()
-setState = put . St
-
-modifyState ::
-  ( ms <: '[State () (St state)]
-  , Monad c
-  ) => (state -> state)
-    -> Ef ms c ()
-modifyState f = void $ modify $ \(St s) -> (St (f s),())
-
-props ::
-  ( ms <: '[Reader () (Props props)]
-  , Monad c
-  ) => Ef ms c props
-props = asks getP
-
-oldProps ::
-  ( ms <: '[Reader () (Old (Props props))]
-  , Monad c
-  ) => Ef ms c props
-oldProps = asks (getP . getOld)
-
-getDOMTree :: ( ms <: '[Reader () (View parent)]
-              , parent <: '[]
-              , ms <: '[]
-              ) => Ef ms IO (View parent)
-getDOMTree = ask
-
-data Component (parent :: [* -> *]) (props :: *) (state :: *) =
-    ( Comment "For each method, props are available via ask, but are wrapped in"
-          ::: "Old and New in willReceiveProps and shouldUpdate."
-          ::: "State is available via get/put with previous state available via"
-          ::: "ask in shouldUpdate. Current state is only available via ask in"
-          ::: "willUnmount."
-    )
-  => Component
-    { constructor ::
-        ( Method "constructor"
-            '[ Description '[ "One-time initialization with access to props." ]
-             , Use '[ "Use constructor to initialize state defaults." ]
-             , Errors '[ "State update in constructor is an error." ]
-             ]
-        ) => Ef '[ Reader () (Props props) ] IO state
-
-    , initialize ::
-        ( Method "initialize"
-            '[ Description '[ "A version of willMount that only runs on the server." ]
-             , Use '[ "Use initialize for synchronous component seeding." ]
-             , Errors '[ "State update in initialize is an error." ]
-             ]
-        ) => Ef '[ Reader () (Props props)
-                , State () (St state)
-                ] IO ()
-
-    , willMount ::
-        (
-
-        ) => Ef '[ Reader () (Props props)
-                 , Reader () (St state)
-                 ] IO ()
-
-    , didMount ::
-        (
-
-        ) => Ef '[ Reader () (Props props)
-                 , Reader () (St state)
-                 , Reader () (View parent)
-                 ] IO ()
-
-    , willReceiveProps ::
-        (
-
-        ) => Ef '[ Reader () (Old (Props props))
-                 , Reader () (Props props)
-                 , State () (St state)
-                 , Reader () (View parent)
-                 ] IO ()
-
-    , shouldUpdate ::
-        (
-
-        ) => Ef '[ Reader () (Old (Props props))
-                 , Reader () (Props props)
-                 , Reader () (Old (St state))
-                 , Reader () (St state)
-                 , Reader () (View parent)
-                 ] IO Bool
-
-    , willUpdate ::
-        (
-
-        ) => Ef '[ Reader () (Props props)
-                 , Reader () (St state)
-                 , Reader () (View parent)
-                 ] IO ()
-
-    , didUpdate ::
-        (
-
-        ) => Ef '[ Reader () (Props props)
-                 , Reader () (St state)
-                 , Reader () (View parent)
-                 ] IO ()
-
-    , willUnmount ::
-        (
-
-        ) => Ef '[ Reader () (Props props)
-                 , Reader () (St state)
-                 ] IO ()
-
-    , renderer ::
-        (
-
-        ) => props -> state -> StateUpdate props state -> View parent
-
+data ComponentRecord parent props state =
+  ComponentRecord
+    { crProps :: props
+    , crState :: state
+    , crInject :: PropsUpdater props
+    , crUpdate :: StateUpdater parent props state
+    , crUnmount :: Unmounter
+    , crLifter :: Lifter parent
+    , crLive :: View parent
+    , crMid :: View parent
+    , crComponent :: Component parent props state
     }
-
-instance Default (Component parent props state) where
-  def =
-    Component
-      { renderer = \_ _ _ -> nil
-      , willUnmount = def
-      , didUpdate = def
-      , willUpdate = def
-      , shouldUpdate = return True
-      , willReceiveProps = def
-      , didMount = def
-      , willMount = def
-      , initialize = def
-      , constructor = error "Component.constructor: state not initialized."
-      }
-
-runConstructor
-  :: ( Typeable parent, Typeable props, Typeable state
-     , parent <: '[]
-     , component ~ Component parent props state
-     ) => props -> component -> IO state
-runConstructor props comp = do
-  let obj = Ef.Base.Object $
-              reader (Props props)
-              *:* Ef.Base.Empty
-  (_,state) <- obj Ef.Base.! constructor comp
-  return state
-
-runInitialize
-  :: ( Typeable parent, Typeable props, Typeable state
-     , parent <: '[]
-     , component ~ Component parent props state
-     ) => props -> state -> component -> IO state
-runInitialize props state comp = do
-  let obj = Ef.Base.Object $
-              reader (Props props)
-              *:* Ef.Base.state (St state)
-              *:* Ef.Base.Empty
-  (_,st) <- obj Ef.Base.! do
-    initialize comp
-    getS <$> get
-  return st
-
-runWillMount
-  :: ( Typeable parent, Typeable props, Typeable state
-     , parent <: '[]
-     , component ~ Component parent props state
-     ) => props -> state -> component -> IO ()
-runWillMount props state comp = do
-  let obj = Ef.Base.Object $
-              reader (Props props)
-              *:* reader (St state)
-              *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! willMount comp
-  return ()
-
-runDidMount
-  :: ( Typeable parent, Typeable props, Typeable state
-     , parent <: '[]
-     , component ~ Component parent props state
-     ) => props -> state -> component -> View parent -> IO ()
-runDidMount props state comp view = do
-  let obj = Ef.Base.Object $
-              reader (Props props)
-              *:* reader (St state)
-              *:* reader view
-              *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! didMount comp
-  return ()
-
-runRenderer :: props -> state -> Component parent props state -> StateUpdate props state -> View parent
-runRenderer props state Component {..} upd = renderer props state upd
-
-runWillReceiveProps
-  :: ( Typeable parent, Typeable props, Typeable state
-     , parent <: '[]
-     , component ~ Component parent props state
-     , ?state :: Proxy state
-     ) => props -> props -> state -> component -> View parent -> IO state
-runWillReceiveProps old_props new_props state comp view = do
-  let obj = Ef.Base.Object $
-              reader (Old (Props old_props))
-              *:* reader (Props new_props)
-              *:* Ef.Base.state (St state)
-              *:* reader view
-              *:* Ef.Base.Empty
-  (_,st) <- obj Ef.Base.! do
-    willReceiveProps comp
-    getS <$> get
-  return st
-
--- One too many traits for GHC again?
-runShouldUpdate
-  :: forall parent props state component.
-     ( Typeable parent, Typeable props, Typeable state
-     , parent <: '[]
-     , component ~ Component parent props state
-     ) => props -> props -> state -> state -> component -> View parent -> IO Bool
-runShouldUpdate old_props new_props old_state new_state comp view = do
-  let obj = Ef.Base.Object $
-              reader (Old (Props old_props))
-              *:* reader (Props new_props)
-              *:* reader (Old (St old_state))
-              *:* reader (St new_state)
-              *:* reader view
-              *:* Ef.Base.Empty
-  (_,shouldUpd) <- obj Ef.Base.! shouldUpdate comp
-  return shouldUpd
-
-runWillUpdate
-  :: ( Typeable parent, Typeable props, Typeable state
-     , parent <: '[]
-     , component ~ Component parent props state
-     ) => props -> state -> component -> View parent -> IO ()
-runWillUpdate props state comp view = do
-  let obj = Ef.Base.Object $
-              reader (Props props)
-              *:* reader (St state)
-              *:* reader view
-              *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! willUpdate comp
-  return ()
-
-runDidUpdate
-  :: ( Typeable parent, Typeable props, Typeable state
-     , parent <: '[]
-     , component ~ Component parent props state
-     ) => props -> state -> component -> View parent -> IO ()
-runDidUpdate props state comp view = do
-  let obj = Ef.Base.Object $
-              reader (Props props)
-              *:* reader (St state)
-              *:* reader view
-              *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! didUpdate comp
-  return ()
-
-runWillUnmount :: ( Typeable props
-                  , Typeable state
-                  , component ~ Component parent props state
-                  )
-               => props -> state -> component -> IO ()
-runWillUnmount props state comp = do
-  let obj = Ef.Base.Object $
-              reader (Props props)
-              *:* reader (St state)
-              *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! (willUnmount comp)
-  return ()
-
-type Lifter parent = Ef parent IO () -> IO ()
-type StateUpdate props state = (props -> state -> IO (Maybe state,IO ())) -> IO ()
-type PropsUpdate props = props -> IO ()
-type UnmountAction = IO ()
 
 data View e where
   -- NullView must have a presence on the page for proper diffing
@@ -502,13 +221,8 @@ data View e where
   STView
     :: (Typeable props,Typeable st) =>
        { _stprops  :: props
-       , _stid     :: Int
-       , _strecord :: (Maybe (MVar (props,st,Component e props st,View x,View x)))
-       , _stview   :: Lifter e -> StateUpdate props st -> Component e props st
-       , _stupdate :: StateUpdate props st
-       , _psupdate :: PropsUpdate props
-       , _unmount  :: UnmountAction
-       , _stateProxy :: Proxy st
+       , _strecord :: (Maybe (MVar (ComponentRecord e props st)))
+       , _stview   :: (?parent :: Proxy e) => Lifter e -> StateUpdater e props st -> Component e props st
        } -> View e
 
   SVG
@@ -670,8 +384,8 @@ pattern String :: (ToTxt t, FromTxt t) => t -> View ms
 pattern String t <- (TextView _ (fromTxt -> t)) where
   String t = TextView Nothing (toTxt t)
 
-pattern ST p v <- STView p 0 _ v _ _ _ _ where
-  ST p v = STView p 0 Nothing v (\_ -> return ()) (\_ -> return ()) def Proxy
+pattern ST p v <- STView p _ v where
+  ST p v = STView p Nothing v
 
 weakRender (View a) = weakRender (render a)
 weakRender a = a
@@ -703,18 +417,20 @@ instance (e <: '[]) => ToJSON (View e) where
 #endif
       go a
     where
-      go (STView props _ iorec c _ _ _ sp) =
-          unsafeCoerce go $
+      go (STView props iorec c) =
+        let ?parent = Proxy :: Proxy e
+        in unsafeCoerce go $
             case iorec of
               Nothing -> unsafePerformIO $ do
-                let comp = let ?state = sp in c (\_ -> return ()) (\_ -> return ())
-                state <- runConstructor props comp
-                state' <- runInitialize props state comp
-                return $ runRenderer props (state' `asTypeOf` state) comp
+                case c (\_ -> return ()) (\_ -> return ()) of
+                  Component {..} -> do
+                    (config,state) <- runConstruct constructor props
+                    state' <- runInitializer initialize props state config
+                    return $ renderer props state config
 
               Just ref ->
-                let (_,_,_,cur,_) = unsafePerformIO (readMVar ref)
-                in unsafeCoerce cur
+                let ComponentRecord {..} = unsafePerformIO (readMVar ref)
+                in crLive
 
       go (View v) = go (render v)
       go (TextView _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
@@ -795,8 +511,9 @@ instance Eq (View e) where
   (==) (HTML _ t fs cs) (HTML _ t' fs' cs') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq cs cs'
 
-  (==) (STView p k _ _ _ _ _ sp) (STView p' k' _ _ _ _ _ sp') =
-    k == k' && reallyVeryUnsafeEq p p' && reallyVeryUnsafeEq sp sp'
+  (==) (STView p _ v) (STView p' _ v') =
+    let ?parent = Proxy :: Proxy e
+    in typeOf p == typeOf p' && reallyVeryUnsafeEq p p' && reallyVeryUnsafeEq v v'
 
   (==) (KSVG _ t fs ks) (KSVG _ t' fs' ks') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq ks ks'
@@ -972,8 +689,8 @@ rebuild h =
     go :: View e -> IO ()
     go STView {..}  = do
       forM_ _strecord $ \ref -> do
-        (_,_,_,a,_) <- readMVar ref
-        rebuild (unsafeCoerce a :: View e)
+        ComponentRecord {..} <- readMVar ref
+        rebuild (unsafeCoerce crLive :: View e)
     go HTML {..}    = mapM_ go _atoms
     go SVG {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
@@ -1009,8 +726,8 @@ triggerBackground = go
     go :: View e -> m ()
     go STView {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,_,a,_) <- liftIO $ readMVar ref
-        go (unsafeCoerce a)
+        ComponentRecord {..} <- liftIO $ readMVar ref
+        go (unsafeCoerce crLive)
     go HTML {..}    = mapM_ go _atoms
     go SVG {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
@@ -1036,8 +753,8 @@ triggerForeground = go
     go :: View e -> m ()
     go STView {..}  =
       forM_ _strecord $ \ref -> do
-        (_,_,_,a,_) <- liftIO $ readMVar ref
-        go (unsafeCoerce a)
+        ComponentRecord {..} <- liftIO $ readMVar ref
+        go (unsafeCoerce crLive)
     go HTML {..}    = mapM_ go _atoms
     go SVG {..} = mapM_ go _atoms
     go KHTML {..}   = mapM_ (go . snd) _keyed
@@ -1222,7 +939,7 @@ instance IsController' ts ms m
           IO
   where
     using_ c = do
-      -- FIXME: likely a bug here with double initialization in multithreaded contex-ts!
+      -- FIXME: likely a bug here with double initialization in multithreaded contexts!
       mi_ <- lookupController (key c)
       case mi_ of
         Just (ControllerRecord {..}) -> return (runAs crAsController)
@@ -1287,7 +1004,6 @@ mkController :: forall ms ts m.
        -> Controller' ts ms m
        -> IO (ControllerRecord ms m)
 mkController mkControllerAction c@Controller {..} = do
-  -- TODO: simply render a nil View and then call diff to force building in rAF?
   let !raw = render $ view model
   doc <- getDocument
   buf <- newEvQueue
@@ -1588,8 +1304,8 @@ swapContent t e =
 embed_ :: forall e. ENode -> View e -> IO ()
 embed_ parent STView {..} = do
   forM_ _strecord $ \ref -> do
-    (_,_,_,a,_) <- readMVar ref
-    embed_ parent (unsafeCoerce a :: View e)
+    ComponentRecord {..} <- readMVar ref
+    embed_ parent (unsafeCoerce crLive :: View e)
 embed_ parent TextView {..} =
   forM_ _tnode $ \node -> do
     ae <- isAlreadyEmbeddedText node parent
@@ -1625,135 +1341,1297 @@ setAttributes as f diffing el = do
 newtype ComponentPatchQueue e props state
   = ComponentPatchQueue (MVar [CPatch e props state])
 
-type WillReceiveProps e props stateo =
-     props ::: "New properties."
-  -> Ef '[ Reader () props ::: "Current properties."
-         , Reader () state ::: "Current state; writable."
-         ]
-         IO
-         state
+newtype ComponentProperties ps = ComponentProperties { unwrapProperties :: ps }
+getProps ::
+  ( ms <: '[Reader () (ComponentProperties ps)]
+  ) => Ef ms IO ps
+getProps = asks unwrapProperties
 
-type ShouldUpdate e props state =
-       props ::: "Next properties."
-    -> state ::: "Next state."
-    -> Ef '[ Reader () props ::: "Current properties."
-           , Reader () state ::: "Current state; writable."
+newtype ComponentState st = ComponentState { unwrapComponentState :: st }
+getState ::
+  ( ms <: '[Reader () (ComponentState st)]
+  ) => Ef ms IO st
+getState = asks unwrapComponentState
+
+newtype ComponentConfig c = ComponentConfig { unwrapComponentConfig :: c }
+getConfig ::
+  ( ms <: '[Reader () (ComponentConfig c)]
+  ) => Ef ms IO c
+getConfig = asks unwrapComponentConfig
+
+-- Access to ComponentView can be cumbersome; generally requires type signature
+-- See if this implicit param can help.
+newtype ComponentView parent = ComponentView { unwrapComponentView :: View parent }
+getView ::
+  ( ?parent :: Proxy parent
+  , ms <: '[Reader () (ComponentView parent)]
+  ) => Ef ms IO (View parent)
+getView = asks unwrapComponentView
+
+type Construct props state config =
+  forall ps.
+  ( ps ~ ComponentProperties props
+  , Method "Construct"
+    '[ About
+       '[ "This method is run once during Component initialization and"
+        , "produces the initial state and a read-only configuration value"
+        , "seen by all other lifecycle methods."
+        ]
+     , Environment
+       '[ Variable props
+          '[ About
+              '[ "Properties as seen during construction. Made available to"
+               , "willMount via `getProps`."
+               ]
            ]
+        ]
+     , Results
+       '[ Result state
+          '[ About '[ "The initial state of the Component." ] ]
+        , Result config
+          '[ About
+             '[ "The static configuration used throughout the life of the"
+              , "Component."
+              ]
+           ]
+        ]
+     ]
+  ) => Ef '[ Reader () ps ]
            IO
-           Bool
+           (config,state)
 
-type WillUpdate e props state =
-       props ::: "Next properties to be fed to the patcher."
-    -> state ::: "Next state to be fed to the patcher."
-    -> Ef '[ Reader () props ::: "Current properties."
-           , Reader () state ::: "Current state; writable."
+runConstruct ::
+  forall props state config.
+  (
+  ) => Construct props state config -> props -> IO (config,state)
+runConstruct constructorMethod props = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties props)
+              *:* Ef.Base.Empty
+  (_,(config,state)) <- obj Ef.Base.! constructorMethod
+  return (config,state)
+
+type Initializer props state config =
+  forall ps st cfg.
+  ( ps ~ ComponentProperties props
+  , st ~ ComponentState state
+  , cfg ~ ComponentConfig config
+  , Method "Initializer"
+    '[ About
+       '[ "This method is run during server-side rendering only and allows"
+        , "the Component to dynamically initialize state that is not"
+        , "necessary on the client."
+          ]
+     , Environment
+       '[ Variable props
+          '[ About
+             '[ "Properties as seen during construction. Made available to"
+              , "willMount via `getProps`."
+              ]
+           ]
+        , Variable state
+          '[ About
+             '[ "State produced during construction. Made available to"
+              , "willMount via `getState`."
+              ]
+           ]
+        , Variable config
+          '[ About
+             '[ "The read-only environment produced by the constructor."
+              , "Made available via `getConfig`"
+              ]
+           ]
+        ]
+     , Results
+       '[ Result state
+          '[ About
+             '["Produces a state value that is used during server-side"
+              , "rendering to text."
+              ]
+           ]
+        ]
+     ]
+  ) => Ef '[ Reader () ps
+           , Reader () st
+           , Reader () cfg
            ]
            IO
            state
 
-type DidUpdate e props state =
-      props ::: "Previous properties from before patch."
-   -> state ::: "Previous state from before patch."
-   -> Ef '[ Reader () props ::: "Current, new properties after patch."
-          , Reader () state ::: "Current, new state after patch; read-only."
+runInitializer ::
+  forall props state config.
+  (
+  ) => Initializer props state config -> props -> state -> config -> IO state
+runInitializer initializerMethod props state config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties props)
+              *:* reader (ComponentState state)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  (_,state) <- obj Ef.Base.! initializerMethod
+  return state
+
+type WillMount props state config willMountResult =
+  forall ps st cfg.
+  ( ps ~ ComponentProperties props
+  , st ~ ComponentState state
+  , cfg ~ ComponentConfig config
+  , Method "WillMount"
+    '[ About
+       '[ "This method is run only once after initialization, before calling"
+        , "render for the first time. Unlike WillUpdate, WillMount does not"
+        , "run in an animation frame."
+        ]
+     , Environment
+       '[ Variable props
+          '[ About
+             '[ "Properties as seen during construction. Made available to"
+              , "willMount via `getProps`."
+              ]
+           ]
+        , Variable state
+          '[ About
+             '[ "State produced during construction. Made available to"
+              , "willMount via `getState`."
+              ]
+           ]
+        , Variable config
+          '[ About
+             '[ "The read-only environment produced by the constructor."
+              , "Made available via `getConfig`"
+              ]
+           ]
+        ]
+     ]
+  ) => Ef '[ Reader () ps
+           , Reader () st
+           , Reader () cfg
+           ]
+           IO
+           willMountResult
+
+runWillMount
+  :: ( Function "runWillMount"
+       '[ About '[ "Run a willMount method." ]
+        , Params
+          '[ Param willMountMethod
+             '[ About '[ "A method to be invoked before the first render." ] ]
+           , Param props
+             '[ About '[ "Current properties as seen in the constructor." ] ]
+           , Param state
+             '[ About '[ "Current state as returned from the constructor." ] ]
+           , Param config
+             '[ About
+                '[ "The read-only environment produced by the constructor." ]
+              ]
+           ]
+        , Results
+          '[ Result willMountResult
+             '[ About
+                '[ "An arbitrary result typed tied to the DidMount method."
+                 , "This may be a useful place to inject profiling"
+                 , "information."
+                 ]
+              ]
+           ]
+        ]
+
+      ) => WillMount props state config willMountResult -> props -> state -> config -> IO willMountResult
+runWillMount willMountMethod props state config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties props)
+              *:* reader (ComponentState state)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  (_,willMountResult) <- obj Ef.Base.! willMountMethod
+  return willMountResult
+
+type DidMount willMountResult parent props state config =
+  forall ps st cfg dom.
+  ( ps ~ ComponentProperties props
+  , st ~ ComponentState state
+  , cfg ~ ComponentConfig config
+  , dom ~ ComponentView parent
+  , ?parent :: Proxy parent
+  , Method "DidMount"
+    '[ About
+       '[ "This method is run only once after rendering for the first time"
+        , "before the end of the animation frame. The result of the render"
+        , "is available for reflowing analysis or setting component state."
+        , "DidMount can inspect the result of the call to WillMount that"
+        , "preceded it which may be useful for debugging purposes."
+        ]
+     , Environment
+       '[ Variable props
+          '[ About
+             '[ "Properties as seen during construction. Made available to"
+              , "didMount via `getProps`."
+              ]
+           ]
+        , Variable state
+          '[ About
+             '[ "State produced during construction. Made available to"
+              , "didMount via `getState`."
+              ]
+           ]
+        , Variable dom
+          '[ About
+             '[ "A transient view of the managed DOM for the newly rendered"
+              , "Component. Made available to didMount via `getView`. It is"
+              , "likely for this view to be invalidated later during a"
+              , "reconciliation cycle in which this view will be diffed"
+              , "against a newly rendered view."
+              ]
+           ]
+        , Variable config
+          '[ About
+             '[ "The read-only environment produced during"
+              , "initialization. Made available via `getConfig`"
+              ]
+           ]
+        ]
+     ]
+  ) => willMountResult
+    -> Ef '[ Reader () ps
+           , Reader () st
+           , Reader () dom
+           , Reader () cfg
+           ]
+           IO
+           ()
+
+runDidMount
+  :: ( dom ~ View parent
+     , ?parent :: Proxy parent
+     , Function "runDidUpdate"
+       '[ About
+          '[ "Run a DidMount method. A transient view of the DOM is"
+           , "available to the method via `getView`. The result of"
+           , "willMount is avaialble via function parameterization. This"
+           , "method runs in an animation frame before painting and permits"
+           , "non-reflowing use of normally reflowing invocations."
+           ]
+        , Implicits
+          '[ Implicit (Proxy parent)
+             '[ About
+                '[ "The parent implicit assists in retrieving a View"
+                 , "quantified by the parent context."
+                 ]
+              ]
+           ]
+        , Params
+          '[ Param didMountMethod
+             '[ About
+                '[ "The method to be invoked after a re-render and diff." ]
+              ]
+           , Param willMountResult
+             '[ About
+                '[ "The result of the call to WillMount that preceded this"
+                 , "call."
+                 ]
+              ]
+           , Param props
+             '[ About '[ "Properties unmodified from initial construction." ] ]
+           , Param state
+             '[ About '[ "Initial state as produced by constructor." ] ]
+           , Param dom
+             '[ About
+                '[ "A transient view of the managed DOM for the rendered"
+                 , "Component. It is likely for this view to be"
+                 , "invalidated during the next update when the view is"
+                 , "re-rendered and this view is diffed against it. During"
+                 , "the evaluation of didMount, this view should be valid."
+                 ]
+              ]
+           , Param config
+             '[ About
+                '[ "The read-only environment produced during"
+                 , "initialization."
+                 ]
+              ]
+           ]
+        ]
+     ) => DidMount willMountResult parent props state config -> willMountResult -> props -> state -> dom -> config -> IO ()
+runDidMount didMountMethod willMountResult props state dom config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties props)
+              *:* reader (ComponentState state)
+              *:* reader (ComponentView dom)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  _ <- obj Ef.Base.! (didMountMethod willMountResult)
+  return ()
+
+type WillReceiveProps parent props state config =
+  forall newprops oldprops oldstate newstate dom cfg.
+  ( newprops ~ props
+  , oldprops ~ ComponentProperties props
+  , oldstate ~ ComponentState state
+  , newstate ~ state
+  , dom ~ ComponentView parent
+  , cfg ~ ComponentConfig config
+  , ?parent :: Proxy parent
+  , Method "WillReceiveProps"
+    '[ About
+       '[ "This method is run at the beginning of a reconciliation cycle"
+        , "when the properties passed to a Component have implicitly"
+        , "changed."
+        ]
+     , Implicits
+       '[ Implicit (Proxy parent)
+          '[ About
+             '[ "The parent implicit assists in retrieving a View"
+              , "quantified by the parent context."
+              ]
+           ]
+        ]
+     , Environment
+       '[ Variable oldprops
+          '[ About
+             '[ "Properties before this reconciliation cycle."
+              , "Made available to via `getProps`."
+              ]
+           ]
+        , Variable oldstate
+          '[ About
+             '[ "State before this reconciliation cycle."
+              , "Made available to via `getState`."
+              ]
+           ]
+        , Variable dom
+          '[ About
+             '[ "A transient view of the managed DOM for the Component"
+              , "being reconciled. Made available to shouldUpdate via"
+              , "`ask`. It is likely for this view to be invalidated"
+              , "later during the active reconciliation cycle in which"
+              , "this method is run when the view is re-rendered and this"
+              , "view is diffed against it."
+              ]
+           ]
+        , Variable config
+          '[ About
+             '[ "The read-only environment produced during"
+              , "initialization. Made available via `getConfig`"
+              ]
+           ]
+        ]
+     , Params
+       '[ Param newprops
+          '[ About '[ "New properties during this reconciliation cycle." ] ]
+        ]
+     , Results
+       '[ Result newstate
+          '[ About
+             '[ "New state produced for further reconciliation. To return"
+              , "the old state, send `ask` as the last message."
+              ]
+           ]
+        ]
+     ]
+  ) => newprops
+    -> Ef '[ Reader () oldprops
+           , Reader () oldstate
+           , Reader () dom
+           , Reader () cfg
+           ]
+           IO
+           newstate
+
+runWillReceiveProps
+  :: ( newprops ~ props
+     , oldprops ~ props
+     , oldstate ~ state
+     , newstate ~ state
+     , dom ~ View parent
+     , ?parent :: Proxy parent
+
+     , Function "runWillReceivePropsMethod"
+       '[ About
+          '[ "A method with implicit access to old properties and old state"
+           , "and a transient view via ask and functional access to new"
+           , "properties. Produces a new state value to be further used"
+           , "during reconciliation."
+           ]
+        , Implicits
+          '[ Implicit (Proxy parent)
+             '[ About
+                '[ "The parent implicit assists in retrieving a View"
+                 , "quantified by the parent context."
+                 ]
+              ]
+           ]
+        , Params
+          '[ Param oldprops
+             '[ About
+                '[ "Properties as they were before this reconciliation cycle." ]
+              ]
+           , Param newprops
+             '[ About '[ "New properties; may be the same as old properties." ]
+              ]
+           , Param oldstate
+             '[ About '[ "State as it was before this reconciliation cycle." ] ]
+           , Param newstate
+             '[ About
+                '[ "New state; may be the same as old state. Produced either"
+                 , "as a result of a state update call or during"
+                 , "willReceiveProps if this reconciliation cycle is due to"
+                 , "the reception of new properties."
+                 ]
+              ]
+           , Param dom
+             '[ About
+                '[ "A transient view of the managed DOM for the Component"
+                 , "being reconciled. It is likely for this view to be"
+                 , "invalidated later during this active reconciliation"
+                 , "cycle when the view is re-rendered and this view is"
+                 , "diffed against it."
+                 ]
+              ]
+           , Param config
+             '[ About
+                '[ "The read-only environment produced during"
+                 , "initialization."
+                 ]
+              ]
+           , Param willReceivePropsMethod
+             '[ About
+                '[ "The receiveProps method to be invoked to produce a new"
+                 , "state from an old properties and old state when given a"
+                 , "new properties."
+                 ]
+              ]
+           ]
+        , Results
+          '[ Result newstate
+             '[ About
+                '[ "Produced state from the willReceivePropsMethod that will"
+                 , "be used during the next phase of the reconciliation cycle,"
+                 , "shouldUpdate."
+                 ]
+              ]
+           ]
+        ]
+     ) => WillReceiveProps parent props state config -> oldprops -> newprops -> oldstate -> dom -> config -> IO newstate
+runWillReceiveProps willReceivePropsMethod oldprops newprops oldstate dom config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties oldprops)
+              *:* reader (ComponentState oldstate)
+              *:* reader (ComponentView dom)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  (_,newstate) <- obj Ef.Base.! (willReceivePropsMethod newprops)
+  return newstate
+
+type ShouldUpdate parent props state config =
+    forall newprops oldprops newstate oldstate dom cfg.
+    ( newprops ~ props
+    , oldprops ~ ComponentProperties props
+    , newstate ~ state
+    , oldstate ~ ComponentState state
+    , dom ~ ComponentView parent
+    , cfg ~ ComponentConfig config
+    , ?parent :: Proxy parent
+    , Method "ShouldUpdate"
+      '[ About
+         '[ "This method is run at the beginning of a reconciliation cycle"
+          , "after WillReceiveProps during property changes or after state"
+          , "changes but before WillUpdate. This allows the Component under"
+          , "reconciliation to choose to not re-render."
           ]
-          IO
-          ()
-
-data CPatch e props state = CPatch
-  { cp_update :: Either props (props -> state -> IO (state,IO ()))
-  , cp_willReceiveProps :: WillReceiveProps e props state
-  , cp_shouldUpdate :: ShouldUpdate e props state
-  , cp_willUpdate :: WillUpdate e props state
-  , cp_didUpdate :: DidUpdate e props state
-  }
-
-queueComponentPatch
-  :: ( patch ~ CPatch e props state
-     , queue ~ ComponentPatchQueue e prosp state
-     , Describe 'queueComponentPatch
-         '[ Param patch
-              '[ "A CPatch that contains two continuations to run before and"
-               , "after the patch is applied."
-               ]
-          , Param queue
-              '[ "An MVar containing a list of patches in reverse order."
-               ]
-          , About
-              '[ "If no existing patch is queued, this method will fork one."
-               ]
+       , Implicits
+         '[ Implicit (Proxy parent)
+            '[ About
+               '[ "The parent implicit assists in retrieving a View"
+                , "quantified by the parent context."
+                ]
+             ]
           ]
-     )
-  => props -> state -> patch -> queue -> IO ()
-queueComponentPatch ps st p cpq@(ComponentPatchQueue q_) = do
-  join . modifyMVar q_ $ \q ->
-    case q of
-      [] -> return ([q],void . forkIO $ runComponentPatch ps st cpq)
-      ps -> return (p:ps,return ())
-
-runComponentPatch
-  :: ( queue ~ ComponentPatchQueue e props state
-     , cstate ~ ComponentState e props state
-     , Describe 'runComponentPatch
-         '[ Param queue
-              '[ "An MVar containing a list of patches in reverse order." ]
-          , About
-              '[ "The existing queue will be locked and reset"
-               , "If executed in the browse, runComponentPatch will request a"
-               , "new animation frame to perform a patch."
-               , "The existing queue will be reset"]
-          , About
-              '[ "All willUpdate methods are chained together with their state"
-               , "results being passed down the chain. After each willUpdate,"
-               , "the corresponding didUpdate will be constructed from the"
-               , "result and turned into an IO action and added to a queue"
-               , "to be executed with (sequence_ . reverse) at the end of the"
-               , "patch."
-               ]
+       , Environment
+         '[ Variable oldprops
+            '[ About
+               '[ "Properties before this reconciliation cycle."
+                , "Made available via `ask`."
+                ]
+             ]
+          , Variable oldstate
+            '[ About
+               '[ "State before this reconciliation cycle."
+                , "Made available via `ask`."
+                ]
+             ]
+          , Variable dom
+            '[ About
+               '[ "A transient view of the managed DOM for the Component"
+                , "being reconciled. Made available to ShouldUpdate via"
+                , "`ask`. It is likely for this view to be invalidated"
+                , "later during the active reconciliation cycle in which"
+                , "this method is run when the view is re-rendered and this"
+                , "view is diffed against it."
+                ]
+             ]
+          , Variable config
+            '[ About
+               '[ "The read-only environment produced during"
+                , "initialization. Made available via `ask`"
+                ]
+             ]
           ]
-     ) => props -> state -> queue -> IO ()
-runComponentPatch ps st (ComponentPatchQueue cpq) = do
-  patches <- getPatches
-  chained <- chain patches
-  rAF $ do
-    st' <- runWillUpdates chained
-    
-    runDiffs
-    run
-  where
-    getPatches = reverse <$> swapMVar cpq []
+       , Params
+         '[ Param newprops
+            '[ About '[ "New properties during this reconciliation cycle." ] ]
+          , Param newstate
+            '[ About '[ "New state during this reconciliation cycle." ] ]
+          ]
+       ]
+    ) => newprops
+      -> newstate
+      -> Ef '[ Reader () oldprops
+             , Reader () oldstate
+             , Reader () dom
+             , Reader () cfg
+             ] IO Bool
 
-    chain ps = (\(acc,ps,st) -> (reverse acc,ps,st)) <$> foldM go ([],ps,st) ps
-      where
-        go (acc,ps,st) CPatch {..} = do
-          case cp_update of
-            Left ps' -> do
-              st' <- runWillReceiveProps ps ps' st cp_willReceiveProps
-              su <- runShouldUpdate ps ps' st st' cp_shouldUpdate
-              return $
-                if su then
-                  let p = Left (cp_willUpdate,cp_didUpdate,ps,ps',st,st')
-                  in (p:acc,ps',st')
-                else
-                  (acc,ps',st')
+runShouldUpdate
+  :: ( newprops ~ props
+     , oldprops ~ props
+     , oldstate ~ state
+     , newstate ~ state
+     , dom ~ View parent
+     , ?parent :: Proxy parent
 
-            Right f -> do
-              (st',cb) <- f ps st
-              su <- runShouldUpdate ps ps st st' cp_shouldUpdate
-              return $
-                if su then
-                  let p = Right (cp_willUpdate,cp_didUpdate,ps,st,st',cb)
-                  in (p:acc,ps,st')
-                else
-                  (acc,ps,st')
+     , Function "runShouldUpdate"
+       '[ About
+          '[ "Run a shouldUpdate method with old and new properties and old"
+           , "and new state as well as a transient view. Old props, old"
+           , " state, and the transient view of the DOM are available to"
+           , "the method via `ask`. New props and state are avaialble via"
+           , "function parameterization."
+           ]
+        , Implicits
+          '[ Implicit (Proxy parent)
+             '[ About
+                '[ "The parent implicit assists in retrieving a View"
+                 , "quantified by the parent context."
+                 ]
+              ]
+           ]
+        , Params
+          '[ Param shouldUpdateMethod
+             '[ About
+                '[ "A method to be invoked to determine if a re-rendering and"
+                 , "diffing is to be considered necessary during the active"
+                 , "reconciliation cycle. The result of this method will be"
+                 , "ignored if the current batch of reconciliations is"
+                 , "already forcing a re-render."
+                 ]
+              ]
+           , Param oldprops
+             '[ About
+                '[ "Properties as they were before this reconciliation cycle." ]
+              ]
+           , Param newprops
+             '[ About
+                '[ "New properties; may be the same as old properties." ]
+              ]
+           , Param oldstate
+             '[ About
+                '[ "State as it was before this reconciliation cycle." ]
+              ]
+           , Param newstate
+             '[ About
+                '[ "New state; may be the same as old state. Produced either"
+                 , "as a result of a state update call or during"
+                 , "willReceiveProps if this reconciliation cycle is due to"
+                 , "the reception of new properties."
+                 ]
+              ]
+           , Param dom
+             '[ About
+                '[ "A transient view of the managed DOM for the Component"
+                 , "being reconciled. It is likely for this view to be"
+                 , "invalidated later during this active reconciliation cycle"
+                 , "when the view is re-rendered and this view is diffed"
+                 , "against it."
+                 ]
+              ]
+           , Param config
+             '[ About
+                '[ "The read-only environment produced during"
+                 , "initialization."
+                 ]
+              ]
+           ]
+        ]
+
+     ) => ShouldUpdate parent props state config -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO ()
+runShouldUpdate shouldUpdateMethod oldprops newprops oldstate newstate dom config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties oldprops)
+              *:* reader (ComponentState oldstate)
+              *:* reader (ComponentView dom)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  _ <- obj Ef.Base.! (shouldUpdateMethod newprops newstate)
+  return ()
+
+type WillUpdate parent props state config willUpdateResult =
+    forall newprops oldprops newstate oldstate dom cfg.
+    ( newprops ~ ComponentProperties props
+    , oldprops ~ props
+    , newstate ~ ComponentState state
+    , oldstate ~ state
+    , dom ~ ComponentView parent
+    , cfg ~ ComponentConfig config
+    , ?parent :: Proxy parent
+    , Method "WillUpdate"
+      '[ About
+         '[ "This method is run before a re-render and diff inside of an"
+          , "animation frame. WillUpdate is useful, in situations where the"
+          , "transient view is reliable, for performing reflowing analysis"
+          , "before a view is updated, e.g., the F step in FLIP animations."
+          ]
+       , Implicits
+         '[ Implicit (Proxy parent)
+            '[ About
+               '[ "The parent implicit assists in retrieving a View"
+                , "quantified by the parent context."
+                ]
+             ]
+         ]
+       , Environment
+         '[ Variable newprops
+            '[ About
+               '[ "New properties during this reconciliation cycle."
+                , "Made available via `ask`."
+                ]
+             ]
+          , Variable newstate
+            '[ About
+               '[ "New state during this reconciliation cycle."
+                , "Made available via `ask`."
+                ]
+             ]
+          , Variable dom
+            '[ About
+               '[ "A transient view of the managed DOM for the Component"
+                , "being reconciled. Made available to WillUpdate via"
+                , "`ask`. It is likely for this view to be invalidated"
+                , "during the re-rendering and diffing performed"
+                , "immediately after WillUpdate."
+                ]
+             ]
+          , Variable config
+            '[ About
+               '[ "The read-only environment produced during"
+                , "initialization. Made available via `ask`"
+                ]
+             ]
+          ]
+       , Params
+         '[ Param oldprops
+            '[ About '[ "Old properties from the previous render." ] ]
+          , Param oldstate
+            '[ About '[ "Old state from the previous render." ] ]
+          ]
+       , Results
+         '[ Result willUpdateResult
+            '[ About
+               '[ "An arbitrary result type that will be passed to"
+                , "DidUpdate."
+                ]
+             ]
+          ]
+       ]
+    ) => oldprops
+      -> oldstate
+      -> Ef '[ Reader () newprops
+             , Reader () newstate
+             , Reader () dom
+             , Reader () cfg
+             ]
+             IO
+             willUpdateResult
+
+runWillUpdate
+  :: ( newprops ~ props
+     , oldprops ~ props
+     , oldstate ~ state
+     , newstate ~ state
+     , dom ~ View parent
+     , ?parent :: Proxy parent
+     , Function "runWillUpdate"
+       '[ About
+          '[ "Run a willUpdate method with old and new properties and old"
+           , "and new state as well as a transient view. New props, new"
+           , "state, and the transient view of the DOM are available to the"
+           , "method via `ask`. New props and state are avaialble via"
+           , "function parameterization."
+           ]
+        , Implicits
+          '[ Implicit (Proxy parent)
+             '[ About
+                '[ "The parent implicit assists in retrieving a"
+                 , "quantified by the parent context."
+                 ]
+              ]
+           ]
+        , Params
+          '[ Param willUpdateMethod
+             '[ About
+                '[ "A method to be invoked to before a re-render and diff." ]
+              ]
+           , Param oldprops
+             '[ About
+                '[ "Properties as they were before this reconciliation cycle." ]
+              ]
+           , Param newprops
+             '[ About
+                '[ "New properties; may be the same as old properties." ]
+              ]
+           , Param oldstate
+             '[ About
+                '[ "State as it was before this reconciliation cycle." ]
+              ]
+           , Param newstate
+             '[ About
+                '[ "New state; may be the same as old state. Produced either"
+                 , "as a result of a state update call or during"
+                 , "willReceiveProps if this reconciliation cycle is due to"
+                 , "the reception of new properties."
+                 ]
+              ]
+           , Param dom
+             '[ About
+                '[ "A transient view of the managed DOM for the Component"
+                 , "being reconciled. It is likely for this view to be"
+                 , "invalidated later during this active reconciliation cycle"
+                 , "when the view is re-rendered and this view is diffed"
+                 , "against it."
+                 ]
+              ]
+           , Param config
+             '[ About
+                '[ "The read-only environment produced during"
+                 , "initialization."
+                 ]
+              ]
+          ]
+        , Results
+          '[ Result willUpdateResult
+             '[ About
+                '[ "An arbitrary result typed tied to the DidUpdate method."
+                 , "This is optionally where the result of DOM analysis is"
+                 , "returned for animations that will be initiated in"
+                 , "DidUpdate."
+                 ]
+              ]
+           ]
+        ]
+     ) => WillUpdate parent props state config willUpdateResult -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO willUpdateResult
+runWillUpdate willUpdateMethod oldprops newprops oldstate newstate dom config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties newprops)
+              *:* reader (ComponentState newstate)
+              *:* reader (ComponentView dom)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  (_,result) <- obj Ef.Base.! (willUpdateMethod oldprops oldstate)
+  return result
+
+type DidUpdate willUpdateResult parent props state config =
+    forall newprops oldprops newstate oldstate dom cfg.
+    ( newprops ~ ComponentProperties props
+    , oldprops ~ props
+    , newstate ~ ComponentState state
+    , oldstate ~ state
+    , dom ~ ComponentView parent
+    , cfg ~ ComponentConfig config
+    , ?parent :: Proxy parent
+    , Method "DidUpdate"
+      '[ About
+         '[ "This method is run after a re-render and diff inside of an"
+          , "animation frame. DidUpdate is useful for performing reflowing"
+          , "analysis after a view is updated, e.g to begin a CSS animation"
+          , "using the FLIP approach."
+          ]
+        , Implicits
+          '[ Implicit (Proxy parent)
+             '[ About
+                '[ "The parent implicit assists in retrieving a View"
+                 , "quantified by the parent context."
+                 ]
+              ]
+           ]
+        , Environment
+          '[ Variable newprops
+             '[ About
+                '[ "New properties during this reconciliation cycle."
+                 , "Made available via `ask`."
+                 ]
+              ]
+           , Variable newstate
+             '[ About
+                '[ "New state during this reconciliation cycle."
+                 , "Made available via `ask`."
+                 ]
+              ]
+           , Variable dom
+             '[ About
+                '[ "A transient view of the managed DOM for the Component"
+                 , "being reconciled. Made available to WillUpdate via"
+                 , "`ask`. It is likely for this view to be invalidated"
+                 , "during the re-rendering and diffing performed"
+                 , "immediately after WillUpdate."
+                 ]
+              ]
+           ]
+        , Params
+          '[ Param willUpdateResult
+             '[ About '[ "Result of the WillUpdate method." ] ]
+           , Param oldprops
+             '[ About '[ "Old properties from the previous render." ] ]
+           , Param oldstate
+             '[ About '[ "Old state from the previous render." ] ]
+           ]
+        ]
+    ) => willUpdateResult
+      -> oldprops
+      -> oldstate
+      -> Ef '[ Reader () newprops
+             , Reader () newstate
+             , Reader () dom
+             , Reader () cfg
+             ]
+             IO
+             ()
+
+runDidUpdate
+  :: ( newprops ~ props
+     , oldprops ~ props
+     , oldstate ~ state
+     , newstate ~ state
+     , dom ~ View parent
+     , cfg ~ ComponentConfig config
+     , ?parent :: Proxy parent
+     , Function "runDidUpdate"
+       '[ About
+          '[ "Run a didUpdate method with old and new properties and old"
+           , "and new state as well as a transient view and the result of"
+           , "willUpdate. New props, new state, and the transient view of"
+           , "the DOM are available to the method via `ask`. Old props, old"
+           , "state and the result of willUpdate are avaialble via"
+           , "function parameterization. This method runs in an animation"
+           , "frame before painting and permits non-reflowing use of"
+           , "normally reflowing invocations, like getBoundingClientRect(),"
+           , "and is thus useful for, e.g., the L and I steps in FLIP"
+           , "animations where the P step is implicit."
+           ]
+        , Implicits
+          '[ Implicit (Proxy parent)
+             '[ About
+                '[ "The parent implicit assists in retrieving a View"
+                 , "quantified by the parent context."
+                 ]
+              ]
+           ]
+        , Params
+          '[ Param didUpdateMethod
+             '[ About
+                '[ "The method to be invoked after a re-render and diff." ]
+              ]
+           , Param oldprops
+             '[ About
+                '[ "Properties as they were before this reconciliation cycle." ]
+              ]
+           , Param newprops
+             '[ About '[ "New properties; may be the same as old properties." ]
+              ]
+           , Param oldstate
+             '[ About '[ "State as it was before this reconciliation cycle." ] ]
+           , Param newstate
+             '[ About
+                '[ "New state; may be the same as old state. Produced either"
+                 , "as a result of a state update call or during"
+                 , "willReceiveProps if this reconciliation cycle is due to"
+                 , "the reception of new properties."
+                 ]
+              ]
+           , Param dom
+             '[ About
+                '[ "A transient view of the managed DOM for the Component"
+                 , "being reconciled. It is likely for this view to be"
+                 , "invalidated later during the next reconciliation cycle"
+                 , "when the view is re-rendered and this view is diffed"
+                 , "against it. During the evaluation of didUpdate, this"
+                 , "view should be valid and active unless it was manipulated"
+                 , "by another DidUpdate method."
+                 ]
+              ]
+           , Param config
+             '[ About
+                '[ "The read-only environment produced during"
+                 , "initialization."
+                 ]
+              ]
+           , Param willUpdateResult
+             '[ About
+                '[ "An arbitrary result typed tied to the previous WillUpdate"
+                 , "method. This is optionally where the result of DOM"
+                 , "analysis was passed for animations that are to be"
+                 , "initiated in the active animation frame. While the"
+                 , "recently rendered view has not been painted, normally"
+                 , "reflowing methods like getBoundingClientRect are"
+                 , "invokable without forcing reflow. This is useful for,"
+                 , "e.g., the L step in FLIP animations."
+                 ]
+              ]
+           ]
+        ]
+
+     ) => DidUpdate willUpdateResult parent props state config -> willUpdateResult -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO ()
+runDidUpdate didUpdateMethod willUpdateResult oldprops newprops oldstate newstate dom config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties newprops)
+              *:* reader (ComponentState newstate)
+              *:* reader (ComponentView dom)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  _ <- obj Ef.Base.! (didUpdateMethod willUpdateResult oldprops oldstate)
+  return ()
+
+type WillUnmount parent props state config willUnmountResult =
+  forall ps st dom cfg.
+  ( ps ~ ComponentProperties props
+  , st ~ ComponentState state
+  , dom ~ ComponentView parent
+  , cfg ~ ComponentConfig config
+  , ?parent :: Proxy parent
+  , Method "WillUnmount"
+    '[ About
+       '[ "This method is run before a Component's view is unmounted and"
+        , "destroyed. Any manually added listeners should be removed here."
+        ]
+     , Implicits
+       '[ Implicit (Proxy parent)
+          '[ About
+             '[ "The parent implicit assists in retrieving a View quantified"
+              , "by the parent context."
+              ]
+           ]
+        ]
+     , Environment
+       '[ Variable props
+          '[ About '[ "Current properties. Made available via `getProps`." ] ]
+        , Variable state
+          '[ About '[ "Current state. Made available via `getState`." ] ]
+        , Variable config
+          '[ About
+             '[ "The read-only environment produced during initialization." ]
+           ]
+        ]
+     ]
+  ) => Ef '[ Reader () ps
+           , Reader () st
+           , Reader () dom
+           , Reader () cfg
+           ]
+           IO
+           willUnmountResult
+
+runWillUnmount
+  :: ( dom ~ View parent
+     , ?parent :: Proxy parent
+     , Function "runWillUnmount"
+       '[ About
+          '[ "Run a willUnmount method with current properties and state as"
+           , "well as the final view of the DOM. This is where manually"
+           , "attached event listeners should be detached before the"
+           , "Component is destructed."
+           ]
+        , Implicits
+          '[ Implicit (Proxy parent)
+             '[ About
+                '[ "The parent implicit assists in retrieving a View"
+                 , "quantified by the parent context."
+                 ]
+              ]
+           ]
+        , Params
+          '[ Param willUnmountMethod
+             '[ About
+                '[ "The method to be invoked before the Component is"
+                 , "destructed."
+                 ]
+              ]
+           , Param props
+             '[ About '[ "The final properties of the Component." ] ]
+           , Param state
+             '[ About '[ "The final state of the Component." ] ]
+           , Param dom
+             '[ About
+                '[ "The view of the DOM before it is destroyed. Use it to"
+                 , "remove manually attched event listeners if necessary."
+                 ]
+              ]
+           , Param config
+             '[ About
+                '[ "The read-only environment produced during initialization." ]
+              ]
+           ]
+        , Results
+          '[ Result willUnmountResult
+             '[ About
+                '[ "Result of the call to the willUnmountMethod. This result"
+                 , "will be tied into the Destructor method. May be useful"
+                 , "for debugging and profiling."
+                 ]
+              ]
+           ]
+        ]
+     ) => WillUnmount parent props state config willUnmountResult -> props -> state -> dom -> config -> IO willUnmountResult
+runWillUnmount willUnmountMethod props state dom config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties props)
+              *:* reader (ComponentState state)
+              *:* reader (ComponentView dom)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  (_,willUnmountResult) <- obj Ef.Base.! willUnmountMethod
+  return willUnmountResult
+
+
+type Destructor willUnmountResult props state config =
+  forall ps st cfg.
+  ( ps ~ ComponentProperties props
+  , st ~ ComponentState state
+  , cfg ~ ComponentConfig config
+  , Method "Destructor"
+    '[ About
+       '[ "This method is run at the end of the Component's lifecycle with"
+        , "final access to the Component's properties, state, configuration"
+        , "and the result of the WillUnmount method."
+        ]
+     , Params
+       '[ Param willUnmountResult
+          '[ About
+             '[ "Result of the predecessor call to WillUnmount." ]
+           ]
+        ]
+     , Environment
+       '[ Variable props
+          '[ About '[ "The final properties of the Component." ] ]
+        , Variable state
+          '[ About '[ "The final state of the Component." ] ]
+        , Variable config
+          '[ About
+             '[ "The read-only environment produced during initialization." ]
+           ]
+        ]
+     ]
+  ) => willUnmountResult
+    -> Ef '[ Reader () ps
+           , Reader () st
+           , Reader () cfg
+           ]
+           IO
+           ()
+
+runDestructor
+  :: ( ?parent :: Proxy parent
+     , Function "runDestructor"
+       '[ About
+          '[ "This function runs the final cleanup method for a Component."
+           , "This is the last time this Component's props, state and config"
+           , "will be accessible. This method is passed the result of"
+           , "WillUnmount."
+           ]
+        , Params
+          '[ Param willUnmountResult
+             '[ About
+                '[ "Result of the predecessor call to WillUnmount." ]
+              ]
+           , Param props
+             '[ About '[ "The final properties of the Component." ] ]
+           , Param state
+             '[ About '[ "The fianl state of the component." ] ]
+           , Param config
+             '[ About
+                '[ "The read-only environment produced during initialization." ]
+              ]
+           ]
+        ]
+     ) => Destructor willUnmountResult props state config -> willUnmountResult -> props -> state -> config -> IO ()
+runDestructor destructorMethod willUnmountResult props state config = do
+  let obj = Ef.Base.Object $
+              reader (ComponentProperties props)
+              *:* reader (ComponentState state)
+              *:* reader (ComponentConfig config)
+              *:* Ef.Base.Empty
+  _ <- obj Ef.Base.! (destructorMethod willUnmountResult)
+  return ()
+
+type Renderer parent props state config =
+  props -> state -> config -> View parent
+
+data Component (parent :: [* -> *]) (props :: *) (state :: *) where
+    Component ::
+      { constructor      -- ✔
+        :: Construct                                  props state config
+
+      , initialize       -- ✔
+        :: Initializer                                props state config
+
+      , willMount        -- ✔
+        :: WillMount                                  props state config willMountResult
+
+      , didMount         -- ✔
+        :: DidMount         willMountResult    parent props state config
+
+      , willReceiveProps -- ✔
+        :: WillReceiveProps                    parent props state config
+
+      , shouldUpdate     -- ✔
+        :: ShouldUpdate                        parent props state config
+
+      , willUpdate       -- ✔
+        :: WillUpdate                          parent props state config willUpdateResult
+
+      , renderer         -- ✔
+        :: Renderer                            parent props state config
+
+      , didUpdate        -- ✔
+        :: DidUpdate         didUpdateResult   parent props state config
+
+      , willUnmount      -- ✔
+        :: WillUnmount                         parent props state config willUnmountResult
+
+      , destructor       -- ✔
+        :: Destructor        willUnmountResult        props state config
+
+      } -> Component parent props state
+
+instance (Typeable props, Typeable parent, Typeable state) => Default (Component parent props state) where
+  def =
+    Component
+      { renderer =
+          unsafeCoerce (\_ _ _ -> def :: Renderer parent props state ())
+      , destructor =
+          unsafeCoerce ((\_ -> def) :: Destructor () props state ())
+      , willUnmount =
+          unsafeCoerce (def :: WillUnmount parent props state () ())
+      , didUpdate =
+          unsafeCoerce ((\_ _ _ -> def) :: DidUpdate () parent props state ())
+      , willUpdate =
+          unsafeCoerce ((\_ _ -> def) :: WillUpdate parent props state () ())
+      , shouldUpdate =
+          unsafeCoerce ((\_ _ -> return True) :: ShouldUpdate parent props state ())
+      , willReceiveProps =
+          unsafeCoerce ((\_ -> asks unwrapComponentState) :: WillReceiveProps parent props state ())
+      , didMount =
+          unsafeCoerce ((\_ -> def) :: DidMount () parent props state ())
+      , willMount =
+          unsafeCoerce (def :: WillMount props state () ())
+      , initialize =
+          unsafeCoerce (asks unwrapComponentState :: Initializer props state ())
+      , constructor =
+          error "Component.constructor: state not initialized."
+      }
+
+data CPatch parent props state where
+  CPatch ::
+    { cp_update :: Either props (props -> state -> IO (state,IO ()))
+    , cp_willReceiveProps :: WillReceiveProps parent props state config
+    , cp_shouldUpdate :: ShouldUpdate parent props state config
+    , cp_willUpdate :: WillUpdate parent props state config willUpdateResult
+    , cp_didUpdate :: DidUpdate willUpdateResult parent props state config
+    } -> CPatch parent props state
+--
+-- queueComponentPatch
+--   :: ( patch ~ CPatch e props state
+--      , queue ~ ComponentPatchQueue e prosp state
+--     --  , Describe "queueComponentPatch"
+--     --      '[ Param patch
+--     --           '[ "A CPatch that contains two continuations to run before and"
+--     --            , "after the patch is applied."
+--     --            ]
+--     --       , Param queue
+--     --           '[ "An MVar containing a list of patches in reverse order."
+--     --            ]
+--     --       , About
+--     --           '[ "If no existing patch is queued, this method will fork one."
+--     --            ]
+--     --       ]
+--      )
+--   => props -> state -> patch -> queue -> IO ()
+-- queueComponentPatch ps st p cpq@(ComponentPatchQueue q_) = do
+--   join . modifyMVar q_ $ \q ->
+--     case q of
+--       [] -> return ([q],void . forkIO $ runComponentPatch ps st cpq)
+--       ps -> return (p:ps,return ())
+--
+-- runComponentPatch
+--   :: ( queue ~ ComponentPatchQueue e props state
+--      , cstate ~ ComponentState e props state
+--     --  , Describe "runComponentPatch"
+--     --      '[ Param queue
+--     --           '[ "An MVar containing a list of patches in reverse order." ]
+--     --       , About
+--     --           '[ "The existing queue will be locked and reset"
+--     --            , "If executed in the browse, runComponentPatch will request a"
+--     --            , "new animation frame to perform a patch."
+--     --            , "The existing queue will be reset"]
+--     --       , About
+--     --           '[ "All willUpdate methods are chained together with their state"
+--     --            , "results being passed down the chain. After each willUpdate,"
+--     --            , "the corresponding didUpdate will be constructed from the"
+--     --            , "result and turned into an IO action and added to a queue"
+--     --            , "to be executed with (sequence_ . reverse) at the end of the"
+--     --            , "patch."
+--     --            ]
+--     --       ]
+--      ) => props -> state -> queue -> IO ()
+-- runComponentPatch ps st (ComponentPatchQueue cpq) = do
+--   patches <- getPatches
+--   chained <- chain patches
+--   rAF $ do
+--     st' <- runWillUpdates chained
+--
+--     runDiffs
+--     run
+--   where
+--     getPatches = List.reverse <$> swapMVar cpq []
+--
+--     chain ps = (\(acc,ps,st) -> (List.reverse acc,ps,st)) <$> foldM go ([],ps,st) ps
+--       where
+--         go (acc,ps,st) CPatch {..} = do
+--           case cp_update of
+--             Left ps' -> do
+--               st' <- runWillReceiveProps ps ps' st cp_willReceiveProps
+--               su <- runShouldUpdate ps ps' st st' cp_shouldUpdate
+--               return $
+--                 if su then
+--                   let p = Left (cp_willUpdate,cp_didUpdate,ps,ps',st,st')
+--                   in (p:acc,ps',st')
+--                 else
+--                   (acc,ps',st')
+--
+--             Right f -> do
+--               (st',cb) <- f ps st
+--               su <- runShouldUpdate ps ps st st' cp_shouldUpdate
+--               return $
+--                 if su then
+--                   let p = Right (cp_willUpdate,cp_didUpdate,ps,st,st',cb)
+--                   in (p:acc,ps,st')
+--                 else
+--                   (acc,ps,st')
+--
 
 
 
 
 
 
-
-rAF f = void $ do
+_rAF f = void $ do
 #ifdef __GHCJS__
   rafCallback <- newRequestAnimationFrameCallback $ \_ -> f
   win <- getWindow
@@ -1763,152 +2641,94 @@ rAF f = void $ do
 #endif
 
 buildComponent :: forall e. (Ef e IO () -> IO ()) -> Maybe ENode -> View e -> IO (View e)
-buildComponent f mparent STView {..} = do
-  let ?parent = Proxy :: Proxy e
-  in let ?state = _stateProxy
-  in do
-    let rAF f = void $ do
-#ifdef __GHCJS__
-          rafCallback <- newRequestAnimationFrameCallback $ \_ -> f
-          win <- getWindow
-          requestAnimationFrame win (Just rafCallback)
-#else
-          f
-#endif
+buildComponent f mparent STView {..} = undefined
+--   let ?parent = Proxy :: Proxy e
+--   in do
+--     let rAF f = void $ do
+-- #ifdef __GHCJS__
+--           rafCallback <- newRequestAnimationFrameCallback $ \_ -> f
+--           win <- getWindow
+--           requestAnimationFrame win (Just rafCallback)
+-- #else
+--           f
+-- #endif
+--
+--     propUpdater <- newEmptyMVar
+--
+--     strec <- newEmptyMVar
+--
+--     let
+--       updateStateInternal should_raf g = void $ forkIO $ do
+--           (props,st,c,old,mid) <- takeMVar strec
+--           (mst,cb) <- g props st
+--           let
+--             updateState props c old mid st mst cb = do
+--                 case mst of
+--                   Nothing  -> do
+--                     putMVar strec (props,st,c,old,mid)
+--                     cb
+--                   Just st' -> do
+--                     shouldUpd <- runShouldUpdate props props st st' c old
+--
+--                     when shouldUpd $ runWillUpdate props st' c old
+--
+--                     if shouldUpd then do
+--                       (if should_raf then _rAF else id) $ do
+--                         let new_mid = runRenderer props st' c (updateStateInternal False)
+--                         new <- diffHelper f doc ch isFG old mid new_mid
+--                         runDidUpdate props st' c new
+--                         putMVar strec (props,st',c,new,new_mid)
+--                         cb
+--                     else do
+--                       putMVar strec (props,st',c,old,mid)
+--                       cb
+--
+--           updateState props c old mid st mst cb
+--
+--
+--       updatePropsInternal props = forkIO $ do
+--         (old_props,st,c,old,mid) <- takeMVar strec
+--         st' <- runWillReceiveProps old_props props st c old
+--         shouldUpd <- runShouldUpdate old_props props st st' c old
+--         if shouldUpd then do
+--           runWillUpdate props st' c old
+--           let new_mid = runRenderer props st' c (updateStateInternal True)
+--           new <- diffHelper f doc ch isFG old mid new_mid
+--           mst <- runDidUpdate props st' c new
+--           putMVar strec (props,st',c,new,new_mid)
+--
+--         else do
+--           putMVar strec (props,st',c,old,mid)
+--
+--       unmountInternal = void $ do
+--         (props,st,c,old,mid) <- takeMVar strec
+--         runWillUnmount props st c
+--         return ()
+--
+--     let comp = _stview f (updateStateInternal True)
+--     st <- runConstructor _stprops comp
+--     putMVar strec (_stprops,st,comp,nil,nil)
+--     runWillMount _stprops st comp
+--     let mid = runRenderer _stprops st comp (updateStateInternal False)
+--     new <- go mparent (render mid)
+--     runDidMount _stprops st comp new
+--     modifyMVar strec $ \(props,st,comp,_,_) -> return ((props,st,comp,new,mid),())
+--
+--     return $
+--       STView
+--         _stprops
+--         _stid
+--         (Just strec)
+--         _stview
+--         (updateStateInternal False)
+--         updatePropsInternal
+--         unmountInternal
+--         _stateProxy
+--
 
-    propUpdater <- newEmptyMVar
+{-
 
-    strec <- newEmptyMVar
-
-    let
-      updateStateInternal should_raf g = void $ forkIO $ do
-          -- putStrLn "7"
-          (props,st,c,old,mid) <- takeMVar strec
-          -- putStrLn "8"
-          (mst,cb) <- g props st
-          -- putStrLn "9"
-          let
-            updateState props c old mid st mst cb = do
-                -- putStrLn "10"
-                case mst of
-                  Nothing  -> do
-                    -- putStrLn "11"
-                    putMVar strec (props,st,c,old,mid)
-                    cb
-                  Just st' -> do
-                    -- putStrLn "12"
-                    shouldUpd <- runShouldUpdate props props st st' c old
-
-                    -- putStrLn "13"
-                    when shouldUpd $ runWillUpdate props st' c old
-
-                    if shouldUpd then do
-                      (if should_raf then rAF else id) $ do
-                        -- putStrLn "14"
-                        let new_mid = runRenderer props st' c (updateStateInternal False)
-                        new <- diffHelper f doc ch isFG old mid new_mid
-                        -- putStrLn "15"
-                        runDidUpdate props st' c new
-                        putMVar strec (props,st',c,new,new_mid)
-                        cb
-                    else do
-                      -- putStrLn "16"
-                      putMVar strec (props,st',c,old,mid)
-                      cb
-
-          updateState props c old mid st mst cb
-
-
-      updatePropsInternal props = forkIO $ do
-        -- putStrLn "17"
-        (old_props,st,c,old,mid) <- takeMVar strec
-        -- putStrLn "18"
-        st' <- runWillReceiveProps old_props props st c old
-        -- putStrLn "19"
-        shouldUpd <- runShouldUpdate old_props props st st' c old
-        -- putStrLn "20"
-        if shouldUpd then do
-          -- putStrLn "21"
-          runWillUpdate props st' c old
-          let new_mid = runRenderer props st' c (updateStateInternal True)
-          -- putStrLn "22"
-          new <- diffHelper f doc ch isFG old mid new_mid
-          -- putStrLn "23"
-          mst <- runDidUpdate props st' c new
-          -- putStrLn "24"
-          putMVar strec (props,st',c,new,new_mid)
-
-        else do
-          -- putStrLn "25"
-          putMVar strec (props,st',c,old,mid)
-
-      unmountInternal = void $ do
-        (props,st,c,old,mid) <- takeMVar strec
-        runWillUnmount props st c
-        return ()
-
-    let comp = _stview f (updateStateInternal True)
-    -- putStrLn "1"
-    st <- runConstructor _stprops comp
-    -- putStrLn "2"
-    putMVar strec (_stprops,st,comp,nil,nil)
-    -- putStrLn "3"
-    runWillMount _stprops st comp
-    let mid = runRenderer _stprops st comp (updateStateInternal False)
-    -- putStrLn "4"
-    new <- go mparent (render mid)
-    -- putStrLn "5"
-    runDidMount _stprops st comp new
-    -- putStrLn "6"
-    modifyMVar strec $ \(props,st,comp,_,_) -> return ((props,st,comp,new,mid),())
-
-    return $
-      STView
-        _stprops
-        _stid
-        (Just strec)
-        _stview
-        (updateStateInternal False)
-        updatePropsInternal
-        unmountInternal
-        _stateProxy
-
-
--- consider this: https://github.com/spicyj/innerhtml-vs-createelement-vs-clonenode
--- and this: https://stackoverflow.com/questions/8913419/is-chromes-appendchild-really-that-slow
--- Would a bottom-up, display='none' -> display='' solution work globally?
--- Does the fact that this runs in a rAF resolve any of this a priori?
-buildAndEmbedMaybe :: forall e. (e <: '[]) => (Ef e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (View e)
-buildAndEmbedMaybe f doc ch isFG mn v = do
-  go mn $ render v
-  where
-    go :: Maybe ENode -> View e -> IO (View e)
-    go mparent (View c) = go mparent (render c)
-
-    go mparent nn@NullView {..} = do
-      _cond@(Just el) <- createElement doc "template"
-      forM_ mparent (flip appendChild el)
-      return $ NullView _cond
-
-    go mparent RawView {..} = do
-      _node@(Just el) <- createElement doc _tag
-      (_attributes,didMount) <- setAttributes _attributes f False el
-      setInnerHTML el _content
-      forM_ mparent $ \parent -> appendChild parent el
-      didMount
-      return $ RawView _node _tag _attributes _content
-
-    go mparent HTML {..} = do
-      _node@(Just el) <- createElement doc _tag
-      (_attributes,didMount) <- setAttributes _attributes f False el
-      _atoms <- mapM (go (Just el)) _atoms
-      forM_ mparent $ \parent -> appendChild parent el
-      didMount
-      return $ HTML _node _tag _attributes _atoms
-
-    go mparent STView {..} =
       let ?parent = Proxy :: Proxy e
-      in let ?state = _stateProxy
       in do
         let rAF f = void $ do
 #ifdef __GHCJS__
@@ -1946,7 +2766,7 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
                         when shouldUpd $ runWillUpdate props st' c old
 
                         if shouldUpd then do
-                          (if should_raf then rAF else id) $ do
+                          (if should_raf then _rAF else id) $ do
                             -- putStrLn "14"
                             let new_mid = runRenderer props st' c (updateStateInternal False)
                             new <- diffHelper f doc ch isFG old mid new_mid
@@ -2015,6 +2835,42 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
             updatePropsInternal
             unmountInternal
             _stateProxy
+
+-}
+
+-- consider this: https://github.com/spicyj/innerhtml-vs-createelement-vs-clonenode
+-- and this: https://stackoverflow.com/questions/8913419/is-chromes-appendchild-really-that-slow
+-- Would a bottom-up, display='none' -> display='' solution work globally?
+-- Does the fact that this runs in a rAF resolve any of this a priori?
+buildAndEmbedMaybe :: forall e. (e <: '[]) => (Ef e IO () -> IO ()) -> Doc -> ControllerHooks -> Bool -> Maybe ENode -> View e -> IO (View e)
+buildAndEmbedMaybe f doc ch isFG mn v = do
+  go mn $ render v
+  where
+    go :: Maybe ENode -> View e -> IO (View e)
+    go mparent (View c) = go mparent (render c)
+
+    go mparent nn@NullView {..} = do
+      _cond@(Just el) <- createElement doc "template"
+      forM_ mparent (flip appendChild el)
+      return $ NullView _cond
+
+    go mparent RawView {..} = do
+      _node@(Just el) <- createElement doc _tag
+      (_attributes,didMount) <- setAttributes _attributes f False el
+      setInnerHTML el _content
+      forM_ mparent $ \parent -> appendChild parent el
+      didMount
+      return $ RawView _node _tag _attributes _content
+
+    go mparent HTML {..} = do
+      _node@(Just el) <- createElement doc _tag
+      (_attributes,didMount) <- setAttributes _attributes f False el
+      _atoms <- mapM (go (Just el)) _atoms
+      forM_ mparent $ \parent -> appendChild parent el
+      didMount
+      return $ HTML _node _tag _attributes _atoms
+
+    go mparent STView {..} = undefined
 
     go mparent SVG {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
@@ -2112,8 +2968,8 @@ getElement STView {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,_,a,_) <- readMVar ref
-      getElement (unsafeCoerce a :: View e)
+      ComponentRecord {..} <- readMVar ref
+      getElement (unsafeCoerce crLive :: View e)
 getElement n = return $ _node n
 
 getNode :: forall e. View e -> IO (Maybe NNode)
@@ -2125,8 +2981,8 @@ getNode STView {..} =
   case _strecord of
     Nothing -> return Nothing
     Just ref -> do
-      (_,_,_,a,_) <- readMVar ref
-      getNode (unsafeCoerce a :: View e)
+      ComponentRecord {..} <- readMVar ref
+      getNode (unsafeCoerce crLive :: View e)
 getNode n = forM (_node n) toNode
 
 getAttributes :: View e -> [Feature e]
@@ -2145,8 +3001,8 @@ getChildren STView {..} = do
   case _strecord of
     Nothing -> return []
     Just ref -> do
-      (_,_,_,a,_) <- readMVar ref
-      return [unsafeCoerce a :: View e]
+      ComponentRecord {..} <- readMVar ref
+      return [unsafeCoerce crLive :: View e]
 getChildren HTML {..} = return _atoms
 getChildren SVG {..} = return _atoms
 getChildren KHTML {..} = return $ map snd _keyed
@@ -2328,20 +3184,18 @@ diffHelper f doc ch isFG =
 
     go' old@STView {} _ new@STView {} = do
       case (old,new) of
-        (STView p k ~(Just r) c upds updp unm sp,STView p' k' _ _ _ _ _ _) -> do
-          if prettyUnsafeEq k k' then
+        (STView p ~(Just r) c,STView p' _ _) -> do
+          if typeOf p == typeOf p' then
             if reallyVeryUnsafeEq p p' then do
               return old
             else do
-              updp (unsafeCoerce p')
-              return $ STView (unsafeCoerce p') k (Just r) c upds updp unm sp
+              error "Implement property injection."
           else do
-            (_,_,_,a,_) <- readMVar r
+            ComponentRecord {..} <- readMVar r
             new' <- buildHTML doc ch isFG f new
-            unm
-            replace a new'
-            didUnmount <- cleanup f [unsafeCoerce a]
-            delete a
+            replace crLive new'
+            didUnmount <- cleanup f [unsafeCoerce crLive]
+            delete crLive
             didUnmount
             return new'
 
