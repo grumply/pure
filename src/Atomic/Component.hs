@@ -1625,6 +1625,23 @@ setAttributes as f diffing el = do
 newtype ComponentPatchQueue e props state
   = ComponentPatchQueue (MVar [CPatch e props state])
 
+type WillReceiveProps e props stateo =
+     props ::: "New properties."
+  -> Ef '[ Reader () props ::: "Current properties."
+         , Reader () state ::: "Current state; writable."
+         ]
+         IO
+         state
+
+type ShouldUpdate e props state =
+       props ::: "Next properties."
+    -> state ::: "Next state."
+    -> Ef '[ Reader () props ::: "Current properties."
+           , Reader () state ::: "Current state; writable."
+           ]
+           IO
+           Bool
+
 type WillUpdate e props state =
        props ::: "Next properties to be fed to the patcher."
     -> state ::: "Next state to be fed to the patcher."
@@ -1632,7 +1649,7 @@ type WillUpdate e props state =
            , Reader () state ::: "Current state; writable."
            ]
            IO
-           ()
+           state
 
 type DidUpdate e props state =
       props ::: "Previous properties from before patch."
@@ -1644,11 +1661,11 @@ type DidUpdate e props state =
           ()
 
 data CPatch e props state = CPatch
-  { cpProps :: props
-  , cpState :: state
-  , update :: Either props (props -> state -> IO (state,IO ()))
-  , willUpdate :: WillUpdate e props state
-  , didUpdate :: DidUpdate e props state
+  { cp_update :: Either props (props -> state -> IO (state,IO ()))
+  , cp_willReceiveProps :: WillReceiveProps e props state
+  , cp_shouldUpdate :: ShouldUpdate e props state
+  , cp_willUpdate :: WillUpdate e props state
+  , cp_didUpdate :: DidUpdate e props state
   }
 
 queueComponentPatch
@@ -1667,11 +1684,11 @@ queueComponentPatch
                ]
           ]
      )
-  => patch -> queue -> IO ()
-queueComponentPatch p cpq@(ComponentPatchQueue q_) = do
+  => props -> state -> patch -> queue -> IO ()
+queueComponentPatch ps st p cpq@(ComponentPatchQueue q_) = do
   join . modifyMVar q_ $ \q ->
     case q of
-      [] -> return ([q],void . forkIO $ runComponentPatch cpq)
+      [] -> return ([q],void . forkIO $ runComponentPatch ps st cpq)
       ps -> return (p:ps,return ())
 
 runComponentPatch
@@ -1694,20 +1711,45 @@ runComponentPatch
                , "patch."
                ]
           ]
-     ) => state -> queue -> IO ()
-runComponentPatch (ComponentPatchQueue cpq) =
+     ) => props -> state -> queue -> IO ()
+runComponentPatch ps st (ComponentPatchQueue cpq) = do
+  patches <- getPatches
+  chained <- chain patches
   rAF $ do
-    patches    <- getPatches
-    didUpdates <- chainWillUpdates patches
-    runDidUpdates didUpdates
+    st' <- runWillUpdates chained
+    
+    runDiffs
+    run
   where
-    getPatches =
-      reverse <$> swapMVar cpq []
+    getPatches = reverse <$> swapMVar cpq []
 
-    chainWillUpdates = reverse . chainWU
+    chain ps = (\(acc,ps,st) -> (reverse acc,ps,st)) <$> foldM go ([],ps,st) ps
       where
-        chainWU [] = []
-        chainWU (CPatch {..} : cps) = do
+        go (acc,ps,st) CPatch {..} = do
+          case cp_update of
+            Left ps' -> do
+              st' <- runWillReceiveProps ps ps' st cp_willReceiveProps
+              su <- runShouldUpdate ps ps' st st' cp_shouldUpdate
+              return $
+                if su then
+                  let p = Left (cp_willUpdate,cp_didUpdate,ps,ps',st,st')
+                  in (p:acc,ps',st')
+                else
+                  (acc,ps',st')
+
+            Right f -> do
+              (st',cb) <- f ps st
+              su <- runShouldUpdate ps ps st st' cp_shouldUpdate
+              return $
+                if su then
+                  let p = Right (cp_willUpdate,cp_didUpdate,ps,st,st',cb)
+                  in (p:acc,ps,st')
+                else
+                  (acc,ps,st')
+
+
+
+
 
 
 
