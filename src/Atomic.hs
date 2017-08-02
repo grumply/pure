@@ -26,7 +26,7 @@ module Atomic
   , LazyByteString
   ) where
 
-import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End,initialize)
+import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End,initialize,construct)
 
 #if MIN_VERSION_hashable(1,2,5)
 import Data.Hashable as Export hiding (hashed)
