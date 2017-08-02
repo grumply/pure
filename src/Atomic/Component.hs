@@ -168,14 +168,14 @@ foreign import javascript unsafe
   "$1[$2] = $3" set_property_js :: E.Element -> Txt -> Txt -> IO ()
 #endif
 
-type StateUpdate ps st = ps -> st -> IO (Maybe st,IO ())
-type StateUpdater ps st = StateUpdate ps st -> IO ()
+type StateUpdate ps st = ps -> st -> IO (st,IO ())
+type StateUpdater ps st = StateUpdate ps st -> IO Bool
 
 type Lifter e = Ef e IO () -> IO ()
 
-type PropsUpdater props = props -> IO ()
+type PropsUpdater props = props -> IO Bool
 
-type Unmounter = IO ()
+type Unmounter = MVar () -> IO Bool
 
 data View e where
   -- NullView must have a presence on the page for proper diffing
@@ -212,12 +212,11 @@ data View e where
     :: (Typeable props) =>
        { _stprops  :: props
        , _strecord :: Maybe (MVar (ComponentRecord e props st config))
-       , _stqueue  :: Maybe (MVar (ComponentPatchQueue e props st config))
        , _stview   :: ( ?parent :: Proxy e
                       , ?state :: Proxy st
                       , ?props :: Proxy props
                       , ?config :: Proxy config
-                      ) => Lifter e -> StateUpdater props st -> Component e props st config willMountResult willUpdateResult willUnmountResult
+                      ) => Lifter e -> StateUpdater props st -> Component e props st config mountResult updateResult unmountResult
        , _stStateProxy :: Proxy st
        , _stPropsProxy :: Proxy props
        , _stConfigProxy :: Proxy config
@@ -382,8 +381,8 @@ pattern String :: (ToTxt t, FromTxt t) => t -> View ms
 pattern String t <- (TextView _ (fromTxt -> t)) where
   String t = TextView Nothing (toTxt t)
 
-pattern ST p v <- STView p _ _ v _ _ _ where
-  ST p v = STView p Nothing Nothing v Proxy Proxy Proxy
+pattern ST p v <- STView p _ v _ _ _ where
+  ST p v = STView p Nothing v Proxy Proxy Proxy
 
 weakRender (View a) = weakRender (render a)
 weakRender a = a
@@ -415,7 +414,7 @@ instance (e <: '[]) => ToJSON (View e) where
 #endif
       go a
     where
-      go (STView props strec stq c sp pp cp) =
+      go (STView props strec c sp pp cp) =
         let ?parent = Proxy :: Proxy e
             ?props = pp
             ?state = sp
@@ -423,11 +422,11 @@ instance (e <: '[]) => ToJSON (View e) where
         in unsafeCoerce go $
             case strec of
               Nothing -> unsafePerformIO $ do
-                case c (\_ -> return ()) (\_ -> return ()) of
+                case c (\_ -> return ()) (\_ -> return False) of
                   Component {..} -> do
                     (config,state) <- runConstruct construct props
                     state' <- runInitializer initialize props state config
-                    return $ renderer props state config (\_ -> return ())
+                    return $ renderer props state config (\_ -> return False)
 
               Just ref ->
                 case unsafePerformIO (readMVar ref) of
@@ -512,7 +511,7 @@ instance Eq (View e) where
   (==) (HTML _ t fs cs) (HTML _ t' fs' cs') =
     prettyUnsafeEq t t' && prettyUnsafeEq fs fs' && reallyUnsafeEq cs cs'
 
-  (==) (STView p _ _ v sp pp cp) (STView p' _ _ v' sp' pp' cp') =
+  (==) (STView p _ v sp pp cp) (STView p' _ v' sp' pp' cp') =
     let ?parent = Proxy :: Proxy e
     in let v0 = let ?state = sp
                     ?props = pp
@@ -805,14 +804,6 @@ reflect c =
 
 data DiffStrategy = Eager | Manual deriving (Eq)
 
-type Differ ms m =
-    forall a. Renderable a ms =>
-       (m ms -> a ms)
-    -> IO ()
-    -> (Ef ms IO () -> IO ())
-    -> ControllerState m
-    -> Ef ms IO ()
-
 data AState m =
   AState
     { as_live :: forall ms. IORef (ControllerView ms m)
@@ -834,7 +825,7 @@ type IsController' ts ms m = (ms <: Base m, ts <. Base m, Delta (Modules ts) (Me
 type IsController ms m = IsController' ms ms m
 
 data ControllerHooks = ControllerHooks
-  { chRenderables      :: Syndicate ()
+  { chRendered   :: Syndicate ()
   , chForeground :: Syndicate ()
   , chBackground :: Syndicate ()
   }
@@ -1045,7 +1036,7 @@ mkController mkControllerAction c@Controller {..} = do
     built <- build $ Ef.Base.state
                             (ControllerState
                                 Nothing
-                                (differ view (publish (chRenderables ch) ()) sendEv)
+                                (differ view (publish (chRendered ch) ()) sendEv)
                                 Eager
                                 us
                                 model
@@ -1187,7 +1178,12 @@ modifyModel f = do
   d cmp'
 #endif
 
-differ :: ms <: Base m => Differ ms m
+differ :: (ms <: Base m, Renderable a ms)
+       => (m ms -> a ms)
+       -> IO ()
+       -> (Ef ms IO () -> IO ())
+       -> ControllerState m
+       -> Ef ms IO ()
 differ r trig sendEv ControllerState {..} = do
 #ifdef __GHCJS__
   ch <- get
@@ -1393,7 +1389,7 @@ type Construct props state config =
        '[ Variable props
           '[ About
               '[ "Properties as seen during construction. Made available to"
-               , "willMount via `getProps`."
+               , "mount via `getProps`."
                ]
            ]
         ]
@@ -1443,13 +1439,13 @@ type Initializer props state config =
        '[ Variable props
           '[ About
              '[ "Properties as seen during construction. Made available to"
-              , "willMount via `getProps`."
+              , "mount via `getProps`."
               ]
            ]
         , Variable state
           '[ About
              '[ "State produced during construction. Made available to"
-              , "willMount via `getState`."
+              , "mount via `getState`."
               ]
            ]
         , Variable config
@@ -1490,7 +1486,7 @@ runInitializer initializerMethod props state config = do
   (_,state) <- obj Ef.Base.! initializerMethod
   return state
 
-type WillMount props state config willMountResult =
+type Mount props state config mountResult =
   forall ps st cfg.
   ( ps ~ ComponentProperties props
   , st ~ ComponentState state
@@ -1498,23 +1494,23 @@ type WillMount props state config willMountResult =
   , ?props :: Proxy props
   , ?state :: Proxy state
   , ?config :: Proxy config
-  , Method "WillMount"
+  , Method "Mount"
     '[ About
        '[ "This method is run only once after initialization, before calling"
-        , "render for the first time. Unlike WillUpdate, WillMount does not"
+        , "render for the first time. Unlike Update, Mount does not"
         , "run in an animation frame."
         ]
      , Environment
        '[ Variable props
           '[ About
              '[ "Properties as seen during construction. Made available to"
-              , "willMount via `getProps`."
+              , "mount via `getProps`."
               ]
            ]
         , Variable state
           '[ About
              '[ "State produced during construction. Made available to"
-              , "willMount via `getState`."
+              , "mount via `getState`."
               ]
            ]
         , Variable config
@@ -1530,16 +1526,16 @@ type WillMount props state config willMountResult =
            , Reader () cfg
            ]
            IO
-           willMountResult
+           mountResult
 
-runWillMount
+runMount
   :: ( ?props :: Proxy props
      , ?state :: Proxy state
      , ?config :: Proxy config
-     , Function "runWillMount"
-       '[ About '[ "Run a willMount method." ]
+     , Function "runMount"
+       '[ About '[ "Run a mount method." ]
         , Params
-          '[ Param willMountMethod
+          '[ Param mountMethod
              '[ About '[ "A method to be invoked before the first render." ] ]
            , Param props
              '[ About '[ "Current properties as seen in the constructor." ] ]
@@ -1551,9 +1547,9 @@ runWillMount
               ]
            ]
         , Results
-          '[ Result willMountResult
+          '[ Result mountResult
              '[ About
-                '[ "An arbitrary result typed tied to the DidMount method."
+                '[ "An arbitrary result typed tied to the Mounted method."
                  , "This may be a useful place to inject profiling"
                  , "information."
                  ]
@@ -1561,17 +1557,17 @@ runWillMount
            ]
         ]
 
-      ) => WillMount props state config willMountResult -> props -> state -> config -> IO willMountResult
-runWillMount willMountMethod props state config = do
+      ) => Mount props state config mountResult -> props -> state -> config -> IO mountResult
+runMount mountMethod props state config = do
   let obj = Ef.Base.Object $
               reader (ComponentProperties props)
               *:* reader (ComponentState state)
               *:* reader (ComponentConfig config)
               *:* Ef.Base.Empty
-  (_,willMountResult) <- obj Ef.Base.! willMountMethod
-  return willMountResult
+  (_,mountResult) <- obj Ef.Base.! mountMethod
+  return mountResult
 
-type DidMount willMountResult parent props state config =
+type Mounted mountResult parent props state config =
   forall ps st cfg dom.
   ( ps ~ ComponentProperties props
   , st ~ ComponentState state
@@ -1581,31 +1577,31 @@ type DidMount willMountResult parent props state config =
   , ?props :: Proxy props
   , ?state :: Proxy state
   , ?config :: Proxy config
-  , Method "DidMount"
+  , Method "Mounted"
     '[ About
        '[ "This method is run only once after rendering for the first time"
         , "before the end of the animation frame. The result of the render"
         , "is available for reflowing analysis or setting component state."
-        , "DidMount can inspect the result of the call to WillMount that"
+        , "Mounted can inspect the result of the call to Mount that"
         , "preceded it which may be useful for debugging purposes."
         ]
      , Environment
        '[ Variable props
           '[ About
              '[ "Properties as seen during construction. Made available to"
-              , "didMount via `getProps`."
+              , "mounted via `getProps`."
               ]
            ]
         , Variable state
           '[ About
              '[ "State produced during construction. Made available to"
-              , "didMount via `getState`."
+              , "mounted via `getState`."
               ]
            ]
         , Variable dom
           '[ About
              '[ "A transient view of the managed DOM for the newly rendered"
-              , "Component. Made available to didMount via `getView`. It is"
+              , "Component. Made available to mounted via `getView`. It is"
               , "likely for this view to be invalidated later during a"
               , "reconciliation cycle in which this view will be diffed"
               , "against a newly rendered view."
@@ -1619,7 +1615,7 @@ type DidMount willMountResult parent props state config =
            ]
         ]
      ]
-  ) => willMountResult
+  ) => mountResult
     -> Ef '[ Reader () ps
            , Reader () st
            , Reader () dom
@@ -1628,17 +1624,17 @@ type DidMount willMountResult parent props state config =
            IO
            ()
 
-runDidMount
+runMounted
   :: ( dom ~ View parent
      , ?parent :: Proxy parent
      , ?props :: Proxy props
      , ?state :: Proxy state
      , ?config :: Proxy config
-     , Function "runDidUpdate"
+     , Function "runUpdated"
        '[ About
-          '[ "Run a DidMount method. A transient view of the DOM is"
+          '[ "Run a Mounted method. A transient view of the DOM is"
            , "available to the method via `getView`. The result of"
-           , "willMount is avaialble via function parameterization. This"
+           , "mount is avaialble via function parameterization. This"
            , "method runs in an animation frame before painting and permits"
            , "non-reflowing use of normally reflowing invocations."
            ]
@@ -1651,13 +1647,13 @@ runDidMount
               ]
            ]
         , Params
-          '[ Param didMountMethod
+          '[ Param mountedMethod
              '[ About
                 '[ "The method to be invoked after a re-render and diff." ]
               ]
-           , Param willMountResult
+           , Param mountResult
              '[ About
-                '[ "The result of the call to WillMount that preceded this"
+                '[ "The result of the call to Mount that preceded this"
                  , "call."
                  ]
               ]
@@ -1671,7 +1667,7 @@ runDidMount
                  , "Component. It is likely for this view to be"
                  , "invalidated during the next update when the view is"
                  , "re-rendered and this view is diffed against it. During"
-                 , "the evaluation of didMount, this view should be valid."
+                 , "the evaluation of mounted, this view should be valid."
                  ]
               ]
            , Param config
@@ -1682,18 +1678,18 @@ runDidMount
               ]
            ]
         ]
-     ) => DidMount willMountResult parent props state config -> willMountResult -> props -> state -> dom -> config -> IO ()
-runDidMount didMountMethod willMountResult props state dom config = do
+     ) => Mounted mountResult parent props state config -> mountResult -> props -> state -> dom -> config -> IO ()
+runMounted mountedMethod mountResult props state dom config = do
   let obj = Ef.Base.Object $
               reader (ComponentProperties props)
               *:* reader (ComponentState state)
               *:* reader (ComponentView dom)
               *:* reader (ComponentConfig config)
               *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! (didMountMethod willMountResult)
+  _ <- obj Ef.Base.! (mountedMethod mountResult)
   return ()
 
-type WillReceiveProps parent props state config =
+type ReceiveProps parent props state config =
   forall newprops oldprops oldstate newstate dom cfg.
   ( newprops ~ props
   , oldprops ~ ComponentProperties props
@@ -1705,7 +1701,7 @@ type WillReceiveProps parent props state config =
   , ?props :: Proxy props
   , ?state :: Proxy state
   , ?config :: Proxy config
-  , Method "WillReceiveProps"
+  , Method "ReceiveProps"
     '[ About
        '[ "This method is run at the beginning of a reconciliation cycle"
         , "when the properties passed to a Component have implicitly"
@@ -1735,7 +1731,7 @@ type WillReceiveProps parent props state config =
         , Variable dom
           '[ About
              '[ "A transient view of the managed DOM for the Component"
-              , "being reconciled. Made available to shouldUpdate via"
+              , "being reconciled. Made available to forceUpdate via"
               , "`ask`. It is likely for this view to be invalidated"
               , "later during the active reconciliation cycle in which"
               , "this method is run when the view is re-rendered and this"
@@ -1771,7 +1767,7 @@ type WillReceiveProps parent props state config =
            IO
            newstate
 
-runWillReceiveProps
+runReceiveProps
   :: ( newprops ~ props
      , oldprops ~ props
      , oldstate ~ state
@@ -1781,7 +1777,7 @@ runWillReceiveProps
      , ?props :: Proxy props
      , ?state :: Proxy state
      , ?config :: Proxy config
-     , Function "runWillReceivePropsMethod"
+     , Function "runReceivePropsMethod"
        '[ About
           '[ "A method with implicit access to old properties and old state"
            , "and a transient view via ask and functional access to new"
@@ -1810,7 +1806,7 @@ runWillReceiveProps
              '[ About
                 '[ "New state; may be the same as old state. Produced either"
                  , "as a result of a state update call or during"
-                 , "willReceiveProps if this reconciliation cycle is due to"
+                 , "receiveProps if this reconciliation cycle is due to"
                  , "the reception of new properties."
                  ]
               ]
@@ -1829,7 +1825,7 @@ runWillReceiveProps
                  , "initialization."
                  ]
               ]
-           , Param willReceivePropsMethod
+           , Param receivePropsMethod
              '[ About
                 '[ "The receiveProps method to be invoked to produce a new"
                  , "state from an old properties and old state when given a"
@@ -1840,25 +1836,25 @@ runWillReceiveProps
         , Results
           '[ Result newstate
              '[ About
-                '[ "Produced state from the willReceivePropsMethod that will"
+                '[ "Produced state from the receivePropsMethod that will"
                  , "be used during the next phase of the reconciliation cycle,"
-                 , "shouldUpdate."
+                 , "forceUpdate."
                  ]
               ]
            ]
         ]
-     ) => WillReceiveProps parent props state config -> oldprops -> newprops -> oldstate -> dom -> config -> IO newstate
-runWillReceiveProps willReceivePropsMethod oldprops newprops oldstate dom config = do
+     ) => ReceiveProps parent props state config -> oldprops -> newprops -> oldstate -> dom -> config -> IO newstate
+runReceiveProps receivePropsMethod oldprops newprops oldstate dom config = do
   let obj = Ef.Base.Object $
               reader (ComponentProperties oldprops)
               *:* reader (ComponentState oldstate)
               *:* reader (ComponentView dom)
               *:* reader (ComponentConfig config)
               *:* Ef.Base.Empty
-  (_,newstate) <- obj Ef.Base.! (willReceivePropsMethod newprops)
+  (_,newstate) <- obj Ef.Base.! (receivePropsMethod newprops)
   return newstate
 
-type ShouldUpdate parent props state config =
+type ForceUpdate parent props state config =
     forall newprops oldprops newstate oldstate dom cfg.
     ( newprops ~ props
     , oldprops ~ ComponentProperties props
@@ -1870,11 +1866,11 @@ type ShouldUpdate parent props state config =
     , ?props :: Proxy props
     , ?state :: Proxy state
     , ?config :: Proxy config
-    , Method "ShouldUpdate"
+    , Method "ForceUpdate"
       '[ About
          '[ "This method is run at the beginning of a reconciliation cycle"
-          , "after WillReceiveProps during property changes or after state"
-          , "changes but before WillUpdate. This allows the Component under"
+          , "after ReceiveProps during property changes or after state"
+          , "changes but before Update. This allows the Component under"
           , "reconciliation to choose to not re-render."
           ]
        , Implicits
@@ -1930,7 +1926,7 @@ type ShouldUpdate parent props state config =
              , Reader () cfg
              ] IO Bool
 
-runShouldUpdate
+runForceUpdate
   :: ( newprops ~ props
      , oldprops ~ props
      , oldstate ~ state
@@ -1940,9 +1936,9 @@ runShouldUpdate
      , ?props :: Proxy props
      , ?state :: Proxy state
      , ?config :: Proxy config
-     , Function "runShouldUpdate"
+     , Function "runForceUpdate"
        '[ About
-          '[ "Run a shouldUpdate method with old and new properties and old"
+          '[ "Run a forceUpdate method with old and new properties and old"
            , "and new state as well as a transient view. Old props, old"
            , " state, and the transient view of the DOM are available to"
            , "the method via `ask`. New props and state are avaialble via"
@@ -1957,7 +1953,7 @@ runShouldUpdate
               ]
            ]
         , Params
-          '[ Param shouldUpdateMethod
+          '[ Param forceUpdateMethod
              '[ About
                 '[ "A method to be invoked to determine if a re-rendering and"
                  , "diffing is to be considered necessary during the active"
@@ -1982,7 +1978,7 @@ runShouldUpdate
              '[ About
                 '[ "New state; may be the same as old state. Produced either"
                  , "as a result of a state update call or during"
-                 , "willReceiveProps if this reconciliation cycle is due to"
+                 , "receiveProps if this reconciliation cycle is due to"
                  , "the reception of new properties."
                  ]
               ]
@@ -2004,18 +2000,18 @@ runShouldUpdate
            ]
         ]
 
-     ) => ShouldUpdate parent props state config -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO ()
-runShouldUpdate shouldUpdateMethod oldprops newprops oldstate newstate dom config = do
+     ) => ForceUpdate parent props state config -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO Bool
+runForceUpdate forceUpdateMethod oldprops newprops oldstate newstate dom config = do
   let obj = Ef.Base.Object $
               reader (ComponentProperties oldprops)
               *:* reader (ComponentState oldstate)
               *:* reader (ComponentView dom)
               *:* reader (ComponentConfig config)
               *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! (shouldUpdateMethod newprops newstate)
-  return ()
+  (_,shouldForceUpdate) <- obj Ef.Base.! (forceUpdateMethod newprops newstate)
+  return shouldForceUpdate
 
-type WillUpdate parent props state config willUpdateResult =
+type Update parent props state config updateResult =
     forall newprops oldprops newstate oldstate dom cfg.
     ( newprops ~ ComponentProperties props
     , oldprops ~ props
@@ -2027,10 +2023,10 @@ type WillUpdate parent props state config willUpdateResult =
     , ?props :: Proxy props
     , ?state :: Proxy state
     , ?config :: Proxy config
-    , Method "WillUpdate"
+    , Method "Update"
       '[ About
          '[ "This method is run before a re-render and diff inside of an"
-          , "animation frame. WillUpdate is useful, in situations where the"
+          , "animation frame. Update is useful, in situations where the"
           , "transient view is reliable, for performing reflowing analysis"
           , "before a view is updated, e.g., the F step in FLIP animations."
           ]
@@ -2058,10 +2054,10 @@ type WillUpdate parent props state config willUpdateResult =
           , Variable dom
             '[ About
                '[ "A transient view of the managed DOM for the Component"
-                , "being reconciled. Made available to WillUpdate via"
+                , "being reconciled. Made available to Update via"
                 , "`ask`. It is likely for this view to be invalidated"
                 , "during the re-rendering and diffing performed"
-                , "immediately after WillUpdate."
+                , "immediately after Update."
                 ]
              ]
           , Variable config
@@ -2078,10 +2074,10 @@ type WillUpdate parent props state config willUpdateResult =
             '[ About '[ "Old state from the previous render." ] ]
           ]
        , Results
-         '[ Result willUpdateResult
+         '[ Result updateResult
             '[ About
                '[ "An arbitrary result type that will be passed to"
-                , "DidUpdate."
+                , "Updated."
                 ]
              ]
           ]
@@ -2094,9 +2090,9 @@ type WillUpdate parent props state config willUpdateResult =
              , Reader () cfg
              ]
              IO
-             willUpdateResult
+             updateResult
 
-runWillUpdate
+runUpdate
   :: ( newprops ~ props
      , oldprops ~ props
      , oldstate ~ state
@@ -2106,9 +2102,9 @@ runWillUpdate
      , ?props :: Proxy props
      , ?state :: Proxy state
      , ?config :: Proxy config
-     , Function "runWillUpdate"
+     , Function "runUpdate"
        '[ About
-          '[ "Run a willUpdate method with old and new properties and old"
+          '[ "Run an update method with old and new properties and old"
            , "and new state as well as a transient view. New props, new"
            , "state, and the transient view of the DOM are available to the"
            , "method via `ask`. New props and state are avaialble via"
@@ -2123,7 +2119,7 @@ runWillUpdate
               ]
            ]
         , Params
-          '[ Param willUpdateMethod
+          '[ Param updateMethod
              '[ About
                 '[ "A method to be invoked to before a re-render and diff." ]
               ]
@@ -2143,7 +2139,7 @@ runWillUpdate
              '[ About
                 '[ "New state; may be the same as old state. Produced either"
                  , "as a result of a state update call or during"
-                 , "willReceiveProps if this reconciliation cycle is due to"
+                 , "receiveProps if this reconciliation cycle is due to"
                  , "the reception of new properties."
                  ]
               ]
@@ -2164,28 +2160,28 @@ runWillUpdate
               ]
           ]
         , Results
-          '[ Result willUpdateResult
+          '[ Result updateResult
              '[ About
-                '[ "An arbitrary result typed tied to the DidUpdate method."
+                '[ "An arbitrary result typed tied to the Updated method."
                  , "This is optionally where the result of DOM analysis is"
                  , "returned for animations that will be initiated in"
-                 , "DidUpdate."
+                 , "Updated."
                  ]
               ]
            ]
         ]
-     ) => WillUpdate parent props state config willUpdateResult -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO willUpdateResult
-runWillUpdate willUpdateMethod oldprops newprops oldstate newstate dom config = do
+     ) => Update parent props state config updateResult -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO updateResult
+runUpdate updateMethod oldprops newprops oldstate newstate dom config = do
   let obj = Ef.Base.Object $
               reader (ComponentProperties newprops)
               *:* reader (ComponentState newstate)
               *:* reader (ComponentView dom)
               *:* reader (ComponentConfig config)
               *:* Ef.Base.Empty
-  (_,result) <- obj Ef.Base.! (willUpdateMethod oldprops oldstate)
+  (_,result) <- obj Ef.Base.! (updateMethod oldprops oldstate)
   return result
 
-type DidUpdate willUpdateResult parent props state config =
+type Updated updateResult parent props state config =
     forall newprops oldprops newstate oldstate dom cfg.
     ( newprops ~ ComponentProperties props
     , oldprops ~ props
@@ -2197,10 +2193,10 @@ type DidUpdate willUpdateResult parent props state config =
     , ?props :: Proxy props
     , ?state :: Proxy state
     , ?config :: Proxy config
-    , Method "DidUpdate"
+    , Method "Updated"
       '[ About
          '[ "This method is run after a re-render and diff inside of an"
-          , "animation frame. DidUpdate is useful for performing reflowing"
+          , "animation frame. Updated is useful for performing reflowing"
           , "analysis after a view is updated, e.g to begin a CSS animation"
           , "using the FLIP approach."
           ]
@@ -2228,23 +2224,23 @@ type DidUpdate willUpdateResult parent props state config =
            , Variable dom
              '[ About
                 '[ "A transient view of the managed DOM for the Component"
-                 , "being reconciled. Made available to WillUpdate via"
+                 , "being reconciled. Made available to Update via"
                  , "`ask`. It is likely for this view to be invalidated"
                  , "during the re-rendering and diffing performed"
-                 , "immediately after WillUpdate."
+                 , "immediately after Update."
                  ]
               ]
            ]
         , Params
-          '[ Param willUpdateResult
-             '[ About '[ "Result of the WillUpdate method." ] ]
+          '[ Param updateResult
+             '[ About '[ "Result of the Update method." ] ]
            , Param oldprops
              '[ About '[ "Old properties from the previous render." ] ]
            , Param oldstate
              '[ About '[ "Old state from the previous render." ] ]
            ]
         ]
-    ) => willUpdateResult
+    ) => updateResult
       -> oldprops
       -> oldstate
       -> Ef '[ Reader () newprops
@@ -2255,7 +2251,7 @@ type DidUpdate willUpdateResult parent props state config =
              IO
              ()
 
-runDidUpdate
+runUpdated
   :: ( newprops ~ props
      , oldprops ~ props
      , oldstate ~ state
@@ -2266,13 +2262,13 @@ runDidUpdate
      , ?props :: Proxy props
      , ?state :: Proxy state
      , ?config :: Proxy config
-     , Function "runDidUpdate"
+     , Function "runUpdated"
        '[ About
-          '[ "Run a didUpdate method with old and new properties and old"
+          '[ "Run an updated method with old and new properties and old"
            , "and new state as well as a transient view and the result of"
-           , "willUpdate. New props, new state, and the transient view of"
+           , "update. New props, new state, and the transient view of"
            , "the DOM are available to the method via `ask`. Old props, old"
-           , "state and the result of willUpdate are avaialble via"
+           , "state and the result of update are avaialble via"
            , "function parameterization. This method runs in an animation"
            , "frame before painting and permits non-reflowing use of"
            , "normally reflowing invocations, like getBoundingClientRect(),"
@@ -2288,7 +2284,7 @@ runDidUpdate
               ]
            ]
         , Params
-          '[ Param didUpdateMethod
+          '[ Param updatedMethod
              '[ About
                 '[ "The method to be invoked after a re-render and diff." ]
               ]
@@ -2305,7 +2301,7 @@ runDidUpdate
              '[ About
                 '[ "New state; may be the same as old state. Produced either"
                  , "as a result of a state update call or during"
-                 , "willReceiveProps if this reconciliation cycle is due to"
+                 , "receiveProps if this reconciliation cycle is due to"
                  , "the reception of new properties."
                  ]
               ]
@@ -2315,9 +2311,9 @@ runDidUpdate
                  , "being reconciled. It is likely for this view to be"
                  , "invalidated later during the next reconciliation cycle"
                  , "when the view is re-rendered and this view is diffed"
-                 , "against it. During the evaluation of didUpdate, this"
+                 , "against it. During the evaluation of updated, this"
                  , "view should be valid and active unless it was manipulated"
-                 , "by another DidUpdate method."
+                 , "by another Updated method."
                  ]
               ]
            , Param config
@@ -2326,9 +2322,9 @@ runDidUpdate
                  , "initialization."
                  ]
               ]
-           , Param willUpdateResult
+           , Param updateResult
              '[ About
-                '[ "An arbitrary result typed tied to the previous WillUpdate"
+                '[ "An arbitrary result typed tied to the previous Update"
                  , "method. This is optionally where the result of DOM"
                  , "analysis was passed for animations that are to be"
                  , "initiated in the active animation frame. While the"
@@ -2341,18 +2337,18 @@ runDidUpdate
            ]
         ]
 
-     ) => DidUpdate willUpdateResult parent props state config -> willUpdateResult -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO ()
-runDidUpdate didUpdateMethod willUpdateResult oldprops newprops oldstate newstate dom config = do
+     ) => Updated updateResult parent props state config -> updateResult -> oldprops -> newprops -> oldstate -> newstate -> dom -> config -> IO ()
+runUpdated updatedMethod updateResult oldprops newprops oldstate newstate dom config = do
   let obj = Ef.Base.Object $
               reader (ComponentProperties newprops)
               *:* reader (ComponentState newstate)
               *:* reader (ComponentView dom)
               *:* reader (ComponentConfig config)
               *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! (didUpdateMethod willUpdateResult oldprops oldstate)
+  _ <- obj Ef.Base.! (updatedMethod updateResult oldprops oldstate)
   return ()
 
-type WillUnmount parent props state config willUnmountResult =
+type Unmount parent props state config unmountResult =
   forall ps st dom cfg.
   ( ps ~ ComponentProperties props
   , st ~ ComponentState state
@@ -2362,7 +2358,7 @@ type WillUnmount parent props state config willUnmountResult =
   , ?props :: Proxy props
   , ?state :: Proxy state
   , ?config :: Proxy config
-  , Method "WillUnmount"
+  , Method "Unmount"
     '[ About
        '[ "This method is run before a Component's view is unmounted and"
         , "destroyed. Any manually added listeners should be removed here."
@@ -2392,17 +2388,17 @@ type WillUnmount parent props state config willUnmountResult =
            , Reader () cfg
            ]
            IO
-           willUnmountResult
+           unmountResult
 
-runWillUnmount
+runUnmount
   :: ( dom ~ View parent
      , ?parent :: Proxy parent
      , ?props :: Proxy props
      , ?state :: Proxy state
      , ?config :: Proxy config
-     , Function "runWillUnmount"
+     , Function "runUnmount"
        '[ About
-          '[ "Run a willUnmount method with current properties and state as"
+          '[ "Run an unmount method with current properties and state as"
            , "well as the final view of the DOM. This is where manually"
            , "attached event listeners should be detached before the"
            , "Component is destructed."
@@ -2416,7 +2412,7 @@ runWillUnmount
               ]
            ]
         , Params
-          '[ Param willUnmountMethod
+          '[ Param unmountMethod
              '[ About
                 '[ "The method to be invoked before the Component is"
                  , "destructed."
@@ -2438,28 +2434,28 @@ runWillUnmount
               ]
            ]
         , Results
-          '[ Result willUnmountResult
+          '[ Result unmountResult
              '[ About
-                '[ "Result of the call to the willUnmountMethod. This result"
+                '[ "Result of the call to the unmountMethod. This result"
                  , "will be tied into the Destructor method. May be useful"
                  , "for debugging and profiling."
                  ]
               ]
            ]
         ]
-     ) => WillUnmount parent props state config willUnmountResult -> props -> state -> dom -> config -> IO willUnmountResult
-runWillUnmount willUnmountMethod props state dom config = do
+     ) => Unmount parent props state config unmountResult -> props -> state -> dom -> config -> IO unmountResult
+runUnmount unmountMethod props state dom config = do
   let obj = Ef.Base.Object $
               reader (ComponentProperties props)
               *:* reader (ComponentState state)
               *:* reader (ComponentView dom)
               *:* reader (ComponentConfig config)
               *:* Ef.Base.Empty
-  (_,willUnmountResult) <- obj Ef.Base.! willUnmountMethod
-  return willUnmountResult
+  (_,unmountResult) <- obj Ef.Base.! unmountMethod
+  return unmountResult
 
 
-type Destruct willUnmountResult props state config =
+type Destruct unmountResult props state config =
   forall ps st cfg.
   ( ps ~ ComponentProperties props
   , st ~ ComponentState state
@@ -2471,12 +2467,12 @@ type Destruct willUnmountResult props state config =
     '[ About
        '[ "This method is run at the end of the Component's lifecycle with"
         , "final access to the Component's properties, state, configuration"
-        , "and the result of the WillUnmount method."
+        , "and the result of the Unmount method."
         ]
      , Params
-       '[ Param willUnmountResult
+       '[ Param unmountResult
           '[ About
-             '[ "Result of the predecessor call to WillUnmount." ]
+             '[ "Result of the predecessor call to Unmount." ]
            ]
         ]
      , Environment
@@ -2490,7 +2486,7 @@ type Destruct willUnmountResult props state config =
            ]
         ]
      ]
-  ) => willUnmountResult
+  ) => unmountResult
     -> Ef '[ Reader () ps
            , Reader () st
            , Reader () cfg
@@ -2508,12 +2504,12 @@ runDestruct
           '[ "This function runs the final cleanup method for a Component."
            , "This is the last time this Component's props, state and config"
            , "will be accessible. This method is passed the result of"
-           , "WillUnmount."
+           , "Unmount."
            ]
         , Params
-          '[ Param willUnmountResult
+          '[ Param unmountResult
              '[ About
-                '[ "Result of the predecessor call to WillUnmount." ]
+                '[ "Result of the predecessor call to Unmount." ]
               ]
            , Param props
              '[ About '[ "The final properties of the Component." ] ]
@@ -2525,157 +2521,49 @@ runDestruct
               ]
            ]
         ]
-     ) => Destruct willUnmountResult props state config -> willUnmountResult -> props -> state -> config -> IO ()
-runDestruct destructMethod willUnmountResult props state config = do
+     ) => Destruct unmountResult props state config -> unmountResult -> props -> state -> config -> IO ()
+runDestruct destructMethod unmountResult props state config = do
   let obj = Ef.Base.Object $
               reader (ComponentProperties props)
               *:* reader (ComponentState state)
               *:* reader (ComponentConfig config)
               *:* Ef.Base.Empty
-  _ <- obj Ef.Base.! (destructMethod willUnmountResult)
+  _ <- obj Ef.Base.! (destructMethod unmountResult)
   return ()
 
 type Renderer parent props state config =
   props -> state -> config -> StateUpdater props state -> View parent
 
-data Component (parent :: [* -> *]) (props :: *) (state :: *) (config :: *) (willMountResult :: *) (willUpdateResult :: *) (willUnmountResult :: *) =
+data Component (parent :: [* -> *]) (props :: *) (state :: *) (config :: *) (mountResult :: *) (updateResult :: *) (unmountResult :: *) =
     Component
-      { construct        -- ✔
-        :: Construct                                  props state config
-
-      , initialize       -- ✔
-        :: Initializer                                props state config
-
-      , willMount        -- ✔
-        :: WillMount                                  props state config willMountResult
-
-      , didMount         -- ✔
-        :: DidMount         willMountResult    parent props state config
-
-      , willReceiveProps -- ✔
-        :: WillReceiveProps                    parent props state config
-
-      , shouldUpdate     -- ✔
-        :: ShouldUpdate                        parent props state config
-
-      , willUpdate       -- ✔
-        :: WillUpdate                          parent props state config willUpdateResult
-
-      , renderer         -- ✔
-        :: Renderer                            parent props state config
-
-      , didUpdate        -- ✔
-        :: DidUpdate         willUpdateResult  parent props state config
-
-      , willUnmount      -- ✔
-        :: WillUnmount                         parent props state config willUnmountResult
-
-      , destruct         -- ✔
-        :: Destruct          willUnmountResult        props state config
-
+      { construct    :: Construct                         props state config
+      , initialize   :: Initializer                       props state config
+      , mount        :: Mount                             props state config mountResult
+      , mounted      :: Mounted      mountResult   parent props state config
+      , receiveProps :: ReceiveProps               parent props state config
+      , forceUpdate  :: ForceUpdate                parent props state config
+      , update       :: Update                     parent props state config updateResult
+      , renderer     :: Renderer                   parent props state config
+      , updated      :: Updated      updateResult  parent props state config
+      , unmount      :: Unmount                    parent props state config unmountResult
+      , destruct     :: Destruct     unmountResult        props state config
       }
 
-instance (Typeable parent, Typeable props, Typeable state, Typeable config) => Default (Component parent props state config willMountResult willUpdateResult willUnmountResult) where
+instance (Typeable parent, Typeable props, Typeable state, Typeable config) => Default (Component parent props state config mountResult updateResult unmountResult) where
   def =
     Component
-      { renderer         = \_ _ _ _ -> def
-      , destruct         = \_ -> def
-      , willUnmount      = return (error "willUnmount: no result")
-      , didUpdate        = \_ _ _ -> def
-      , willUpdate       = \_ _ -> return (error "willUpate: no result")
-      , shouldUpdate     = \_ _ -> return True
-      , willReceiveProps = \_ -> asks unwrapComponentState
-      , didMount         = \_ -> def
-      , willMount        = return (error "willMount: no result")
-      , initialize       = asks unwrapComponentState
-      , construct        = error "Component.construct: state not initialized."
+      { renderer     = \_ _ _ _ -> def
+      , destruct     = \_ -> def
+      , unmount      = return (error "unmount: no result")
+      , updated      = \_ _ _ -> def
+      , update       = \_ _ -> return (error "willUpate: no result")
+      , forceUpdate  = \_ _ -> return True
+      , receiveProps = \_ -> asks unwrapComponentState
+      , mounted      = \_ -> def
+      , mount        = return (error "mount: no result")
+      , initialize   = asks unwrapComponentState
+      , construct    = error "Component.construct: state not initialized."
       }
-
---
--- queueComponentPatch
---   :: ( patch ~ CPatch e props state
---      , queue ~ ComponentPatchQueue e prosp state
---     --  , Describe "queueComponentPatch"
---     --      '[ Param patch
---     --           '[ "A CPatch that contains two continuations to run before and"
---     --            , "after the patch is applied."
---     --            ]
---     --       , Param queue
---     --           '[ "An MVar containing a list of patches in reverse order."
---     --            ]
---     --       , About
---     --           '[ "If no existing patch is queued, this method will fork one."
---     --            ]
---     --       ]
---      )
---   => props -> state -> patch -> queue -> IO ()
--- queueComponentPatch ps st p cpq@(ComponentPatchQueue q_) = do
---   join . modifyMVar q_ $ \q ->
---     case q of
---       [] -> return ([q],void . forkIO $ runComponentPatch ps st cpq)
---       ps -> return (p:ps,return ())
---
--- runComponentPatch
---   :: ( queue ~ ComponentPatchQueue e props state
---      , cstate ~ ComponentState e props state
---     --  , Describe "runComponentPatch"
---     --      '[ Param queue
---     --           '[ "An MVar containing a list of patches in reverse order." ]
---     --       , About
---     --           '[ "The existing queue will be locked and reset"
---     --            , "If executed in the browse, runComponentPatch will request a"
---     --            , "new animation frame to perform a patch."
---     --            , "The existing queue will be reset"]
---     --       , About
---     --           '[ "All willUpdate methods are chained together with their state"
---     --            , "results being passed down the chain. After each willUpdate,"
---     --            , "the corresponding didUpdate will be constructed from the"
---     --            , "result and turned into an IO action and added to a queue"
---     --            , "to be executed with (sequence_ . reverse) at the end of the"
---     --            , "patch."
---     --            ]
---     --       ]
---      ) => props -> state -> queue -> IO ()
--- runComponentPatch ps st (ComponentPatchQueue cpq) = do
---   patches <- getPatches
---   chained <- chain patches
---   rAF $ do
---     st' <- runWillUpdates chained
---
---     runDiffs
---     run
---   where
---     getPatches = List.reverse <$> swapMVar cpq []
---
---     chain ps = (\(acc,ps,st) -> (List.reverse acc,ps,st)) <$> foldM go ([],ps,st) ps
---       where
---         go (acc,ps,st) CPatch {..} = do
---           case cp_update of
---             Left ps' -> do
---               st' <- runWillReceiveProps ps ps' st cp_willReceiveProps
---               su <- runShouldUpdate ps ps' st st' cp_shouldUpdate
---               return $
---                 if su then
---                   let p = Left (cp_willUpdate,cp_didUpdate,ps,ps',st,st')
---                   in (p:acc,ps',st')
---                 else
---                   (acc,ps',st')
---
---             Right f -> do
---               (st',cb) <- f ps st
---               su <- runShouldUpdate ps ps st st' cp_shouldUpdate
---               return $
---                 if su then
---                   let p = Right (cp_willUpdate,cp_didUpdate,ps,st,st',cb)
---                   in (p:acc,ps,st')
---                 else
---                   (acc,ps,st')
---
-
-
-
-
-
 
 _rAF f = void $ do
 #ifdef __GHCJS__
@@ -2685,352 +2573,215 @@ _rAF f = void $ do
 #else
   f
 #endif
-buildComponent :: (Ef e IO () -> IO ())
-               -> Maybe ENode
-               -> MVar (ComponentRecord e props state config)
-               -> Component e props state config x y z
-               -> IO ()
-buildComponent f mparent strec Component {..} = undefined
---   let ?parent = Proxy :: Proxy e
---   in do
---     let rAF f = void $ do
--- #ifdef __GHCJS__
---           rafCallback <- newRequestAnimationFrameCallback $ \_ -> f
---           win <- getWindow
---           requestAnimationFrame win (Just rafCallback)
--- #else
---           f
--- #endif
---
---     propUpdater <- newEmptyMVar
---
---     strec <- newEmptyMVar
---
---     let
---       updateStateInternal should_raf g = void $ forkIO $ do
---           (props,st,c,old,mid) <- takeMVar strec
---           (mst,cb) <- g props st
---           let
---             updateState props c old mid st mst cb = do
---                 case mst of
---                   Nothing  -> do
---                     putMVar strec (props,st,c,old,mid)
---                     cb
---                   Just st' -> do
---                     shouldUpd <- runShouldUpdate props props st st' c old
---
---                     when shouldUpd $ runWillUpdate props st' c old
---
---                     if shouldUpd then do
---                       (if should_raf then _rAF else id) $ do
---                         let new_mid = runRenderer props st' c (updateStateInternal False)
---                         new <- diffHelper f doc ch isFG old mid new_mid
---                         runDidUpdate props st' c new
---                         putMVar strec (props,st',c,new,new_mid)
---                         cb
---                     else do
---                       putMVar strec (props,st',c,old,mid)
---                       cb
---
---           updateState props c old mid st mst cb
---
---
---       updatePropsInternal props = forkIO $ do
---         (old_props,st,c,old,mid) <- takeMVar strec
---         st' <- runWillReceiveProps old_props props st c old
---         shouldUpd <- runShouldUpdate old_props props st st' c old
---         if shouldUpd then do
---           runWillUpdate props st' c old
---           let new_mid = runRenderer props st' c (updateStateInternal True)
---           new <- diffHelper f doc ch isFG old mid new_mid
---           mst <- runDidUpdate props st' c new
---           putMVar strec (props,st',c,new,new_mid)
---
---         else do
---           putMVar strec (props,st',c,old,mid)
---
---       unmountInternal = void $ do
---         (props,st,c,old,mid) <- takeMVar strec
---         runWillUnmount props st c
---         return ()
---
---     let comp = _stview f (updateStateInternal True)
---     st <- runConstructor _stprops comp
---     putMVar strec (_stprops,st,comp,nil,nil)
---     runWillMount _stprops st comp
---     let mid = runRenderer _stprops st comp (updateStateInternal False)
---     new <- go mparent (render mid)
---     runDidMount _stprops st comp new
---     modifyMVar strec $ \(props,st,comp,_,_) -> return ((props,st,comp,new,mid),())
---
---     return $
---       STView
---         _stprops
---         _stid
---         (Just strec)
---         _stview
---         (updateStateInternal False)
---         updatePropsInternal
---         unmountInternal
---         _stateProxy
---
 
-{-
-
-      let ?parent = Proxy :: Proxy e
-      in do
-        let rAF f = void $ do
-#ifdef __GHCJS__
-              rafCallback <- newRequestAnimationFrameCallback $ \_ -> f
-              win <- getWindow
-              requestAnimationFrame win (Just rafCallback)
-#else
-              f
-#endif
-
-        propUpdater <- newEmptyMVar
-
-        strec <- newEmptyMVar
-
-        let
-          updateStateInternal should_raf g = void $ forkIO $ do
-              -- putStrLn "7"
-              (props,st,c,old,mid) <- takeMVar strec
-              -- putStrLn "8"
-              (mst,cb) <- g props st
-              -- putStrLn "9"
-              let
-                updateState props c old mid st mst cb = do
-                    -- putStrLn "10"
-                    case mst of
-                      Nothing  -> do
-                        -- putStrLn "11"
-                        putMVar strec (props,st,c,old,mid)
-                        cb
-                      Just st' -> do
-                        -- putStrLn "12"
-                        shouldUpd <- runShouldUpdate props props st st' c old
-
-                        -- putStrLn "13"
-                        when shouldUpd $ runWillUpdate props st' c old
-
-                        if shouldUpd then do
-                          (if should_raf then _rAF else id) $ do
-                            -- putStrLn "14"
-                            let new_mid = runRenderer props st' c (updateStateInternal False)
-                            new <- diffHelper f doc ch isFG old mid new_mid
-                            -- putStrLn "15"
-                            runDidUpdate props st' c new
-                            putMVar strec (props,st',c,new,new_mid)
-                            cb
-                        else do
-                          -- putStrLn "16"
-                          putMVar strec (props,st',c,old,mid)
-                          cb
-
-              updateState props c old mid st mst cb
-
-
-          updatePropsInternal props = forkIO $ do
-            -- putStrLn "17"
-            (old_props,st,c,old,mid) <- takeMVar strec
-            -- putStrLn "18"
-            st' <- runWillReceiveProps old_props props st c old
-            -- putStrLn "19"
-            shouldUpd <- runShouldUpdate old_props props st st' c old
-            -- putStrLn "20"
-            if shouldUpd then do
-              -- putStrLn "21"
-              runWillUpdate props st' c old
-              let new_mid = runRenderer props st' c (updateStateInternal True)
-              -- putStrLn "22"
-              new <- diffHelper f doc ch isFG old mid new_mid
-              -- putStrLn "23"
-              mst <- runDidUpdate props st' c new
-              -- putStrLn "24"
-              putMVar strec (props,st',c,new,new_mid)
-
-            else do
-              -- putStrLn "25"
-              putMVar strec (props,st',c,old,mid)
-
-          unmountInternal = void $ do
-            (props,st,c,old,mid) <- takeMVar strec
-            runWillUnmount props st c
-            return ()
-
-        let comp = _stview f (updateStateInternal True)
-        -- putStrLn "1"
-        st <- runConstructor _stprops comp
-        -- putStrLn "2"
-        putMVar strec (_stprops,st,comp,nil,nil)
-        -- putStrLn "3"
-        runWillMount _stprops st comp
-        let mid = runRenderer _stprops st comp (updateStateInternal False)
-        -- putStrLn "4"
-        new <- go mparent (render mid)
-        -- putStrLn "5"
-        runDidMount _stprops st comp new
-        -- putStrLn "6"
-        modifyMVar strec $ \(props,st,comp,_,_) -> return ((props,st,comp,new,mid),())
-
-        return $
-          STView
-            _stprops
-            _stid
-            (Just strec)
-            _stview
-            (updateStateInternal False)
-            updatePropsInternal
-            unmountInternal
-            _stateProxy
-
--}
+buildComponent
+  :: ( parent <: '[]
+     , ?config ::Proxy config
+     , ?parent ::Proxy parent
+     , ?props  ::Proxy props
+     , ?state  ::Proxy state
+     ) => (Ef parent IO () -> IO ())
+       -> Maybe ENode
+       -> Bool
+       -> ControllerHooks
+       -> MVar (ComponentRecord parent props state config)
+       -> MVar (ComponentPatchQueue props state)
+       -> IORef (Maybe (PropsUpdater props))
+       -> IORef (Maybe (StateUpdater props state))
+       -> IORef (Maybe Unmounter)
+       -> props
+       -> Component parent props state config x y z
+       -> IO ()
+buildComponent f mparent isFG hooks strec stq pupd supd unm props c@Component {..} = do
+  fg <- newIORef isFG
+  (config,state) <- runConstruct construct props
+  result <- runMount mount props state config
+  d <- getDocument
+  mupd <- readIORef supd
+  forM_ mupd $ \upd ->
+    _rAF $ do
+      let mid = renderer props state config upd
+      new <- buildAndEmbedMaybe f d hooks isFG mparent mid
+      runMounted mounted result props state new config
+      putMVar strec $
+        ComponentRecord
+          props
+          state
+          config
+          pupd
+          supd
+          unm
+          f
+          fg
+          hooks
+          new
+          mid
+          c
+          stq
 
 newtype ComponentPatch props state =
-  ComponentPatch ::
-    { cpUpdate :: Maybe (Either props (StateUpdate props state)) }
+  ComponentPatch
+    { cpUpdate :: Either (MVar ()) (Either props (StateUpdate props state)) }
 
-newtype ComponentPatchQueue e props state config
-  = ComponentPatchQueue ([ComponentPatch e props state config],Bool)
+newtype ComponentPatchQueue props state
+  = ComponentPatchQueue ([ComponentPatch props state],Maybe ThreadId)
 
 data ComponentRecord parent props state config where
   ComponentRecord ::
     { crProps :: props
     , crState :: state
     , crConfig :: config
-    , crInject :: IORef (PropsUpdater props)
-    , crUpdate :: IORef (StateUpdater props state)
-    , crUnmount :: IORef Unmounter
+    , crInject :: IORef (Maybe (PropsUpdater props))
+    , crUpdate :: IORef (Maybe (StateUpdater props state))
+    , crUnmount :: IORef (Maybe Unmounter)
     , crLifter :: Lifter parent
+    , crForeground :: IORef Bool
+    , crControllerHooks :: ControllerHooks
     , crLive :: View parent
     , crMid :: View parent
-    , crComponent :: Component parent props state config willMountResult willUpdateResult willUnmountResult
+    , crComponent :: Component parent props state config mountResult updateResult unmountResult
+    , crPatchQueue :: MVar (ComponentPatchQueue props state)
     } -> ComponentRecord parent props state config
 
 newPatchQueue ::
   forall parent state props config.
-  ( ?parent :: Proxy parent
-  , ?state :: Proxy state
+  ( ?state :: Proxy state
   , ?props :: Proxy props
-  , ?config :: Proxy config
-  ) => IO (MVar (ComponentPatchQueue parent props state config))
-newPatchQueue = newMVar $ ComponentPatchQueue ([],False)
+  ) => IO (MVar (ComponentPatchQueue props state))
+newPatchQueue = newMVar $ ComponentPatchQueue ([],Nothing)
 
 queueComponentUpdate
   :: forall parent props state config x y z.
-     (
-     ) => MVar (ComponentPatchQueue parent props state config)
+     ( parent <: '[]
+     , ?config ::Proxy config
+     , ?parent ::Proxy parent
+     , ?props  ::Proxy props
+     , ?state  ::Proxy state
+     ) => MVar (ComponentPatchQueue props state)
        -> MVar (ComponentRecord parent props state config)
-       -> Maybe (Either props (StateUpdate props state))
-       -> IO ()
-queueComponentUpdate q crec epu = do
-  join $ modifyMVar q $ \(ComponentPatchQueue (ps,isPatching)) -> do
-    assert (List.null ps || isPatching) $ do
-      let p = ComponentPatch epu
-      return $
-        if isPatching then
-          (ComponentPatchQueue (p:ps,True),def)
-        else
-          (ComponentPatchQueue ([],True),void . forkIO $ componentPatcher q crec (List.reverse $ p:ps))
+       -> Either (MVar ()) (Either props (StateUpdate props state))
+       -> IO Bool ::: "Always returns True."
+queueComponentUpdate q crec mepu = do
+  modifyMVar q $ \(ComponentPatchQueue (ps,patchThread)) -> do
+    assert (List.null ps || isJust patchThread) $ do
+      let p = ComponentPatch mepu
+      if isJust patchThread then
+        return (ComponentPatchQueue (p:ps,patchThread),True)
+      else do
+        tid <- forkIO $ componentPatcher q crec (List.reverse $ p:ps)
+        return (ComponentPatchQueue ([],Just tid),True)
 
 data RenderUpdate where
   RenderUpdate
-    :: { willUpd :: IO willUpdateResult
-       , didUpd :: willUpdateResult -> IO ()
-       , updated :: IO ()
-       }
+    :: { ru_willUpd :: IO updateResult
+       , ru_didUpd :: updateResult -> IO ()
+       , ru_updated :: IO ()
+       } -> RenderUpdate
 
 componentPatcher
   :: forall parent props state config.
-     MVar (ComponentPatchQueue parent props state config)
-  -> MVar (ComponentRecord parent props state config)
-  -> [ComponentPatch parent props state config]
-  -> IO ()
-componentPatcher q crec ps =
-    cr <- takeMVar crec
-    go cr crProps crState crConfig crLive [] ps
+     ( parent <: '[]
+     , ?config ::Proxy config
+     , ?parent ::Proxy parent
+     , ?props  ::Proxy props
+     , ?state  ::Proxy state
+     ) => MVar (ComponentPatchQueue props state)
+       -> MVar (ComponentRecord parent props state config)
+       -> [ComponentPatch props state]
+       -> IO ()
+componentPatcher q crec ps = do
+    cr@ComponentRecord { .. } <- readMVar crec
+    go cr crComponent crProps crState crConfig crLive [] ps
   where
 
     invalidateComponent cr = do
-      writeIORef (crInject cr) (\_ -> return ())
-      writeIORef (crUpdate cr) (\_ -> return ())
-      writeIORef (crUnmount cr) (\_ -> return ())
-      putMVar crec cr
+      writeIORef (crInject cr) Nothing
+      writeIORef (crUpdate cr) Nothing
+      writeIORef (crUnmount cr) Nothing
 
+    continue :: IO ()
     continue =
-      join $ modifyMVar q $ \(ComponentPatchQueue (ps,isPatching)) -> do
-        assert isPatching $
+      join $ modifyMVar q $ \(ComponentPatchQueue (ps,patchThread)) -> do
+        assert (isJust patchThread) $
           return $
             case ps of
-              [] -> (ComponentPatchQueue ([],False),def)
-              _  -> (ComponentPatchQueue ([],True),componentPatcher q crec (List.reverse ps))
+              [] -> (ComponentPatchQueue ([],Nothing),def)
+              _  -> (ComponentPatchQueue ([],patchThread),componentPatcher q crec (List.reverse ps))
 
     go :: forall x y z.
           ComponentRecord parent props state config
+       -> Component parent props state config x y z
        -> props
        -> state
        -> config
        -> View parent
-       -> [RenderUpdate parent props state config]
-       -> [ComponentPatch parent props state config]
-       -> IO [RenderUpdate parent props state config]
-    go cr _ _ _ _ [] [] = do
-      putMVar crec cr
+       -> [RenderUpdate]
+       -> [ComponentPatch props state]
+       -> IO ()
+    go cr _ _ _ _ _ [] [] =
       continue
 
-    go cr newProps newState _ _ acc [] = do
-      barrier <- newEmptyMVar
-      rAF $ do
-        (newMid,newLive) <- runUpdates (crMid cr) (crLive cr) newProps newState (renderer crComponent) (List.reverse acc)
-        putMVar crec cr
-          { crLive = newLive
-          , crMid = newMid
-          , crState = newState
-          , crProps = newProps
-          }
-        putMVar barrier ()
-      () <- takeMVar barrier
+    go cr c newProps newState _ _ acc [] = do
+      renderUpdates <- newEmptyMVar
+      runUpdates renderUpdates newProps newState (List.reverse acc)
+      rus <- takeMVar renderUpdates
+      sequence_ rus
       continue
       where
-        runUpdates mid live props state acc [] =
-          new <- diffHelper
+        runUpdates renderUpdates props state as =
+          _rAF $ do
+            dus <- forM as $ \RenderUpdate {..} -> do
+              res <- ru_willUpd
+              return (ru_didUpd res,ru_updated)
+            mupd <- readIORef (crUpdate cr)
+            forM_ mupd $ \upd -> do
+              let new = (renderer c) props state (crConfig cr) upd
+              doc <- getDocument
+              isFG <- readIORef (crForeground cr)
+              new_live <- diffHelper (crLifter cr) doc (crControllerHooks cr) isFG (crLive cr) (crMid cr) new
+              cbs <- forM dus $ \(du,c) -> do
+                du
+                return c
+              swapMVar crec cr
+                { crLive = new_live
+                , crMid = new
+                , crState = state
+                , crProps = props
+                }
+              putMVar renderUpdates cbs
 
-    go c props state config live acc (ComponentPatch p : ps ) =
-      maybe unmount (either propUpdate stateUpdate) p
+    go cr c props state config live acc (ComponentPatch p : ps ) =
+      either remove (either propUpdate stateUpdate) p
       where
         propUpdate newProps = do
-          newState <- runWillReceiveProps (willReceiveProps c) props newProps state live config
-          should <- runShouldUpdate (shouldUpdate c) props newProps state newState live config
-          if should || not (List.null acc) then
+          newState <- runReceiveProps (receiveProps c) props newProps state live config
+          shouldUpdate <- runForceUpdate (forceUpdate c) props newProps state newState live config
+          if shouldUpdate || not (List.null acc) then
             let
-              will = runWillUpdate (willUpdate c) props newProps state newState live config
-              did = \wur -> runDidUpdate (didUpdate c) wur props newProps state newState live config
+              will = runUpdate (update c) props newProps state newState live config
+              did = \wur -> runUpdated (updated c) wur props newProps state newState live config
             in
-              go newProps newState config live (RenderUpdate will did def : acc) ps
+              go cr c newProps newState config live (RenderUpdate will did def : acc) ps
           else
-            go newProps newState config live acc ps
+            go cr c newProps newState config live acc ps
 
         stateUpdate f = do
-          (newState,updatedCallback) <- f props state config
-          should <- runShouldUpdate (shouldUpdate c) props props state newState live config
-          if should || not (List.null acc) then
+          (newState,updatedCallback) <- f props state
+          shouldUpdate <- runForceUpdate (forceUpdate c) props props state newState live config
+          if shouldUpdate || not (List.null acc) then
             let
-              will = runWillUpdate (willUpdate c) props props state newState live config
-              did = \wur -> runDidUpdate (didUpdate c) wur props props state newState live config
+              will = runUpdate (update c) props props state newState live config
+              did = \wur -> runUpdated (updated c) wur props props state newState live config
             in
-              go props newState config live (RenderUpdate will did updatedCallback : acc) ps
+              go cr c props newState config live (RenderUpdate will did updatedCallback : acc) ps
           else
-            go props newState config live acc ps
+            go cr c props newState config live acc ps
 
-        unmount = do
-          barrier <- newEmptyMVar
-          rAF $ do
-            wur <- runWillUnmount (willUnmount c) props state live config
-            runDestruct (destruct c) wur props state config
-            putMVar barrier ()
-          takeMVar barrier
-          invalidateComponent
+        remove barrier = do
+          invalidateComponent cr
+          wur <- runUnmount (unmount c) props state live config
+          putMVar barrier ()
+          runDestruct (destruct c) wur props state config
 
 -- consider this: https://github.com/spicyj/innerhtml-vs-createelement-vs-clonenode
 -- and this: https://stackoverflow.com/questions/8913419/is-chromes-appendchild-really-that-slow
@@ -3073,21 +2824,41 @@ buildAndEmbedMaybe f doc ch isFG mn v = do
       in do
         strec <- newEmptyMVar
         stq <- newPatchQueue
-        stUpd <- newIORef $ queueComponentStateUpdate stq strec . Just . Right
-        psUpd <- newIORef $ queueComponentStateUpdate stq strec . Just . Left
-        unm <- newIORef $ queueComponentStateUpdate stq strec Nothing
+        stUpd <- newIORef $ Just $ queueComponentUpdate stq strec . Right . Right
+        psUpd <- newIORef $ Just $ queueComponentUpdate stq strec . Right . Left
+        unm   <- newIORef $ Just $ queueComponentUpdate stq strec . Left
         let
-          stateUpdater f = readIORef stUpd <*> pure f
-          propsUpdater ps = readIORef psUpd <*> pure ps
-          unmounter = join $ readIORef unm
+          stateUpdater f = do
+            upd <- readIORef stUpd
+            case upd of
+              Nothing  -> return False
+              Just upd -> do
+                upd f
+                return True
+
+          propsUpdater ps = do
+            upd <- readIORef psUpd
+            case upd of
+              Nothing  -> return False
+              Just upd -> do
+                upd ps
+                return True
+
+          unmounter = do
+            upd <- readIORef unm
+            case upd of
+              Nothing  -> return False
+              Just upd -> do
+                barrier <- newEmptyMVar
+                upd barrier
+                takeMVar barrier
+                return True
+
           c = _stview f stateUpdater
-        case mparent of
-          Nothing -> void . forkIO $ buildComponent f Nothing strec c
-          Just parent -> do
-            Just el <- createElement doc "template"
-            forM_ mparent (flip appendChild el)
-            buildComponent f (Just el) strec c
-        return $ STView _stprops (Just strec) (Just stq) _stview _stStateProxy _stPropsProxy _stConfigProxy
+
+        buildComponent f mparent isFG ch strec stq psUpd stUpd unm _stprops c
+
+        return $ STView _stprops (Just strec) _stview _stStateProxy _stPropsProxy _stConfigProxy
 
     go mparent SVG {..} = do
       _node@(Just el) <- createElementNS doc "http://www.w3.org/2000/svg" _tag
@@ -3403,23 +3174,37 @@ diffHelper f doc ch isFG =
 
     go' old@STView {} _ new@STView {} = do
       case (old,new) of
-        (STView p ~(Just r) ~(Just q) c _ _ _,STView p' _ _ _ _ _ _) -> do
+        (STView p ~(Just r) c _ _ _,STView p' _ _ _ _ _) -> do
           if typeOf p == typeOf p' then
             if reallyVeryUnsafeEq p p' then do
               return old
-            else
-              void . forkIO $
-                withMVar r $ \ComponentRecord {..} ->
-                  crInject p'
+            else do
+              withMVar r $ \ComponentRecord {..} -> do
+                inj <- readIORef crInject
+                forM_ inj ($ (unsafeCoerce p'))
+              return old
           else do
             -- FIXME: This is still wonky.
-            ComponentRecord {..} <- readMVar r
             new' <- buildHTML doc ch isFG f new
-            replace crLive new'
-            didUnmount <- cleanup f [unsafeCoerce crLive]
-            delete crLive
-            didUnmount
+            ComponentRecord {..} <- readMVar r
+            barrier <- newEmptyMVar
+            munm <- readIORef crUnmount
+            case munm of
+              Nothing ->
+                -- ?
+                replace crLive new'
+              Just unm -> do
+                b <- unm barrier
+                if b then do
+                  replace crLive new'
+                  didUnmount <- cleanup f [crLive]
+                  delete crLive
+                  didUnmount
+                else do
+                  -- hmm?
+                  replace crLive new'
             return new'
+
 
     go' old@SVG {} mid@SVG {} new@SVG {} =
       if prettyUnsafeEq (_tag old) (_tag new)
@@ -3543,6 +3328,23 @@ diffHelper f doc ch isFG =
       case old of
         t@(TextView (Just o) _) ->
           forM_ (_node n') (swapContent o)
+        STView {..} ->
+          forM_ _strecord $ \strec_ -> do
+            strec <- readMVar strec_
+            barrier <- newEmptyMVar
+            munm <- readIORef (crUnmount strec)
+            case munm of
+              Nothing  -> replace old n'
+              Just unm -> do
+                b <- unm barrier
+                if b then do
+                  replace old n'
+                  didUnmount <- cleanup f [old]
+                  delete old
+                  didUnmount
+                else do
+                  -- hmm?
+                  replace old n'
         _ -> do
           replace old n'
           didUnmount <- cleanup f [old]
