@@ -62,3 +62,11 @@
 	path = deps/atomic-websocket
 	url = https://github.com/grumply/atomic-websocket.git
 	branch = master
+[submodule "deps/ef"]
+	path = deps/ef
+	url = https://github.com/grumply/ef.git
+	branch = master
+[submodule "deps/ef-base"]
+	path = deps/ef-base
+	url = https://github.com/grumply/ef-base.git
+	branch = master

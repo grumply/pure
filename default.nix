@@ -54,7 +54,7 @@ let
                 new.callPackage ./deps/atomic-router/atomic-router.nix { };
 
               atomic-server =
-                new.callPackage ./deps/atomic-server/atomic-server.nix { };
+                new.callPackage ./deps/atomic-server/atomic-server.nix { secure=secure; debugws=debugws; devel=devel; };
 
               atomic-service =
                 new.callPackage ./deps/atomic-service/atomic-service.nix { };
@@ -85,7 +85,6 @@ in
     ef = pkgs.haskell.packages.${compiler}.ef;
     ef-base = pkgs.haskell.packages.${compiler}.ef-base;
     tlc = pkgs.haskell.packages.${compiler}.tlc;
-    trivial = pkgs.haskell.packages.${compiler}.trivial;
     atomic-base = pkgs.haskell.packages.${compiler}.atomic-base;
     atomic-types = pkgs.haskell.packages.${compiler}.atomic-types;
     atomic-app = pkgs.haskell.packages.${compiler}.atomic-app;
