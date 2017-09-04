@@ -1,18 +1,33 @@
 # atomic
+
 A unified full-stack web application framework in Haskell. 
-
-Atomic:
-
-* Is performance-oriented with server-side concurrency and client-side multitasking. 
-* Uses a hierarchical MVC with services (HMVCS) approach for expressive UIs. 
-* Permits server-side execution/rendering of UIs. 
-* Has first-class, type-safe, composable websocket APIs and API implementations.
-* Uses the same context abstractions (services, modules, etc...) on client and server; learn once, write anywhere.
-* Uses and exposes a set of reactive-oriented programming primitives like signals, behaviors, promises and evented contexts.
-* Implements *an extensible dynamically-typed hierarchy of views* a la [Marlow '06 (PDF)](http://simonmar.github.io/bib/papers/ext-exceptions.pdf).
 
 *Documentation is OUT OF DATE as of the latest framework updates. Updates forthcoming.*
 
-Documentation is under construction [here](https://grumply.gitbooks.io/atomic). 
+Features:
 
-A simple real-time chat application with a GitBook tutorial exists [here](https://github.com/grumply/atomic-chat) as a demonstration of the `atomic` fundamentals.
+* Performance-oriented
+* Hierarchical MVC with services (HMVCS)
+* MVC-style component views (asynchronous)
+* React-style component views (synchronous)
+* Extensible views a la [Marlow '06 (PDF)](http://simonmar.github.io/bib/papers/ext-exceptions.pdf)
+* Pure views (basic HTML/SVG, keyed and unkeyed)
+* Global named services
+* Local named modules
+* Routing
+* Reactive primitives
+* Server rendering
+* Typed and composable websocket APIs
+
+## Version 0.6
+
+* Per-component and per-controller asynchronous (fibered) diffing with deferred and batched application. 
+* React-style components
+
+## Version 0.5:
+
+* Extensible views a la [Marlow '06 (PDF)](http://simonmar.github.io/bib/papers/ext-exceptions.pdf).
+
+## Version 0.4:
+
+* First-class, type-safe and composable websocket API specifications and implementations.

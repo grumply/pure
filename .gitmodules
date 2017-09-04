@@ -1,0 +1,64 @@
+[submodule "deps/atomic-base"]
+	path = deps/atomic-base
+	url = https://github.com/grumply/atomic-base
+	branch = master
+[submodule "deps/trivial"]
+	path = deps/trivial
+	url = https://github.com/grumply/trivial
+	branch = master
+[submodule "deps/tlc"]
+	path = deps/tlc
+	url = https://github.com/grumply/tlc.git
+	branch = master
+[submodule "deps/atomic-types"]
+	path = deps/atomic-types
+	url = https://github.com/grumply/atomic-types.git
+	branch = master
+[submodule "deps/atomic-app"]
+	path = deps/atomic-app
+	url = https://github.com/grumply/atomic-app.git
+	branch = master
+[submodule "deps/atomic-attributes"]
+	path = deps/atomic-attributes
+	url = https://github.com/grumply/atomic-attributes.git
+	branch = master
+[submodule "deps/atomic-css"]
+	path = deps/atomic-css
+	url = https://github.com/grumply/atomic-css.git
+	branch = master
+[submodule "deps/atomic-dom"]
+	path = deps/atomic-dom
+	url = https://github.com/grumply/atomic-dom.git
+	branch = master
+[submodule "deps/atomic-html"]
+	path = deps/atomic-html
+	url = https://github.com/grumply/atomic-html.git
+	branch = master
+[submodule "deps/atomic-module"]
+	path = deps/atomic-module
+	url = https://github.com/grumply/atomic-module.git
+	branch = master
+[submodule "deps/atomic-router"]
+	path = deps/atomic-router
+	url = https://github.com/grumply/atomic-router.git
+	branch = master
+[submodule "deps/atomic-server"]
+	path = deps/atomic-server
+	url = https://github.com/grumply/atomic-server.git
+	branch = master
+[submodule "deps/atomic-service"]
+	path = deps/atomic-service
+	url = https://github.com/grumply/atomic-service.git
+	branch = master
+[submodule "deps/atomic-signals"]
+	path = deps/atomic-signals
+	url = https://github.com/grumply/atomic-signals.git
+	branch = master
+[submodule "deps/atomic-svg"]
+	path = deps/atomic-svg
+	url = https://github.com/grumply/atomic-svg.git
+	branch = master
+[submodule "deps/atomic-websocket"]
+	path = deps/atomic-websocket
+	url = https://github.com/grumply/atomic-websocket.git
+	branch = master

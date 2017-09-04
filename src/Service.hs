@@ -1,6 +1,6 @@
-module Service (module Export, module Service) where
+module Service (module Export) where
 
-import Ef.Base as Export hiding (As,Index,child,watch,transform,construct,uncons,distribute,embed,observe,End,Nat(..),maps,initialize)
+import Ef.Base as Export hiding (As,Index,child,transform,watch,construct,uncons,distribute,embed,observe,End,Nat(..),initialize)
+import Atomic  as Export
+
 import Atomic.Service as Export
-import Atomic as Export hiding (maps)
-import Prelude as Export hiding (any,and,or,all,exponent,tan,lookup,reverse)
