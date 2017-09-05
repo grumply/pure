@@ -16,13 +16,15 @@ module Atomic
 
 -- This module is a bit of a sin bin
 
-import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End,initialize,construct,maps)
+import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End,initialize,construct,maps,send,run)
+
+import Atomic.Types
+import Atomic.Types.JSV
 
 import Atomic.Base          as Export hiding (String,Text,Null,(!),hashed)
 
 import qualified Data.Txt as Txt
 
-import Data.IORef
 import Data.Typeable
 
 import Debug.Trace
@@ -31,8 +33,8 @@ import System.IO.Unsafe
 import Unsafe.Coerce
 
 import Language.Haskell.TH.Syntax
-import Language.Haskell.TH
 
+import GHC.Generics as Export (Generic(..),to,from)
 -- grid :: StaticCSS
 -- grid = $( let g = staticCSS flexboxGrid in [| g |] )
 

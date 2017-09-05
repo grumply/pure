@@ -3,13 +3,14 @@
 {-# LANGUAGE PolyKinds #-}
 module View (module Export) where
 
-import Ef.Base              as Export hiding (As,Index,child,transform,watch,construct,uncons,distribute,embed,observe,End,Nat(..),initialize,maps)
 import Atomic               as Export hiding (Alt)
-import Atomic.DOM           as Export (forceDiff,currentHTML,ownHTML,setEagerDiff,setManualDiff,onModelChange,onOwnModelChange,onOwnModelChangeByProxy,getModel,putModel,modifyModel)
+import Atomic.DOM           as Export (forceDiff,currentHTML,ownHTML,setEagerDiff,setManualDiff,onModelChange,onOwnModelChange,onOwnModelChangeByProxy,getModel,putModel,modifyModel,onRaw,getHost)
+import Atomic.Types.CB      as Export hiding (Callback)
 import Atomic.Types.View    as Export
-import Atomic.Types.Feature as Export (Feature)
+import Atomic.Types.Feature as Export (Feature,Options(..),Evt(..),Target(..))
 import Atomic.HTML          as Export
 import Atomic.CSS           as Export
+import Atomic.CSS.Styles    as Export
 import Atomic.Attributes    as Export
 
 import Atomic.Signals       as Export

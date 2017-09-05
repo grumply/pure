@@ -19,6 +19,7 @@ library
     , Router
     , SVG
     , Service
+    , Txt
     , View
   other-modules:
       Atomic
@@ -36,7 +37,6 @@ library
     , atomic-html
     , atomic-module
     , atomic-router
-    , atomic-server
     , atomic-service
     , atomic-signals
     , atomic-svg
@@ -45,10 +45,9 @@ library
 
   if (impl(ghcjs))
     cpp-options: -DGHCJS_BROWSER
-    build-depends:
-        ghcjs-base
-      , atomic-server
   else
+    build-depends:
+        atomic-server
     exposed-modules:
         Server
       , Connection
