@@ -4,10 +4,10 @@
 module View (module Export) where
 
 import Atomic               as Export hiding (Alt)
-import Atomic.DOM           as Export (forceDiff,currentHTML,ownHTML,setEagerDiff,setManualDiff,onModel,onOwnModel,getModel,putModel,modifyModel,onRaw,getHost,setState,setProps,unmountComponent,getView,getState,getProps)
+import Atomic.DOM           as Export (forceDiff,currentHTML,ownHTML,setEagerDiff,setManualDiff,onModel,onOwnModel,getModel,putModel,modifyModel,onRaw,getHost,setState,setProps,parent,unmountComponent,getView,getState,getProps)
 import Atomic.Types.CB      as Export hiding (Callback)
 import Atomic.Types.View    as Export
-import Atomic.Types.Feature as Export (Feature,Options(..),Evt(..),Target(..))
+import Atomic.Types.Feature as Export (Feature,Options(..),Target(..),Evt(..))
 import Atomic.Types.Lifted  as Export (scrollToTop,blurNode,clickNode,focusNode,requestAnimationFrame,cancelAnimationFrame,isNull,findById,findByTag)
 import Atomic.Types.JSV     as Export hiding (Text)
 import Atomic.HTML          as Export

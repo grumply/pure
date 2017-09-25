@@ -40,6 +40,9 @@ import GHC.Generics as Export (Generic(..),to,from)
 -- grid :: StaticCSS
 -- grid = $( let g = staticCSS flexboxGrid in [| g |] )
 
+instance (Monad c) => Default (Callback_ status result c) where
+  def = Callback (\_ -> return ()) (\_ -> return ()) (\_ -> return ())
+
 #ifdef __GHCJS__
 foreign import javascript unsafe
   "console.log($1);console.log($2);"

@@ -13,6 +13,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:
       App
+    , Base
     , CSS
     , HTML
     , Module
@@ -21,6 +22,7 @@ library
     , Service
     , Txt
     , View
+    , WebSocket
   other-modules:
       Atomic
 
