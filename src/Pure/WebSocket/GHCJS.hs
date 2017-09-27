@@ -24,10 +24,11 @@ module Pure.WebSocket.GHCJS where
 
 import Ef.Base
 
-import Data.JSON as AE
+import Pure.Data.JSON as AE
 
 import Pure.Data
 import Pure.Types
+import Pure.Lifted
 
 import Pure.WebSocket.API
 import Pure.WebSocket.Dispatch
@@ -1022,7 +1023,7 @@ messageWith :: ( MonadIO c
             -> Proxy mTy
             -> msg
             -> Ef ms c (Promise (Either WSException SendStatus))
-messageWith s mty_proxy m = Atomic.WebSocket.GHCJS.send s (messageHeader mty_proxy) m
+messageWith s mty_proxy m = Pure.WebSocket.GHCJS.send s (messageHeader mty_proxy) m
 
 apiMessageWith :: ( MonadIO c
                   , MonadIO c'

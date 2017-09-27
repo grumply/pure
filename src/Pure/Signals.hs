@@ -8,6 +8,7 @@ import Ef.Base
 
 import Pure.Data
 import Pure.Types
+import Pure.Lifted
 
 #ifdef __GHCJS__
 import GHCJS.Foreign.Callback as CB
