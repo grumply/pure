@@ -298,7 +298,7 @@ renderPage (Page h c) =
                 [ unsafeCoerce $ render $ view model
                 , Body []
                     [ case c of
-                        Controller_ a@Controller {} -> mvc Div [ Id "atomic" ] a
+                        Controller_ a@Controller {} -> mvc Div [ Id "pure" ] a
                     ]
                 ]
         in
@@ -311,7 +311,7 @@ renderPage (Partial c) =
             [ Head [] []
             , Body []
                 [ case c of
-                    Controller_ a@Controller {} -> mvc Div [ Id "atomic" ] a
+                    Controller_ a@Controller {} -> mvc Div [ Id "pure" ] a
                 ]
             ]
     in
@@ -328,7 +328,7 @@ renderPageBootstrap (Page h c) mainScript =
                 [ Head [] []
                 , Body []
                     [ case c of
-                        Controller_ a@Controller {} -> mvc Div [ Id "atomic" ] a
+                        Controller_ a@Controller {} -> mvc Div [ Id "pure" ] a
                     , Script [ Src mainScript, Defer True ] []
                     ]
                 ]
@@ -343,7 +343,7 @@ renderPageBootstrap (Partial c) mainScript =
               Html []
                 [ Head [] []
                 , Body []
-                    [ mvc Div [ Id "atomic" ] a
+                    [ mvc Div [ Id "pure" ] a
                     , Script [ Src mainScript, Defer True ] []
                     ]
                 ]
@@ -356,14 +356,14 @@ renderDynamicPage (Page (Controller_ h) (Controller_ c)) = do
   Just h_ <- demandMaybe =<< currentHTML h
   head_html <- renderDynamicHTML h_
   let bdy :: View '[]
-      bdy = Body [] [ mvc Div [ Id "atomic" ] c]
+      bdy = Body [] [ mvc Div [ Id "pure" ] c]
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> head_html <> body_html <> "</html>"
 renderDynamicPage (Partial (Controller_ c)) = do
   let dt = "<!DOCTYPE html><head></head>"
   Just c_ <- demandMaybe =<< currentHTML c
   let bdy :: View '[]
-      bdy = Body [] [ mvc Div [ Id "atomic" ] c ]
+      bdy = Body [] [ mvc Div [ Id "pure" ] c ]
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> body_html <> "</html>"
 
@@ -373,13 +373,13 @@ renderDynamicPageBootstrap (Page (Controller_ h) (Controller_ c)) mainScript = d
   Just h_ <- demandMaybe =<< currentHTML h
   head_html <- renderDynamicHTML h_
   let bdy :: View '[]
-      bdy = Body [] [ mvc Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
+      bdy = Body [] [ mvc Div [ Id "pure" ] c, Script [ Src mainScript, Defer True ] [] ]
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> head_html <> body_html <> "</html>"
 renderDynamicPageBootstrap (Partial (Controller_ c)) mainScript = do
   let dt = "<!DOCTYPE html><html><head></head>"
   let bdy :: View '[]
-      bdy = Body [] [ mvc Div [ Id "atomic" ] c, Script [ Src mainScript, Defer True ] [] ]
+      bdy = Body [] [ mvc Div [ Id "pure" ] c, Script [ Src mainScript, Defer True ] [] ]
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> body_html <> "</html>"
 

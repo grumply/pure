@@ -24,11 +24,11 @@ instance FromBS Dispatch
   where
     fromBS = eitherDecode' . BSL.takeWhile (/= 0)
   -- NOTE on BSL.takeWhile (/= 0):
-  -- fixes a padding bug when used with ghcjs/atomic. Is \NUL
+  -- fixes a padding bug when used with ghcjs/pure. Is \NUL
   -- valid in a text component of an encoded message?
   -- Probably need to filter \NUL from encoded messages
-  -- in ghcjs/atomic. Any use of a null byte is liable to clobber
-  -- a message and force a disconnect since ghc/atomic doesn't
+  -- in ghcjs/pure. Any use of a null byte is liable to clobber
+  -- a message and force a disconnect since ghc/pure doesn't
   -- permit malformed messages.
 #endif
 

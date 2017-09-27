@@ -1,4 +1,4 @@
-# atomic
+# pure
 
 A unified full-stack web application framework in Haskell. 
 

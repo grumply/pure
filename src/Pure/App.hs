@@ -252,7 +252,7 @@ getAppRoot mt = do
   me <- forM mt (liftIO . findById)
   case join me of
     Nothing -> do
-      me <- liftIO $ findById "atomic"
+      me <- liftIO $ findById "pure"
       case me of
         Nothing -> toNode . fromJust <$> liftIO (findByTag "body")
         Just e  -> return (toNode e)
