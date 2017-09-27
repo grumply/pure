@@ -1,0 +1,141 @@
+name:                pure
+version:             0.6.0.0
+synopsis:            Pure application framework.
+homepage:            github.com/grumply/pure
+license:             BSD3
+license-file:        LICENSE
+author:              S. M. Hickman
+maintainer:          sean@grump.ly
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+
+Flag secure
+     Description: enable secure server-side websockets
+     Default: False
+
+Flag debugws
+     Description: debug websocket messages
+     Default: False
+
+Flag devel
+     Description: development debugging
+     Default: True
+
+Flag debugapi
+     Description: log failed parsing at api endpoints
+     Default: False
+
+library
+  if flag(debugws)
+    cpp-options: -DDEBUGWS
+
+  if flag(devel)
+    cpp-options: -DDEVEL
+
+  if flag(debugapi)
+    cpp-options: -DDEBUGAPI
+
+  exposed-modules:
+      Pure.App
+    , Pure.Attributes
+    , Pure.CSS
+    , Pure.DOM
+    , Pure.Data
+    , Pure.HTML
+    , Pure.Lifted
+    , Pure.Module
+    , Pure.Render
+    , Pure.Route
+    , Pure.Router
+    , Pure.SVG
+    , Pure.Service
+    , Pure.Signals
+    , Pure.Styles
+    , Pure.Types
+    , Pure.View
+    , Pure.WebSocket
+
+  other-modules:
+      Pure.Data.BS
+    , Pure.Data.CB
+    , Pure.Data.Cond
+    , Pure.Data.Default
+    , Pure.Data.Ease
+    , Pure.Data.Identify
+    , Pure.Data.JSON
+    , Pure.Data.JSV
+    , Pure.Data.Key
+    , Pure.Data.Micros
+    , Pure.Data.Millis
+    , Pure.Data.Try
+    , Pure.Data.Txt
+    , Pure.Data.UnsafeEq
+    , Pure.Data.Vault
+    , Pure.Types.Feature
+    , Pure.Types.View
+    , Pure.WebSocket.API.Implementation
+    , Pure.WebSocket.API.Interface
+    , Pure.WebSocket.API.ProxyList
+    , Pure.WebSocket.API
+    , Pure.WebSocket.Dispatch
+    , Pure.WebSocket.Endpoint
+    , Pure.WebSocket.Message
+    , Pure.WebSocket.Request
+    , Pure.WebSocket.TypeRep
+
+  build-depends:
+      base >= 4.8
+    , ef
+    , ef-base
+    , websockets
+    , network
+    , bytestring
+    , io-streams 
+    , aeson
+    , containers
+    , text
+    , ghc-prim
+    , hashable
+    , template-haskell
+    , unordered-containers
+    , vector
+    , tlc
+    , trivial
+
+  if (impl(ghcjs))
+
+    build-depends:    ghcjs-base
+
+    other-modules:
+      Pure.WebSocket.GHCJS
+
+    cpp-options:      -DGHCJS_BROWSER
+
+  else
+
+    build-depends:
+        websockets      >= 0.9.6.1  && < 0.11
+      , network         >= 2.6.2.1  && < 2.7
+      , bytestring      >= 0.10.6   && < 0.11
+      , io-streams      >= 1.3.5    && < 1.5
+      , time
+      , random
+
+    other-modules:
+      Pure.WebSocket.GHC
+
+    exposed-modules:
+      Pure.Server
+      Pure.Connection
+
+    if flag(secure)
+
+      cpp-options:    -DSECURE
+
+      build-depends:
+          HsOpenSSL       >= 0.11.1.1 && < 0.12
+        , openssl-streams >= 1.2      && < 1.5
+
+  hs-source-dirs:      src
+  default-language:    Haskell2010

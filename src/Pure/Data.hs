@@ -11,21 +11,33 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Atomic
-  ( module Atomic
+module Pure.Data
+  ( module Pure.Data
   , module Export
   ) where
 
--- This module is a bit of a sin bin
+import Pure.Data.BS as Export
+import Pure.Data.CB as Export
+import Pure.Data.Cond as Export
+import Pure.Data.Default as Export
+import Pure.Data.Ease as Export
+import Pure.Data.Identify as Export
+import Pure.Data.JSON as Export
+import Pure.Data.JSV as Export
+import Pure.Data.Key as Export
+import Pure.Data.Micros as Export
+import Pure.Data.Millis as Export
+import Pure.Data.Try as Export
+import Pure.Data.UnsafeEq as Export
+import Pure.Data.Vault as Export
+import Pure.Data.Txt as Export (Txt,ToTxt(..),FromTxt(..),pattern Translated)
+import Data.Hashable as Export
 
-import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End,initialize,construct,maps,send,run)
+import qualified Pure.Data.Txt as Txt
 
-import Atomic.Types
-import Atomic.Types.JSV
+import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End,initialize,construct,maps,send,run,(!))
 
-import Atomic.Base          as Export hiding (String,Text,Null,(!),hashed)
-
-import qualified Data.Txt as Txt
+import Pure.Types
 
 import Data.Typeable
 
