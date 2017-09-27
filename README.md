@@ -2,8 +2,6 @@
 
 A unified full-stack web application framework in Haskell. 
 
-*Documentation is OUT OF DATE as of the latest framework updates. Updates forthcoming.*
-
 Features:
 
 * Performance-oriented
