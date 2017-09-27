@@ -1,4 +1,4 @@
-# <a href='https://github.com/grumply/pure'><img src='https://github.com/grumply/pure/blob/cc0d8ab6a893be1d1a4069820cbbaf52e7d58935/logo/pure.svg' height='60'></a>
+# <a href='https://github.com/grumply/pure'><img src='https://github.com/grumply/pure/blob/0379442b5e05ef2d967a855bfd950ae770189db6/logo/pure.svg' height='60'></a>
 
 A unified full-stack web application framework in Haskell. 
 
