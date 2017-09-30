@@ -15,7 +15,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
-module Pure.WebSocket.GHC where
+module Pure.WebSocket.GHC (module Pure.WebSocket.GHC, S.SockAddr) where
 
 import Ef.Base
 import Data.Queue

@@ -1,11 +1,11 @@
 {-# language OverloadedStrings #-}
 {-# language PatternSynonyms #-}
-module Pure.HTML where
+module Pure.HTML (module Pure.HTML, module Export) where
 
 import Pure.Types
 
 import Pure.Attributes as Export
-import Pure.CSS        as Export hiding (Alt)
+import Pure.CSS        as Export hiding (Alt,intercept)
 
 pattern Abbr :: [Feature e] -> [View e] -> View e
 pattern Abbr fs cs <- HTMLView mn "abbr" fs cs where

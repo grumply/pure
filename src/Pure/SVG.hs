@@ -5,7 +5,7 @@ module Pure.SVG (module Pure.SVG, module Export) where
 import Pure.Types
 
 import Pure.Attributes as Export hiding (ClipPath,ColorProfile,Cursor,Filter,GlyphRef,Mask,Pattern)
-import Pure.CSS        as Export hiding (Alt,Text)
+import Pure.CSS        as Export hiding (Alt,Text,intercept)
 
 pattern A :: [Feature e] -> [View e] -> View e
 pattern A fs cs <- SVGView mn "a" fs cs where

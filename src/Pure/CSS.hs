@@ -15,8 +15,8 @@ module Pure.CSS (module Pure.CSS, module Export) where
 
 import Ef
 
-import Pure.Data as Export
-import qualified Pure.Styles as Export
+import Pure.Data as Export hiding (wrap,wait,end,from,to)
+import Pure.Styles as Export
 
 import Pure.Data.Txt as Txt
 import Pure.Types.Feature

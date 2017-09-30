@@ -53,6 +53,7 @@ library
     , Pure.Signals
     , Pure.Styles
     , Pure.Types
+    , Pure.Txt
     , Pure.View
     , Pure.WebSocket
 
@@ -68,6 +69,7 @@ library
     , Pure.Data.Key
     , Pure.Data.Micros
     , Pure.Data.Millis
+    , Pure.Data.ServerId
     , Pure.Data.Try
     , Pure.Data.Txt
     , Pure.Data.UnsafeEq
@@ -88,20 +90,21 @@ library
       base >= 4.8
     , ef
     , ef-base
-    , websockets
-    , network
-    , bytestring
-    , io-streams 
     , aeson
+    , bytestring
     , containers
-    , text
     , ghc-prim
     , hashable
+    , io-streams 
+    , network
+    , random
     , template-haskell
-    , unordered-containers
-    , vector
+    , text
     , tlc
     , trivial
+    , unordered-containers
+    , vector
+    , websockets
 
   if (impl(ghcjs))
 

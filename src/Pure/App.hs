@@ -52,16 +52,6 @@ import GHC.Prim
 import System.IO.Unsafe
 import Unsafe.Coerce
 
-__timeInMicros :: MonadIO c => c Integer
-__timeInMicros = liftIO $ getMicros <$> micros
-
-{-# NOINLINE __startTime__ #-}
-__startTime__ :: Integer
-__startTime__ = unsafePerformIO __timeInMicros
-
-hashWithStartTime :: Hashable a => a -> Int
-hashWithStartTime x = hash (__startTime__,x)
-
 data Page
   = Page
     { getHead    :: Controller_

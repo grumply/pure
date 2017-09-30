@@ -19,7 +19,7 @@ import Pure.CSS
 import Pure.DOM
 import Pure.Types
 import Pure.Attributes hiding (SVGLink)
-import Pure.HTML hiding (Link)
+import Pure.HTML hiding (Link,SVGLink)
 
 import qualified Pure.Data.Txt as Txt
 
