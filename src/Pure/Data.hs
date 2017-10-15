@@ -11,6 +11,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeOperators #-}
 module Pure.Data
   ( module Pure.Data
   , module Export
@@ -106,6 +107,7 @@ ghcjs =
 
 type TxtLike as = Constrain '[FromTxt,ToTxt] as
 type JSON as = Constrain '[ToJSON,FromJSON,Typeable] as
+type (==>) as c = Constrain '[c] as
 
 -- -- Build a Getter through an intermediate type from an Iso.
 -- -- This is equivalent to writing the often impossible combinator

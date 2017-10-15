@@ -1072,7 +1072,6 @@ requestWith srv rqty_proxy req f = do
 
         in f done (maybe (Left m) Right (decodeDispatch m))
 
-  -- liftIO $ Prelude.putStrLn $ "Adding response handler in requestWith: " ++ show header
   newn <- syndicate
   with srv $ do
     WebSocket {..} <- get

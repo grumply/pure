@@ -20,7 +20,7 @@ Flag debugws
 
 Flag devel
      Description: development debugging
-     Default: True
+     Default: False
 
 Flag debugapi
      Description: log failed parsing at api endpoints

@@ -118,4 +118,3 @@ instance ToTxt Value where
 #endif
 
 parse = flip parseMaybe
-

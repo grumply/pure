@@ -164,14 +164,13 @@ buildComponentView f mtd mparent ComponentView {..} = do
     return $ ComponentView componentProps (Just cr) componentView
 
 buildManagedView :: Dispatcher e -> IORef (IO ()) -> Maybe Node -> View e -> IO (View e)
-buildManagedView f mounted mparent m@ManagedView {..} =
+buildManagedView f mounted mparent m@ManagedView {..} = do
   case controller of
     Controller_ a -> do
-      let bld el = do
+      let bld elementHost = do
             MVCRecord {..} <- mkController mounted BuildOnly a
             MVCView {..} <- liftIO $ readIORef mvcrView
-            embed (toNode el) mvcvCurrentLive
-            for_ mparent (`embed` ManagedView {..})
+            for_ elementHost ((`embed` mvcvCurrentLive) . toNode)
             return ManagedView {..}
 
       case elementHost of
@@ -181,18 +180,24 @@ buildManagedView f mounted mparent m@ManagedView {..} =
           mi_ <- lookupController (key a)
           let elementHost = Just el
           case mi_ of
-            Nothing -> bld el
+            Nothing -> do
+              mv <- bld elementHost
+              for_ mparent (`append` el)
+              return mv
             Just MVCRecord {..} -> do
               MVCView {..} <- liftIO $ readIORef mvcrView
-              rebuild ManagedView {..}
+              let mv = ManagedView {..}
+              rebuild mv
               embed (toNode el) mvcvCurrentLive
-              for_ mparent (`embed` ManagedView {..})
-              return m
+              for_ mparent (`append` el)
+              return mv
 
         Just e -> do
           mi_ <- lookupController (key a)
           case mi_ of
-            Nothing -> bld e
+            Nothing -> do
+              mv <- bld elementHost
+              return mv
             Just MVCRecord {..} -> do
               MVCView {..} <- liftIO $ readIORef mvcrView
               rebuild m

@@ -9,7 +9,11 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
+{-# LANGUAGE MultiWayIf #-}
 module Pure.Render where
+
+-- This is very much non-robust rendering. Lots of corner cases.
+-- Needs a tremendous amount of work and thought.
 
 import Ef.Base
 
@@ -20,6 +24,8 @@ import Pure.DOM
 import Pure.Types
 import Pure.Attributes hiding (SVGLink)
 import Pure.HTML hiding (Link,SVGLink)
+
+import qualified Data.List as List
 
 import qualified Pure.Data.Txt as Txt
 
@@ -193,6 +199,9 @@ instance Typeable e => FromJSON (View e) where
         "null" -> pure $ NullView Nothing
         _ -> Ef.Base.empty
 
+instance Show (Feature e) where
+  show = fromTxt . toTxt
+
 instance ToTxt (Feature e) where
   toTxt NullFeature          = mempty
 
@@ -225,6 +234,51 @@ instance ToTxt [Feature e] where
     Txt.intercalate
      (Txt.singleton ' ')
      (Prelude.filter (not . Txt.null) $ Prelude.map toTxt fs)
+
+instance Show (View e) where
+  show = go 0
+    where
+      go n NullView {} = ""
+      go n TextView {..} = List.replicate n ' ' <> fromTxt content <> "\n"
+      go n RawView {..} =
+        "<" <> fromTxt tag
+            <> (if List.null features then "" else " " <> unwords (List.map show features))
+            <>
+        ">" <> fromTxt content <>
+        "</" <> fromTxt tag <> ">"
+
+      go n KHTMLView {..} =
+        go n HTMLView { children = List.map snd keyedChildren, ..}
+
+      go n KSVGView {..} =
+        go n HTMLView { children = List.map snd keyedChildren, .. }
+
+      go n SVGView {..} = go n HTMLView { .. }
+
+      go n HTMLView {..} =
+        List.replicate (2 * n) ' ' <>
+        "<" <> fromTxt tag <> (if null features then "" else " " <> unwords (List.map show features))
+            <> if | tag == "?xml"     -> "?>\n"
+                  | tag == "!doctype" -> ">\n"
+                  | selfClosing tag   -> "/>\n"
+                  | otherwise         ->
+                      ">\n" <> List.concatMap (go (n + 1)) children <>
+                       List.replicate (2 * n) ' ' <> "</" <> fromTxt tag <> ">\n"
+      go n ManagedView {..} =
+        case controller of
+          Controller_ Controller {..} ->
+            List.replicate (2 * n) ' ' <> "<" <> fromTxt tag <> (if List.null features then "" else " " <> unwords (List.map show features)) <>
+              ">"  <> show (render $ view model) <> "</" <> fromTxt tag <> ">"
+
+      go n stv@ComponentView { componentRecord = c, ..} =
+        case c of
+          Nothing -> show $ unsafePerformIO $ do
+                      mtd <- newIORef (return ())
+                      Pure.DOM.build (\_ -> return ()) mtd Nothing stv
+          Just ref -> show $ unsafePerformIO (readIORef (crView ref))
+
+      go n (SomeView c) = show (render c)
+
 
 instance ToTxt (View e) where
   toTxt NullView {} = mempty
