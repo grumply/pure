@@ -68,6 +68,8 @@ import qualified Data.ByteString        as S
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Unsafe as S
 
+import qualified Data.Text.Lazy.Encoding as TL
+
 import qualified Data.HashMap.Strict as Map
 
 import System.IO.Unsafe
@@ -387,7 +389,7 @@ websocket tp = liftIO $ do
   tpl <- throughputToThroughputLimits tp
   mhs <- newIORef (Map.empty :: Map.HashMap Txt (Syndicate Dispatch))
   wssn <- syndicate
-  brr <- newIORef (2 * 1024 * 1024,2 * 1024 * 1024) -- 2MiB
+  brr <- newIORef (8 * 1024 * 1024,8 * 1024 * 1024) -- 2MiB
   return $ WebSocket
     { wsSocket           = Nothing
     , wsReceiveThread    = Nothing
@@ -418,7 +420,7 @@ serverWS q sock tp = liftIO $ do
   tpl <- throughputToThroughputLimits tp
   mhs <- newIORef (Map.empty :: Map.HashMap Txt (Syndicate Dispatch))
   wssn <- syndicate
-  brr <- newIORef (2 * 1024 * 1024,2 * 1024 * 1024)
+  brr <- newIORef (maxBound,maxBound)
 
   streams <- Streams.socketToStreams sock
 
@@ -426,7 +428,7 @@ serverWS q sock tp = liftIO $ do
 
   pc <- WS.makePendingConnectionFromStream
           wsStream
-          WS.defaultConnectionOptions
+          WS.defaultConnectionOptions { WS.connectionStrictUnicode = True, WS.connectionCompressionOptions = WS.PermessageDeflateCompression WS.defaultPermessageDeflate }
 
   c <- WS.acceptRequest pc
 
@@ -525,7 +527,7 @@ serverWSS q sock ssl tp = liftIO $ do
   tpl <- throughputToThroughputLimits tp
   mhs <- newIORef (Map.empty :: Map.HashMap Txt (Syndicate Dispatch))
   wssn <- syndicate
-  brr <- newIORef (2 * 1024 * 1024,2 * 1024 * 1024)
+  brr <- newIORef (8 * 1024 * 1024,8 * 1024 * 1024)
 
   streams <- Streams.sslToStreams ssl
 
@@ -617,13 +619,14 @@ wsClose :: forall ms c.
            (MonadIO c, ms <: '[State () WebSocket])
         => WSCloseReason -> Ef ms c ()
 wsClose wscr = do
-  -- liftIO $ putStrLn $ "Sending wsClose because: " ++ show wscr
+  liftIO $ putStrLn $ "Sending wsClose because: " ++ show wscr
   ws@WebSocket {..} <- get
-  forM_ wsSocket $ \(sa,sock,c,_) -> do
-    liftIO $ E.handle (\(e :: SomeException) -> return ()) $
-      WS.sendClose c (BLC.pack "closed")
-    liftIO $ E.handle (\(e :: SomeException) -> return ()) $
-      S.sClose sock
+  forM_ wsSocket $ \(sa,sock,c,s) -> do
+    liftIO $ WS.close s
+    -- liftIO $ E.handle (\(e :: SomeException) -> print e >> return ()) $
+    --   WS.sendClose c (BLC.pack "closed")
+    -- liftIO $ E.handle (\(e :: SomeException) -> print e >> return ()) $
+    --   S.sClose sock
     put ws { wsSocket = Nothing }
   setWSStatus (WSClosed wscr)
 
@@ -755,10 +758,7 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
 resetBytesReadRef brr_ = atomicModifyIORef' brr_ $ \(_,tot) -> ((tot,tot),())
 
 receiveIO c = do
-  eem <- E.handle (\(e :: SomeException) -> do
-                      -- liftIO (print e)
-                      return (Left Closed)
-                  ) $
+  eem <- E.handle (\(_ :: WS.ConnectionException) -> return (Left Closed)) $
            Right <$> WS.receiveDataMessage c
   case eem of
     Left e -> return (Left Closed)
@@ -771,7 +771,7 @@ receiveIO c = do
     -- I believe fusion is receiving text msgs but sending
     -- binary msgs for performance reasons.
     Right (WS.Binary b) -> return $ Right b
-    Right (WS.Text t) -> return $ Right t
+    Right (WS.Text t _) -> return $ Right t
 
 newListenSocket :: (MonadIO c)
                 => String -> Int -> c S.Socket
@@ -783,7 +783,8 @@ makeExhaustible :: IORef (Int64,Int64)
                 -> (Streams.InputStream B.ByteString,Streams.OutputStream B.ByteString)
                 -> IO WS.Stream
 makeExhaustible readCount wssn sock (i,o) = do
-  i' <- limit i
+  sa <- S.getPeerName sock
+  i' <- limit sa i
   stream <- WS.makeStream
     (Streams.read i')
     (\b -> Streams.write (BL.toStrict <$> b) o)
@@ -791,7 +792,7 @@ makeExhaustible readCount wssn sock (i,o) = do
   where
 
     {-# INLINE limit #-}
-    limit i = return $! Streams.InputStream prod pb
+    limit sa i = return $! Streams.InputStream prod pb
       where
 
         {-# INLINE prod #-}
@@ -801,6 +802,7 @@ makeExhaustible readCount wssn sock (i,o) = do
                 !res = if remaining' < 0 then ((0,total),(total,True)) else ((remaining',total),(total,False))
             in res
           when kill $ do
+            liftIO $ putStrLn "throughput limit exceeded"
             S.sClose sock
             publish wssn (WSClosed (MessageLengthLimitExceeded count))
           return (Just x)
@@ -910,7 +912,7 @@ sendRaw b = do
                                     -- liftIO $ putStrLn "Got an exception in sendRaw"
                                     return $ Left (WSClosed ClientClosedConnection)
                                  )
-                      $ Right <$> WS.sendTextData c b
+                      $ Right <$> WS.sendTextData c (TL.decodeUtf8 b)
       either setWSStatus (const $ return ()) ewssu
       return ewssu
     Nothing -> return (Left wsStatus)
@@ -956,14 +958,14 @@ sendRawStream h bl = do
     -- for locally encoded data. If the data is stored on disk, sendFile will
     -- read the file in, at most, 8kB chunks.
     go c [ch] =
-      WS.sendTextData c $
+      WS.sendTextData c $ TL.decodeUtf8 $
         "{\"ep\":"
           <> encode h
           <> ",\"pl\":"
           <> BL.fromStrict ch
           <> "}"
     go c (a:as) = do
-      WS.sendTextData c $
+      WS.sendTextData c $ TL.decodeUtf8 $
         "C{\"ep\":"
           <> encode h
           <> ",\"pl\":"
@@ -971,10 +973,10 @@ sendRawStream h bl = do
       go' as
       where
         go' [a] = do
-          WS.sendTextData c $
+          WS.sendTextData c $ TL.decodeUtf8 $
             "F" <> BL.fromStrict a <> "}"
         go' (a:as) = do
-          WS.sendTextData c $
+          WS.sendTextData c $ TL.decodeUtf8 $
             "C" <> BL.fromStrict a
           go' as
 

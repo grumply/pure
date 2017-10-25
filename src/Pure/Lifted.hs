@@ -103,13 +103,13 @@ foreign import javascript unsafe
   "$1.style[$2] = $3" set_style_js :: Element -> Txt -> Txt -> IO ()
 
 foreign import javascript unsafe
-  "$1.preventDefault" prevent_default_js :: JSV -> IO ()
+  "$1.preventDefault()" prevent_default_js :: JSV -> IO ()
 
 foreign import javascript unsafe
-  "$1.stopPropagation" stop_propagation_js :: JSV -> IO ()
+  "$1.stopPropagation()" stop_propagation_js :: JSV -> IO ()
 
 foreign import javascript unsafe
-  "if ($4) { $1.addEventListener($2,$3,{passive:true}); } else { $1.addEventListener($2,$3); }" add_event_listener_js :: JSV -> Txt -> CB (JSV -> IO ()) -> Bool -> IO ()
+  "$1.addEventListener($2,$3,{passive:$4})" add_event_listener_js :: JSV -> Txt -> CB (JSV -> IO ()) -> Bool -> IO ()
 
 foreign import javascript unsafe
   "$1.removeEventListener($2,$3)" remove_event_listener_js :: JSV -> Txt -> CB (JSV -> IO ()) -> IO ()

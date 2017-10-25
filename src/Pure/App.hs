@@ -193,9 +193,9 @@ run app@App {..} = animator `seq` do
                 rebuild new
                 if first then do
                   clear (toNode ort)
-                  forM_ (getHost new) (append ort)
+                  forM_ (getHost new) (addAnimation . append ort)
                 else
-                  void $ replace old (unsafeCoerce new)
+                  void $ addAnimation $ replace old (unsafeCoerce new)
                 return (Carrier mvcrView)
           become $ \r -> do
             pg <- lift $ pages r
@@ -214,7 +214,7 @@ run app@App {..} = animator `seq` do
                 Just h <- findByTag "head"
                 MVCView _ new _ <- readIORef mvcrView
                 rebuild new
-                void $ replace (NullView $ Just h) new
+                void $ addAnimation $ replace (NullView $ Just h) new
             mb_ <- lookupController (Pure.Types.key b)
             case mb_ of
               Nothing -> do
@@ -229,9 +229,9 @@ run app@App {..} = animator `seq` do
                 rebuild new
                 if first then do
                   clear (toNode ort)
-                  forM_ (getHost new) (append ort)
+                  forM_ (getHost new) (addAnimation . append ort)
                 else
-                  void $ replace old (unsafeCoerce new)
+                  void $ addAnimation $ replace old (unsafeCoerce new)
                 return (Carrier mvcrView)
           become $ \r -> do
             pg <- lift $ pages r
@@ -304,6 +304,7 @@ setupRouter _ = do
           rtr <- lift getRouter
           pn  <- liftIO getPathname
           qps <- liftIO getSearch
+          liftIO $ print (pn,qps)
           let p' = pn <> qps
           -- prevent recalculation with popstate on hash change
           unless (p' == p) $ do

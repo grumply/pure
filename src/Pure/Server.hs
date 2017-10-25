@@ -183,7 +183,7 @@ run SecureServer {..} = void $ do
           forkIO $ void $
             E.handle (\(e :: E.SomeException) -> sClose conn) $ do
               ssl <- sslAccept conn
-              ws <- populationWSS buf conn ssl unlimited
+              ws <- serverWSS buf conn ssl unlimited
               buffer gb connSignal (ws,sockAddr,buf)
           go
 #endif

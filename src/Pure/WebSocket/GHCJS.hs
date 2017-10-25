@@ -20,11 +20,14 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Pure.WebSocket.GHCJS where
 
 import Ef.Base
 
 import Pure.Data.JSON as AE
+
+import qualified Data.Aeson as Aeson
 
 import Pure.Data
 import Pure.Types
@@ -323,6 +326,9 @@ wss :: forall ms c ts.
     => String -> Int -> WebSocket (Action ts c)
 wss hn p = ws_ hn p True
 
+foreign import javascript unsafe
+  "$1.binaryType = $2" set_binary_type_js :: JSV -> Txt -> IO ()
+
 ws_ :: forall ms c ts.
       (MonadIO c
       , ts <. '[WebSocket]
@@ -384,10 +390,12 @@ ws_ hn p secure = WebSocket
                 Nothing -> liftIO $ do
                   msock <- tryNewWebSocket (toTxt $ (if secure then "wss://" else "ws://") ++ hn ++ ':':port)
                   (rnr,_) :: (Signal ms c (Ef ms c ()),Behavior ms c (Ef ms c ())) <- runner
-                  cBuf <- liftIO $ newIORef mempty
+                  cBuf <- newIORef mempty
                   case msock of
                     Nothing -> return Nothing
                     Just sock -> do
+                      -- set_binary_type_js sock "blob"
+
                       openCallback <- CB.syncCallback1 CB.ContinueAsync $ \_ ->
                         publish statesSyndicate WSOpened
                       addEventListener sock "open" openCallback False
@@ -396,14 +404,15 @@ ws_ hn p secure = WebSocket
                         publish statesSyndicate $ WSClosed ServerClosedConnection
                       addEventListener sock "close" closeCallback False
 
-                      errorCallback <- CB.syncCallback1 CB.ContinueAsync $ \_ ->
+                      errorCallback <- CB.syncCallback1 CB.ContinueAsync $ \err -> do
+                        -- printAny_js "" err
                         publish statesSyndicate $ WSClosed ServerClosedConnection
                       addEventListener sock "error" errorCallback False
 
                       messageCallback <- CB.syncCallback1 CB.ContinueAsync $ \ev -> do
+                        -- printAny_js "" ev
                         case WME.getData $ unsafeCoerce ev of
                           WME.StringData sd -> liftIO $ do
-                            -- printAny sd
 #if defined(DEBUGWS) || defined(DEVEL)
                             putStrLn $ "Received message: " ++ show sd
 #endif
@@ -447,6 +456,21 @@ ws_ hn p secure = WebSocket
                               _ ->
                               -- Any message not beginning with 'C', 'F', or '{' is guaranteed to be invalid.
                                putStrLn $ "Invalid message: " ++ show sd
+
+--                           WME.ArrayBufferData ab -> do
+--                             let b = GB.createFromArrayBuffer ab
+--                                 bs = GB.toByteString 0 Nothing b
+--                             case Aeson.decode (BSL.fromStrict bs) of
+--                               Nothing -> putStrLn $ "decode dispatch failed"
+--                               Just m -> do
+--                                 mhs <- liftIO $ readIORef mhs_
+--                                 case Map.lookup (ep m) mhs of
+--                                   Nothing -> putStrLn $ "No handler found: " ++ show (ep m)
+--                                   Just h -> do
+-- #if defined(DEBUGWS) || defined(DEVEL)
+--                                         putStrLn $ "Handled message at endpoint: " ++ show (ep m)
+-- #endif
+--                                         buffer gb rnr $ publish h m
 
                           _ -> return ()
 

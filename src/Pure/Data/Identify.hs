@@ -6,6 +6,9 @@ module Pure.Data.Identify where
 
 import Pure.Data.Txt (Txt)
 
+import Data.Word
+import Data.Int
+
 class Identify a where
   type I a :: *
   type I a = a
@@ -15,6 +18,19 @@ class Identify a where
 
 instance Identify ()
 instance Identify Txt
+instance Identify Char
+instance Identify Int
+instance Identify Integer
+instance Identify Double
+instance Identify Float
+instance Identify Int8
+instance Identify Int16
+instance Identify Int32
+instance Identify Int64
+instance Identify Word8
+instance Identify Word16
+instance Identify Word32
+instance Identify Word64
 
 instance {-# OVERLAPPABLE #-} Identify a => Identify [a] where
   type I [a] = [I a]

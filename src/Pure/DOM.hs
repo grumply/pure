@@ -809,11 +809,11 @@ mkController mounted mkControllerAction c@Controller {..} = do
               i <- Pure.DOM.build sendEv mounted Nothing raw
               clear (toNode n)
               let mn = getHost i
-              forM_ mn (append n)
+              forM_ mn (addAnimation . append n)
               return (i,True)
             Replace as -> do
               i <- Pure.DOM.build sendEv mounted Nothing raw
-              replace as (unsafeCoerce i)
+              addAnimation $ replace as (unsafeCoerce i)
               return (i,True)
             Append en -> do
               i <- Pure.DOM.build sendEv mounted (Just en) raw
@@ -1334,7 +1334,7 @@ addFeature f e = go
       writeIORef stopper $ do
         removeEventListener e "click" callback
         releaseCB callback
-      addEventListener e "click" callback True
+      addEventListener e "click" callback False
       return $ Link link (join $ readIORef stopper)
 #else
     go l@Link {..} = return l
@@ -1352,7 +1352,7 @@ addFeature f e = go
       writeIORef stopper $ do
         removeEventListener e "click" callback
         releaseCB callback
-      addEventListener e "click" callback True
+      addEventListener e "click" callback False
       return $ SVGLink link (join $ readIORef stopper)
 #else
     go l@SVGLink {..} = return l
@@ -1489,7 +1489,7 @@ addFeatureDeferred e f plan = go
 
       amendPlan plan $ do
         setAttribute e "href" link
-        addEventListener e "click" cb True
+        addEventListener e "click" cb False
       return l
 #else
     go l@Link {..} = return l
@@ -1515,7 +1515,7 @@ addFeatureDeferred e f plan = go
 
       amendPlan plan $ do
         setAttributeNS e "http://www.w3.org/1999/xlink" "xlink:href" link
-        addEventListener e "click" cb True
+        addEventListener e "click" cb False
       return l
 #else
     go l@SVGLink {..} = return l
@@ -1596,16 +1596,19 @@ diffFeaturesDeferred e f plan = start
               Just ef -> f ef
           return new
 
-    diffFeatureDeferred old mid@Link{} new@Link{} = do
-      unless (prettyUnsafeEq (link mid) (link new)) $
-        amendPlan plan $ setAttribute e "href" (link new)
-      return new
+    diffFeatureDeferred old mid@Link{} new@Link{} =
+      if (prettyUnsafeEq (link mid) (link new))
+        then return old
+        else do
+          amendPlan plan $ eventStopper old
+          addFeatureDeferred e f plan new
 
-    diffFeatureDeferred old mid@SVGLink{} new@SVGLink{} = do
-      unless (prettyUnsafeEq (link mid) (link new)) $
-        amendPlan plan $
-          setAttributeNS e "http://www.w3.org/1999/xlink" "xlink:href" (link new)
-      return new
+    diffFeatureDeferred old mid@SVGLink{} new@SVGLink{} =
+      if (prettyUnsafeEq (link mid) (link new))
+        then return old
+        else do
+          amendPlan plan $ eventStopper old
+          addFeatureDeferred e f plan new
 
     diffFeatureDeferred old mid@XLink{} new@XLink{} = do
       if prettyUnsafeEq (name mid) (name new)

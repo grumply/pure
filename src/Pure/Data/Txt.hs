@@ -14,6 +14,9 @@ import Data.String
 
 import Data.Coerce
 
+import Data.Int
+import Data.Word
+
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BSL
@@ -107,7 +110,6 @@ instance ToTxt B.ByteString where
 instance ToTxt Txt where
   toTxt = id
 
-
 #ifdef __GHCJS__
 
 ----------------------------------------
@@ -144,6 +146,33 @@ instance FromTxt Double where
 instance FromTxt Integer where
   fromTxt t = fromMaybe (readError "Integer" t) (T.readIntegerMaybe t)
 
+instance FromTxt Int64 where
+  fromTxt t = fromMaybe (readError "Int64" t) (T.readInt64Maybe t)
+
+instance FromTxt Int32 where
+  fromTxt t = maybe (readError "Int32" t) fromIntegral (T.readIntMaybe t)
+
+instance FromTxt Int16 where
+  fromTxt t = maybe (readError "Int16" t) fromIntegral (T.readIntMaybe t)
+
+instance FromTxt Int8 where
+  fromTxt t = maybe (readError "Int8" t) fromIntegral (T.readIntMaybe t)
+
+instance FromTxt Word64 where
+  fromTxt t = fromMaybe (readError "Word64" t) (T.readWord64Maybe t)
+
+instance FromTxt Word32 where
+  fromTxt t = maybe (readError "Word32" t) fromIntegral (T.readWord64Maybe t)
+
+instance FromTxt Word16 where
+  fromTxt t = maybe (readError "Word16" t) fromIntegral (T.readWord64Maybe t)
+
+instance FromTxt Word8 where
+  fromTxt t = maybe (readError "Word8" t) fromIntegral (T.readWord64Maybe t)
+
+instance FromTxt Word where -- Word is Word32 in GHCJS? I dunno....
+  fromTxt t = maybe (readError "Word" t) fromIntegral (T.readWord64Maybe t)
+
 instance ToTxt T.Text where
   toTxt = textToJSString
 
@@ -159,6 +188,9 @@ instance ToTxt String where
 instance ToTxt Int where
   toTxt = decimal
 
+instance ToTxt Word where
+  toTxt = decimal
+
 instance ToTxt Integer where
   toTxt = decimal
 
@@ -167,6 +199,30 @@ instance ToTxt Float where
 
 instance ToTxt Double where
   toTxt = realFloat
+
+instance ToTxt Int64 where
+  toTxt = decimal
+
+instance ToTxt Int32 where
+  toTxt = decimal
+
+instance ToTxt Int16 where
+  toTxt = decimal
+
+instance ToTxt Int8 where
+  toTxt = decimal
+
+instance ToTxt Word64 where
+  toTxt = decimal
+
+instance ToTxt Word32 where
+  toTxt = decimal
+
+instance ToTxt Word16 where
+  toTxt = decimal
+
+instance ToTxt Word8 where
+  toTxt = decimal
 
 #else
 
@@ -197,6 +253,34 @@ instance FromTxt Double where
 instance FromTxt Integer where
   fromTxt t = either (readError "Integer" t) fst (T.signed T.decimal t)
 
+instance FromTxt Int8 where
+  fromTxt t = either (readError "Int8" t) fst (T.signed T.decimal t)
+
+instance FromTxt Int16 where
+  fromTxt t = either (readError "Int16" t) fst (T.signed T.decimal t)
+
+instance FromTxt Int32 where
+  fromTxt t = either (readError "Int32" t) fst (T.signed T.decimal t)
+
+instance FromTxt Int64 where
+  fromTxt t = either (readError "Int64" t) fst (T.signed T.decimal t)
+
+instance FromTxt Word where
+  fromTxt t = either (readError "Word" t) fst (T.decimal t)
+
+instance FromTxt Word8 where
+  fromTxt t = either (readError "Word8" t) fst (T.decimal t)
+
+instance FromTxt Word16 where
+  fromTxt t = either (readError "Word16" t) fst (T.decimal t)
+
+instance FromTxt Word32 where
+  fromTxt t = either (readError "Word32" t) fst (T.decimal t)
+
+instance FromTxt Word64 where
+  fromTxt t = either (readError "Word64" t) fst (T.decimal t)
+
+
 instance ToTxt TL.Text where
   toTxt = TL.toStrict
 
@@ -209,6 +293,9 @@ instance ToTxt String where
 instance ToTxt Int where
   toTxt = shortText . Builder.decimal
 
+instance ToTxt Word where
+  toTxt = shortText . Builder.decimal
+
 instance ToTxt Integer where
   toTxt = shortText . Builder.decimal
 
@@ -217,6 +304,30 @@ instance ToTxt Float where
 
 instance ToTxt Double where
   toTxt = toTxt . ($ "") . showFFloat Nothing
+
+instance ToTxt Int64 where
+  toTxt = shortText . Builder.decimal
+
+instance ToTxt Int32 where
+  toTxt = shortText . Builder.decimal
+
+instance ToTxt Int16 where
+  toTxt = shortText . Builder.decimal
+
+instance ToTxt Int8 where
+  toTxt = shortText . Builder.decimal
+
+instance ToTxt Word64 where
+  toTxt = shortText . Builder.decimal
+
+instance ToTxt Word32 where
+  toTxt = shortText . Builder.decimal
+
+instance ToTxt Word16 where
+  toTxt = shortText . Builder.decimal
+
+instance ToTxt Word8 where
+  toTxt = shortText . Builder.decimal
 
 #endif
 

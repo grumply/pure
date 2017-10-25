@@ -18,6 +18,7 @@ data Dispatch
     { ep :: Txt
     , pl :: Value
     } deriving (Generic,ToJSON,FromJSON)
+
 instance ToBS Dispatch
 #ifndef __GHCJS__
 instance FromBS Dispatch
@@ -30,6 +31,8 @@ instance FromBS Dispatch
   -- in ghcjs/pure. Any use of a null byte is liable to clobber
   -- a message and force a disconnect since ghc/pure doesn't
   -- permit malformed messages.
+#else
+instance FromBS Dispatch
 #endif
 
 {-# INLINE encodeDispatch #-}
