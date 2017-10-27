@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DefaultSignatures #-}
 module Pure.Data.Millis where
 
 import Pure.Data.Txt
@@ -37,6 +38,16 @@ instance Num Millis where
   fromInteger = Millis
 instance Hashable Millis where
   hashWithSalt salt (Millis ms) = hashWithSalt salt ms
+instance Enum Millis where
+  toEnum = Millis . toEnum
+  fromEnum (Millis ms) = fromEnum ms
+instance Real Millis where
+  toRational (Millis ms) = toRational ms
+instance Integral Millis where
+  quotRem (Millis ms) (Millis ms') =
+    let (q,r) = quotRem ms ms'
+    in (Millis q,Millis r)
+  toInteger = getMillis
 
 millis :: IO Millis
 millis = timeInMillis
@@ -51,12 +62,8 @@ timeInMillis =
 
 class FromMillis a where
   fromMillis :: Millis -> a
-
-instance FromMillis Integer where
-  fromMillis = getMillis
-
-instance FromMillis Double where
-  fromMillis = fromInteger . getMillis
+  default fromMillis :: Num a => Millis -> a
+  fromMillis = fromIntegral . getMillis
 
 #ifndef __GHCJS__
 instance FromMillis POSIXTime where

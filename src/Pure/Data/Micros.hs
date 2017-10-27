@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DefaultSignatures #-}
 module Pure.Data.Micros where
 
 import Pure.Data.Txt
@@ -36,6 +37,16 @@ instance Num Micros where
   fromInteger = Micros
 instance Hashable Micros where
   hashWithSalt salt (Micros us) = hashWithSalt salt us
+instance Enum Micros where
+  toEnum = Micros . toEnum
+  fromEnum (Micros ms) = fromEnum ms
+instance Real Micros where
+  toRational (Micros ms) = toRational ms
+instance Integral Micros where
+  quotRem (Micros ms) (Micros ms') =
+    let (q,r) = quotRem ms ms'
+    in (Micros q,Micros r)
+  toInteger = getMicros
 
 micros :: IO Micros
 micros = timeInMicros
@@ -50,12 +61,8 @@ timeInMicros =
 
 class FromMicros a where
   fromMicros :: Micros -> a
-
-instance FromMicros Double where
-  fromMicros = fromInteger . getMicros
-
-instance FromMicros Integer where
-  fromMicros = getMicros
+  default fromMicros :: Num a => Micros -> a
+  fromMicros = fromIntegral . getMicros
 
 #ifndef __GHCJS__
 instance FromMicros POSIXTime where
