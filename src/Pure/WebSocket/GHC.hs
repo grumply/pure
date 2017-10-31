@@ -280,16 +280,16 @@ data Implementation ms c msgs rqs msgs' rqs'
       -> Implementation ms c msgs rqs msgs' rqs'
 
 -- well that's an obnoxious type signature
-(<+++>) :: (TListAppend (Endpoints RequestHandler ms c) rqsl' rqsr' rqs'
-           ,TListAppend (Endpoints MessageHandler ms c) msgsl' msgsr' msgs'
-           ,TListAppend (API Request) rqsl rqsr rqs
-           ,TListAppend (API Message) msgsl msgsr msgs
-           ,EnactEndpoints RequestAPI RequestHandler ms c rqs rqs'
-           ,EnactEndpoints MessageAPI MessageHandler ms c msgs msgs'
-           )
-        => Implementation ms c msgsl rqsl msgsl' rqsl'
-        -> Implementation ms c msgsr rqsr msgsr' rqsr'
-        -> Implementation ms c msgs rqs msgs' rqs'
+-- (<+++>) :: (TListAppend (Endpoints RequestHandler ms c) rqsl' rqsr' rqs'
+--            ,TListAppend (Endpoints MessageHandler ms c) msgsl' msgsr' msgs'
+--            ,TListAppend (API Request) rqsl rqsr rqs
+--            ,TListAppend (API Message) msgsl msgsr msgs
+--            ,EnactEndpoints RequestAPI RequestHandler ms c rqs rqs'
+--            ,EnactEndpoints MessageAPI MessageHandler ms c msgs msgs'
+--            )
+--         => Implementation ms c msgsl rqsl msgsl' rqsl'
+--         -> Implementation ms c msgsr rqsr msgsr' rqsr'
+--         -> Implementation ms c msgs rqs msgs' rqs'
 (Impl (API ml rl) eml erl) <+++> (Impl (API mr rr) emr err) =
   Impl (API (ml <++> mr) (rl <++> rr)) (eml <++> emr) (erl <++> err)
 
@@ -501,6 +501,8 @@ initializeClientWS host port path = do
 
           (rnr :: Signal ms c (Ef ms c ()),_) <- runner
 
+          reconnectOnDisconnect
+
           rt <- liftIO $ forkIO $ receiveLoop sock (snd wsThroughputLimits) wsMessageHandlers wsBytesReadRef q c rnr
 
           put WebSocket
@@ -508,6 +510,13 @@ initializeClientWS host port path = do
                 , wsReceiveThread = Just rt
                 , .. }
           setWSStatus WSOpened
+
+    reconnectOnDisconnect = do
+      WebSocket {..} <- get
+      connect wsStatusSyndicate $ \status -> do
+        case status of
+          WSClosed _ -> lift $ connectWithExponentialBackoff 0
+          _ -> return ()
 
 #ifdef SECURE
 serverWSS :: forall ts ms c c'.
