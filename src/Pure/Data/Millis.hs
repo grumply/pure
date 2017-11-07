@@ -5,6 +5,8 @@
 {-# LANGUAGE DefaultSignatures #-}
 module Pure.Data.Millis where
 
+import Ef.Base
+
 import Pure.Data.Txt
 import Pure.Data.JSON
 import Pure.Data.Identify
@@ -48,8 +50,8 @@ instance Integral Millis where
     in (Millis q,Millis r)
   toInteger = getMillis
 
-millis :: IO Millis
-millis = timeInMillis
+millis :: MonadIO c => c Millis
+millis = liftIO timeInMillis
 
 timeInMillis :: IO Millis
 timeInMillis =

@@ -5,6 +5,8 @@
 {-# LANGUAGE DefaultSignatures #-}
 module Pure.Data.Micros where
 
+import Ef.Base
+
 import Pure.Data.Txt
 import Pure.Data.JSON
 import Pure.Data.Identify
@@ -47,8 +49,8 @@ instance Integral Micros where
     in (Micros q,Micros r)
   toInteger = getMicros
 
-micros :: IO Micros
-micros = timeInMicros
+micros :: MonadIO c => c Micros
+micros = liftIO timeInMicros
 
 timeInMicros :: IO Micros
 timeInMicros =
