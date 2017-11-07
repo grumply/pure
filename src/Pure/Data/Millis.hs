@@ -14,9 +14,8 @@ import GHC.Generics
 import Data.Hashable
 import Data.Ratio
 
-#ifndef __GHCJS__
+import Data.Time.Clock
 import Data.Time.Clock.POSIX
-#endif
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
@@ -57,7 +56,7 @@ timeInMillis =
 #ifdef __GHCJS__
   (Millis . fromIntegral) <$> getTime_millis_js
 #else
-  (Millis . posixToMillis) <$> getPOSIXTime
+  posixToMillis <$> getPOSIXTime
 #endif
 
 class FromMillis a where
@@ -65,20 +64,33 @@ class FromMillis a where
   default fromMillis :: Num a => Millis -> a
   fromMillis = fromIntegral . getMillis
 
-#ifndef __GHCJS__
 instance FromMillis POSIXTime where
-  fromMillis (Millis jst) = posixFromMillis jst
+  fromMillis = posixFromMillis
 
-posixToMillis :: POSIXTime -> Integer
-posixToMillis =
+instance FromMillis UTCTime where
+  fromMillis = utcTimeFromMillis
+
+posixToMillis :: POSIXTime -> Millis
+posixToMillis = Millis .
   (`div` 1000)
   . numerator
   . toRational
   . (* 1000000)
 
-posixFromMillis :: Integer -> POSIXTime
+posixFromMillis :: Millis -> POSIXTime
 posixFromMillis =
   fromRational
   . (% 1000000)
   . (* 1000)
-#endif
+  . getMillis
+
+utcTimeToMillis :: UTCTime -> Millis
+utcTimeToMillis =
+    posixToMillis
+  . utcTimeToPOSIXSeconds
+
+utcTimeFromMillis :: Millis -> UTCTime
+utcTimeFromMillis =
+    posixSecondsToUTCTime
+  . posixFromMillis
+
