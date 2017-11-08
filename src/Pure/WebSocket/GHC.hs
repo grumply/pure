@@ -812,7 +812,7 @@ makeExhaustible readCount wssn sock (i,o) = do
             in res
           when kill $ do
             liftIO $ putStrLn "throughput limit exceeded"
-            S.sClose sock
+            S.close sock
             publish wssn (WSClosed (MessageLengthLimitExceeded count))
           return (Just x)
 

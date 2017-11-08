@@ -393,8 +393,8 @@ pattern Headers p <- (Property "headers" p) where
 pattern Scope p <- (Property "scope" p) where
   Scope p = Property "scope" p
 
-pattern Async b <- (Property "async" (toBool -> b)) where
-  Async b = Property "async" (fromBool b)
+pattern Async_ b <- (Property "async" (toBool -> b)) where
+  Async_ b = Property "async" (fromBool b)
 
 pattern Charset v <- (Attribute "charset" v) where
   Charset v = Attribute "charset" v

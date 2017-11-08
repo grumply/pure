@@ -37,11 +37,14 @@ import Data.Hashable as Export
 
 import qualified Pure.Data.Txt as Txt
 
+import Data.List as List
+
 import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distribute,embed,render,Nat(..),End,initialize,construct,maps,send,run,(!))
 
 import Pure.Types
 
 import Data.Typeable
+import Data.Unique
 
 import Debug.Trace
 
@@ -56,6 +59,19 @@ import GHC.Generics as Export (Generic(..),to,from)
 
 instance (Monad c) => Default (Callback_ status result c) where
   def = Callback (\_ -> return ()) (\_ -> return ()) (\_ -> return ())
+
+fresh :: MonadIO c => c Int
+fresh = hashUnique <$> liftIO newUnique
+
+parseIp :: String -> String
+parseIp str =
+  let (ip,_) = List.span (/= ':') str
+  in (if List.null ip then "127.0.0.1" else ip)
+
+parsePort :: String -> Int
+parsePort str =
+  let (_,':':port) = List.span (/= ':') str
+  in read port
 
 #ifdef __GHCJS__
 foreign import javascript unsafe

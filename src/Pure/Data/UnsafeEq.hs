@@ -1,6 +1,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DefaultSignatures #-}
 module Pure.Data.UnsafeEq where
 
 import GHC.Prim
@@ -8,8 +9,7 @@ import Unsafe.Coerce
 
 class UnsafeEq a where
   (===) :: a -> a -> Bool
-
-instance Eq a => UnsafeEq a where
+  default (===) :: (Eq a) => a -> a -> Bool
   (===) = prettyUnsafeEq
   {-# INLINE (===) #-}
 

@@ -36,7 +36,7 @@ import Data.Int as Export (Int64)
 import Data.Ratio
 import Text.Read hiding (get,lift)
 
-import Network.Socket as Export (Socket,SockAddr(..),accept,sClose)
+import Network.Socket as Export (Socket,SockAddr(..),accept,close)
 import qualified Network.WebSockets as WS
 import qualified Network.WebSockets.Stream as WS
 #ifdef SECURE
@@ -227,7 +227,7 @@ run Server {..} = void $ do
           (conn,sockAddr) <- accept sock
           buf <- newEvQueue
           forkIO $ void $
-            E.handle (\(e :: E.SomeException) -> sClose conn) $ do
+            E.handle (\(e :: E.SomeException) -> close conn) $ do
               ws <- serverWS buf conn unlimited
               buffer gb connSignal (ws,sockAddr,buf)
           go
