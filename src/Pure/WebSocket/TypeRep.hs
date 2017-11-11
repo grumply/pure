@@ -24,7 +24,7 @@ rep _ =
       in if L.null trs then
            r
          else if surround then
-           " (" <> L.unwords (r:L.map (go True) trs) <> ")"
+           "(" <> L.unwords (r:L.map (go True) trs) <> ")"
          else
            L.unwords (r:L.map (go True) trs)
 
@@ -44,7 +44,7 @@ fullRep _ =
       in if L.null trs then
            r
          else if surround then
-           " (" <> L.unwords (r:L.map (go True) trs) <> ")"
+           "(" <> L.unwords (r:L.map (go True) trs) <> ")"
          else
            L.unwords (r:L.map (go True) trs)
 
@@ -61,7 +61,7 @@ qualRep _ =
       in if L.null trs then
            r
          else if surround then
-           " (" <> L.unwords (r:L.map (go True) trs) <> ")"
+           "(" <> L.unwords (r:L.map (go True) trs) <> ")"
          else
            L.unwords (r:L.map (go True) trs)
 
