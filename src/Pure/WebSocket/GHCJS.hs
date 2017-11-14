@@ -26,6 +26,7 @@ module Pure.WebSocket.GHCJS where
 import Ef.Base
 
 import Pure.Data.JSON as AE
+import Pure.Data.JSV
 
 import qualified Data.Aeson as Aeson
 

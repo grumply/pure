@@ -120,6 +120,7 @@ library
       , network         >= 2.6
       , io-streams      >= 1.4
       , random
+      , aeson-pretty
 
     other-modules:
       Pure.WebSocket.GHC

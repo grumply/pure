@@ -27,6 +27,7 @@ import qualified Pure.Signals as Export
 import qualified Pure.Types as Export hiding (Text,Null,build,prime,key)
 
 import Pure.Data as Export hiding (hashed)
+import Pure.Data.JSV
 
 import Pure.Lifted
 import Pure.DOM

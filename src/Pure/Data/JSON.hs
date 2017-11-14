@@ -17,6 +17,8 @@ import GHCJS.Types (JSVal)
 import GHCJS.Marshal
 import GHCJS.Marshal.Pure
 
+import Pure.Data.JSV
+
 import qualified JavaScript.JSON.Types as O (Object)
 
 import Unsafe.Coerce
@@ -62,6 +64,14 @@ instance ToTxt Value where
   {-# INLINE toTxt #-}
   toTxt = encode
 
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "JSON.stringify($1,null,4)" pretty_js :: Value -> Txt
+#endif
+
+pretty :: ToJSON a => a -> Txt
+pretty = pretty_js . toJSON
+
 #else
 import qualified Data.Aeson as Aeson
 import Data.Aeson as Export hiding (Options,Object)
@@ -76,6 +86,11 @@ import qualified Data.Vector as V
 import qualified Data.Aeson.Types as O (Object)
 
 import Prelude hiding (lookup)
+
+import Data.Aeson.Encode.Pretty
+
+pretty :: ToJSON a => a -> Txt
+pretty = toTxt . encodePretty
 
 type Obj = O.Object
 

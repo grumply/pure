@@ -6,6 +6,7 @@
 module Pure.Lifted where
 
 import Pure.Data
+import Pure.Data.JSV
 
 import Data.Int
 

@@ -7,6 +7,7 @@ module Pure.Signals where
 import Ef.Base
 
 import Pure.Data
+import Pure.Data.JSV
 import Pure.Types
 import Pure.Lifted
 
