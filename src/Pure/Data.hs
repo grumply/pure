@@ -43,7 +43,7 @@ import Ef.Base as Export hiding (child,As,Index,transform,observe,uncons,distrib
 
 import Pure.Types
 
-import Data.Typeable
+import Data.Typeable as Export
 import Data.Unique
 
 import Debug.Trace
@@ -54,8 +54,11 @@ import Unsafe.Coerce
 import Language.Haskell.TH.Syntax
 
 import GHC.Generics as Export (Generic(..),to,from)
--- grid :: StaticCSS
--- grid = $( let g = staticCSS flexboxGrid in [| g |] )
+
+import Data.Foldable as Export hiding (all,and,any,or)
+import Data.Traversable as Export
+
+data Renderable (a :: *) (ms :: [* -> *]) = Render a
 
 instance (Monad c) => Default (Callback_ status result c) where
   def = Callback (\_ -> return ()) (\_ -> return ()) (\_ -> return ())
