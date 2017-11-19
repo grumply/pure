@@ -300,10 +300,12 @@ deleteApp :: MonadIO c => Key phantom -> c ()
 deleteApp = liftIO . vaultDelete appVault__
 
 setupRouter :: forall ms c rTy. (Eq rTy, MonadIO c, ms <: '[Evented,State () (Router rTy)])
-            => Proxy rTy -> Ef ms c (IO (),Promise (IO ()))
+            => Proxy rTy -> Ef ms c (IO ())
 setupRouter _ = do
   crn :: Syndicate rTy <- getRouteSyndicate
   psn <- getWindowSyndicatePreventDefault "popstate"
+  ln <- getWindowSyndicate "load"
+  connect ln $ \_ -> liftIO setPopped >> end
   pn  <- liftIO getPathname
   qps <- liftIO getSearch
   let p = pn <> qps
@@ -311,25 +313,27 @@ setupRouter _ = do
   mncr <- Route.route rtr p
   setRoute mncr
   forM_ mncr $ publish crn
-  delay 500000 (connect psn (go crn p mncr))
+  connect psn (go crn p mncr)
   where
     go crn = go'
       where
         go' p cr _ = do
-          rtr <- lift getRouter
-          pn  <- liftIO getPathname
-          qps <- liftIO getSearch
-          liftIO $ print (pn,qps)
-          let p' = pn <> qps
-          -- prevent recalculation with popstate on hash change
-          unless (p' == p) $ do
-            mncr <- lift $ Route.route rtr p'
-            forM_ mncr $ \ncr ->
-              when (mncr /= cr) $
-                lift $ do
-                  setRoute mncr
-                  publish crn ncr
-            become (go' p' mncr)
+          loaded <- liftIO getPopped
+          when loaded $ do
+            rtr <- lift getRouter
+            pn  <- liftIO getPathname
+            qps <- liftIO getSearch
+            liftIO $ print (pn,qps)
+            let p' = pn <> qps
+            -- prevent recalculation with popstate on hash change
+            unless (p' == p) $ do
+              mncr <- lift $ Route.route rtr p'
+              forM_ mncr $ \ncr ->
+                when (mncr /= cr) $
+                  lift $ do
+                    setRoute mncr
+                    publish crn ncr
+              become (go' p' mncr)
 
 goto :: (MonadIO c, With (App' ts ms IO r) (Ef ms IO) IO, ms <: '[State () (Router r)], ms' <: '[Evented])
      => App' ts ms IO r -> Txt -> r -> Ef ms' c (Promise ())

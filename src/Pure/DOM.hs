@@ -25,6 +25,8 @@ import Pure.Types hiding (build)
 import Pure.Lifted
 import qualified Pure.Types as Types
 
+import Pure.Router
+
 import Control.Arrow
 import Control.Concurrent
 import Data.Coerce
@@ -1357,6 +1359,7 @@ addFeature f e = go
       setAttribute e "href" link
       stopper <- newIORef undefined
       callback <- CB.syncCallback1 CB.ContinueAsync $ \jsv -> do
+                    setPopped
                     preventDefault jsv
                     pushState link
                     popState
@@ -1375,6 +1378,7 @@ addFeature f e = go
       setAttributeNS e "http://www.w3.org/1999/xlink" "xlink:href" link
       stopper <- newIORef undefined
       callback <- CB.syncCallback1 CB.ContinueAsync $ \jsv -> do
+                    setPopped
                     preventDefault jsv
                     pushState link
                     popState
@@ -1506,6 +1510,7 @@ addFeatureDeferred e f plan = go
         stopper <- newIORef undefined
 
         cb <- CB.syncCallback1 CB.ContinueAsync $ \jsv -> do
+          setPopped
           preventDefault jsv
           pushState link
           popState
@@ -1532,6 +1537,7 @@ addFeatureDeferred e f plan = go
         stopper <- newIORef undefined
 
         cb <- CB.syncCallback1 CB.ContinueAsync $ \jsv -> do
+          setPopped
           preventDefault jsv
           pushState link
           popState

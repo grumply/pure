@@ -63,12 +63,16 @@ mkRouter :: (Monad c, Eq r, rtr ~ State () (Router r), ts <. '[rtr], ms <: '[rtr
          => Syndicate r -> Narrative Route (Ef ms c) r -> rtr (Action ts c)
 mkRouter nw rtr = state (Router (unsafeCoerce rtr) Nothing nw)
 
--- Note that `route` /should not/ be called within the first 500 milliseconds
--- of the application loading or it may be ignored. This is to work around
--- a browser disparity in the triggering of popstate events on page load.
+{-# NOINLINE popped #-}
+popped = unsafePerformIO $ newIORef False
+
+setPopped = writeIORef popped True
+getPopped = readIORef popped
+
 route :: MonadIO c => T.Txt -> c ()
 route rt = do
   liftIO $ do
+    setPopped
     pushState rt
     popState
 #ifndef __GHCJS__
@@ -77,6 +81,7 @@ route rt = do
 
 pushPath :: MonadIO c => T.Txt -> c ()
 pushPath pth = do
+  liftIO setPopped
   liftIO $ pushState pth
 #ifndef __GHCJS__
   let (pathname,search) = T.span (/= '?') pth
