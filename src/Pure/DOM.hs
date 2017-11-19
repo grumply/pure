@@ -170,7 +170,7 @@ buildManagedView f mounted mparent m@ManagedView {..} = do
   case controller of
     Controller_ a -> do
       let bld elementHost = do
-            MVCRecord {..} <- mkController mounted BuildOnly a
+            MVCRecord {..} <- mkController mounted Build a
             MVCView {..} <- liftIO $ readIORef mvcrView
             for_ mvcvCurrentLive $ \live ->
               for_ elementHost ((`embed` live) . toNode)
@@ -670,18 +670,21 @@ rebuild h =
       case controller of
         Controller_ c -> do
           mi_ <- lookupController (key c)
-          for_ mi_ $ \MVCRecord {..} -> do
-            let f = void . runAs mvcrAs
-            MVCView {..} <- readIORef mvcrView
-            mounted <- newIORef (return ())
-            case mvcvCurrentLive of
-              Nothing -> do
-                live <- build f mounted (fmap toNode elementHost) mvcvCurrent
-                writeIORef mvcrView MVCView { mvcvCurrentLive = Just live, .. }
-                join $ readIORef mounted
-              Just live -> do
-                rebuild live
-                for_ elementHost ((`embed` live) . toNode)
+          case mi_ of
+            Nothing -> liftIO $ print "lookupController: Nothing"
+            Just MVCRecord {..} -> do
+              MVCView {..} <- readIORef mvcrView
+              case mvcvCurrentLive of
+                Nothing -> do
+                  let f = void . runAs mvcrAs
+                  mounted <- newIORef (return ())
+                  live <- build f mounted Nothing mvcvCurrent
+                  writeIORef mvcrView MVCView { mvcvCurrentLive = Just live, .. }
+                  for_ elementHost ((`embed` live) . toNode)
+                  join $ readIORef mounted
+                Just live -> do
+                  rebuild live
+                  for_ elementHost ((`embed` live) . toNode)
     go _ =
       return ()
 #endif
@@ -723,15 +726,7 @@ instance IsMVC' ts ms m
           (Ef ms IO)
           IO
   where
-    using_ c = do
-      -- FIXME: likely a bug here with double initialization in multithreaded contexts!
-      mi_ <- lookupController (key c)
-      case mi_ of
-        Just (MVCRecord {..}) -> return (runAs mvcrAs)
-        Nothing -> do
-          mounted <- newIORef (return ())
-          mkController mounted NoBuild c
-          using_ c
+    using_ c = usingController c NoBuild
     with_ c m = do
       run <- using_ c
       run m
@@ -756,12 +751,23 @@ instance IsMVC' ts ms m
                 myThreadId >>= killThread
         _ -> return ()
 
+usingController c bld = do
+  -- FIXME: likely a bug here with double initialization in multithreaded contexts!
+  mi_ <- lookupController (key c)
+  case mi_ of
+    Just (MVCRecord {..}) -> return (runAs mvcrAs)
+    Nothing -> do
+      mounted <- newIORef (return ())
+      mkController mounted bld c
+      usingController c bld
+
 data MkControllerAction
   = ClearAndAppend Node
   | forall e. Replace (View e)
   | Append Node
-  | BuildOnly
+  | Build
   | NoBuild
+  | Preinit
 
 controllerPatcher :: (Pure a ms) => Dispatcher ms -> IORef (MVCView ms m) -> (m ms -> a ms) -> IO (ThreadId,MVar ())
 controllerPatcher f view rndr = do
@@ -780,13 +786,10 @@ controllerPatcher f view rndr = do
       -- render the current view which should be an update to the exisiting view in mvcvCurrent/Live
       let new = render $ rndr mvcvModel
       mounted <- newIORef (return ())
-      (plan,newLive) <-
-        case mvcvCurrentLive of
-          Nothing -> do
-            i <- Pure.DOM.build f mounted Nothing mvcvCurrent
-            return ([],i)
-          Just live ->
-            return $ buildPlan (\p -> diffDeferred f mounted p live mvcvCurrent new)
+      let (plan,newLive) =
+            case mvcvCurrentLive of
+              Nothing -> ([],Nothing)
+              Just live -> fmap Just $ buildPlan (\p -> diffDeferred f mounted p live mvcvCurrent new)
       mtd <- plan `seq` readIORef mounted
       unless (List.null plan) $ do
         barrier <- newEmptyMVar
@@ -794,23 +797,20 @@ controllerPatcher f view rndr = do
         takeMVar barrier
       mtd
       atomicModifyIORef' view $ \v ->
-        (v { mvcvCurrent = new, mvcvCurrentLive = Just newLive },())
+        (v { mvcvCurrent = new, mvcvCurrentLive = newLive },())
 #else
       mvcv@MVCView {..} <- readIORef view
       let new = render $ rndr mvcvModel
       mounted <- newIORef (return ())
-      (plan,newLive) <-
-        case mvcvCurrentLive of
-            Nothing -> do
-              i <- Pure.DOM.build f mounted Nothing mvcvCurrent
-              return ([],i)
-            Just live ->
-              return $ buildPlan (\p -> diffDeferred f mounted p live mvcvCurrent new)
+      let (plan,newLive) =
+            case mvcvCurrentLive of
+                Nothing -> ([],Nothing)
+                Just live -> fmap Just $ buildPlan (\p -> diffDeferred f mounted p live mvcvCurrent new)
       mtd <- plan `seq` readIORef mounted
       runPlan plan
       mtd
       atomicModifyIORef' view $ \v ->
-        (v { mvcvCurrent = new, mvcvCurrentLive = Just newLive },())
+        (v { mvcvCurrent = new, mvcvCurrentLive = newLive },())
 #endif
 
 mkController :: forall ms ts m.
@@ -842,11 +842,15 @@ mkController mounted mkControllerAction c@Controller {..} = do
          Append en -> do
            i <- Pure.DOM.build sendEv mounted (Just en) raw
            return (Just i)
-         BuildOnly -> do
+         Build -> do
            i <- Pure.DOM.build sendEv mounted Nothing raw
            return (Just i)
          NoBuild ->
            return Nothing
+         Preinit -> do
+           frag <- createFrag
+           i <- Pure.DOM.build sendEv mounted (Just (toNode frag)) raw
+           return (Just i)
   ds   <- newIORef Eager
   mvcv <- newIORef (MVCView raw i model)
   (patcherThread,patcherBarrier) <- controllerPatcher sendEv mvcv view

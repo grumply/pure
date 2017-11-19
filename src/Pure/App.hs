@@ -192,8 +192,9 @@ run app@App {..} = animator `seq` do
                 return (Carrier $ mvcrView iob)
               Just MVCRecord {..} -> do
                 MVCView _ mold _ <- readIORef rt
+                rebuild (ManagedView Nothing "" [] b')
                 MVCView _ mnew _ <- readIORef mvcrView
-                for_ mnew rebuild
+                -- for_ mnew rebuild
                 if first then do
                   clear (toNode ort)
                   for_ mnew $ \new ->
@@ -235,8 +236,9 @@ run app@App {..} = animator `seq` do
                 return (Carrier $ mvcrView cr)
               Just MVCRecord {..} -> do
                 MVCView _ mold _ <- readIORef rt
+                rebuild (ManagedView Nothing "" [] b')
                 MVCView _ mnew _ <- readIORef mvcrView
-                for_ mnew rebuild
+                -- for_ mnew rebuild
                 if first then do
                   clear (toNode ort)
                   for_ mnew $ \new ->
