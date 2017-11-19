@@ -166,6 +166,7 @@ buildComponentView f mtd mparent ComponentView {..} = do
 
 buildManagedView :: Dispatcher e -> IORef (IO ()) -> Maybe Node -> View e -> IO (View e)
 buildManagedView f mounted mparent m@ManagedView {..} = do
+  -- the assumptions here need reviewing; keep an eye out
   case controller of
     Controller_ a -> do
       let bld elementHost = do
@@ -190,7 +191,7 @@ buildManagedView f mounted mparent m@ManagedView {..} = do
               MVCView {..} <- liftIO $ readIORef mvcrView
               let mv = ManagedView {..}
               rebuild mv
-              for_ mvcvCurrentLive $ embed (toNode el)
+              for_ mvcvCurrentLive $ embed (toNode el) -- doesn't rebuild do this?
               for_ mparent (`append` el)
               return mv
 
@@ -670,10 +671,17 @@ rebuild h =
         Controller_ c -> do
           mi_ <- lookupController (key c)
           for_ mi_ $ \MVCRecord {..} -> do
+            let f = void . runAs mvcrAs
             MVCView {..} <- readIORef mvcrView
-            for_ mvcvCurrentLive rebuild 
-            for_ mvcvCurrentLive $ \live ->
-              for_ elementHost ((`embed` live) . toNode)
+            mounted <- newIORef (return ())
+            case mvcvCurrentLive of
+              Nothing -> do
+                live <- build f mounted (fmap toNode elementHost) mvcvCurrent
+                writeIORef mvcrView MVCView { mvcvCurrentLive = Just live, .. }
+                join $ readIORef mounted
+              Just live -> do
+                rebuild live
+                for_ elementHost ((`embed` live) . toNode)
     go _ =
       return ()
 #endif
