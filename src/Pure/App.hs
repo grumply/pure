@@ -143,7 +143,7 @@ run app@App {..} = animator `seq` do
   ph  <- liftIO $ create "template"
   liftIO $ append ort ph
   rt'     <- liftIO $ newIORef (MVCView (NullView (Just ph) :: View '[])
-                                        (NullView $ Just ph)
+                                        (Just $ NullView $ Just ph)
                                         (Const ())
                                )
   nw :: Syndicate r   <- syndicate
@@ -180,23 +180,28 @@ run app@App {..} = animator `seq` do
             mb_ <- lookupController (Pure.Types.key b)
             case mb_ of
               Nothing -> do
-                MVCView _ old _ <- readIORef rt
+                MVCView _ mold _ <- readIORef rt
                 mounted <- newIORef (return ())
                 iob <- if first then
                          mkController mounted (ClearAndAppend ort) b
                        else
-                         mkController mounted (Replace old) b
+                         case mold of
+                           Nothing  -> mkController mounted (ClearAndAppend ort) b
+                           Just old -> mkController mounted (Replace old) b
                 join $ readIORef mounted
                 return (Carrier $ mvcrView iob)
               Just MVCRecord {..} -> do
-                MVCView _ old _ <- readIORef rt
-                MVCView _ new _ <- readIORef mvcrView
-                rebuild new
+                MVCView _ mold _ <- readIORef rt
+                MVCView _ mnew _ <- readIORef mvcrView
+                for_ mnew rebuild
                 if first then do
                   clear (toNode ort)
-                  forM_ (getHost new) (addAnimation . append ort)
+                  for_ mnew $ \new ->
+                    for_ (getHost new) (addAnimation . append ort)
                 else
-                  void $ addAnimation $ replace old (unsafeCoerce new)
+                  case (mold,unsafeCoerce mnew) of
+                    (Just old,Just new) -> void $ addAnimation $ replace old (unsafeCoerce new)
+                    _                   -> return ()
                 return (Carrier mvcrView)
           become $ \r -> do
             pg <- lift $ pages r
@@ -213,26 +218,33 @@ run app@App {..} = animator `seq` do
                 join $ readIORef mounted
               Just MVCRecord {..} -> do
                 Just h <- findByTag "head"
-                MVCView _ new _ <- readIORef mvcrView
-                rebuild new
-                void $ addAnimation $ replace (NullView $ Just h) new
+                MVCView _ mnew _ <- readIORef mvcrView
+                for_ mnew $ \new -> do
+                  rebuild new
+                  void $ addAnimation $ replace (NullView $ Just h) new
             mb_ <- lookupController (Pure.Types.key b)
             case mb_ of
               Nothing -> do
-                MVCView _ old _ <- readIORef rt
+                MVCView _ mold _ <- readIORef rt
                 mounted <- newIORef (return ())
-                cr <- flip (mkController mounted) b $ if first then ClearAndAppend ort else Replace old
+                cr <- flip (mkController mounted) b $
+                        if first
+                          then ClearAndAppend ort
+                          else maybe (ClearAndAppend ort) Replace mold
                 join $ readIORef mounted
                 return (Carrier $ mvcrView cr)
               Just MVCRecord {..} -> do
-                MVCView _ old _ <- readIORef rt
-                MVCView _ new _ <- readIORef mvcrView
-                rebuild new
+                MVCView _ mold _ <- readIORef rt
+                MVCView _ mnew _ <- readIORef mvcrView
+                for_ mnew rebuild
                 if first then do
                   clear (toNode ort)
-                  forM_ (getHost new) (addAnimation . append ort)
+                  for_ mnew $ \new ->
+                    for_ (getHost new) (addAnimation . append ort)
                 else
-                  void $ addAnimation $ replace old (unsafeCoerce new)
+                  case (mold,unsafeCoerce mnew) of
+                    (Just o,Just n) -> void $ addAnimation $ replace o n
+                    _               -> return ()
                 return (Carrier mvcrView)
           become $ \r -> do
             pg <- lift $ pages r

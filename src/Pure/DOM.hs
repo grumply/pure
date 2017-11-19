@@ -171,7 +171,8 @@ buildManagedView f mounted mparent m@ManagedView {..} = do
       let bld elementHost = do
             MVCRecord {..} <- mkController mounted BuildOnly a
             MVCView {..} <- liftIO $ readIORef mvcrView
-            for_ elementHost ((`embed` mvcvCurrentLive) . toNode)
+            for_ mvcvCurrentLive $ \live ->
+              for_ elementHost ((`embed` live) . toNode)
             return ManagedView {..}
 
       case elementHost of
@@ -189,7 +190,7 @@ buildManagedView f mounted mparent m@ManagedView {..} = do
               MVCView {..} <- liftIO $ readIORef mvcrView
               let mv = ManagedView {..}
               rebuild mv
-              embed (toNode el) mvcvCurrentLive
+              for_ mvcvCurrentLive $ embed (toNode el)
               for_ mparent (`append` el)
               return mv
 
@@ -202,7 +203,7 @@ buildManagedView f mounted mparent m@ManagedView {..} = do
             Just MVCRecord {..} -> do
               MVCView {..} <- liftIO $ readIORef mvcrView
               rebuild m
-              embed (toNode e) mvcvCurrentLive
+              for_ mvcvCurrentLive $ embed (toNode e)
               return m
 
 cleanup :: View e -> IO ()
@@ -668,10 +669,11 @@ rebuild h =
       case controller of
         Controller_ c -> do
           mi_ <- lookupController (key c)
-          forM_ mi_ $ \MVCRecord {..} -> do
+          for_ mi_ $ \MVCRecord {..} -> do
             MVCView {..} <- readIORef mvcrView
-            rebuild mvcvCurrentLive
-            forM_ elementHost ((`embed` mvcvCurrentLive) . toNode)
+            for_ mvcvCurrentLive rebuild 
+            for_ mvcvCurrentLive $ \live ->
+              for_ elementHost ((`embed` live) . toNode)
     go _ =
       return ()
 #endif
@@ -720,7 +722,7 @@ instance IsMVC' ts ms m
         Just (MVCRecord {..}) -> return (runAs mvcrAs)
         Nothing -> do
           mounted <- newIORef (return ())
-          mkController mounted BuildOnly c
+          mkController mounted NoBuild c
           using_ c
     with_ c m = do
       run <- using_ c
@@ -733,7 +735,7 @@ instance IsMVC' ts ms m
         Just MVCRecord {..} -> do
           killThread (mvcpThreadId mvcrPatcher)
           MVCView {..} <- liftIO $ readIORef mvcrView
-          remove mvcvCurrentLive
+          for mvcvCurrentLive remove
           void $ runAs mvcrAs $ do
             buf <- get
             Shutdown sdn <- get
@@ -751,6 +753,7 @@ data MkControllerAction
   | forall e. Replace (View e)
   | Append Node
   | BuildOnly
+  | NoBuild
 
 controllerPatcher :: (Pure a ms) => Dispatcher ms -> IORef (MVCView ms m) -> (m ms -> a ms) -> IO (ThreadId,MVar ())
 controllerPatcher f view rndr = do
@@ -769,7 +772,13 @@ controllerPatcher f view rndr = do
       -- render the current view which should be an update to the exisiting view in mvcvCurrent/Live
       let new = render $ rndr mvcvModel
       mounted <- newIORef (return ())
-      let (plan,newLive) = buildPlan (\p -> diffDeferred f mounted p mvcvCurrentLive mvcvCurrent new)
+      (plan,newLive) <-
+        case mvcvCurrentLive of
+          Nothing -> do
+            i <- Pure.DOM.build f mounted Nothing mvcvCurrent
+            return ([],i)
+          Just live ->
+            return $ buildPlan (\p -> diffDeferred f mounted p live mvcvCurrent new)
       mtd <- plan `seq` readIORef mounted
       unless (List.null plan) $ do
         barrier <- newEmptyMVar
@@ -777,17 +786,23 @@ controllerPatcher f view rndr = do
         takeMVar barrier
       mtd
       atomicModifyIORef' view $ \v ->
-        (v { mvcvCurrent = new, mvcvCurrentLive = newLive },())
+        (v { mvcvCurrent = new, mvcvCurrentLive = Just newLive },())
 #else
       mvcv@MVCView {..} <- readIORef view
       let new = render $ rndr mvcvModel
       mounted <- newIORef (return ())
-      let (plan,newLive) = buildPlan (\p -> diffDeferred f mounted p mvcvCurrentLive mvcvCurrent new)
+      (plan,newLive) <-
+        case mvcvCurrentLive of
+            Nothing -> do
+              i <- Pure.DOM.build f mounted Nothing mvcvCurrent
+              return ([],i)
+            Just live ->
+              return $ buildPlan (\p -> diffDeferred f mounted p live mvcvCurrent new)
       mtd <- plan `seq` readIORef mounted
       runPlan plan
       mtd
       atomicModifyIORef' view $ \v ->
-        (v { mvcvCurrent = new, mvcvCurrentLive = newLive },())
+        (v { mvcvCurrent = new, mvcvCurrentLive = Just newLive },())
 #endif
 
 mkController :: forall ms ts m.
@@ -805,23 +820,25 @@ mkController mounted mkControllerAction c@Controller {..} = do
   sdn <- Shutdown <$> syndicate
   as  <- unsafeConstructAs buf
   let sendEv = void . runAs as
-  (i,l) <- case mkControllerAction of
-            ClearAndAppend n -> do
-              i <- Pure.DOM.build sendEv mounted Nothing raw
-              clear (toNode n)
-              let mn = getHost i
-              forM_ mn (addAnimation . append n)
-              return (i,True)
-            Replace as -> do
-              i <- Pure.DOM.build sendEv mounted Nothing raw
-              addAnimation $ replace as (unsafeCoerce i)
-              return (i,True)
-            Append en -> do
-              i <- Pure.DOM.build sendEv mounted (Just en) raw
-              return (i,True)
-            BuildOnly -> do
-              i <- Pure.DOM.build sendEv mounted Nothing raw
-              return (i,False)
+  i <- case mkControllerAction of
+         ClearAndAppend n -> do
+           i <- Pure.DOM.build sendEv mounted Nothing raw
+           clear (toNode n)
+           let mn = getHost i
+           for_ mn (addAnimation . append n)
+           return (Just i)
+         Replace as -> do
+           i <- Pure.DOM.build sendEv mounted Nothing raw
+           addAnimation $ replace as (unsafeCoerce i)
+           return (Just i)
+         Append en -> do
+           i <- Pure.DOM.build sendEv mounted (Just en) raw
+           return (Just i)
+         BuildOnly -> do
+           i <- Pure.DOM.build sendEv mounted Nothing raw
+           return (Just i)
+         NoBuild ->
+           return Nothing
   ds   <- newIORef Eager
   mvcv <- newIORef (MVCView raw i model)
   (patcherThread,patcherBarrier) <- controllerPatcher sendEv mvcv view
@@ -1301,7 +1318,7 @@ addFeature f e = go
           when (preventDef o) (preventDefault jsv)
           when (stopProp o) (stopPropagation jsv)
           mef <- a (Evt (pFromJSVal jsv) stpr target)
-          forM_ mef f
+          for_ mef f
 
         writeIORef stopper $ do
           removeEventListener target n cb
@@ -1396,7 +1413,7 @@ removeFeature e = go
       removeProperty e name
 
     go StyleList {..} =
-      forM_ (M.keys stylePairs) (removeStyle e)
+      for_ (M.keys stylePairs) (removeStyle e)
 
     go On {..} =
       eventStopper
@@ -1450,7 +1467,7 @@ addFeatureDeferred e f plan = go
                 when (preventDef o) (preventDefault jsv)
                 when (stopProp o) (stopPropagation jsv)
                 mef <- a (Evt (pFromJSVal jsv) stpr target)
-                forM_ mef f
+                for_ mef f
 
               writeIORef stopper $ do
                 removeEventListener target n cb
@@ -1467,7 +1484,7 @@ addFeatureDeferred e f plan = go
     go ref@(HostRef g) = do
       amendPlan plan $ do
         mef <- g (toNode e)
-        forM_ mef f
+        for_ mef f
       return ref
 
 #ifdef __GHCJS__

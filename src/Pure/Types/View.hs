@@ -211,7 +211,7 @@ data DiffStrategy = Eager | Manual deriving (Eq)
 data MVCView (ms :: [* -> *]) m where
   MVCView ::
     { mvcvCurrent     :: View ms
-    , mvcvCurrentLive :: View ms
+    , mvcvCurrentLive :: Maybe (View ms)
     , mvcvModel       :: m ms
     } -> MVCView ms m
 
