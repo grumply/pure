@@ -323,7 +323,6 @@ setupRouter _ = do
             rtr <- lift getRouter
             pn  <- liftIO getPathname
             qps <- liftIO getSearch
-            liftIO $ print (pn,qps)
             let p' = pn <> qps
             -- prevent recalculation with popstate on hash change
             unless (p' == p) $ do

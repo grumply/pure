@@ -753,6 +753,10 @@ instance IsMVC' ts ms m
                 myThreadId >>= killThread
         _ -> return ()
 
+unsafePreinit c = liftIO $ do
+  asc <- usingController c Preinit
+  void $ asc (return ())
+
 usingController c bld = do
   -- FIXME: likely a bug here with double initialization in multithreaded contexts!
   mi_ <- lookupController (key c)
@@ -1023,8 +1027,11 @@ getView = liftIO . readIORef . crView
 parent :: Ref parent props state -> Dispatcher parent
 parent = crDispatcher
 
-setState :: MonadIO m => Ref parent props state -> (props -> state -> IO (state,IO ())) -> m Bool
-setState cr = liftIO . queueComponentUpdate cr . UpdateState
+setStateIO :: MonadIO m => Ref parent props state -> (props -> state -> IO (state,IO ())) -> m Bool
+setStateIO cr = liftIO . queueComponentUpdate cr . UpdateState
+
+setState :: MonadIO m => Ref parent props state -> (props -> state -> state) -> m Bool
+setState self f = setStateIO self (\p s -> return (f p s,def))
 
 -- Probably don't use this....
 setProps :: MonadIO m => Ref parent props state -> props -> m Bool
