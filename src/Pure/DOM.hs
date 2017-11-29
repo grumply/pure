@@ -647,7 +647,6 @@ replace old@(getHost -> oldHost) new@(getHost -> newHost) =
         Nothing -> error "Expected new host in replace; got nothing."
         Just nh -> do
           replaceNodes oh nh
-          cleanup old
           return new
 
 forceToFromTxt :: (ToTxt t, FromTxt t) => Txt -> t
@@ -1413,15 +1412,15 @@ styleDiff e = M.mergeWithKey diff remove add
     add    = M.mapWithKey (\nm val   -> setStyle e nm val)
 
 cleanupFeature :: Feature e -> IO ()
--- cleanupFeature Link {..} = eventStopper
--- cleanupFeature SVGLink {..} = eventStopper
--- cleanupFeature On {..} = eventStopper
+cleanupFeature Link {..} = eventStopper
+cleanupFeature SVGLink {..} = eventStopper
+cleanupFeature On {..} = eventStopper
 cleanupFeature _ = return ()
 
 cleanupFeatureDeferred :: Plan s -> Feature e -> ST s ()
--- cleanupFeatureDeferred plan Link {..} = amendPlan plan eventStopper
--- cleanupFeatureDeferred plan SVGLink {..} = amendPlan plan eventStopper
--- cleanupFeatureDeferred plan On {..} = amendPlan plan eventStopper
+cleanupFeatureDeferred plan Link {..} = amendPlan plan eventStopper
+cleanupFeatureDeferred plan SVGLink {..} = amendPlan plan eventStopper
+cleanupFeatureDeferred plan On {..} = amendPlan plan eventStopper
 cleanupFeatureDeferred _ _ = return ()
 
 removeFeature :: Element -> Feature e -> IO ()

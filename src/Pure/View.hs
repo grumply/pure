@@ -3,7 +3,7 @@
 {-# LANGUAGE PolyKinds #-}
 module Pure.View (module Export) where
 
-import Pure.DOM           as Export (forceDiff,currentHTML,ownHTML,setEagerDiff,setManualDiff,onModel,onOwnModel,getModel,putModel,modifyModel,onRaw,getHost,setState,setProps,parent,unmountComponent,getView,getState,getProps,usingController,MkControllerAction(..))
+import Pure.DOM           as Export (forceDiff,currentHTML,ownHTML,setEagerDiff,setManualDiff,onModel,onOwnModel,getModel,putModel,modifyModel,onRaw,getHost,setState,setStateIO,setProps,parent,unmountComponent,getView,getState,getProps,unsafePreinit,usingController,MkControllerAction(..))
 import Pure.Data  as Export hiding (Text,Alt,hashed,to,from,end,wait,wrap)
 import Pure.Types as Export hiding (Callback,Link,SVGLink,On,Text,Null,name,content)
 import Pure.Types.View    as Export hiding (Null,content,intercept)
