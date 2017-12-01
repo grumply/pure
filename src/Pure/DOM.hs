@@ -764,6 +764,7 @@ usingController c bld = do
     Nothing -> do
       mounted <- newIORef (return ())
       mkController mounted bld c
+      join $ readIORef mounted
       usingController c bld
 
 data MkControllerAction
