@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PolyKinds #-}
-module Pure.View (module Export) where
+module Pure.View (module Export, simple) where
 
 import Pure.DOM           as Export (forceDiff,currentHTML,ownHTML,setEagerDiff,setManualDiff,onModel,onOwnModel,getModel,putModel,modifyModel,onRaw,getHost,setState,setStateIO,setProps,parent,unmountComponent,getView,getState,getProps,unsafePreinit,usingController,MkControllerAction(..))
 import Pure.Data  as Export hiding (Text,Alt,hashed,to,from,end,wait,wrap)
@@ -17,8 +17,8 @@ import Pure.Signals       as Export
 
 type Static = Controller '[] (Const ())
 -- static :: ControllerKey '[] () -> HTML [] () -> Static
-static :: ControllerKey '[] (Const ()) -> View (Base (Const ())) -> Static
-static key0 view0 = Controller {..}
+simple :: ControllerKey '[] (Const ()) -> View (Base (Const ())) -> Static
+simple key0 view0 = Controller {..}
   where
     key = key0
     build = return
