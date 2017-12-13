@@ -72,6 +72,7 @@ library
     , Pure.Data.Txt
     , Pure.Data.UnsafeEq
     , Pure.Data.Vault
+    , Pure.Services.LocalStorage
     , Pure.Types.Feature
     , Pure.Types.View
     , Pure.WebSocket.API.Implementation
@@ -110,6 +111,8 @@ library
       Pure.WebSocket.GHCJS
 
     cpp-options:      -DGHCJS_BROWSER
+
+    js-sources: js/lz-string.min.js
 
   else
 
