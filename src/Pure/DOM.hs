@@ -154,13 +154,16 @@ buildComponentView f mtd mparent ComponentView {..} = do
 #ifndef __GHCJS__
     state1 <- Types.initialize c state1
     writeIORef state_ state1
-#else
-    mount c
-#endif
     let new = renderer c componentProps state1
     live <- build f mtd mparent new
     writeIORef live_ live
-#ifdef __GHCJS__
+    modifyIORef mtd (>> initialized c)
+#else
+    state2 <- mount c state1
+    writeIORef state_ state2
+    let new = renderer c componentProps state2
+    live <- build f mtd mparent new
+    writeIORef live_ live
     modifyIORef mtd (>> mounted c)
 #endif
     componentThread cr live componentProps state1
@@ -682,7 +685,7 @@ rebuild h =
                   live <- build f mounted Nothing mvcvCurrent
                   writeIORef mvcrView MVCView { mvcvCurrentLive = Just live, .. }
                   for_ elementHost ((`embed` live) . toNode)
-                  join $ readIORef mounted
+                  void $ addAnimation (join $ readIORef mounted)
                 Just live -> do
                   rebuild live
                   for_ elementHost ((`embed` live) . toNode)
@@ -764,7 +767,7 @@ usingController c bld = do
     Nothing -> do
       mounted <- newIORef (return ())
       mkController mounted bld c
-      join $ readIORef mounted
+      addAnimation (join $ readIORef mounted)
       usingController c bld
 
 data MkControllerAction

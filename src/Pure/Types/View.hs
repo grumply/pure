@@ -414,7 +414,8 @@ data Comp (parent :: [* -> *]) (props :: *) (state :: *) =
     Comp
       { construct    :: (IO state)
       , initialize   :: (state -> IO state)
-      , mount        :: (IO ())
+      , initialized  :: (IO ())
+      , mount        :: (state -> IO state)
       , mounted      :: (IO ())
       , receiveProps :: (props -> state -> IO state)
       , forceUpdate  :: (props -> state -> IO Bool)
@@ -436,7 +437,8 @@ instance (Typeable props, Typeable state) => Default (Comp parent props state) w
       , forceUpdate  = \_ _ -> return True
       , receiveProps = \_ -> return
       , mounted      = return ()
-      , mount        = return ()
+      , mount        = return
+      , initialized  = return ()
       , initialize   = return
       , construct    = return (error "Component.construct: no initial state.")
       }

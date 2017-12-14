@@ -188,7 +188,7 @@ run app@App {..} = animator `seq` do
                          case mold of
                            Nothing  -> mkController mounted (ClearAndAppend ort) b
                            Just old -> mkController mounted (Replace old) b
-                join $ readIORef mounted
+                addAnimation (join $ readIORef mounted)
                 return (Carrier $ mvcrView iob)
               Just MVCRecord {..} -> do
                 MVCView _ mold _ <- readIORef rt
@@ -216,7 +216,7 @@ run app@App {..} = animator `seq` do
                 Just h <- findByTag "head"
                 mounted <- newIORef (return ())
                 mkController mounted (Replace (NullView (Just h))) hc
-                join $ readIORef mounted
+                void $ addAnimation (join $ readIORef mounted)
               Just MVCRecord {..} -> do
                 Just h <- findByTag "head"
                 MVCView _ mnew _ <- readIORef mvcrView
@@ -232,7 +232,7 @@ run app@App {..} = animator `seq` do
                         if first
                           then ClearAndAppend ort
                           else maybe (ClearAndAppend ort) Replace mold
-                join $ readIORef mounted
+                addAnimation (join $ readIORef mounted)
                 return (Carrier $ mvcrView cr)
               Just MVCRecord {..} -> do
                 MVCView _ mold _ <- readIORef rt
