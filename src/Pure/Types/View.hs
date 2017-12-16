@@ -38,11 +38,13 @@ import Data.Bifunctor
 import Data.String
 import Data.Typeable
 import Data.IORef
+import Data.Unique
 import GHC.Generics
 import GHC.Exts
+import System.IO.Unsafe
 
 import Data.Hashable
-import qualified Data.HashMap.Lazy as HM
+import qualified Data.IntMap.Strict as HM
 
 import Unsafe.Coerce
 
@@ -84,12 +86,12 @@ data View (ms :: [* -> *]) where
         , tag           :: Txt
         , features      :: [Feature ms]
         , keyedChildren :: [(Int,View ms)]
-        , childMap      :: (HM.HashMap Int (View ms))
+        , childMap      :: (HM.IntMap (View ms))
         } -> View ms
 
   ComponentView
-    :: (Typeable props) =>
-       { componentProps  :: props
+    :: { componentType   :: Txt
+       , componentProps  :: props
        , componentRecord :: (Maybe (Ref ms props state))
        , componentView   :: (Ref ms props state -> Comp ms props state)
        } -> View ms
@@ -106,7 +108,7 @@ data View (ms :: [* -> *]) where
         , tag           :: Txt
         , features      :: [Feature ms]
         , keyedChildren :: [(Int,View ms)]
-        , childMap      :: (HM.HashMap Int (View ms))
+        , childMap      :: (HM.IntMap (View ms))
         } -> View ms
 
   ManagedView
@@ -118,6 +120,10 @@ data View (ms :: [* -> *]) where
 
   SomeView
     :: (Pure a ms, Typeable a, Typeable ms) => { renderable :: a ms } -> View ms
+
+  -- StaticView
+  --   :: { staticView :: View ms } -> View ms
+
 
 type Builder e      = [Feature e] -> [View e] -> View e
 type KeyedBuilder e = [Feature e] -> [(Int,View e)] -> View e
@@ -138,7 +144,7 @@ instance Eq (View e) where
           prettyUnsafeEq t t' && (reallyUnsafeEq fs fs' || fs == fs') && (reallyUnsafeEq ks ks' || ks == ks')
       go (HTMLView _ t fs cs) (HTMLView _ t' fs' cs') =
           prettyUnsafeEq t t' && (reallyUnsafeEq fs fs' || fs == fs') && (reallyUnsafeEq cs cs' || cs == cs')
-      go (ComponentView p _ v) (ComponentView p' _ v') =
+      go (ComponentView _ p _ v) (ComponentView _ p' _ v') =
           reallyVeryUnsafeEq v v' && reallyVeryUnsafeEq p p'
       go (KSVGView _ t fs ks cm) (KSVGView _ t' fs' ks' cm') =
           prettyUnsafeEq t t' && (reallyUnsafeEq fs fs' || fs == fs') && (reallyUnsafeEq ks ks' || ks == ks')
@@ -256,9 +262,9 @@ data Controller_ where
   Controller_ :: (IsMVC' ts ms m) => Controller' ts ms m -> Controller_
 instance Eq Controller_ where
  (==) (Controller_ c) (Controller_ c') =
-  let Key k1 :: Key GHC.Exts.Any = unsafeCoerce (key c)
-      Key k2 :: Key GHC.Exts.Any = unsafeCoerce (key c')
-  in prettyUnsafeEq k1 k2
+  let Key _ k1 :: Key GHC.Exts.Any = unsafeCoerce (key c)
+      Key _ k2 :: Key GHC.Exts.Any = unsafeCoerce (key c')
+  in k1 == k2
 
 type ControllerKey ms m = Key (MVCRecord (Appended ms (Base m)) m)
 
@@ -282,12 +288,12 @@ instance ToTxt (Controller' ts ms m) where
 
 instance Eq (Controller' ts ms m) where
   (==) (Controller k _ _ _ _) (Controller k' _ _ _ _) =
-    let Key k1 = k
-        Key k2 = k'
-    in prettyUnsafeEq k1 k2
+    let Key _ k1 = k
+        Key _ k2 = k'
+    in k1 == k2
 
 instance Ord (Controller' ts ms m) where
-  compare (Controller (Key k) _ _ _ _) (Controller (Key k') _ _ _ _) = compare k k'
+  compare (Controller (Key _ k) _ _ _ _) (Controller (Key _ k') _ _ _ _) = compare k k'
 
 pattern Null :: Typeable ms => View ms
 pattern Null <- (NullView _) where
@@ -301,8 +307,8 @@ pattern Text :: (ToTxt t, FromTxt t) => t -> View ms
 pattern Text t <- (TextView _ (fromTxt -> t)) where
   Text t = TextView Nothing (toTxt t)
 
-pattern Component p v <- ComponentView p _ v where
-  Component p v = ComponentView p Nothing v
+pattern Component nm p v <- ComponentView nm p _ v where
+  Component nm p v = ComponentView nm p Nothing v
 
 pattern View :: (Pure a e, Typeable a, Typeable e) => a e -> View e
 pattern View ams <- (SomeView (cast -> Just ams)) where
@@ -462,7 +468,8 @@ data ComponentPatch (parent :: [* -> *]) props state where
 
 data Ref (parent :: [* -> *]) (props :: *) (state :: *) where
   Ref ::
-    { crView       :: (IORef (View parent))
+    { crType       :: Txt
+    , crView       :: (IORef (View parent))
     , crProps      :: (IORef props)
     , crState      :: (IORef state)
     , crDispatcher :: (Dispatcher parent)

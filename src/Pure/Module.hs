@@ -18,7 +18,7 @@ import qualified Pure.Data as Export
 import Control.Concurrent
 import GHC.Prim
 
-import Data.HashMap.Strict as Map hiding ((!))
+import Data.IntMap.Strict as Map hiding (Key,(!))
 
 import Unsafe.Coerce
 
@@ -37,11 +37,9 @@ type Module ms = Module' ms ms
 
 instance Eq (Module' ts ms) where
   (==) (Module i _ _) (Module i' _ _) =
-    let Key k1 = i
-        Key k2 = i'
-    in case reallyUnsafePtrEquality# i i' of
-         1# -> True
-         _  -> k1 == k2
+    let Key _ k1 = i
+        Key _ k2 = i'
+    in k1 == k2
 
 -- Unlike services, modules are evented-context-local.
 instance (IsModule' ts ms, MonadIO c, ms' <: ModuleBase)
@@ -53,7 +51,7 @@ instance (IsModule' ts ms, MonadIO c, ms' <: ModuleBase)
       case mi_ of
         Nothing -> do
           sdn <- get
-          let Key (_,i) = key c
+          let Key _ i = key c
           liftIO $ modifyVault lv $ \v ->
             case Map.lookup i v of
               Just as ->

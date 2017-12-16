@@ -3,10 +3,10 @@
 {-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ViewPatterns #-}
-module Pure.Lifted where
+module Pure.Lifted (module Pure.Lifted, module Export) where
 
-import Pure.Data
-import Pure.Data.JSV
+import Pure.Data as Export
+import Pure.Data.JSV as Export
 
 import Data.Int
 

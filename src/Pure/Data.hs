@@ -58,6 +58,36 @@ import GHC.Generics as Export (Generic(..),to,from)
 import Data.Foldable as Export hiding (all,and,any,or)
 import Data.Traversable as Export
 
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "console.time($1)" timeRenderStart_js :: Txt -> IO ()
+
+foreign import javascript unsafe
+  "console.timeEnd($1)" timeRenderEnd_js :: Txt -> IO ()
+
+foreign import javascript unsafe
+  "console.timeStamp($1)" timestamp_js :: Txt -> IO ()
+#endif
+
+time :: Txt -> IO a -> IO a
+time t ioa = do
+#ifdef __GHCJS__
+  timeRenderStart_js t
+  a <- ioa
+  timeRenderEnd_js t
+#else
+  a <- ioa
+#endif
+  return a
+
+timestamp :: Txt -> IO ()
+timestamp t = do
+#ifdef __GHCJS__
+  timestamp_js t
+#else
+  return ()
+#endif
+
 data Renderable (a :: *) (ms :: [* -> *]) = Render a
 
 instance (Monad c) => Default (Callback_ status result c) where

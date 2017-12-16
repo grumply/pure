@@ -20,7 +20,7 @@ import qualified Pure.Data as Export
 import Control.Concurrent
 import GHC.Prim
 
-import Data.HashMap.Strict as Map hiding ((!))
+import Data.IntMap.Strict as Map hiding (Key,(!))
 
 import System.IO.Unsafe
 import Unsafe.Coerce
@@ -37,7 +37,7 @@ instance (IsService' ts ms, MonadIO c) =>
       mas <- lookupService (key s)
       case mas of
         Nothing -> do
-          let Key (_,i) = key s
+          let Key _ i = key s
           liftIO $ modifyVault serviceVault__ $ \v ->
             case Map.lookup i v of
               Nothing -> do
@@ -84,11 +84,9 @@ type Service ms = Service' (Appended ms Base) (Appended ms Base)
 
 instance Eq (Service' ts ms) where
   (==) (Service i _ _) (Service i' _ _) =
-    let Key k1 = i
-        Key k2 = i'
-    in case reallyUnsafePtrEquality# i i' of
-         1# -> True
-         _  -> k1 == k2
+    let Key _ k1 = i
+        Key _ k2 = i'
+    in k1 == k2
 
 startService :: forall ms ts c.
                 ( MonadIO c

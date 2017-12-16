@@ -107,11 +107,9 @@ type App ms r = forall ms'. ms' ~ Appended ms (Base r) => App' ms' ms' IO r
 
 instance Eq (App' ts ms c r) where
   (==) (App s _ _ _ _ _) (App s' _ _ _ _ _) =
-    let Key k1 = s
-        Key k2 = s'
-    in case reallyUnsafePtrEquality# k1 k2 of
-         1# -> True
-         _  -> k1 == k2
+    let Key _ k1 = s
+        Key _ k2 = s'
+    in k1 == k2
 
 simpleApp :: e ~ Ef (Base r) IO => Narrative Route e r -> (r -> e Page) -> App '[] r
 simpleApp = App "main" return (return ()) Nothing

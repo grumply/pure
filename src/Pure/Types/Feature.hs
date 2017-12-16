@@ -76,6 +76,12 @@ data Feature ms where
     , value :: Txt
     } -> Feature ms
 
+  StaticFeature ::
+    { feature :: Feature ms } -> Feature ms
+
+  DiffFeatureOn ::
+    { diffFeatureOn :: a, feature :: Feature ms } -> Feature ms
+
 instance Eq (Feature ms) where
   (==) NullFeature NullFeature = True
   (==) (Property p v) (Property p' v') =
@@ -94,6 +100,8 @@ instance Eq (Feature ms) where
     prettyUnsafeEq t t'
   (==) (XLink t _) (XLink t' _) =
     prettyUnsafeEq t t'
+  (==) (StaticFeature _) (StaticFeature _) = True
+  (==) (DiffFeatureOn a f) (DiffFeatureOn a' f') = reallyVeryUnsafeEq a a' || f == f'
   (==) _ _ = False
 
 instance Cond (Feature ms) where
