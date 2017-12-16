@@ -29,7 +29,7 @@ import qualified Pure.Types as Export hiding (Text,Null,build,prime,key)
 import Pure.Data as Export hiding (hashed)
 import Pure.Data.JSV
 
-import Pure.Lifted
+import Pure.Lifted hiding (hashed)
 import Pure.DOM
 import Pure.Types hiding (Base)
 import Pure.Router hiding (hashed)
