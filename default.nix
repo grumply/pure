@@ -1,4 +1,4 @@
-{ mkDerivation, aeson, aeson-pretty, base, bytestring, containers
+{ mkDerivation, ghc, aeson, aeson-pretty, base, bytestring, containers
 , ef, ef-base, ghc-prim, hashable, io-streams, network, random
 , stdenv, template-haskell, text, time, tlc, trivial
 , unordered-containers, vector, websockets
