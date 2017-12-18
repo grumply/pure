@@ -31,6 +31,7 @@ import Data.Proxy
 #ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH
 import Language.Haskell.TH.Lib
+#endif
 
 mapHead f [] = []
 mapHead f (x:xs) = f x : xs
