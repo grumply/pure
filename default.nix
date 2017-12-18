@@ -1,4 +1,4 @@
-{ mkDerivation, ghc, aeson, aeson-pretty, base, bytestring, containers
+{ mkDerivation, ghc, ghcjs-base, aeson, aeson-pretty, base, bytestring, containers
 , ef, ef-base, ghc-prim, hashable, io-streams, network, random
 , stdenv, template-haskell, text, time, tlc, trivial
 , unordered-containers, vector, websockets
@@ -17,8 +17,8 @@ mkDerivation {
     hashable text time tlc trivial unordered-containers 
     vector websockets
   ] ++ (if useTemplateHaskell then [ template-haskell ] else [])
-    ++ (if ghc.isGhcjs or false then [] else [
-        aeson-pretty io-streams network random websockets 
+    ++ (if ghc.isGhcjs or false then [ ghcjs-base ] else [
+        aeson-pretty io-streams network random websockets
     ]);
   configureFlags =
     [ (secure ? "-fsecure")
