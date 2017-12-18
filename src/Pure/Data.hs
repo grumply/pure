@@ -1,5 +1,7 @@
 {-# LANGUAGE CPP #-}
+#ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -51,7 +53,9 @@ import Debug.Trace
 import System.IO.Unsafe
 import Unsafe.Coerce
 
+#ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH.Syntax
+#endif
 
 import GHC.Generics as Export (Generic(..),to,from)
 
@@ -201,11 +205,13 @@ type (==>) as c = Constrain '[c] as
 scoped :: (FromTxt x) => (?scope :: Txt) => Txt -> x
 scoped t = fromTxt (?scope <> t)
 
+#ifdef USE_TEMPLATE_HASKELL
 this :: Q Exp
 this = do
   md <- fmap loc_module qLocation
   let t = dash $ Txt.pack md
   [| fromTxt t |]
+#endif
 
 dash :: Txt -> Txt
 dash = Txt.map (\x -> if x == '.' then '-' else x)

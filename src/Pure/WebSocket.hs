@@ -1,7 +1,16 @@
 {-# LANGUAGE CPP #-}
+#ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE ViewPatterns #-}
-module Pure.WebSocket (mkRequest, mkMessage, module Export) where
+module Pure.WebSocket 
+  (
+#ifdef USE_TEMPLATE_HASKELL
+    mkRequest, 
+    mkMessage, 
+#endif
+    module Export
+  ) where
 
 #ifdef __GHCJS__
 import Pure.WebSocket.GHCJS    as Export
@@ -18,12 +27,15 @@ import Pure.WebSocket.TypeRep  as Export
 
 import Data.Char
 import Data.Proxy
+
+#ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH
 import Language.Haskell.TH.Lib
 
 mapHead f [] = []
 mapHead f (x:xs) = f x : xs
 
+#ifdef USE_TEMPLATE_HASKELL
 processName str = (mkName str,mkName $ mapHead toLower str)
 
 mkRequest :: String -> TypeQ -> Q [Dec]
@@ -50,3 +62,4 @@ mkMessage (processName -> (dat,msg)) ty = do
       messageInstanceDec = InstanceD Nothing [] (ConT ''Message `AppT` ConT dat)
         [ TySynInstD ''M (TySynEqn [ ConT dat ] message) ]
   return [dataDec,proxyFunTy,proxyFunDec,messageInstanceDec]
+#endif

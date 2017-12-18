@@ -13,18 +13,27 @@ cabal-version:       >=1.10
 Flag secure
      Description: enable secure server-side websockets
      Default: False
+     Manual: True
 
 Flag debugws
      Description: debug websocket messages
      Default: False
+     Manual: True
 
 Flag devel
      Description: development debugging
      Default: False
+     Manual: True
 
 Flag debugapi
      Description: log failed parsing at api endpoints
      Default: False
+     Manual: True
+
+Flag use-template-haskell
+     Description: enable template haskell for message/request derivation
+     Default: True
+     Manual: True
 
 library
   if flag(debugws)
@@ -35,6 +44,9 @@ library
 
   if flag(debugapi)
     cpp-options: -DDEBUGAPI
+
+  if flag(use-template-haskell)
+    cpp-options: -DUSE_TEMPLATE_HASKELL
 
   exposed-modules:
       Pure.App
@@ -95,13 +107,15 @@ library
     , ghc-prim
     , hashable
     , random
-    , template-haskell
     , text
     , tlc
     , trivial
     , unordered-containers
     , vector
     , time
+
+  if flag(use-template-haskell)
+    build-depends: template-haskell
 
   if (impl(ghcjs))
 

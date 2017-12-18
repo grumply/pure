@@ -1,6 +1,8 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
+#ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE PatternSynonyms, ViewPatterns #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
@@ -29,8 +31,10 @@ import qualified Data.Text.Lazy.Encoding as TL
 import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Text.Lazy.Builder.Int as Builder
 
+#ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
+#endif
 
 import Numeric
 
@@ -338,6 +342,8 @@ pattern Translated :: (ToTxt t, FromTxt t, ToTxt f, FromTxt f) => f -> t
 pattern Translated t <- (fromTxt . toTxt -> t) where
   Translated f = fromTxt $ toTxt f
 
+#ifdef USE_TEMPLATE_HASKELL
 instance Lift Txt where
   lift (unpack -> str) = [| pack str |]
+#endif
 

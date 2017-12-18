@@ -8,7 +8,9 @@
 {-# LANGUAGE FlexibleInstances,FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE MultiWayIf #-}
 module Pure.Render where
 
@@ -43,8 +45,10 @@ import Unsafe.Coerce
 
 import qualified Data.Aeson as A
 
+#ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
+#endif
 
 newtype StaticHTML = StaticHTML { htmlText :: Txt } deriving (Eq,Ord)
 instance ToTxt StaticHTML where
@@ -54,8 +58,10 @@ instance FromTxt StaticHTML where
 instance Monoid StaticHTML where
   mempty = fromTxt mempty
   mappend htmlt1 htmlt2 = fromTxt $ toTxt htmlt1 <> toTxt htmlt2
+#ifdef USE_TEMPLATE_HASKELL
 instance Lift StaticHTML where
   lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
+#endif
 
 staticHTML :: Typeable e => View e -> StaticHTML
 staticHTML = fromTxt . toTxt

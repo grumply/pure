@@ -3,7 +3,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -11,6 +10,9 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 module Pure.CSS (module Pure.CSS, module Export) where
 
 import Ef
@@ -37,7 +39,9 @@ import qualified Data.Map.Strict as M
 
 import Unsafe.Coerce
 
+#ifdef USE_TEMPLATE_HASKELL
 import qualified Language.Haskell.TH.Syntax as TH
+#endif
 
 import Prelude hiding ((.),id)
 
@@ -249,8 +253,10 @@ instance FromTxt StaticCSS where
 instance Monoid StaticCSS where
   mempty = fromTxt mempty
   mappend csst1 csst2 = fromTxt $ toTxt csst1 <> "\n" <> toTxt csst2
+#ifdef USE_TEMPLATE_HASKELL
 instance TH.Lift StaticCSS where
   lift (StaticCSS csst) = [| StaticCSS csst |]
+#endif
 
 instance ToTxt (CSS a) where
   toTxt = fst . go "\n" False
