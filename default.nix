@@ -1,7 +1,7 @@
-{ mkDerivation, aeson, base, bytestring, containers, ef, ef-base
-, ghc-prim, hashable, io-streams, network, random, stdenv
-, template-haskell, text, time, tlc, trivial, unordered-containers
-, vector, websockets
+{ mkDerivation, aeson, aeson-pretty, base, bytestring, containers
+, ef, ef-base, ghc-prim, hashable, io-streams, network, random
+, stdenv, template-haskell, text, time, tlc, trivial
+, unordered-containers, vector, websockets
 , secure ? false
 , debugws ? false
 , debugapi ? false
@@ -10,13 +10,16 @@
 }:
 mkDerivation {
   pname = "pure";
-  version = "0.6.0.0";
+  version = "0.6.0.1";
   src = ./.;
   libraryHaskellDepends = [
-    aeson base bytestring containers ef ef-base ghc-prim hashable
-    io-streams network random text time tlc trivial
-    unordered-containers vector websockets
-  ] ++ (if useTemplateHaskell then [ template-haskell ] else []);
+    aeson base bytestring containers ef ef-base ghc-prim
+    hashable text time tlc trivial unordered-containers 
+    vector websockets
+  ] ++ (if useTemplateHaskell then [ template-haskell ] else [])
+    ++ (if ghc.isGhcjs or false then [] else [
+        aeson-pretty io-streams network random websockets 
+    ]);
   configureFlags =
     [ (secure ? "-fsecure")
       (debugws ? "-fdebugws")
