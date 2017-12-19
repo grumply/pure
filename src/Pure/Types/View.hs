@@ -163,16 +163,16 @@ instance Default (View ms) where
 instance Cond (View e) where
   nil = NullView Nothing
 
-instance Typeable e => IsString (View e) where
+instance IsString (View e) where
   fromString = TextView Nothing . fromString
 
-instance Typeable e => FromTxt (View e) where
+instance FromTxt (View e) where
   fromTxt = TextView Nothing
 
-instance {-# OVERLAPS #-} Typeable e => IsString [View e] where
+instance {-# OVERLAPS #-} IsString [View e] where
   fromString s = [fromString s]
 
-instance Typeable e => FromTxt [View e] where
+instance FromTxt [View e] where
   fromTxt t = [fromTxt t]
 
 class Pure (a :: [* -> *] -> *) (ms :: [* -> *]) where
