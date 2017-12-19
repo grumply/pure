@@ -63,10 +63,10 @@ instance Lift StaticHTML where
   lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
 #endif
 
-staticHTML :: Typeable e => View e -> StaticHTML
+staticHTML :: View e -> StaticHTML
 staticHTML = fromTxt . toTxt
 
-shtml :: Typeable e => Txt -> [Feature e] -> StaticHTML -> View e
+shtml :: Txt -> [Feature e] -> StaticHTML -> View e
 shtml _tag _attributes = raw (mkHTML _tag) _attributes . toTxt
 
 selfClosing tag = tag `elem` selfclosing
@@ -165,7 +165,7 @@ instance (e <: '[]) => ToJSON (View e) where
 
       go _ = object [ "type" .= ("null" :: Txt) ]
 
-instance Typeable e => FromJSON (View e) where
+instance FromJSON (View e) where
   parseJSON o0 = do
 #ifdef __GHCJS__
     flip (withObject "obj") o0 $ \o -> do
@@ -344,7 +344,7 @@ instance ToTxt (View e) where
 
   toTxt (SomeView c) = toTxt (render c)
 
-instance Typeable e => ToTxt [View e] where
+instance ToTxt [View e] where
   toTxt = mconcat . map toTxt
 
 renderPage :: Page -> Txt
@@ -443,7 +443,7 @@ renderDynamicPageBootstrap (Partial (Controller_ c)) mainScript = do
   body_html <- renderDynamicHTML (render bdy)
   return $ dt <> body_html <> "</html>"
 
-renderDynamicHTML :: forall e. Typeable e => View e -> IO Txt
+renderDynamicHTML :: forall e. View e -> IO Txt
 renderDynamicHTML h =
   case h of
     NullView {} -> return mempty
