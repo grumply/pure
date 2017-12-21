@@ -16,6 +16,7 @@ import Data.Text.Read as T
 import Pure.Data.Txt as T
 import Pure.Data.JSON
 import Pure.Data.Default
+import Data.List as List
 
 import qualified Pure.Types as T
 import Pure.Types (Feature(NullFeature,Attribute,Property,StyleList,Link,SVGLink,XLink),Target(..),Options(..),Evt(..))
@@ -155,7 +156,7 @@ pattern SVGLink l <- (T.SVGLink l _) where
 -- makeLenses ''Options
 
 pattern ClassList cs <- (Attribute "class" (T.splitOn " " -> cs)) where
-  ClassList cs = Attribute "class" $ T.intercalate " " cs
+  ClassList cs = Attribute "class" $ T.intercalate " " $ List.filter (not . T.null) cs
 
 toBool :: Txt -> Bool
 toBool t = t /= ""
