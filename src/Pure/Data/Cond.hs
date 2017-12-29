@@ -72,7 +72,7 @@ instance Cond (Try a) where
 
 instance Cond () where
   nil = ()
-  isNil _ = False
+  isNil _ = True
 
 instance Cond Any where
   nil = Any True
