@@ -1060,7 +1060,6 @@ unmountComponent cr (f,cb) = liftIO . queueComponentUpdate cr $ Unmount f cb
 
 queueComponentUpdate :: Ref parent props state -> ComponentPatch parent props state -> IO Bool
 queueComponentUpdate crec cp = do
-  liftIO $ print ("queueing update: ", crType crec)
   mq <- readIORef (crPatchQueue crec)
   case mq of
     Nothing -> return False
@@ -1121,7 +1120,6 @@ componentThread Ref { crComponent = c, ..} live props state = void $ forkIO $ wr
               takeMVar barrier
               destruct c
             UpdateProperties newProps -> do
-              liftIO $ print ("UpdateProps: ",crType)
               newState      <- receiveProps c newProps state
               shouldUpdate  <- forceUpdate  c newProps newState
               let writeRefs = writeIORef crProps newProps >> writeIORef crState newState
@@ -1135,7 +1133,6 @@ componentThread Ref { crComponent = c, ..} live props state = void $ forkIO $ wr
                 writeRefs
                 wrapper rndr live props state newProps newState acc cps
             UpdateState f -> do
-              liftIO $ print ("UpdateState: ",crType)
               (newState,updatedCallback) <- f props state
               shouldUpdate               <- forceUpdate c props newState
               let writeRef = writeIORef crState newState
