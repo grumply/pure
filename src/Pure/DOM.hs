@@ -53,7 +53,7 @@ import GHCJS.Marshal.Pure
 
 import qualified Data.Map.Strict as M
 
-import Debug.Trace
+-- import Debug.Trace
 
 import Control.Monad.ST as Export
 import Control.Monad.ST.Unsafe as Export
@@ -403,8 +403,8 @@ diffKeyedChildrenDeferred (toNode -> e) f mounted plan keys olds mids news =
           (_,_,keys,removals) <- readSTRef dc
           ks                  <- newSTRef keys
           plan'               <- newSTRef []
-          unsafeIOToST $ do
-            print ("dKCD",map fst olds, map fst mids, map fst news)
+          -- unsafeIOToST $ do
+            -- print ("dKCD",map fst olds, map fst mids, map fst news)
           for_ (HM.toList removals) $ \(i,r) -> do
             modifySTRef ks (HM.delete i)
             removeDeferred plan' r
@@ -423,7 +423,7 @@ type DiffCtx s e = STRef s (Node,Dispatcher e,Keys e,Removals e)
 
 dKCD_new :: DiffCtx s e -> IORef (IO ()) -> Plan s -> [(Int,View e)] -> ST s [(Int,View e)]
 dKCD_new dc mounted plan news = do
-  unsafeIOToST $ print ("dKCD_new",map fst news)
+  -- unsafeIOToST $ print ("dKCD_new",map fst news)
   (e,f,_,removals) <- readSTRef dc
   plan' <- newSTRef []
   keys <- newSTRef mempty
@@ -440,7 +440,7 @@ dKCD_new dc mounted plan news = do
 
 dKCD_rm :: DiffCtx s e -> Plan s -> [(Int,View e)] -> ST s [(Int,View e)]
 dKCD_rm dc plan olds = do
-  unsafeIOToST $ print ("dKCD_rm",map fst olds)
+  -- unsafeIOToST $ print ("dKCD_rm",map fst olds)
   plan' <- newSTRef []
   for_ olds $ traverse (removeDeferred plan')
   p <- readSTRef plan'
@@ -450,7 +450,7 @@ dKCD_rm dc plan olds = do
 
 dKCD_ins :: DiffCtx s e -> IORef (IO ()) -> Plan s -> Int -> Int -> View e -> ST s (Int,View e)
 dKCD_ins dc mounted plan i nk new = do
-  unsafeIOToST $ print ("dKCD_ins",nk)
+  -- unsafeIOToST $ print ("dKCD_ins",nk)
   (e,f,keys,removals) <- readSTRef dc
   let ins i ~(Just a) = amendPlan plan (insertAt (coerce e) a i)
   case HM.lookup nk removals of
@@ -467,7 +467,7 @@ dKCD_ins dc mounted plan i nk new = do
 dKCD_upd :: DiffCtx s e -> IORef (IO ()) -> Plan s -> Diff' s [(Int,View e)]
 dKCD_upd dc mounted plan = go 0
   where
-    go !i olds mids news = traceShow ("dKCD_upd",map fst olds,map fst news) $
+    go !i olds mids news = -- traceShow ("dKCD_upd",map fst olds,map fst news) $
       case reallyUnsafePtrEquality# mids news of
         1# -> do
           -- unsafeIOToST $ putStrLn "Fully short circuited a keyed element"
@@ -478,13 +478,13 @@ dKCD_slow :: DiffCtx s e -> IORef (IO ()) -> Plan s -> Int -> Diff' s [(Int,View
 dKCD_slow dc mounted plan = go
   where
     go !_ olds _ [] = do
-      unsafeIOToST $ print ("dKCD_slow",1,map fst olds)
+      -- unsafeIOToST $ print ("dKCD_slow",1,map fst olds)
       -- for_ olds $ \(ok,_) -> unsafeIOToST $ print ("removing",ok)
       for_ olds $ \(ok,o) -> modifySTRef dc $ \(e,f,keys,removals) -> (e,f,HM.delete ok keys,HM.insert ok o removals)
       return []
 
     go _ [] _ news = do
-      unsafeIOToST $ print ("dKCD_slow",2,map fst news)
+      -- unsafeIOToST $ print ("dKCD_slow",2,map fst news)
       for news $ \(i,new) -> do
         (e,f,keys,removals) <- readSTRef dc
         case HM.lookup i removals of
@@ -499,7 +499,7 @@ dKCD_slow dc mounted plan = go
             return (i,r)
 
     go i [o@(ok,old)] ~[m@(mk,mid)] (n0@(nk0,new0):n1@(nk1,new1):ns) = do
-      unsafeIOToST $ print ("dKCD_slow",3,ok,(nk0:nk1:map fst ns))
+      -- unsafeIOToST $ print ("dKCD_slow",3,ok,(nk0:nk1:map fst ns))
       if mk == nk0
         then do
           n' <- dKCD_helper dc mounted plan o m n0
@@ -518,7 +518,7 @@ dKCD_slow dc mounted plan = go
               return (n':ns')
 
     go i [o@(ok,old)] ~[m@(mk,mid)] ~[n@(nk,new)] = do
-      unsafeIOToST $ print ("dKCD_slow",4,ok,nk)
+      -- unsafeIOToST $ print ("dKCD_slow",4,ok,nk)
       if mk == nk
         then do
           n' <- dKCD_helper dc mounted plan o m n
@@ -529,7 +529,7 @@ dKCD_slow dc mounted plan = go
           return [n']
 
     go i ~(o@(ok,old):os) ~(m@(mk,mid):ms) ns@[n@(nk,new)] = do
-      unsafeIOToST $ print ("dKCD_slow",5,ok:map fst os,nk)
+      -- unsafeIOToST $ print ("dKCD_slow",5,ok:map fst os,nk)
       if mk == nk
         then do
           -- unsafeIOToST $ print 51
@@ -543,7 +543,7 @@ dKCD_slow dc mounted plan = go
 
     go i ~os0@(o0@(ok0,old0):os1@(o1@(ok1,old1):os2)) ~ms0@(m0@(mk0,mid0):ms1@(m1@(mk1,mid1):ms2)) ~ns@(n0@(nk0,new0):ns1@(n1@(nk1,new1):ns2))
       | mk0 == nk0 = do
-          unsafeIOToST $ print ("dKCD_slow",6,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
+          -- unsafeIOToST $ print ("dKCD_slow",6,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
           n  <- dKCD_helper dc mounted plan o0 m0 n0
           case reallyUnsafePtrEquality# ms1 ns1 of
             1# -> do
@@ -554,7 +554,7 @@ dKCD_slow dc mounted plan = go
               return (n:ns)
 
       | mk0 == nk1 && mk1 == nk0 = do
-          unsafeIOToST $ print ("dKCD_slow",7,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
+          -- unsafeIOToST $ print ("dKCD_slow",7,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
           -- swap mk0 mk1
           (e,_,_,_) <- readSTRef dc
           let ins ~(Just b) = amendPlan plan (insertAt (coerce e) b i)
@@ -568,7 +568,7 @@ dKCD_slow dc mounted plan = go
               return (o1:o0:ns)
 
       | mk0 == nk1 = do
-          unsafeIOToST $ print ("dKCD_slow",8,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
+          -- unsafeIOToST $ print ("dKCD_slow",8,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
           -- insert nk0
           n0 <- dKCD_ins dc mounted plan i nk0 new0
           case reallyUnsafePtrEquality# ms0 ns1 of
@@ -580,7 +580,7 @@ dKCD_slow dc mounted plan = go
               return (n0:ns)
 
       | mk1 == nk0 = do
-          unsafeIOToST $ print ("dKCD_slow",9,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
+          -- unsafeIOToST $ print ("dKCD_slow",9,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
           -- delete mk0
           modifySTRef dc $ \(e,f,keys,removals) -> (e,f,keys,HM.insert mk0 old0 removals)
           case reallyUnsafePtrEquality# ms1 ns of
@@ -590,7 +590,7 @@ dKCD_slow dc mounted plan = go
             _  -> go i os1 ms1 ns
 
       | otherwise = do
-          unsafeIOToST $ print ("dKCD_slow",10,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
+          -- unsafeIOToST $ print ("dKCD_slow",10,ok0:ok1:map fst os2,nk0:nk1:map fst ns2)
           -- remove mk0, insert nk0, diff mk1 nk1 or recurse
           modifySTRef dc $ \(e,f,keys,removals) -> (e,f,keys,HM.insert mk0 old0 removals)
           n0 <- dKCD_ins dc mounted plan i nk0 new0
@@ -615,7 +615,7 @@ dKCD_slow dc mounted plan = go
 
 dKCD_helper :: DiffCtx s e -> IORef (IO ()) -> Plan s -> (Int,View e) -> (Int,View e) -> (Int,View e) -> ST s (Int,View e)
 dKCD_helper dc mounted plan (ok,old) (mk,mid) (nk,new) = do
-  unsafeIOToST $ print ("dKCD_helper",ok,mk,nk)
+  -- unsafeIOToST $ print ("dKCD_helper",ok,mk,nk)
   (e,f,keys,removals) <- readSTRef dc
   new' <- diffDeferred f mounted plan old mid new
   case reallyUnsafePtrEquality# old new' of
