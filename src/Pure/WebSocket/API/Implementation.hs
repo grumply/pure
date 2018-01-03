@@ -1,5 +1,4 @@
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
