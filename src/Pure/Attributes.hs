@@ -17,9 +17,10 @@ import Pure.Data.Txt as T
 import Pure.Data.JSON
 import Pure.Data.Default
 import Data.List as List
+import qualified Data.Map.Strict as Map
 
 import qualified Pure.Types as T
-import Pure.Types (Feature(NullFeature,Attribute,Property,StyleList,Link,SVGLink,XLink),Target(..),Options(..),Evt(..))
+import Pure.Types (Feature(NullFeature,Attribute,Property,StyleMap,Link,SVGLink,XLink),Target(..),Options(..),Evt(..))
 
 -- instance IsString (Feature ms) where
 --   fromString = Attribute "class" . fromString
@@ -157,6 +158,9 @@ pattern SVGLink l <- (T.SVGLink l _) where
 
 pattern ClassList cs <- (Attribute "class" (T.splitOn " " -> cs)) where
   ClassList cs = Attribute "class" $ T.intercalate " " $ List.filter (not . T.null) cs
+
+pattern StyleList ss <- (StyleMap (Map.toList -> ss)) where
+  StyleList ss = StyleMap (Map.fromList ss)
 
 toBool :: Txt -> Bool
 toBool t = t /= ""

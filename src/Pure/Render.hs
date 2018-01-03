@@ -87,7 +87,7 @@ instance ToJSON (Feature ms) where
       go NullFeature = object [ "type" .= ("null" :: Txt)]
       go (Property k v) = object [ "type" .= ("prop" :: Txt), "prop" .= k, "val" .= v]
       go (Attribute k v) = object [ "type" .= ("attr" :: Txt), "attr" .= k, "val" .= v]
-      go (StyleList ss) = object [ "type" .= ("style" :: Txt), "styles" .= M.toList ss ]
+      go (StyleMap ss) = object [ "type" .= ("style" :: Txt), "styles" .= M.toList ss ]
       go (Link e _) = object [ "type" .= ("link" :: Txt), "link" .= e]
       go (SVGLink e _) = object [ "type" .= ("svglink" :: Txt), "link" .= e ]
       go (XLink k v) = object [ "type" .= ("xlink" :: Txt), "key" .= k, "val" .= v]
@@ -114,7 +114,7 @@ instance FromJSON (Feature ms) where
           pure $ Property k v
         "style" -> do
           ss <- o .: "styles"
-          pure $ StyleList (M.fromList ss)
+          pure $ StyleMap (M.fromList ss)
         "link" -> do
           l <- o .: "link"
           pure $ Link l (return ())
@@ -220,7 +220,7 @@ instance ToTxt (Feature e) where
   toTxt (Property prop val) =
     prop <> "=\"" <> val <> "\""
 
-  toTxt (StyleList pairs) =
+  toTxt (StyleMap pairs) =
     "style=\""
       <> Txt.intercalate
            (Txt.singleton ';')

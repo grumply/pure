@@ -86,7 +86,7 @@ renderStyles b = first Prelude.reverse . runIdentity . flip (thread go) []
        r (((if b then "\t\t" else "\t") <> k <> ": " <> v):acc)
 
 styled :: Styles a -> Feature ms
-styled = StyleList . fst . runIdentity . flip (thread collect) mempty
+styled = StyleMap . fst . runIdentity . flip (thread collect) mempty
   where
     collect (Style_ k v r) acc = r $ M.insert k v acc
 
@@ -97,7 +97,7 @@ getStyles = go (return ()) []
       case ss of
         Return _ -> Nothing
         _ -> Just (ss,Prelude.reverse fs)
-    go ss fs ((StyleList styles):rest) =
+    go ss fs ((StyleMap styles):rest) =
       go (ss >> sequence_ (M.mapWithKey (=:) styles)) fs rest
     go ss fs (x:rest) = go ss (x:fs) rest
 

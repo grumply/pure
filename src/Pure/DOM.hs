@@ -1336,7 +1336,7 @@ addFeature f e = go
       setProperty e name value
       return p
 
-    go sl@StyleList {..} = do
+    go sl@StyleMap {..} = do
       M.foldMapWithKey (setStyle e) stylePairs
       return sl
 
@@ -1464,7 +1464,7 @@ removeFeature e = go
     go Property {..}  =
       removeProperty e name
 
-    go StyleList {..} =
+    go StyleMap {..} =
       for_ (M.keys stylePairs) (removeStyle e)
 
     go On {..} =
@@ -1506,7 +1506,7 @@ addFeatureDeferred e f plan = go
       amendPlan plan (setProperty e name value)
       return p
 
-    go sl@StyleList {..} = do
+    go sl@StyleMap {..} = do
       amendPlan plan (M.foldMapWithKey (setStyle e) stylePairs)
       return sl
 
@@ -1657,7 +1657,7 @@ diffFeaturesDeferred e f plan = start
                setProperty e (name new) (value new)
       return new
 
-    diffFeatureDeferred old mid@StyleList{} new@StyleList{} = do
+    diffFeatureDeferred old mid@StyleMap{} new@StyleMap{} = do
       sequence_ $ plannedStyleDiff e plan (stylePairs mid) (stylePairs new)
       return new
 

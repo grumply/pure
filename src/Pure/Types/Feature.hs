@@ -44,7 +44,7 @@ data Feature ms where
     , value :: Txt
     } -> Feature ms
 
-  StyleList ::
+  StyleMap ::
     { stylePairs :: !(M.Map Txt Txt)
     } -> Feature ms
 
@@ -88,7 +88,7 @@ instance Eq (Feature ms) where
     prettyUnsafeEq p p' && prettyUnsafeEq v v'
   (==) (Attribute a v) (Attribute a' v') =
     prettyUnsafeEq a a' && prettyUnsafeEq v v'
-  (==) (StyleList ss) (StyleList ss') =
+  (==) (StyleMap ss) (StyleMap ss') =
     reallyUnsafeEq ss ss' || ss == ss'
   (==) (On e t os ev _ _) (On e' t' os' ev' _ _) =
     e == e' && t == t' && os == os' && reallyVeryUnsafeEq ev ev'
