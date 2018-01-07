@@ -116,7 +116,7 @@ build f mounted mparent (KHTMLView _ t fs cs _) = do
   for_ mparent (`append` e)
   return $ KHTMLView (Just e) t fs' cs' $ HM.fromList cs'
 
-build f mounted mparent (SomeView r) = build f mounted mparent (render r)
+build f mounted mparent (SomeView _ r) = build f mounted mparent (render r)
 
 build f mounted mparent (RawView _ t fs c) = do
   e   <- create t
@@ -303,10 +303,12 @@ diffDeferred f mounted plan old mid new =
         case (mid,new) of
           (NullView{},NullView{})              -> return old
           (TextView{},TextView{})              -> replaceTextContentDeferred plan old new
-          (SomeView m,SomeView n)
+          (SomeView t m,SomeView t' n)
             -> if reallyVeryUnsafeEq m n -- shouldn't the above rUPE catch this?
                 then return old
-                else diffDeferred f mounted plan old (render m) (render n)
+                else if prettyUnsafeEq t t' 
+                        then diffDeferred f mounted plan old (render m) (render n)
+                        else replace
           (HTMLView{},HTMLView{})
             | tag mid == tag new               -> diffElementDeferred f mounted plan old mid new
             | otherwise                        -> replace

@@ -119,7 +119,10 @@ data View (ms :: [* -> *]) where
         } -> View ms
 
   SomeView
-    :: (Pure a ms, Typeable a, Typeable ms) => { renderable :: a ms } -> View ms
+    :: (Pure a ms) => 
+        { renderableType :: String -- Typeable is too expensive here because of the weight of ms
+        , renderable :: a ms 
+        } -> View ms
 
   -- StaticView
   --   :: { staticView :: View ms } -> View ms
@@ -152,8 +155,8 @@ instance Eq (View e) where
           prettyUnsafeEq t t' && (reallyUnsafeEq fs fs' || fs == fs') && (reallyUnsafeEq cs cs' || cs == cs')
       go (ManagedView _ t fs c) (ManagedView _ t' fs' c') =
           prettyUnsafeEq t t' && (reallyUnsafeEq fs fs' || fs == fs') && prettyUnsafeEq c c'
-      go (SomeView a) (SomeView b) =
-          reallyVeryUnsafeEq a b
+      go (SomeView t a) (SomeView t' b) =
+          prettyUnsafeEq t t' && reallyVeryUnsafeEq a b
       go _ _ =
           False
 
@@ -187,7 +190,7 @@ class Pure (a :: [* -> *] -> *) (ms :: [* -> *]) where
   render = grender . from
 
 instance Pure View ms where
-  render (SomeView a) = render a
+  render (SomeView _ a) = render a
   render a = a
 
 class GPure a ms where
@@ -295,7 +298,7 @@ instance Eq (Controller' ts ms m) where
 instance Ord (Controller' ts ms m) where
   compare (Controller (Key _ k) _ _ _ _) (Controller (Key _ k') _ _ _ _) = compare k k'
 
-pattern Null :: Typeable ms => View ms
+pattern Null :: View ms
 pattern Null <- (NullView _) where
   Null = NullView Nothing
 
@@ -310,9 +313,12 @@ pattern Text t <- (TextView _ (fromTxt -> t)) where
 pattern Component nm p v <- ComponentView nm p _ v where
   Component nm p v = ComponentView nm p Nothing v
 
-pattern View :: (Pure a e, Typeable a, Typeable e) => a e -> View e
-pattern View ams <- (SomeView (cast -> Just ams)) where
-  View ams = SomeView ams
+typeOfSomeView :: forall t (ms :: [* -> *]) . Typeable t => t ms -> TypeRep
+typeOfSomeView _ = typeRep (Proxy :: Proxy t)
+
+pattern View :: forall a e. (Pure a e, Typeable a) => a e -> View e
+pattern View ams <- (SomeView ((==) (tyConName (typeRepTyCon (typeOfSomeView (undefined :: a e)))) -> True) (unsafeCoerce -> ams)) where
+  View ams = SomeView (tyConName (typeRepTyCon (typeOfSomeView (undefined :: a e)))) ams
 
 mkHTML :: Txt -> [Feature e] -> [View e] -> View e
 mkHTML tag features children =
@@ -383,29 +389,29 @@ witness = unsafeCoerce
 witnesses :: [View '[]] -> [View ms]
 witnesses = unsafeCoerce
 
-mapPure :: (Typeable a, Typeable a', Typeable ms, Pure a ms, Pure a' ms) => (a ms -> a' ms) -> View ms -> View ms
+mapPure :: (Typeable a, Typeable a', Pure a ms, Pure a' ms) => (a ms -> a' ms) -> View ms -> View ms
 mapPure f sa =
   case sa of
     View a -> View (f a)
     _ -> sa
 
-forPure :: (Typeable a, Typeable a', Typeable ms, Pure a ms, Pure a' ms)
+forPure :: (Typeable a, Typeable a', Pure a ms, Pure a' ms)
              => View ms -> (a ms -> a' ms) -> View ms
 forPure = flip mapPure
 
 infixl 9 %
-(%) :: (Typeable a, Typeable a', Typeable ms, Pure a ms, Pure a' ms) => View ms -> (a ms -> a' ms) -> View ms
+(%) :: (Typeable a, Typeable a', Pure a ms, Pure a' ms) => View ms -> (a ms -> a' ms) -> View ms
 (%) = forPure
 
-mapPures :: (Typeable a, Typeable a', Typeable ms, Pure a ms, Pure a' ms)
+mapPures :: (Typeable a, Typeable a', Pure a ms, Pure a' ms)
               => (a ms -> a' ms) -> [View ms] -> [View ms]
 mapPures f as = map (mapPure f) as
 
-forPures :: (Typeable a, Typeable a', Typeable ms, Pure a ms, Pure a' ms)
+forPures :: (Typeable a, Typeable a', Pure a ms, Pure a' ms)
               => [View ms] -> (a ms -> a' ms) -> [View ms]
 forPures = flip mapPures
 
-data Mapping ms = forall a a'. (Typeable a, Typeable a', Typeable ms, Pure a ms, Pure a' ms)
+data Mapping ms = forall a a'. (Typeable a, Typeable a', Pure a ms, Pure a' ms)
                 => Mapping (a ms -> a' ms)
 
 maps :: View ms -> [Mapping ms] -> View ms

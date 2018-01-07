@@ -145,7 +145,7 @@ instance (e <: '[]) => ToJSON (View e) where
           Just ref ->
             go (unsafePerformIO (readIORef (crView ref)))
 
-      go (SomeView v) = go (render v)
+      go (SomeView _ v) = go (render v)
       go (TextView _ c) = object [ "type" .= ("text" :: Txt), "content" .= c]
       go (RawView _ t as c) = object [ "type" .= ("raw" :: Txt), "tag" .= t, "attrs" .= toJSON as, "content" .= c ]
       go (KHTMLView _ t as ks _) = object [ "type" .= ("keyed" :: Txt), "tag" .= t, "attrs" .= toJSON as, "keyed" .= toJSON (map (fmap render) ks) ]
@@ -283,7 +283,7 @@ instance Show (View e) where
                       Pure.DOM.build (\_ -> return ()) mtd Nothing stv
           Just ref -> show $ unsafePerformIO (readIORef (crView ref))
 
-      go n (SomeView c) = show (render c)
+      go n (SomeView _ c) = show (render c)
 
 
 instance ToTxt (View e) where
@@ -342,7 +342,7 @@ instance ToTxt (View e) where
                    Pure.DOM.build (\_ -> return ()) mtd Nothing stv
       Just ref -> toTxt $ unsafePerformIO (readIORef (crView ref))
 
-  toTxt (SomeView c) = toTxt (render c)
+  toTxt (SomeView _ c) = toTxt (render c)
 
 instance ToTxt [View e] where
   toTxt = mconcat . map toTxt
@@ -509,5 +509,5 @@ renderDynamicHTML h =
             "<" <> tag <> (if null features then "" else " " <> Txt.intercalate " " (map toTxt features))
               <> ">"  <> inner <> "</" <> tag <> ">"
 
-    SomeView c ->
+    SomeView _ c ->
       renderDynamicHTML (render c)
