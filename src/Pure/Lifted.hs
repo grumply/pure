@@ -13,6 +13,7 @@ import Data.Int
 #ifdef __GHCJS__
 import GHCJS.Types hiding (isNull)
 import GHCJS.Marshal.Pure
+import GHCJS.Marshal
 #endif
 
 #ifdef __GHCJS__
@@ -150,6 +151,24 @@ foreign import javascript unsafe
 
 foreign import javascript unsafe
   "$r = location.search" search_js :: IO Txt
+
+foreign import javascript unsafe
+  "$1[$2]" get_prop_unsafe_js :: JSV -> Txt -> IO JSV
+
+foreign import javascript unsafe
+  "$1[$2]" get_prop_unsafe_js_pure :: JSV -> Txt -> JSV
+
+{-# INLINE (.#) #-}
+(.#) :: PFromJSVal a => JSV -> Txt -> Maybe a
+(.#) jsv t =
+  let v = get_prop_unsafe_js_pure jsv t
+  in if isNull v then Nothing else Just (pFromJSVal v)
+
+{-# INLINE (..#) #-}
+(..#) :: FromJSVal a => JSV -> Txt -> IO (Maybe a)
+(..#) jsv t = do
+  v <- get_prop_unsafe_js jsv t
+  if isNull v then return Nothing else fromJSVal v
 
 {-# INLINE create #-}
 create :: Txt -> IO Element
@@ -322,6 +341,12 @@ getSearch = search_js
 -- Not sure which noops will be needed,
 -- though, so I'm implementing them all
 -- just to be safe.
+
+(.#) :: JSV -> Txt -> Maybe a
+(.#) _ _ = Nothing
+
+(..#) :: JSV -> Txt -> IO (Maybe a)
+(..#) _ _ = return Nothing
 
 create :: Txt -> IO Element
 create _ = return (Element ())

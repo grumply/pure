@@ -1307,14 +1307,14 @@ animator = unsafePerformIO $ void $ forkIO await
       takeMVar barrier
       await
 
-onRaw :: Node -> Txt -> Options -> (IO () -> Obj -> IO ()) -> IO (IO ())
+onRaw :: Node -> Txt -> Options -> (IO () -> JSV -> IO ()) -> IO (IO ())
 onRaw n nm os f = do
 #ifdef __GHCJS__
   stopper <- newIORef undefined
   cb <- CB.syncCallback1 CB.ContinueAsync $ \ev -> do
     when (preventDef os) (preventDefault ev)
     when (stopProp os) (stopPropagation ev)
-    f (join $ readIORef stopper) (pFromJSVal ev)
+    f (join $ readIORef stopper) ev
   writeIORef stopper $ do
     removeEventListener n nm cb
     CB.releaseCallback cb
@@ -1357,7 +1357,7 @@ addFeature f e = go
         cb <- CB.syncCallback1 CB.ContinueAsync $ \jsv -> do
           when (preventDef o) (preventDefault jsv)
           when (stopProp o) (stopPropagation jsv)
-          mef <- a (Evt (pFromJSVal jsv) stpr target)
+          mef <- a (Evt jsv stpr target)
           for_ mef f
 
         writeIORef stopper $ do
@@ -1527,7 +1527,7 @@ addFeatureDeferred e f plan = go
               cb <- CB.syncCallback1 CB.ContinueAsync $ \jsv -> do
                 when (preventDef o) (preventDefault jsv)
                 when (stopProp o) (stopPropagation jsv)
-                mef <- a (Evt (pFromJSVal jsv) stpr target)
+                mef <- a (Evt jsv stpr target)
                 for_ mef f
 
               writeIORef stopper $ do

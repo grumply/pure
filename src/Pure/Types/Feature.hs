@@ -6,7 +6,6 @@ import Ef
 import Pure.Data.CB
 import Pure.Data.Cond
 import Pure.Data.Default
-import Pure.Data.JSON
 import Pure.Data.JSV
 import Pure.Data.Txt
 import Pure.Data.UnsafeEq
@@ -22,7 +21,7 @@ instance Default Options where
   def = Options False False True
 
 data Evt = Evt
-  { evtObj            :: Obj
+  { evtObj            :: JSV
   , evtRemoveListener :: IO ()
   , evtTarget         :: JSV
   }

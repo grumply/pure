@@ -17,6 +17,7 @@ import Pure.Data.Txt as T
 import Pure.Data.JSON
 import Pure.Data.Default
 import Data.List as List
+import Pure.Lifted (JSV,(.#))
 import qualified Data.Map.Strict as Map
 
 import qualified Pure.Types as T
@@ -51,10 +52,10 @@ import Pure.Types (Feature(NullFeature,Attribute,Property,StyleMap,Link,SVGLink,
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
-  "$1.preventDefault" prev_def_js :: Obj -> IO ()
+  "$1.preventDefault" prev_def_js :: JSV -> IO ()
 
 foreign import javascript unsafe
-  "$1.stopPropagation" prev_prop_js :: Obj -> IO ()
+  "$1.stopPropagation" prev_prop_js :: JSV -> IO ()
 #endif
 
 prevDef :: Evt -> IO ()
@@ -1310,21 +1311,21 @@ pattern OnKeyPress opts f <- (On "keypress" opts f) where
   OnKeyPress opts f = On "keypress" opts f
 
 onInput :: (Txt -> Ef ms IO ()) -> Feature ms
-onInput f = On "input" def $ \ev -> return $ parse (evtObj ev) $ \o -> do
-  target <- o .: "target"
-  value <- target .: "value"
+onInput f = On "input" def $ \(evtObj -> o) -> return $ do
+  target <- o .# "target"
+  value <- target .# "value"
   pure $ f value
 
 onInputChange :: (Txt -> Ef ms IO ()) -> Feature ms
-onInputChange f = On "change" def $ \ev -> return $ parse (evtObj ev) $ \o -> do
-  target <- o .: "target"
-  value <- target .: "value"
+onInputChange f = On "change" def $ \(evtObj -> o) -> return $ do
+  target <- o .# "target"
+  value <- target .# "value"
   pure $ f value
 
 onCheck :: (Bool -> Ef ms IO ()) -> Feature ms
-onCheck f = On "change" def $ \ev -> return $ parse (evtObj ev) $ \o -> do
-  target <- o .: "target"
-  checked <- target .: "checked"
+onCheck f = On "change" def $ \(evtObj -> o) -> return $ do
+  target <- o .# "target"
+  checked <- target .# "checked"
   pure $ f checked
 
 onSubmit :: Ef ms IO () -> Feature ms
@@ -1336,13 +1337,13 @@ onBlur f = On "blur" def $ \_ -> return $ Just f
 onFocus :: Ef ms IO () -> Feature ms
 onFocus f = On "focus" def $ \_ -> return $ Just f
 
-onKeyUp :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
+onKeyUp :: (JSV -> Maybe (Ef ms IO ())) -> Feature ms
 onKeyUp f = On "keyup" def $ \ev -> return $ f (evtObj ev)
 
-onKeyDown :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
+onKeyDown :: (JSV -> Maybe (Ef ms IO ())) -> Feature ms
 onKeyDown f = On "keydown" def $ \ev -> return $ f (evtObj ev)
 
-onKeyPress :: (Obj -> Maybe (Ef ms IO ())) -> Feature ms
+onKeyPress :: (JSV -> Maybe (Ef ms IO ())) -> Feature ms
 onKeyPress f = On "keypress" def $ \ev -> return $ f (evtObj ev)
 
 onClick :: Ef ms IO () -> Feature ms
@@ -1358,7 +1359,7 @@ ignoreClick = Intercept $ On "click" def $ \_ -> return Nothing
 -- Keys
 
 keyCode :: Evt -> Maybe Int
-keyCode = parseMaybe (.: "keyCode") . evtObj
+keyCode = (.# "keyCode") . evtObj
 
 pattern Digit0 <- (keyCode -> Just 48)
 pattern Digit1 <- (keyCode -> Just 49)
@@ -1528,14 +1529,14 @@ pattern NumpadEqual <- (keyCode -> Just 12)
 pattern NumpadMultiply <- (keyCode -> Just 106)
 pattern NumpadSubtract <- (keyCode -> Just 109)
 
-shiftModifier o = (parseMaybe (.: "shiftKey") (evtObj o),o)
+shiftModifier o = ((.# "shiftKey") (evtObj o),o)
 pattern ShiftKey o <- (shiftModifier -> (Just True,o))
 
-altModifier o = (parseMaybe (.: "altKey") (evtObj o),o)
+altModifier o = ((.# "altKey") (evtObj o),o)
 pattern AltKey o <- (altModifier -> (Just True,o))
 
-ctrlModifier o = (parseMaybe (.: "ctrlKey") (evtObj o),o)
+ctrlModifier o = ((.# "ctrlKey") (evtObj o),o)
 pattern CtrlKey o <- (ctrlModifier -> (Just True,o))
 
-metaModifier o = (parseMaybe (.: "metaKey") (evtObj o),o)
+metaModifier o = ((.# "metaKey") (evtObj o),o)
 pattern MetaKey o <- (metaModifier -> (Just True,o))
