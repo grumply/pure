@@ -310,6 +310,7 @@ pattern Text :: (ToTxt t, FromTxt t) => t -> View ms
 pattern Text t <- (TextView _ (fromTxt -> t)) where
   Text t = TextView Nothing (toTxt t)
 
+pattern Component :: Txt -> props -> (Ref ms props state -> Comp ms props state) -> View ms
 pattern Component nm p v <- ComponentView nm p _ v where
   Component nm p v = ComponentView nm p Nothing v
 
@@ -438,7 +439,7 @@ data Comp (parent :: [* -> *]) (props :: *) (state :: *) =
       , destruct     :: (IO ())
       }
 
-instance (Typeable props, Typeable state) => Default (Comp parent props state) where
+instance Default (Comp parent props state) where
   def =
     Comp
       { renderer     = \_ _ -> nil
