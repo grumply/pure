@@ -1279,7 +1279,6 @@ componentThread ref@Ref { crComponent = c, ..} live props state = void $ forkIO 
 --             go props newState acc ps
 
 addAnimation a = do
-  putStrLn "adding animation"
   atomicModifyIORef' animationQueue $ \as -> (a:as,())
   tryPutMVar animationsAwaiting ()
 
