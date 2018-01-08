@@ -1070,83 +1070,86 @@ queueComponentUpdate crec cp = do
       return True
 
 componentThread :: forall parent props state. Ref parent props state -> View parent -> props -> state -> IO ()
-componentThread ref@Ref { crComponent = c, ..} live props state = void $ forkIO $ wrapper (renderer c) live props state [] []
+componentThread ref@Ref { crComponent = c@(renderer -> rndr), ..} live props state = void $ forkIO $ outer live props state props state [] []
   where
-    {-# INLINE wrapper #-}
-    wrapper rndr live newProps newState = worker
+    {-# INLINE outer #-}
+    outer live props state = inner
       where
-        {-# INLINE worker #-}
-        worker :: [(IO (),View parent -> IO (),IO ())] -> [ComponentPatch parent props state] -> IO ()
-        worker [] [] = do
-          mq <- readIORef crPatchQueue
-          for_ mq (worker [] <=< collect)
+        {-# INLINE inner #-}
+        inner newProps newState = worker
+          where
+            {-# INLINE worker #-}
+            worker :: [(IO (),View parent -> IO (),IO ())] -> [ComponentPatch parent props state] -> IO ()
+            worker [] [] = do
+              mq <- readIORef crPatchQueue
+              for_ mq (worker [] <=< collect)
 
-        worker acc [] = do
-          dus <- for (List.reverse acc) $ \(willUpd,didUpd,callback) -> do
-            willUpd
-            return (didUpd,callback)
-          mtd <- newIORef (return ())
-          let new =
-                case reallyUnsafePtrEquality# props newProps of
-                  1# ->
-                    case reallyUnsafePtrEquality# state newState of
-                      1# -> rndr props state
-                      _  -> rndr props newState
-                  _ ->
-                    case reallyUnsafePtrEquality# state newState of
-                      1# -> rndr newProps state
-                      _  -> rndr newProps newState
-          let old = rndr props state
-              (plan,new_live) = buildPlan (\p -> diffDeferred crDispatcher mtd p live old new)
-          writeIORef crView new_live
-          mtd <- plan `seq` readIORef mtd
-          unless (List.null plan) $ do
-            barrier <- newEmptyMVar
-            addAnimation (runPlan (putMVar barrier ():plan))
-            takeMVar barrier
-          mtd
-          cbs <- for dus $ \(du,c) -> do
-            du new_live
-            return c
-          sequence_ cbs
-          componentThread ref live newProps newState
+            worker acc [] = do
+              dus <- for (List.reverse acc) $ \(willUpd,didUpd,callback) -> do
+                willUpd
+                return (didUpd,callback)
+              mtd <- newIORef (return ())
+              let new =
+                    case reallyUnsafePtrEquality# props newProps of
+                      1# ->
+                        case reallyUnsafePtrEquality# state newState of
+                          1# -> rndr props state
+                          _  -> rndr props newState
+                      _ ->
+                        case reallyUnsafePtrEquality# state newState of
+                          1# -> rndr newProps state
+                          _  -> rndr newProps newState
+              let old = rndr props state
+                  (plan,new_live) = buildPlan (\p -> diffDeferred crDispatcher mtd p live old new)
+              writeIORef crView new_live
+              mtd <- plan `seq` readIORef mtd
+              unless (List.null plan) $ do
+                barrier <- newEmptyMVar
+                addAnimation (runPlan (putMVar barrier ():plan))
+                takeMVar barrier
+              mtd
+              cbs <- for dus $ \(du,c) -> do
+                du new_live
+                return c
+              sequence_ cbs
+              outer new_live newProps newState newProps newState [] []
 
-        worker acc (cp : cps) = do
-          case cp of
-            Unmount f plan -> do
-              unmount c
-              writeIORef crPatchQueue Nothing
-              barrier <- newEmptyMVar
-              let (p,_) = buildPlan (flip (unsafeCoerce f) live)
-              putMVar plan (runPlan (putMVar barrier ():p))
-              takeMVar barrier
-              destruct c
-            UpdateProperties newProps' -> do
-              newState'      <- receiveProps c newProps' newState
-              shouldUpdate   <- forceUpdate  c newProps' newState'
-              let writeRefs = writeIORef crProps newProps' >> writeIORef crState newState'
-              if shouldUpdate || not (List.null acc) then
-                let
-                  will = update  c newProps' newState'
-                  did  = updated c newProps  newState  
-                in
-                  wrapper rndr live newProps' newState' ((will >> writeRefs,did,def) : acc) cps
-              else do
-                writeRefs
-                wrapper rndr live newProps' newState' acc cps
-            UpdateState f -> do
-              (newState',updatedCallback) <- f newProps newState
-              shouldUpdate                <- forceUpdate c newProps newState'
-              let writeRef = writeIORef crState newState'
-              if shouldUpdate || not (List.null acc) then
-                let
-                  will = update  c newProps newState'
-                  did  = updated c newProps newState
-                in
-                  wrapper rndr live newProps newState' ((will >> writeRef,did,updatedCallback) : acc) cps
-              else do
-                writeRef
-                wrapper rndr live newProps newState' acc cps
+            worker acc (cp : cps) = do
+              case cp of
+                Unmount f plan -> do
+                  unmount c
+                  writeIORef crPatchQueue Nothing
+                  barrier <- newEmptyMVar
+                  let (p,_) = buildPlan (flip (unsafeCoerce f) live)
+                  putMVar plan (runPlan (putMVar barrier ():p))
+                  takeMVar barrier
+                  destruct c
+                UpdateProperties newProps' -> do
+                  newState'      <- receiveProps c newProps' newState
+                  shouldUpdate   <- forceUpdate  c newProps' newState'
+                  let writeRefs = writeIORef crProps newProps' >> writeIORef crState newState'
+                  if shouldUpdate || not (List.null acc) then
+                    let
+                      will = update  c newProps' newState'
+                      did  = updated c newProps  newState  
+                    in
+                      inner newProps' newState' ((will >> writeRefs,did,def) : acc) cps
+                  else do
+                    writeRefs
+                    inner newProps' newState' acc cps
+                UpdateState f -> do
+                  (newState',updatedCallback) <- f newProps newState
+                  shouldUpdate                <- forceUpdate c newProps newState'
+                  let writeRef = writeIORef crState newState'
+                  if shouldUpdate || not (List.null acc) then
+                    let
+                      will = update  c newProps newState'
+                      did  = updated c newProps newState
+                    in
+                      inner newProps newState' ((will >> writeRef,did,updatedCallback) : acc) cps
+                  else do
+                    writeRef
+                    inner newProps newState' acc cps
 
 addAnimation a = do
   atomicModifyIORef' animationQueue $ \as -> (a:as,())
