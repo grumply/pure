@@ -16,6 +16,7 @@ type JSV = ()
 newtype Win     = Win JSV
 newtype Doc     = Doc JSV
 newtype Loc     = Loc JSV
+newtype Body    = Body JSV
 newtype History = History JSV
 
 newtype Element = Element JSV
@@ -27,6 +28,8 @@ class IsNode e where
   toNode :: e -> Node
 instance IsNode Node where
   toNode = id
+instance IsNode Body where
+  toNode (Body b) = Node b
 instance IsNode Element where
   toNode (Element e) = Node e
 instance IsNode Text where
@@ -54,6 +57,8 @@ instance IsJSV Win where
   toJSV (Win w) = w
 instance IsJSV Doc where
   toJSV (Doc d) = d
+instance IsJSV Body where
+  toJSV (Body b) = b
 instance IsJSV Loc where
   toJSV (Loc l) = l
 instance IsJSV Element where

@@ -26,6 +26,9 @@ foreign import javascript unsafe
 foreign import javascript unsafe
   "$r = window.history" history :: History
 
+foreign import javascript unsafe
+  "$r = document.body" body :: Body
+
 -- note this is only for objects
 foreign import javascript unsafe
   "$r = $1 === $2" reference_equality_js :: JSV -> JSV -> Bool
@@ -295,6 +298,9 @@ requestAnimationFrame cb = request_animation_frame_js cb
 getWindow :: IO Win
 getWindow = return window
 
+getBody :: IO Body
+getBody = return body
+
 getDocument :: IO Doc
 getDocument = return document
 
@@ -438,11 +444,23 @@ requestAnimationFrame _ = return 0
 cancelAnimationFrame :: Int64 -> IO ()
 cancelAnimationFrame _ = return ()
 
+window :: Win
+window = Win ()
+
+body :: Body
+body = Body ()
+
 getWindow :: IO Win
 getWindow = return $ Win ()
 
+document :: Doc
+document = Doc ()
+
 getDocument :: IO Doc
 getDocument = return $ Doc ()
+
+history :: History
+history = History ()
 
 getHistory :: IO History
 getHistory = return $ History ()

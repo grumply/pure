@@ -2,7 +2,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE StandaloneDeriving #-}
 module Pure.WebSocket.Dispatch where
 
 import qualified Data.ByteString.Lazy as BSL
@@ -20,7 +19,7 @@ data Dispatch
     , pl :: Value
     } deriving (Generic,ToJSON,FromJSON)
 
-deriving instance ToBS Dispatch
+instance ToBS Dispatch
 #ifndef __GHCJS__
 instance FromBS Dispatch
   where
@@ -33,7 +32,7 @@ instance FromBS Dispatch
   -- a message and force a disconnect since ghc/pure doesn't
   -- permit malformed messages.
 #else
-deriving instance FromBS Dispatch
+instance FromBS Dispatch
 #endif
 
 {-# INLINE encodeDispatch #-}
