@@ -1070,10 +1070,10 @@ queueComponentUpdate crec cp = do
       return True
 
 componentThread :: forall parent props state. Ref parent props state -> View parent -> props -> state -> IO ()
-componentThread Ref { crComponent = c, ..} live props state = void $ forkIO $ wrapper (renderer c) live props state props state [] []
+componentThread ref@Ref { crComponent = c, ..} live props state = void $ forkIO $ wrapper (renderer c) live props state [] []
   where
     {-# INLINE wrapper #-}
-    wrapper rndr live props state newProps newState = worker
+    wrapper rndr live newProps newState = worker
       where
         {-# INLINE worker #-}
         worker :: [(IO (),View parent -> IO (),IO ())] -> [ComponentPatch parent props state] -> IO ()
@@ -1109,7 +1109,7 @@ componentThread Ref { crComponent = c, ..} live props state = void $ forkIO $ wr
             du new_live
             return c
           sequence_ cbs
-          wrapper rndr new_live newProps newState newProps newState [] []
+          componentThread ref live newProps newState
 
         worker acc (cp : cps) = do
           case cp of
@@ -1121,32 +1121,32 @@ componentThread Ref { crComponent = c, ..} live props state = void $ forkIO $ wr
               putMVar plan (runPlan (putMVar barrier ():p))
               takeMVar barrier
               destruct c
-            UpdateProperties newProps -> do
-              newState      <- receiveProps c newProps state
-              shouldUpdate  <- forceUpdate  c newProps newState
-              let writeRefs = writeIORef crProps newProps >> writeIORef crState newState
+            UpdateProperties newProps' -> do
+              newState'      <- receiveProps c newProps' newState
+              shouldUpdate   <- forceUpdate  c newProps' newState'
+              let writeRefs = writeIORef crProps newProps' >> writeIORef crState newState'
               if shouldUpdate || not (List.null acc) then
                 let
-                  will = update  c newProps newState
-                  did  = updated c props    state
+                  will = update  c newProps' newState'
+                  did  = updated c newProps  newState  
                 in
-                  wrapper rndr live props state newProps newState ((will >> writeRefs,did,def) : acc) cps
+                  wrapper rndr live newProps' newState' ((will >> writeRefs,did,def) : acc) cps
               else do
                 writeRefs
-                wrapper rndr live props state newProps newState acc cps
+                wrapper rndr live newProps' newState' acc cps
             UpdateState f -> do
-              (newState,updatedCallback) <- f props state
-              shouldUpdate               <- forceUpdate c props newState
-              let writeRef = writeIORef crState newState
+              (newState',updatedCallback) <- f newProps newState
+              shouldUpdate                <- forceUpdate c newProps newState'
+              let writeRef = writeIORef crState newState'
               if shouldUpdate || not (List.null acc) then
                 let
-                  will = update  c props newState
-                  did  = updated c props state
+                  will = update  c newProps newState'
+                  did  = updated c newProps newState
                 in
-                  wrapper rndr live props state newProps newState ((will >> writeRef,did,updatedCallback) : acc) cps
+                  wrapper rndr live newProps newState' ((will >> writeRef,did,updatedCallback) : acc) cps
               else do
                 writeRef
-                wrapper rndr live props state newProps newState acc cps
+                wrapper rndr live newProps newState' acc cps
 
 
 -- componentPatcher
@@ -1279,6 +1279,7 @@ componentThread Ref { crComponent = c, ..} live props state = void $ forkIO $ wr
 --             go props newState acc ps
 
 addAnimation a = do
+  putStrLn "adding animation"
   atomicModifyIORef' animationQueue $ \as -> (a:as,())
   tryPutMVar animationsAwaiting ()
 
