@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverlappingInstances #-}
 module Pure.WebSocket.API.Implementation where
 
 import Ef.Base
@@ -34,9 +35,6 @@ instance EmptyDefault (API f) where
 instance Build (hndlr ms c :: * -> *) (Endpoints hndlr ms c :: [*] -> *) where
   (<:>) = EndpointsCons
 
-instance (Appended '[] ys ~ ys) => TListAppend (Endpoints hndlr ms c) '[] ys ys where
-  (<++>) _ ys = ys
-
 instance ( Removed (y ': ys) x ~ (y ': ys)
          , Appended (x ': xs) (y ': ys) ~ (x ': zs)
          , TListAppend (Endpoints hndlr ms c) xs (y ': ys) zs
@@ -52,12 +50,11 @@ class GetHandler' (hndlr :: [* -> *] -> (* -> *) -> * -> *) (e :: *) (es :: [*])
                -> Endpoints hndlr ms c es
                -> hndlr ms c e
 
-instance es ~ (e ': xs)
-    => GetHandler' hndlr e es 'Z
-  where
+instance {-# OVERLAPPING #-} GetHandler' hndlr e (e ': xs) 'Z where
     getHandler' _ (EndpointsCons h _) = h
 
-instance ( index ~ Offset es e
+instance {-# OVERLAPPABLE #-}
+         ( index ~ Offset es e
          , GetHandler' hndlr e es index
          )
     => GetHandler' hndlr e (x ': es) ('S n)
@@ -86,12 +83,14 @@ class (Removed es e ~ es')
                   -> Endpoints hndlr ms c es
                   -> Endpoints hndlr ms c es'
 
-instance (Removed (e ': es) e ~ es)
+instance {-# OVERLAPPING #-} 
+         (Removed (e ': es) e ~ es)
     => DeleteHandler hndlr e (e ': es) es
   where
   deleteHandler _ (EndpointsCons _ hs) = hs
 
-instance ( DeleteHandler hndlr e es es''
+instance {-# OVERLAPPABLE #-} 
+         ( DeleteHandler hndlr e es es''
          , Removed (x ': es) e ~ es'
          , es' ~ (x ': es'')
          ) => DeleteHandler hndlr e (x ': es) es' where
