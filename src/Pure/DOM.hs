@@ -1096,7 +1096,7 @@ componentThread ref@Ref { crComponent = c@(renderer -> rndr), ..} live props sta
                         case reallyUnsafePtrEquality# props newProps of
                           1# ->
                             case reallyUnsafePtrEquality# state newState of
-                              1# -> rndr props state
+                              1# -> old
                               _  -> rndr props newState
                           _ ->
                             case reallyUnsafePtrEquality# state newState of
