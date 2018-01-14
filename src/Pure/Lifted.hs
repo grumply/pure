@@ -70,25 +70,25 @@ foreign import javascript unsafe
   "$1[$2] = null" remove_property_js :: Element -> Txt -> IO ()
 
 foreign import javascript unsafe
-  "document.createElement($1)" create_element_js :: Txt -> IO Element
+  "$r = document.createElement($1)" create_element_js :: Txt -> IO Element
 
 foreign import javascript unsafe
-  "document.createElementNS($1,$2)" create_element_ns_js :: Txt -> Txt -> IO Element
+  "$r = document.createElementNS($1,$2)" create_element_ns_js :: Txt -> Txt -> IO Element
 
 foreign import javascript unsafe
-  "document.createTextNode($1)" create_text_js :: Txt -> IO Text
+  "$r = document.createTextNode($1)" create_text_js :: Txt -> IO Text
 
 foreign import javascript unsafe
-  "document.createDocumentFragment()" create_frag_js :: IO Frag
+  "$r = document.createDocumentFragment()" create_frag_js :: IO Frag
 
 foreign import javascript unsafe
-  "document.getElementById($1)" get_element_by_id_js :: Txt -> IO Element
+  "$r = document.getElementById($1)" get_element_by_id_js :: Txt -> IO Element
 
 foreign import javascript unsafe
-  "$r = $1 == null" is_null_js :: JSV -> Bool
+  "$r = $1 === null" is_null_js :: JSV -> Bool
 
 foreign import javascript unsafe
-  "document.getElementsByTagName($1)[0]" get_first_element_by_tag_name_js :: Txt -> IO Element
+  "$r = document.getElementsByTagName($1)[0]" get_first_element_by_tag_name_js :: Txt -> IO Element
 
 foreign import javascript unsafe
   "$1.parentNode.removeChild($1)" remove_js :: Node -> IO ()
@@ -96,10 +96,10 @@ foreign import javascript unsafe
 -- A description of childNodes vs children:
 -- https://stackoverflow.com/questions/7935689/what-is-the-difference-between-children-and-childnodes-in-javascript
 foreign import javascript unsafe
-  "$1.childNodes[$2]" get_child_js :: Node -> Int -> IO Node
+  "$r = $1.childNodes[$2]" get_child_js :: Node -> Int -> IO Node
 
 foreign import javascript unsafe
-  "$1.textContent" text_content_js :: Node -> IO Txt
+  "$r = $1.textContent" text_content_js :: Node -> IO Txt
 
 foreign import javascript unsafe
   "$1.setAttribute($2,$3)" set_attribute_js :: Element -> Txt -> Txt -> IO ()
@@ -120,7 +120,7 @@ foreign import javascript unsafe
   "$1.removeEventListener($2,$3)" remove_event_listener_js :: JSV -> Txt -> CB (JSV -> IO ()) -> IO ()
 
 foreign import javascript unsafe
-  "window.requestAnimationFrame($1)" request_animation_frame_js :: CB (JSV -> IO ()) -> IO Int
+  "$r = window.requestAnimationFrame($1)" request_animation_frame_js :: CB (JSV -> IO ()) -> IO Int
 
 foreign import javascript unsafe
   "window.cancelAnimationFrame($1)" cancel_animation_frame_js :: Int -> IO ()
@@ -150,16 +150,16 @@ foreign import javascript unsafe
   "while ($1.firstChild) $1.removeChild($1.firstChild)" clear_js :: Node -> IO ()
 
 foreign import javascript unsafe
-  "$r = location.pathname" pathname_js :: IO Txt
+  "$r = location.pathname" pathname_js :: Txt
 
 foreign import javascript unsafe
-  "$r = location.search" search_js :: IO Txt
+  "$r = location.search" search_js :: Txt
 
 foreign import javascript unsafe
-  "$1[$2]" get_prop_unsafe_js :: JSV -> Txt -> IO JSV
+  "$r = $1[$2]" get_prop_unsafe_js :: JSV -> Txt -> IO JSV
 
 foreign import javascript unsafe
-  "$1[$2]" get_prop_unsafe_js_pure :: JSV -> Txt -> JSV
+  "$r = $1[$2]" get_prop_unsafe_js_pure :: JSV -> Txt -> JSV
 
 {-# INLINE (.#) #-}
 (.#) :: PFromJSVal a => JSV -> Txt -> Maybe a
@@ -332,10 +332,10 @@ clear :: Node -> IO ()
 clear n = clear_js n
 
 getPathname :: IO Txt
-getPathname = pathname_js
+getPathname = return pathname_js
 
 getSearch :: IO Txt
-getSearch = search_js
+getSearch = return search_js
 #else
 
 ----------------------------------------
