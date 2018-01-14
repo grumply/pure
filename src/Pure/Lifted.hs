@@ -165,13 +165,13 @@ foreign import javascript unsafe
 (.#) :: PFromJSVal a => JSV -> Txt -> Maybe a
 (.#) jsv t =
   let v = get_prop_unsafe_js_pure jsv t
-  in if isNull v then Nothing else Just (pFromJSVal v)
+  in if isNull v || isUndefined v then Nothing else Just (pFromJSVal v)
 
 {-# INLINE (..#) #-}
 (..#) :: FromJSVal a => JSV -> Txt -> IO (Maybe a)
 (..#) jsv t = do
   v <- get_prop_unsafe_js jsv t
-  if isNull v then return Nothing else fromJSVal v
+  if isNull v || isUndefined v then return Nothing else fromJSVal v
 
 {-# INLINE create #-}
 create :: Txt -> IO Element
