@@ -4,10 +4,10 @@
 {-# LANGUAGE DeriveAnyClass #-}
 module Pure.WebSocket.Dispatch where
 
-import qualified Data.ByteString.Lazy as BSL
 import GHC.Generics
 
 import Pure.Data
+import Pure.Data.JSON (pretty)
 
 #if defined(DEBUGAPI) || defined(DEVEL)
 import Debug.Trace
@@ -18,22 +18,6 @@ data Dispatch
     { ep :: Txt
     , pl :: Value
     } deriving (Generic,ToJSON,FromJSON)
-
-instance ToBS Dispatch
-#ifndef __GHCJS__
-instance FromBS Dispatch
-  where
-    fromBS = eitherDecode' . BSL.takeWhile (/= 0)
-  -- NOTE on BSL.takeWhile (/= 0):
-  -- fixes a padding bug when used with ghcjs/pure. Is \NUL
-  -- valid in a text component of an encoded message?
-  -- Probably need to filter \NUL from encoded messages
-  -- in ghcjs/pure. Any use of a null byte is liable to clobber
-  -- a message and force a disconnect since ghc/pure doesn't
-  -- permit malformed messages.
-#else
-instance FromBS Dispatch
-#endif
 
 {-# INLINE encodeDispatch #-}
 encodeDispatch :: ToJSON a => Txt -> a -> Dispatch
@@ -47,7 +31,7 @@ decodeDispatch d@Dispatch {..} =
   case fromJSON pl of
     Error err ->
 #if defined(DEBUGAPI) || defined(DEVEL)
-      traceShow ("decodeDispatch:fromJSON => Error",err,toBS d) Nothing
+      traceShow ("decodeDispatch:fromJSON => Error",err,pretty d) Nothing
 #else
       Nothing
 #endif

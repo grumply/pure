@@ -68,7 +68,6 @@ library
     , Pure.Txt
     , Pure.View
     , Pure.WebSocket
-    , Pure.Data.BS
     , Pure.Data.CB
     , Pure.Data.Cond
     , Pure.Data.Default

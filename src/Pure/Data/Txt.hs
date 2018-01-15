@@ -19,10 +19,6 @@ import Data.Coerce
 import Data.Int
 import Data.Word
 
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.Lazy.Char8 as BSLC
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
@@ -56,6 +52,8 @@ import Data.Text hiding (Text)
 import Data.Text.Read as T
 #endif
 
+import Debug.Trace
+
 #ifdef __GHCJS__
 type Txt = JSString
 #else
@@ -68,16 +66,10 @@ class FromTxt a where
   fromTxt = coerce
 
 -- ToTxt is representational and is thus uni-directional. For a fully
--- bidirectional encoding, see ToBS/FromBS where the expectation is that
--- fromBS (toBS a) = Right and fmap toBS . fromBS = Right
+-- bidirectional encoding, use ToJSON/FromJSON
 --
 -- ToTxt is used to construct, possibly unique, resource identifiers.
 --
--- Note the default instance uses a ToBS instance to construct a text value
--- from a full encoding of the term; this is slow since ToBS generates a
--- lazy bytestring and we must use lazy decoding and subsequent strictness
--- conversion. For small terms, which is the intended use-case for the
--- default instance, this won't matter much.
 class ToTxt a where
   toTxt :: a -> Txt
   default toTxt :: Coercible a Txt => a -> Txt
@@ -95,21 +87,13 @@ instance ToTxt a => ToTxt (Maybe a) where
   toTxt Nothing = mempty
 
 readError :: String -> Txt -> a
-readError ty t = error ("Atomic.FromTxt: FromTxt failed to read an " ++ ty ++ " when given: " ++ show t)
+readError ty t = error ("Pure.Data.Txt.FromTxt: FromTxt failed to read an " ++ ty ++ " when given: " ++ show t)
 
 instance FromTxt a => FromTxt (Maybe a) where
   fromTxt x = if x == mempty then Nothing else Just (fromTxt x)
 
 instance ToTxt () where
   toTxt _ = "()"
-
-instance ToTxt BSL.ByteString where
-  -- can this fail at runtime from a bad encoding?
-  toTxt = toTxt . TL.decodeUtf8
-
-instance ToTxt B.ByteString where
-  -- can this fail at runtime from a bad encoding?
-  toTxt = toTxt . T.decodeUtf8
 
 instance ToTxt Txt where
   toTxt = id
@@ -134,13 +118,6 @@ instance FromTxt JSString where
 
 instance FromTxt [Char] where
   fromTxt = unpack
-
-instance FromTxt B.ByteString where
-  fromTxt = BC.pack . unpack
-
-instance FromTxt BSL.ByteString where
-  fromTxt = BSLC.pack . unpack
-
 instance FromTxt Int where
   fromTxt t = fromMaybe (readError "Int" t) (T.readIntMaybe t)
 
@@ -241,12 +218,6 @@ instance FromTxt T.Text where
 
 instance FromTxt [Char] where
   fromTxt = T.unpack
-
-instance FromTxt B.ByteString where
-  fromTxt = T.encodeUtf8
-
-instance FromTxt BSL.ByteString where
-  fromTxt = BSL.fromStrict . T.encodeUtf8
 
 instance FromTxt Int where
   fromTxt t = either (readError "Int" t) fst (T.signed T.decimal t)

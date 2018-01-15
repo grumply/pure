@@ -68,6 +68,7 @@ import qualified Data.ByteString        as S
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Unsafe as S
 
+import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
 
 import qualified Data.HashMap.Strict as Map
@@ -97,7 +98,7 @@ data WSCloseReason
      , msgsPerMinuteSeen :: Int
      , msgsPerMinuteAllowed :: Int
      }
-  | BadMessageReceived Txt
+  | BadMessageReceived String
   | ClientClosedConnection
   | ServerClosedConnection
   deriving (Show,Eq,Generic,ToJSON,FromJSON)
@@ -641,7 +642,6 @@ wsClose wscr = do
 
 data WSException
   = Closed
-  | BadMessage String
   | CouldNotEstablishClientWS
   | NoMsgsignal
   deriving (Show)
@@ -657,13 +657,12 @@ instance Exception WSException
 --            . (* 1000000)
 
 receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
-  buffer <- newIORef mempty
   now <- timeInMicros
   mps <- readIORef msgsPerSecond
   mpm <- readIORef msgsPerMinute
-  go now now mps mpm buffer
+  go now now mps mpm
   where
-    go sec minu mps mpm buf = do
+    go sec minu mps mpm = do
       eem <- receiveIO c
 #if defined(DEBUGWS) || defined(DEVEL)
       Prelude.putStrLn $ "Received websocket message: " ++ show eem
@@ -678,11 +677,11 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
               new_mps <- readIORef msgsPerSecond
               if now > minu then do
                 new_mpm <- readIORef msgsPerMinute
-                go (now + 1000000) (now + 60000000) new_mps new_mpm buf
+                go (now + 1000000) (now + 60000000) new_mps new_mpm
               else
-                go (now + 1000000) minu new_mps mpm' buf
+                go (now + 1000000) minu new_mps mpm'
             else
-              go sec minu mps' mpm' buf
+              go sec minu mps' mpm'
 
           checkThroughput bad good =
             if mps' < 1 || mpm' < 1 then do
@@ -717,39 +716,15 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
       case eem of
 
         Right str -> do
-          case BLC.uncons str of
+          case eitherDecode' str of
 
-            Just ('C',rest) ->
-              checkThroughput
-                (writeIORef buf mempty)
-                (modifyIORef buf (<> rest))
+            Left _ ->
+              -- Simple generic protection against malicious msgs.
+              -- How often will this kill a valid connection?
+              buffer q rnr (wsClose (BadMessageReceived $ BLC.unpack str))
 
-            Just ('F',rest) -> do
-              beg <- readIORef buf
-              let msg = beg <> rest
-              writeIORef buf mempty
-              case fromBS msg of
-
-                Left _ -> do
-                  buffer q rnr (wsClose (BadMessageReceived $ toTxt str))
-
-                Right m ->
-                  resetSyndicateAndCheckThroughput m
-
-            Just ('{',_) -> do
-              writeIORef buf mempty -- just in case
-              case fromBS str of
-
-                Left _ ->
-                  -- Simple generic protection against malicious msgs.
-                  -- How often will this kill a valid connection?
-                  buffer q rnr (wsClose (BadMessageReceived $ toTxt str))
-
-                Right !(m :: Dispatch) ->
-                  resetSyndicateAndCheckThroughput m
-
-            _ ->
-              buffer q rnr (wsClose (BadMessageReceived $ toTxt str))
+            Right !(m :: Dispatch) ->
+              resetSyndicateAndCheckThroughput m
 
         Left Closed -> do
 #if defined(DEBUGWS) || defined(DEVEL)
@@ -761,7 +736,6 @@ receiveLoop sock ThroughputLimits {..} mhs_ brr_ q c rnr = do
 #if defined(DEBUGWS) || defined(DEVEL)
           Prelude.putStrLn $ "receiveloop websocket exception: " ++ show x
 #endif
-          writeIORef buf mempty -- just in case
           continue
 
 resetBytesReadRef brr_ = atomicModifyIORef' brr_ $ \(_,tot) -> ((tot,tot),())
@@ -776,8 +750,8 @@ receiveIO c = do
 
     -- is this right? All data is expected utf-8 encoded, so....
     -- I don't have the time to test with third-party libraries, but
-    -- it seems to work with fusion and fission....
-    -- I believe fusion is receiving text msgs but sending
+    -- it seems to work with pure....
+    -- I believe pure is receiving text msgs but sending
     -- binary msgs for performance reasons.
     Right (WS.Binary b) -> return $ Right b
     Right (WS.Text t _) -> return $ Right t
@@ -1096,7 +1070,7 @@ requestWith srv rqty_proxy req f = do
     let stopper = forkStop bhv >> leaveSyndicate n sub
 
     liftIO $ writeIORef s_ (n,stopper)
-    sendRawWith srv $ toBS $ encodeDispatch (requestHeader rqty_proxy) req
+    sendRawWith srv $ encode $ encodeDispatch (requestHeader rqty_proxy) req
     fulfill pr (Endpoint header (unsafeCoerce sub) n)
 
   return pr
@@ -1179,7 +1153,7 @@ request rqty_proxy req f = do
   let stopper = forkStop bhv >> leaveSyndicate n sub
 
   liftIO $ writeIORef s_ (n,stopper)
-  sendRaw $ toBS $ encodeDispatch (requestHeader rqty_proxy) req
+  sendRaw $ encode $ encodeDispatch (requestHeader rqty_proxy) req
   return (Endpoint header (unsafeCoerce sub) n)
 
 apiRequest :: forall c ms rqTy request rqI response rqs msgs.
@@ -1257,7 +1231,7 @@ respondWith srv rqty_proxy rr = do
             -- cleaned up, but it shouldn't matter too much since servers will have a limited set of msgs
             -- to which they're responding.
             void $ rr done $ maybe (Left m) (\rq -> Right
-              (sendRawWith srv . either id (toBS . encodeDispatch (responseHeader rqty_proxy rq))
+              (sendRawWith srv . either id (encode . encodeDispatch (responseHeader rqty_proxy rq))
               ,rq
               )) (decodeDispatch m)
   newn <- syndicate
@@ -1318,7 +1292,7 @@ respond rqty_proxy rr = do
             -- cleaned up, but it shouldn't matter too much since servers will have a limited set of msgs
             -- to which they're responding.
             void $ rr done $ maybe (Left m) (\rq -> Right
-              (sendRaw . either id (toBS . encodeDispatch (responseHeader rqty_proxy rq))
+              (sendRaw . either id (encode . encodeDispatch (responseHeader rqty_proxy rq))
               , rq
               )) (decodeDispatch m)
 
@@ -1350,7 +1324,7 @@ messageWith :: ( MonadIO c
             -> message
             -> Ef ms c (Promise (Either WSStatus ()))
 messageWith s mty_proxy m =
-  sendRawWith s $ toBS $ encodeDispatch (messageHeader mty_proxy) m
+  sendRawWith s $ encode $ encodeDispatch (messageHeader mty_proxy) m
 
 apiMessageWith :: ( MonadIO c
                   , MonadIO c'
@@ -1379,7 +1353,7 @@ message :: ( MonadIO c
         -> msg
         -> Ef ms c (Either WSStatus ())
 message mty_proxy m =
-  sendRaw $ toBS $ encodeDispatch (messageHeader mty_proxy) m
+  sendRaw $ encode $ encodeDispatch (messageHeader mty_proxy) m
 
 apiMessage :: ( MonadIO c
               , ms <: '[State () WebSocket]
@@ -1393,7 +1367,7 @@ apiMessage :: ( MonadIO c
            -> msg
            -> Ef ms c (Either WSStatus ())
 apiMessage _ mty_proxy m =
-  sendRaw $ toBS $ encodeDispatch (messageHeader mty_proxy) m
+  sendRaw $ encode $ encodeDispatch (messageHeader mty_proxy) m
 
 onMessageWith :: ( MonadIO c
                  , MonadIO c'

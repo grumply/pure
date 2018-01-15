@@ -19,7 +19,6 @@ module Pure.Data
   , module Export
   ) where
 
-import Pure.Data.BS as Export
 import Pure.Data.CB as Export hiding (Callback)
 import Pure.Data.Cond as Export
 import Pure.Data.Default as Export

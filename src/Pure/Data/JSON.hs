@@ -64,10 +64,8 @@ instance ToTxt Value where
   {-# INLINE toTxt #-}
   toTxt = encode
 
-#ifdef __GHCJS__
 foreign import javascript unsafe
   "JSON.stringify($1,null,4)" pretty_js :: Value -> Txt
-#endif
 
 pretty :: ToJSON a => a -> Txt
 pretty = pretty_js . toJSON
@@ -89,8 +87,11 @@ import Prelude hiding (lookup)
 
 import Data.Aeson.Encode.Pretty
 
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Encoding as TL
+
 pretty :: ToJSON a => a -> Txt
-pretty = toTxt . encodePretty
+pretty = TL.toStrict . TL.decodeUtf8 . encodePretty
 
 type Obj = O.Object
 
@@ -129,7 +130,7 @@ instance Lookup Int Value where
 
 instance ToTxt Value where
   {-# INLINE toTxt #-}
-  toTxt = toTxt . encode
+  toTxt = TL.toStrict . TL.decodeUtf8 . encode
 #endif
 
 parse = flip parseMaybe

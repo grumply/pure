@@ -65,12 +65,6 @@ import Text.Read hiding (lift,get)
 
 import GHC.Prim
 
-import Data.ByteString.Lazy as BSL hiding (putStrLn)
-
--- import Control.Lens as L
-
-type LazyByteString = BSL.ByteString
-
 #ifdef __GHCJS__
 foreign import javascript unsafe
   "$r = JSON.parse($1);" jsonParse :: Txt -> IO T.JSVal
@@ -169,7 +163,7 @@ data RequestHandler ms c rqTy
          , ToJSON rsp
          )
       => Proxy rqTy
-      -> (Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
+      -> (Ef ms c () -> Either Dispatch (Either Txt rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
       -> RequestHandler ms c rqTy
 
 responds :: ( MonadIO c
@@ -186,7 +180,7 @@ responds :: ( MonadIO c
             , ToJSON rsp
             )
           => Proxy rqTy
-          -> (Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
+          -> (Ef ms c () -> Either Dispatch (Either Txt rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
           -> RequestHandler ms c rqTy
 responds = RequestHandler
 
@@ -253,7 +247,7 @@ instance ( GetHandler RequestHandler request rqs'
       RequestHandler _ f -> do
         let p = Proxy :: Proxy request
             mhs' = deleteHandler p mhs :: ReqHandlers ms c rqs''
-        amh <- respond p ((unsafeCoerce f) :: Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (),req) -> Ef '[Event Dispatch] (Ef ms c) ())
+        amh <- respond p ((unsafeCoerce f) :: Ef ms c () -> Either Dispatch (Either Txt rsp -> Ef ms c (),req) -> Ef '[Event Dispatch] (Ef ms c) ())
         ams <- enactEndpoints ms mhs'
         return $ ActiveEndpointsCons pm amh ams
 
@@ -391,7 +385,6 @@ ws_ hn p secure = WebSocket
                 Nothing -> liftIO $ do
                   msock <- tryNewWebSocket (toTxt $ (if secure then "wss://" else "ws://") ++ hn ++ ':':port)
                   (rnr,_) :: (Signal ms c (Ef ms c ()),Behavior ms c (Ef ms c ())) <- runner
-                  cBuf <- newIORef mempty
                   case msock of
                     Nothing -> return Nothing
                     Just sock -> do
@@ -406,72 +399,26 @@ ws_ hn p secure = WebSocket
                       addEventListener sock "close" closeCallback False
 
                       errorCallback <- CB.syncCallback1 CB.ContinueAsync $ \err -> do
-                        -- printAny_js "" err
                         publish statesSyndicate $ WSClosed ServerClosedConnection
                       addEventListener sock "error" errorCallback False
 
                       messageCallback <- CB.syncCallback1 CB.ContinueAsync $ \ev -> do
-                        -- printAny_js "" ev
                         case WME.getData $ unsafeCoerce ev of
                           WME.StringData sd -> liftIO $ do
 #if defined(DEBUGWS) || defined(DEVEL)
                             putStrLn $ "Received message: " ++ show sd
 #endif
-                            case JS.uncons sd of
-
-                              Just ('C',rst) -> do
-                                modifyIORef cBuf (<> rst)
-
-                              Just ('F',rst) -> do
-                                b <- readIORef cBuf
-                                writeIORef cBuf mempty
-                                let msg = b <> rst
-                                    val = js_JSON_parse msg
-                                case fromJSON val of
-                                  Error e ->
-                                    putStrLn $ "(multi-part):fromJSON message failed with: " ++ e
-                                  Success m -> do
-                                    mhs <- liftIO $ readIORef mhs_
-                                    case Map.lookup (ep m) mhs of
-                                      Nothing -> putStrLn $ "(multi-part):No handler found: " ++ show (ep m)
-                                      Just h  -> do
+                            case fromJSON (js_JSON_parse sd) of
+                              Error e -> putStrLn $ "fromJSON failed with: " ++ e
+                              Success m -> do
+                                mhs <- liftIO $ readIORef mhs_
+                                case Map.lookup (ep m) mhs of
+                                  Nothing -> putStrLn $ "No handler found: " ++ show (ep m)
+                                  Just h  -> do
 #if defined(DEBUGWS) || defined(DEVEL)
-                                        putStrLn $ "Handled message at endpoint: " ++ show (ep m)
+                                    putStrLn $ "Handled message at endpoint: " ++ show (ep m)
 #endif
-                                        buffer gb rnr $ publish h m
-
-                              Just ('{',_) -> do
-                                let val = js_JSON_parse sd
-                                case fromJSON val of
-                                  Error e -> putStrLn $ "fromJSON failed with: " ++ e
-                                  Success m -> do
-                                    mhs <- liftIO $ readIORef mhs_
-                                    case Map.lookup (ep m) mhs of
-                                      Nothing -> putStrLn $ "No handler found: " ++ show (ep m)
-                                      Just h  -> do
-#if defined(DEBUGWS) || defined(DEVEL)
-                                        putStrLn $ "Handled message at endpoint: " ++ show (ep m)
-#endif
-                                        buffer gb rnr $ publish h m
-
-                              _ ->
-                              -- Any message not beginning with 'C', 'F', or '{' is guaranteed to be invalid.
-                               putStrLn $ "Invalid message: " ++ show sd
-
---                           WME.ArrayBufferData ab -> do
---                             let b = GB.createFromArrayBuffer ab
---                                 bs = GB.toByteString 0 Nothing b
---                             case Aeson.decode (BSL.fromStrict bs) of
---                               Nothing -> putStrLn $ "decode dispatch failed"
---                               Just m -> do
---                                 mhs <- liftIO $ readIORef mhs_
---                                 case Map.lookup (ep m) mhs of
---                                   Nothing -> putStrLn $ "No handler found: " ++ show (ep m)
---                                   Just h -> do
--- #if defined(DEBUGWS) || defined(DEVEL)
---                                         putStrLn $ "Handled message at endpoint: " ++ show (ep m)
--- #endif
---                                         buffer gb rnr $ publish h m
+                                    buffer gb rnr $ publish h m
 
                           _ -> return ()
 
@@ -572,10 +519,13 @@ wsDisconnect = do
     Just ws -> liftIO (ws_close_js ws 1000 "wsDisconnect called.")
     Nothing -> return ()
 
+foreign import javascript unsafe
+  ""
+    str_to_ab :: Txt -> IO TAB.ArrayBuffer
 
 send' :: forall ms c.
         (MonadIO c, ms <: '[Evented,WebSocket])
-     => Either LazyByteString Dispatch -> Ef ms c (Either WSException SendStatus)
+     => Either Txt Dispatch -> Ef ms c (Either WSException SendStatus)
 send' m = go True
   where
     go b = do
@@ -587,13 +537,10 @@ send' m = go True
             -- If WSOpened, getWS => (Just ws)
             Nothing -> return (Left InvalidSocketState)
             Just ws -> do
-              let bs = either id toBS m
-                  (sbi,_,_) = GB.fromByteString $ BSL.toStrict bs
-                  sabi = GB.getArrayBuffer sbi
 #if defined(DEBUGWS) || defined(DEVEL)
-              liftIO $ putStrLn $ "send' sending: " ++ show bs
+              liftIO $ putStrLn $ "send' sending: " ++ show (fmap pretty v)
 #endif
-              liftIO $ send_js ws sabi
+              liftIO $ send_js ws (either id (encode . toJSON) m)
               return (Right Sent)
         _ -> do
           -- buffer the message for when the socket opens back up
@@ -605,13 +552,10 @@ send' m = go True
                 case mws of
                   Nothing -> return () -- huh?
                   Just ws -> do
-                    let bs = either id toBS m
-                        (sbi,_,_) = GB.fromByteString $ BSL.toStrict bs
-                        sabi = GB.getArrayBuffer sbi
 #if defined(DEBUGWS) || defined(DEVEL)
-                    liftIO $ putStrLn $ "send' sending after websocket state changed: " ++ show bs
+                    liftIO $ putStrLn $ "send' sending after websocket state changed: " ++ show (fmap pretty m)
 #endif
-                    liftIO $ send_js ws sabi
+                    liftIO $ send_js ws (either id (encode . toJSON) m)
                 -- stop when successful
                 end
               -- If not opened, just wait for the next event.
@@ -622,11 +566,11 @@ send' m = go True
 data SendStatus = BufferedSend | Sent
 
 foreign import javascript unsafe
-  "$1.send($2)" send_js :: JSV -> TAB.ArrayBuffer -> IO ()
+  "$1.send($2);" send_js :: JSV -> Txt -> IO ()
 
 trySend' :: forall ms c.
            (MonadIO c, ms <: '[WebSocket])
-        => Either LazyByteString Dispatch -> Ef ms c (Either WSStatus ())
+        => Either Txt Dispatch -> Ef ms c (Either WSStatus ())
 trySend' m = do
   wss <- getWSState
   case wss of
@@ -635,15 +579,13 @@ trySend' m = do
       case mws of
         Nothing -> return (Left WSUninitialized) -- not correct....
         Just ws -> do
-          let (sbi,_,_) = GB.fromByteString $ BSL.toStrict $ either id toBS m
-              sabi = GB.getArrayBuffer sbi
 #if defined(DEBUGWS) || defined(DEVEL)
-          liftIO $ putStrLn $ "trySend' sending: " ++ show (fmap (encode . toJSON) m)
+          liftIO $ putStrLn $ "trySend' sending: " ++ show (fmap pretty m)
 #endif
-          liftIO (Right <$> send_js ws sabi)
+          liftIO (Right <$> send_js ws (either id (encode . toJSON) m))
     _ -> do
 #if defined(DEBUGWS) || defined(DEVEL)
-      liftIO $ putStrLn $ "trySend' couldn't send: " ++ show (fmap (encode . toJSON) m)
+      liftIO $ putStrLn $ "trySend' couldn't send: " ++ show (fmap pretty m)
 #endif
       return $ Left wss
 
@@ -940,7 +882,7 @@ respondWith :: forall c c' w ms ms' rqTy request rqI rsp.
                )
             => w
             -> Proxy rqTy
-            -> (Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (Promise ()),request) -> Ef '[Event Dispatch] (Ef ms c) ())
+            -> (Ef ms c () -> Either Dispatch (Either Txt rsp -> Ef ms c (Promise ()),request) -> Ef '[Event Dispatch] (Ef ms c) ())
             -> Ef ms c (Promise (Endpoint Dispatch))
 respondWith s rqty_proxy rr = do
   pr <- promise
@@ -999,7 +941,7 @@ respond :: forall c ms rqTy request rqI rsp.
            , ToJSON rsp
            )
         => Proxy rqTy
-        -> (Ef ms c () -> Either Dispatch (Either LazyByteString rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
+        -> (Ef ms c () -> Either Dispatch (Either Txt rsp -> Ef ms c (),request) -> Ef '[Event Dispatch] (Ef ms c) ())
         -> Ef ms c (Endpoint Dispatch)
 respond rqty_proxy rr = do
   s_ <- liftIO $ newIORef undefined

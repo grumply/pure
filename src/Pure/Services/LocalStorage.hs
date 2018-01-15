@@ -11,9 +11,6 @@ module Pure.Services.LocalStorage where
 
 import Ef.Base
 
-import Data.ByteString
-import qualified Data.ByteString.Lazy as BSL
-
 import Pure.Service
 import Pure.Signals
 import Pure.Data
@@ -30,6 +27,8 @@ import qualified JavaScript.Object as O
 import qualified JavaScript.Object.Internal as O
 import qualified JavaScript.Array as JSA
 import qualified JavaScript.JSON.Types.Internal as JSON
+#else
+import Data.Text.Lazy.Encoding as TL
 #endif
 
 import qualified Data.HashMap.Strict as Map
@@ -217,7 +216,6 @@ proxyLocalMessage :: forall ts ms ms' c m mTy.
                       , Message mTy
                       , M mTy ~ m
                       , ToJSON m
-                      , FromBS m
                       , FromJSON m
                       )
                   => Service' ts ms -> Proxy mTy -> c (IO ())
@@ -232,12 +230,11 @@ proxyLocalMessage s mty_proxy = do
               pure $ do
 #ifdef __GHCJS__
                 liftIO $ removeItem key
-                case fromBS (BSL.fromStrict (fromTxt nv :: ByteString)) of
-                  Left _ -> liftIO $ Prelude.putStrLn "Bad message from storage event."
-                  Right (m :: m) ->
-                    void $ lift $ sendSelfMessage s mty_proxy m
+                case fromJSON (js_JSON_parse nv) of
+                  Error _ -> liftIO $ Prelude.putStrLn "Bad message from storage event."
+                  Success (m :: m) -> void $ lift $ sendSelfMessage s mty_proxy m
 #else
-                case fromBS (BSL.fromStrict (fromTxt nv :: ByteString)) of
+                case eitherDecode' (TL.encodeUtf8 nv) of
                   Left _ -> liftIO $ Prelude.putStrLn "Bad message from storage event."
                   Right (m :: m) -> return ()
 #endif
@@ -253,7 +250,6 @@ onLocalMessage :: forall ms c m mTy e.
                   , Message mTy
                   , M mTy ~ m
                   , FromJSON m
-                  , FromBS m
                   , ms <: '[Evented]
                   , e ~ Ef ms c
                   )
@@ -268,10 +264,14 @@ onLocalMessage mty_proxy f = do
             pure $ do
 #ifdef __GHCJS__
               liftIO $ removeItem key
-#endif
-              case fromBS (BSL.fromStrict (fromTxt nv :: ByteString)) of
+              case fromJSON (js_JSON_parse nv) of
+                Error _   -> liftIO $ Prelude.putStrLn $ "Bad message from storage event: " ++ show (key,nv)
+                Success m -> void $ runAs slf (f m)
+#else
+              case eitherDecode' (TL.encodeUtf8 nv) of
                 Left _ -> liftIO $ Prelude.putStrLn $ "Bad message from storage event: " ++ show (key,nv)
-                Right (m :: m) -> void $ runAs slf (f m)
+                Right m -> void $ runAs slf (f m)
+#endif
           else
             pure (return ())
     forM_ mres id
