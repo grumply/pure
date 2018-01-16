@@ -9,6 +9,39 @@
 {-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, UnliftedFFITypes #-}
 module Pure.Data.Txt (module Pure.Data.Txt, module Export) where
 
+{-
+It is important to note that ToTxt/FromTxt can throw exceptions!
+
+If you don't know where a value came from, be careful!
+
+In general, for pure, this isn't much of an issue as the values we deal with
+were either generated locally or have been produced over a websocket and thus
+have already been safely utf-8 decoded.
+
+Many of these instances trade safety for convenience. I didn't make this
+decision lightly; it was out of a need for (developer) productivity on 
+client-side where exceptions have less of an overall impact. This choice
+may come back to bite me, but it has worked out well for a while.
+
+One case where ToTxt/FromTxt should be safe is when deriving it for
+newtype wrappers around Txt values, which is one of the best uses of
+these classes.
+
+These instances of FromTxt (Txt -> a) should be safe:
+
+* String
+* Text
+* Lazy Text
+* ByteString
+* Lazy ByteString
+
+These instances of ToTxt (a -> Txt) are unsafe:
+
+* ByteString
+* Lazy ByteString
+
+-}
+
 import Data.Monoid
 
 import Data.Maybe
@@ -19,6 +52,8 @@ import Data.Coerce
 import Data.Int
 import Data.Word
 
+import qualified Data.ByteString.Char8 as BC		
+import qualified Data.ByteString.Lazy.Char8 as BSLC
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
@@ -95,6 +130,12 @@ instance FromTxt a => FromTxt (Maybe a) where
 instance ToTxt () where
   toTxt _ = "()"
 
+instance ToTxt BSLC.ByteString where
+  toTxt = toTxt . TL.decodeUtf8
+
+instance ToTxt BC.ByteString where
+  toTxt = toTxt . T.decodeUtf8
+
 instance ToTxt Txt where
   toTxt = id
 
@@ -118,6 +159,13 @@ instance FromTxt JSString where
 
 instance FromTxt [Char] where
   fromTxt = unpack
+
+instance FromTxt BC.ByteString where
+  fromTxt = BC.pack . unpack
+
+instance FromTxt BSLC.ByteString where
+  fromTxt = BSLC.pack . unpack
+
 instance FromTxt Int where
   fromTxt t = fromMaybe (readError "Int" t) (T.readIntMaybe t)
 
@@ -216,8 +264,17 @@ instance FromTxt TL.Text where
 instance FromTxt T.Text where
   fromTxt = id
 
+instance FromTxt () where
+  fromTxt "()" = ()
+
 instance FromTxt [Char] where
   fromTxt = T.unpack
+
+instance FromTxt BC.ByteString where
+  fromTxt = T.encodeUtf8
+
+instance FromTxt BSLC.ByteString where
+  fromTxt = BSLC.fromStrict . T.encodeUtf8
 
 instance FromTxt Int where
   fromTxt t = either (readError "Int" t) fst (T.signed T.decimal t)
