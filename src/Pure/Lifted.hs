@@ -150,10 +150,10 @@ foreign import javascript unsafe
   "while ($1.firstChild) $1.removeChild($1.firstChild)" clear_js :: Node -> IO ()
 
 foreign import javascript unsafe
-  "$r = location.pathname" pathname_js :: Txt
+  "$r = location.pathname" pathname_js :: IO Txt
 
 foreign import javascript unsafe
-  "$r = location.search" search_js :: Txt
+  "$r = location.search" search_js :: IO Txt
 
 foreign import javascript unsafe
   "$r = $1[$2]" get_prop_unsafe_js :: JSV -> Txt -> IO JSV
@@ -332,10 +332,10 @@ clear :: Node -> IO ()
 clear n = clear_js n
 
 getPathname :: IO Txt
-getPathname = return pathname_js
+getPathname = pathname_js
 
 getSearch :: IO Txt
-getSearch = return search_js
+getSearch = search_js
 #else
 
 ----------------------------------------

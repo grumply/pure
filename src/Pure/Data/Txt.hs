@@ -52,7 +52,7 @@ import Data.Coerce
 import Data.Int
 import Data.Word
 
-import qualified Data.ByteString.Char8 as BC		
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy.Char8 as BSLC
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
