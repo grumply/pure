@@ -21,7 +21,7 @@ import Data.Time.Clock.POSIX
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
-  "$r = new Date().getTime();" getTime_millis_js :: IO Int
+  "$r = new Date().getTime();" getTime_millis_js :: IO Double
 #endif
 
 -- milliseconds since beginning of 1970
@@ -56,7 +56,7 @@ millis = liftIO timeInMillis
 timeInMillis :: IO Millis
 timeInMillis =
 #ifdef __GHCJS__
-  (Millis . fromIntegral) <$> getTime_millis_js
+  (Millis . round) <$> getTime_millis_js
 #else
   posixToMillis <$> getPOSIXTime
 #endif
