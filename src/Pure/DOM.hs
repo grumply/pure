@@ -1164,23 +1164,21 @@ animationsAwaiting = unsafePerformIO newEmptyMVar
 animationQueue = unsafePerformIO (newIORef [])
 
 {-# NOINLINE animator #-}
-animator = unsafePerformIO $ void $ forkIO await
+animator = unsafePerformIO $ void $ forkIO loop
   where
-    await = do
+    loop = forever $ do
       takeMVar animationsAwaiting
-      as <- atomicModifyIORef' animationQueue $ \as -> ([],as)
-      animate as
-
-    animate [] = await
-    animate as = do
-      barrier <- newEmptyMVar
-      _rAF $ do
-        bs <- atomicModifyIORef' animationQueue $ \bs -> ([],bs)
-        sequence_ (List.reverse as)
-        sequence_ (List.reverse bs)
-        putMVar barrier ()
-      takeMVar barrier
-      await
+      as <- atomicModifyIORef' animationQueue $ \rs -> ([],rs)
+      case as of
+        [] -> return ()
+        _  -> do
+          barrier <- newEmptyMVar
+          _rAF $ do
+            bs <- atomicModifyIORef' animationQueue $ \rs -> ([],rs)
+            sequence_ (List.reverse as)
+            sequence_ (List.reverse bs)
+            putMVar barrier ()
+          takeMVar barrier
 
 onRaw :: Node -> Txt -> Options -> (IO () -> JSV -> IO ()) -> IO (IO ())
 onRaw n nm os f = do
