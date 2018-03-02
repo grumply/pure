@@ -1153,6 +1153,7 @@ componentThread ref@Ref { crComponent = c@(renderer -> rndr), ..} live props sta
                         writeRef
                         inner newProps newState' acc cps
 
+{-# NOINLINE addAnimation #-}
 addAnimation a = do
   atomicModifyIORef' animationQueue $ \as -> (a:as,())
   tryPutMVar animationsAwaiting ()
@@ -1164,21 +1165,23 @@ animationsAwaiting = unsafePerformIO newEmptyMVar
 animationQueue = unsafePerformIO (newIORef [])
 
 {-# NOINLINE animator #-}
-animator = unsafePerformIO $ void $ forkIO loop
+animator = unsafePerformIO $ void $ forkIO await
   where
-    loop = forever $ do
+    await = do
       takeMVar animationsAwaiting
-      as <- atomicModifyIORef' animationQueue $ \rs -> ([],rs)
-      case as of
-        [] -> return ()
-        _  -> do
-          barrier <- newEmptyMVar
-          _rAF $ do
-            bs <- atomicModifyIORef' animationQueue $ \rs -> ([],rs)
-            sequence_ (List.reverse as)
-            sequence_ (List.reverse bs)
-            putMVar barrier ()
-          takeMVar barrier
+      as <- atomicModifyIORef' animationQueue $ \as -> ([],as)
+      animate as
+
+    animate [] = await
+    animate as = do
+      barrier <- newEmptyMVar
+      _rAF $ do
+        bs <- atomicModifyIORef' animationQueue $ \bs -> ([],bs)
+        sequence_ (List.reverse as)
+        sequence_ (List.reverse bs)
+        putMVar barrier ()
+      takeMVar barrier
+      await
 
 onRaw :: Node -> Txt -> Options -> (IO () -> JSV -> IO ()) -> IO (IO ())
 onRaw n nm os f = do
