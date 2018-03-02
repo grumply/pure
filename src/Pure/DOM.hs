@@ -1023,14 +1023,6 @@ modifyModel f = do
   patch
 #endif
 
-_rAF f = void $ do
-#ifdef __GHCJS__
-  callback <- CB.syncCallback1 CB.ContinueAsync $ \_ -> f
-  requestAnimationFrame callback
-#else
-  f
-#endif
-
 newPatchQueue :: IO (IORef (Maybe (Queue (ComponentPatch parent props state))))
 newPatchQueue = newIORef . Just =<< newQueue
 
@@ -1174,13 +1166,21 @@ animator = unsafePerformIO $ void $ forkIO await
 
     animate [] = await
     animate as = do
+#ifdef __GHCJS__
       barrier <- newEmptyMVar
-      _rAF $ do
+      callback <- CB.syncCallback1 CB.ContinueAsync $ \_ -> do
         bs <- atomicModifyIORef' animationQueue $ \bs -> ([],bs)
         sequence_ (List.reverse as)
         sequence_ (List.reverse bs)
         putMVar barrier ()
+      requestAnimationFrame callback
       takeMVar barrier
+      releaseCallback callback
+#else
+      bs <- atomicModifyIORef' animationQueue $ \bs -> ([],bs)
+      sequence_ (List.reverse as)
+      sequence_ (List.reverse bs)
+#endif
       await
 
 onRaw :: Node -> Txt -> Options -> (IO () -> JSV -> IO ()) -> IO (IO ())
