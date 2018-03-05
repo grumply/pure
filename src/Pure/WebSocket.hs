@@ -78,6 +78,6 @@ create ip port = do
 connect ip port = do
 #ifdef __GHCJS__
   wsInitialize
-#lse
+#else
   initializeClientWS ip port "/"
 #endif
