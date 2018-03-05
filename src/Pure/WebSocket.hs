@@ -3,12 +3,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 #endif
 {-# LANGUAGE ViewPatterns #-}
-module Pure.WebSocket 
+module Pure.WebSocket
   (
 #ifdef USE_TEMPLATE_HASKELL
-    mkRequest, 
-    mkMessage, 
+    mkRequest,
+    mkMessage,
 #endif
+    create,
+    connect,
     module Export
   ) where
 
@@ -63,4 +65,19 @@ mkMessage (processName -> (dat,msg)) ty = do
       messageInstanceDec = InstanceD Nothing [] (ConT ''Message `AppT` ConT dat)
         [ TySynInstD ''M (TySynEqn [ ConT dat ] message) ]
   return [dataDec,proxyFunTy,proxyFunDec,messageInstanceDec]
+#endif
+
+-- TODO: refactor Pure.WebSocket.GHC and Pure.WebSocket.GHCJS and unify their APIs to avoid this CPP mess.
+create ip port = do
+#ifdef __GHCJS__
+  return (ws ip port)
+#else
+  state <$> websocket unlimited
+#endif
+
+connect ip port = do
+#ifdef __GHCJS__
+  wsInitialize
+#lse
+  initializeClientWS ip port "/"
 #endif
