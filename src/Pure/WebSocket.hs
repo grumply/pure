@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, FlexibleContexts #-}
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
@@ -29,6 +29,8 @@ import Pure.WebSocket.TypeRep  as Export
 
 import Data.Char
 import Data.Proxy
+
+import Ef.State (state)
 
 #ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH
