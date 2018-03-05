@@ -9,8 +9,8 @@ module Pure.WebSocket
     mkRequest,
     mkMessage,
 #endif
-    create,
-    connect,
+    createWebSocket,
+    connectWebSocket,
     module Export
   ) where
 
@@ -70,14 +70,14 @@ mkMessage (processName -> (dat,msg)) ty = do
 #endif
 
 -- TODO: refactor Pure.WebSocket.GHC and Pure.WebSocket.GHCJS and unify their APIs to avoid this CPP mess.
-create ip port = do
+createWebSocket ip port = do
 #ifdef __GHCJS__
   return (ws ip port)
 #else
   state <$> websocket unlimited
 #endif
 
-connect ip port = do
+connectWebSocket ip port = do
 #ifdef __GHCJS__
   wsInitialize
 #else
