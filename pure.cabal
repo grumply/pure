@@ -100,9 +100,9 @@ library
       base >= 4.8
     , ef
     , ef-base
-    , aeson >= 1.2.2.0
+    , aeson >=1.2.2
     , bytestring
-    , containers
+    , containers >=0.5.10
     , ghc-prim
     , hashable
     , random
