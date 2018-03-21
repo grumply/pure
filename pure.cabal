@@ -102,7 +102,7 @@ library
     , ef-base
     , aeson >=1.2.2
     , bytestring
-    , containers >=0.5.10
+    , containers
     , ghc-prim
     , hashable
     , random
