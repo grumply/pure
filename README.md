@@ -5,14 +5,14 @@ A unified full-stack web application framework in Haskell.
 Features:
 
 * Performance-oriented
-* Hierarchical MVC with services (HMVCS)
+* Truly asynchronous and fair rendering and diffing
 * MVC-style component views (asynchronous)
-* React-style component views (synchronous)
+* React-style component views (locally and hierarchically synchronous; globally asynchronous)
 * Extensible views a la [Marlow '06 (PDF)](http://simonmar.github.io/bib/papers/ext-exceptions.pdf)
 * Pure views (basic HTML/SVG, keyed and unkeyed)
-* Global named services
-* Local named modules
-* Routing
+* Global services
+* Cross-component/service/controller messaging
+* Built-in Routing
 * Reactive primitives
 * Server rendering
 * Typed and composable websocket APIs
