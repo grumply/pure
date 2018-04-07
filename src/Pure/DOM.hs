@@ -1202,7 +1202,7 @@ onRaw n nm os f = do
 
 {-# INLINE addFeature #-}
 addFeature :: Dispatcher e -> IORef (IO ()) -> Element -> Feature e -> IO (Feature e)
-addFeature f e = go
+addFeature f mounted e = go
   where
     go NullFeature    = return NullFeature
 
