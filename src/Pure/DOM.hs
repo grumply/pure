@@ -85,7 +85,7 @@ amendPlan plan !f = modifySTRef' plan (f:)
 
 {-# INLINE runPlan #-}
 runPlan :: P -> IO ()
-runPlan = sequence_ . reverse
+runPlan = foldr (flip (>>)) (return ())
 
 type Diff a = a -> a -> a -> IO a
 type Diff' s a = a -> a -> a -> ST s a
