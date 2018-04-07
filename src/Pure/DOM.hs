@@ -103,7 +103,7 @@ build f mounted mparent (TextView _ t) = do
 build f mounted mparent (HTMLView _ t fs cs) = do
   e   <- create t
   let n = Just (toNode e)
-  fs' <- for fs (addFeature f e)
+  fs' <- for fs (addFeature f mounted e)
   cs' <- for cs (build f mounted n)
   for_ mparent (`append` e)
   return $ HTMLView (Just e) t fs' cs'
@@ -111,7 +111,7 @@ build f mounted mparent (HTMLView _ t fs cs) = do
 build f mounted mparent (KHTMLView _ t fs cs _) = do
   e   <- create t
   let n = Just (toNode e)
-  fs' <- for fs (addFeature f e)
+  fs' <- for fs (addFeature f mounted e)
   cs' <- for cs (traverse (build f mounted n))
   for_ mparent (`append` e)
   return $ KHTMLView (Just e) t fs' cs' $ HM.fromList cs'
@@ -122,14 +122,14 @@ build f mounted mparent (RawView _ t fs c) = do
   e   <- create t
   setInnerHTML e c
   let n = Just (toNode e)
-  fs' <- for fs (addFeature f e)
+  fs' <- for fs (addFeature f mounted e)
   for_ mparent (`append` e)
   return $ RawView n t fs' c
 
 build f mounted mparent (SVGView _ t fs cs) = do
   e   <- createNS "http://www.w3.org/2000/svg" t
   let n = Just (toNode e)
-  fs' <- for fs (addFeature f e)
+  fs' <- for fs (addFeature f mounted e)
   cs' <- for cs (build f mounted n)
   for_ mparent (`append` e)
   return $ SVGView (Just e) t fs' cs'
@@ -137,7 +137,7 @@ build f mounted mparent (SVGView _ t fs cs) = do
 build f mounted mparent (KSVGView _ t fs cs _) = do
   e   <- createNS "http://www.w3.org/2000/svg" t
   let n = Just (toNode e)
-  fs' <- for fs (addFeature f e)
+  fs' <- for fs (addFeature f mounted e)
   cs' <- for cs (traverse (build f mounted n))
   for_ mparent (`append` e)
   return $ KSVGView (Just e) t fs' cs' $ HM.fromList cs'
@@ -189,7 +189,7 @@ buildManagedView f mounted mparent m@ManagedView {..} = do
       case elementHost of
         Nothing -> do
           el <- create tag
-          features <- for features (addFeature f el)
+          features <- for features (addFeature f mounted el)
           mi_ <- lookupController (key a)
           let elementHost = Just el
           case mi_ of
@@ -1201,7 +1201,7 @@ onRaw n nm os f = do
 #endif
 
 {-# INLINE addFeature #-}
-addFeature :: Dispatcher e -> Element -> Feature e -> IO (Feature e)
+addFeature :: Dispatcher e -> IORef (IO ()) -> Element -> Feature e -> IO (Feature e)
 addFeature f e = go
   where
     go NullFeature    = return NullFeature
@@ -1249,12 +1249,8 @@ addFeature f e = go
 #endif
 
     go ref@(HostRef g) = do
-      mef <- g (toNode e)
-      case mef of
-        Nothing -> return ref
-        Just ef -> do
-          f ef
-          return ref
+      modifyIORef mounted (>> (g (toNode e) >>= \mx -> for_ mx f))
+      return ref
 
 #ifdef __GHCJS__
     go l@Link {..} = do
