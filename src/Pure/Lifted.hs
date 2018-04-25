@@ -45,8 +45,12 @@ foreign import javascript unsafe
 foreign import javascript unsafe
   "$1.innerHTML = $2" set_inner_html_js :: Element -> Txt -> IO ()
 
+-- This is a quick fix for a Component issue where content has yet to be rendered,
+-- but a setState changes the view.  We should track rendered state and queue calls
+-- to setState to be run after the first render.  For now, just check if a parentNode
+-- exists. This fix should only affect code that was previously broken.
 foreign import javascript unsafe
-  "$1.parentNode.replaceChild($2,$1)" replace_nodes_js :: Node -> Node -> IO ()
+  "if ($1.parentNode) { $1.parentNode.replaceChild($2,$1); }" replace_nodes_js :: Node -> Node -> IO ()
 
 foreign import javascript unsafe
   "$1.textContent=$2" replace_text_js :: Text -> Txt -> IO ()
