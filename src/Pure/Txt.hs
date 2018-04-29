@@ -18,6 +18,8 @@ import Data.Type.Coercion
 import Pure.Data.Cond
 import Pure.Data.Default
 
+import Data.String
+
 type IsTxt a = Coercible Txt a
 
 instance {-# OVERLAPPABLE #-} IsTxt a => Default a where
@@ -32,6 +34,9 @@ instance {-# OVERLAPPABLE #-} IsTxt a => FromTxt a where
 
 instance {-# OVERLAPPABLE #-} IsTxt a => ToTxt a where
   toTxt = repack
+
+instance {-# OVERLAPPABLE #-} IsTxt a => IsString a where
+  fromString = Pure.Txt.pack
 
 {-# INLINE convert #-}
 convert :: (IsTxt a, FromTxt b) => a -> b

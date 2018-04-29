@@ -10,7 +10,7 @@
 }:
 mkDerivation {
   pname = "pure";
-  version = "0.6.0.1";
+  version = "0.6.1.0";
   src = ./.;
   libraryHaskellDepends = [
     aeson base bytestring containers ef ef-base ghc-prim
