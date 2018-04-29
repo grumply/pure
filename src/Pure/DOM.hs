@@ -21,6 +21,7 @@ import Ef.Base hiding (Construct,Updated,Update,embed)
 
 import Pure.Data hiding (append,replace)
 import Pure.Data.JSV
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import Pure.Types hiding (build)
 import Pure.Lifted
 import qualified Pure.Types as Types

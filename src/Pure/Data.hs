@@ -32,10 +32,10 @@ import Pure.Data.Millis as Export
 import Pure.Data.Try as Export
 import Pure.Data.UnsafeEq as Export
 import Pure.Data.Vault as Export
-import Pure.Data.Txt as Export (Txt,ToTxt(..),FromTxt(..),pattern Translated)
 import Pure.Data.ServerId as Export
 import Data.Hashable as Export
 
+import Pure.Data.Txt as Export (Txt,ToTxt(..),FromTxt(..),pattern Translated)
 import qualified Pure.Data.Txt as Txt
 
 import Data.List as List

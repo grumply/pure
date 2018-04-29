@@ -3,6 +3,7 @@
 module Pure.Styles where
 
 import Pure.Data hiding (map)
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import qualified Pure.Data.Txt as Txt
 
 import Data.Monoid

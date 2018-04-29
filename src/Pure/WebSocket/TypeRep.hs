@@ -10,6 +10,7 @@ import Data.Monoid
 import Data.List as L
 
 import Pure.Data
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
 -- | rep is a type representation without package or module qualification.
 {-# INLINE rep #-}

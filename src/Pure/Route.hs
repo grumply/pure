@@ -12,6 +12,7 @@ module Pure.Route where
 
 import Ef.Base
 import Pure.Data
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
 import Data.Bifunctor
 import Data.Function

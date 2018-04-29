@@ -22,6 +22,7 @@ import Data.Queue
 
 import Pure.Data
 import Pure.Data.JSON as AE
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
 import Pure.WebSocket.API
 import Pure.WebSocket.Dispatch

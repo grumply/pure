@@ -8,6 +8,7 @@ import Ef.Base
 
 import Pure.Data
 import Pure.Data.JSV
+import Pure.Data.Txt (Txt,ToTxt,FromTxt)
 import Pure.Types
 import Pure.Lifted
 

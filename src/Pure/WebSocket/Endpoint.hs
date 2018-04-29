@@ -6,6 +6,7 @@ module Pure.WebSocket.Endpoint where
 import Ef.Base
 
 import Pure.Data
+import Pure.Data.Txt (Txt)
 
 import Pure.WebSocket.Dispatch
 import Pure.WebSocket.Message

@@ -112,6 +112,7 @@ library
     , unordered-containers
     , vector
     , time
+    , roles
 
   if flag(use-template-haskell)
     build-depends: template-haskell

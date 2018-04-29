@@ -7,6 +7,7 @@ module Pure.Lifted (module Pure.Lifted, module Export) where
 
 import Pure.Data as Export
 import Pure.Data.JSV as Export
+import Pure.Data.Txt
 
 import Data.Int
 

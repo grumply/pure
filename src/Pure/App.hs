@@ -28,6 +28,7 @@ import qualified Pure.Types as Export hiding (Text,Null,build,prime,key)
 
 import Pure.Data as Export hiding (hashed)
 import Pure.Data.JSV
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
 import Pure.Lifted hiding (hashed)
 import Pure.DOM

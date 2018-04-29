@@ -72,6 +72,7 @@ import Numeric
 #ifdef __GHCJS__
 import Data.JSString as Export
 import Data.JSString.Text as Export
+import Data.JSString.Internal as Export
 import Data.Hashable
 import Data.JSString.Read as T
 import Data.JSString.RealFloat

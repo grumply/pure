@@ -29,6 +29,7 @@ import Pure.HTML hiding (Link,SVGLink)
 
 import qualified Data.List as List
 
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import qualified Pure.Data.Txt as Txt
 
 import qualified Data.Map.Strict as M

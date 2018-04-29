@@ -16,6 +16,7 @@ import Pure.Signals
 import Pure.Data
 import Pure.Lifted
 import Pure.Data.JSV
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import Pure.WebSocket
 
 import qualified Pure.Data.Txt as Txt

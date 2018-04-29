@@ -27,6 +27,7 @@ import Ef.Base
 
 import Pure.Data.JSON as AE
 import Pure.Data.JSV
+import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
 import qualified Data.Aeson as Aeson
 

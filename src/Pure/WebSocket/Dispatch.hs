@@ -8,6 +8,7 @@ import GHC.Generics
 
 import Pure.Data
 import Pure.Data.JSON (pretty)
+import Pure.Data.Txt (Txt)
 
 #if defined(DEBUGAPI) || defined(DEVEL)
 import Debug.Trace
