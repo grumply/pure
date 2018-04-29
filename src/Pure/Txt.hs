@@ -77,9 +77,17 @@ append = coerce Txt.append
 uncons :: IsTxt a => a -> Maybe (Char,a)
 uncons = coerce Txt.uncons
 
+{-# INLINE head #-}
+head :: IsTxt a => a -> Char
+head = coerce Txt.head
+
 {-# INLINE last #-}
 last :: IsTxt a => a -> Char
 last = coerce Txt.last
+
+{-# INLINE tail #-}
+tail :: IsTxt a => a -> a
+tail = coerce Txt.tail
 
 {-# INLINE init #-}
 init :: IsTxt a => a -> a
