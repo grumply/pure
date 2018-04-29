@@ -77,10 +77,6 @@ append = coerce Txt.append
 uncons :: IsTxt a => a -> Maybe (Char,a)
 uncons = coerce Txt.uncons
 
-{-# INLINE unsnoc #-}
-unsnoc :: IsTxt a => a -> Maybe (Char,a)
-unsnoc = coerce Txt.unsnoc
-
 {-# INLINE head #-}
 head :: IsTxt a => a -> Char
 head = coerce Txt.head
