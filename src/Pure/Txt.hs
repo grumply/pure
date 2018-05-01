@@ -36,7 +36,7 @@ instance {-# OVERLAPPABLE #-} IsTxt a => ToTxt a where
   toTxt = repack
 
 instance {-# OVERLAPPABLE #-} IsTxt a => IsString a where
-  fromString = Pure.Txt.pack
+  fromString = repack . Txt.pack
 
 {-# INLINE convert #-}
 convert :: (IsTxt a, FromTxt b) => a -> b
@@ -51,8 +51,8 @@ repacks :: (IsTxt a, IsTxt b, Coercible a b, Representational f, Functor f) => f
 repacks = coerceWith (rep Coercion)
 
 {-# INLINE pack #-}
-pack :: IsTxt a => String -> a
-pack = coerce Txt.pack
+pack :: IsTxt a => Txt -> a
+pack = coerce
 
 {-# INLINE unpack #-}
 unpack :: IsTxt a => a -> String
