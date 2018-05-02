@@ -644,13 +644,9 @@ diffChildrenDeferred (toNode -> e) f mounted plan = start
       return []
 
     go [] _ news = do
-      plan' <- newSTRef []
-      news' <- for news $ \n -> do
-        new' <- unsafeIOToST $ build f mounted Nothing n
-        for_ (getHost new') $ amendPlan plan' . append e
-        return new'
-      p <- readSTRef plan'
-      amendPlan plan $! sequence_ (List.reverse p)
+      frag <- unsafeIOToST createFrag
+      news' <- for news (unsafeIOToST . build f mounted (Just (toNode frag)))
+      amendPlan plan (append e frag)
       return news'
 
     go (old:olds) (mid:mids) (new:news) = do
