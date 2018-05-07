@@ -29,7 +29,7 @@ import qualified Pure.Types as Types
 import Pure.Router
 
 import Control.Arrow
-import Control.Concurrent
+import Control.Concurrent as CC
 import Data.Coerce
 import Data.IORef
 import Data.List as List
@@ -105,6 +105,7 @@ build f mounted mparent (HTMLView _ t fs cs) = do
   e   <- create t
   let n = Just (toNode e)
   fs' <- for fs (addFeature f mounted e)
+  CC.yield
   cs' <- for cs (build f mounted n)
   for_ mparent (`append` e)
   return $ HTMLView (Just e) t fs' cs'
@@ -113,6 +114,7 @@ build f mounted mparent (KHTMLView _ t fs cs _) = do
   e   <- create t
   let n = Just (toNode e)
   fs' <- for fs (addFeature f mounted e)
+  CC.yield
   cs' <- for cs (traverse (build f mounted n))
   for_ mparent (`append` e)
   return $ KHTMLView (Just e) t fs' cs' $ HM.fromList cs'
@@ -139,6 +141,7 @@ build f mounted mparent (KSVGView _ t fs cs _) = do
   e   <- createNS "http://www.w3.org/2000/svg" t
   let n = Just (toNode e)
   fs' <- for fs (addFeature f mounted e)
+  CC.yield
   cs' <- for cs (traverse (build f mounted n))
   for_ mparent (`append` e)
   return $ KSVGView (Just e) t fs' cs' $ HM.fromList cs'
@@ -371,6 +374,7 @@ replaceTextContentDeferred plan old@(textHost -> Just oh) new = do
 diffKeyedElementDeferred :: Dispatcher e -> IORef (IO ()) -> Plan s -> Diff' s (View e)
 diffKeyedElementDeferred f mounted plan old@(elementHost &&& childMap -> (Just e,cm)) mid new = do
   fs      <- diffFeaturesDeferred      e f         plan    (fs old) (fs mid) (fs new)
+  unsafeIOToST CC.yield
   (cm,cs) <- diffKeyedChildrenDeferred e f mounted plan cm (cs old) (cs mid) (cs new)
   return old { features = fs, keyedChildren = cs, childMap = cm }
   where
@@ -380,6 +384,7 @@ diffKeyedElementDeferred f mounted plan old@(elementHost &&& childMap -> (Just e
 diffElementDeferred :: Dispatcher e -> IORef (IO ()) -> Plan s -> Diff' s (View e)
 diffElementDeferred f mounted plan old@(elementHost -> Just e) mid new = do
   fs <- diffFeaturesDeferred e f         plan (fs old) (fs mid) (fs new)
+  unsafeIOToST CC.yield
   cs <- diffChildrenDeferred e f mounted plan (cs old) (cs mid) (cs new)
   return old { features = fs, children = cs }
   where
@@ -1103,6 +1108,7 @@ componentThread ref@Ref { crComponent = c@(renderer -> rndr), ..} live props sta
                     du new_live
                     return c
                   sequence_ cbs
+                  CC.yield
                   outer new new_live newProps newState newProps newState [] []
 
                 worker acc (cp : cps) = do
@@ -1157,6 +1163,7 @@ animationQueue = unsafePerformIO (newIORef [])
 animator = unsafePerformIO $ void $ forkIO await
   where
     await = do
+      CC.yield
       takeMVar animationsAwaiting
       as <- atomicModifyIORef' animationQueue $ \as -> ([],as)
       animate as
