@@ -6,6 +6,8 @@ Work has been moved to the following repositories:
 
 [pure-platform](https://github.com/grumply/pure-platform) 
 
+[pure-cond](https://github.com/grumply/pure-cond)
+
 [pure-core](https://github.com/grumply/pure-core)
 
 [pure-css](https://github.com/grumply/pure-css)
