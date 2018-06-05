@@ -1,0 +1,38 @@
+name:                pure
+version:             0.7.0.0
+synopsis:
+homepage:            github.com/grumply/pure
+license:             BSD3
+license-file:        LICENSE
+author:              Sean Mackenzie
+maintainer:          sean@grump.ly
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+
+library
+  build-depends:
+    base >= 4.8 && < 5,
+    pure-core >= 0.7 && < 1,
+    pure-default >= 0.7 && < 1,
+    pure-dom >= 0.7 && < 1,
+    pure-events >= 0.7 && < 1,
+    pure-html >= 0.7 && < 1,
+    pure-lifted >= 0.7 && < 1,
+    pure-styles >= 0.7 && < 1,
+    pure-time >= 0.7 && < 1
+
+  hs-source-dirs: src
+
+  exposed-modules:
+    HTML
+
+  if !(impl(ghcjs))
+    build-depends:
+      pure-server >= 0.7 && < 1,
+      pure-websocket >= 0.7 && < 1
+
+    exposed-modules:
+      Server
+
+  default-language: Haskell2010

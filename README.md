@@ -1,6 +1,8 @@
 # <a href='https://github.com/grumply/pure'><img src='https://github.com/grumply/pure/blob/0379442b5e05ef2d967a855bfd950ae770189db6/logo/pure.svg' height='60'></a>
 
-A haskell web framework.
+A haskell web framework. 
+
+This repository is a meta-library that re-exports a set of modules to simplify pure development.
 
 Work has been moved to the following repositories:
 
