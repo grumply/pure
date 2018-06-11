@@ -1,6 +1,53 @@
 # <a href='https://github.com/grumply/pure'><img src='https://github.com/grumply/pure/blob/0379442b5e05ef2d967a855bfd950ae770189db6/logo/pure.svg' height='60'></a>
 
-A haskell web framework. 
+A haskell web framework; components + fair diffing + multi-threading + batteries included.
+
+## Sample
+
+### Hello, World!
+
+```haskell
+{-# LANGUAGE OverloadedStrings #-}
+module Main where
+
+import Pure
+
+main = inject body "Hello, World!"
+```
+
+### Counting
+
+```haskell
+{-# LANGUAGE OverloadedStrings #-}
+module Main where
+
+import Pure
+
+data Counter = Counter
+
+instance Pure Counter where
+  view = ComponentIO $ \self ->
+    let
+        upd f = setState_ self $ \_ n -> return ( f n , return () )
+        inc n _ = upd (+ n)
+        dec n _ = upd (subtract n)
+    in
+      def
+        { construct = return (0 :: Int)
+        , render = \_ n ->
+            Div <||>
+              [ Button <| OnClick (inc 1) |> [ "Increment" ]
+              , Br
+              , fromTxt (toTxt n)
+              , Br
+              , Button <| OnClick (dec 1) |> [ "Decrement" ]
+              ]
+        }
+
+main = inject body (View Counter)
+```
+
+## About
 
 This repository is a meta-library that re-exports a set of modules to simplify pure development.
 
