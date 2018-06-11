@@ -1,6 +1,6 @@
 { mkDerivation, ghc, base, pure-core, pure-default, pure-dom
 , pure-events, pure-html, pure-lifted, pure-server, pure-styles
-, pure-time, pure-websocket, stdenv
+, pure-time, pure-txt, pure-websocket, stdenv
 , secure ? false
 , debugws ? false
 , debugapi ? false
@@ -13,7 +13,7 @@ mkDerivation {
   src = ./.;
   libraryHaskellDepends = [
     base pure-core pure-default pure-dom pure-events pure-html
-    pure-lifted pure-styles pure-time
+    pure-lifted pure-styles pure-time pure-txt
     ] ++ (if ghc.isGhcjs or false then [ ] else [
         pure-server pure-websocket
     ]);
