@@ -50,6 +50,7 @@ main = inject body (View Counter)
 ## Performance
 
 There's still work to be done on optimizing the render loop, but, in practice, overall performance should be good enough.
+The benchmark module can be found in [pure-platform](https://github.com/grumply/pure-platform).
 
 <img src='https://github.com/grumply/pure/blob/ab5517253f689e5f40e3d4c5a074281764046203/assets/benchmarks_results.png'>
 
