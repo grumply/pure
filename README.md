@@ -1,4 +1,4 @@
-# <a href='https://github.com/grumply/pure'><img src='https://raw.githubusercontent.com/grumply/pure/master/assets/logo.svg' height='60'></a>
+# <a href='https://github.com/grumply/pure'><img src='https://github.com/grumply/pure/blob/ab5517253f689e5f40e3d4c5a074281764046203/assets/logo.svg' height='60'></a>
 
 A haskell web framework; components + fair diffing + multi-threading + batteries included.
 
@@ -49,7 +49,7 @@ main = inject body (View Counter)
 
 ## Performance
 
-<img src='https://raw.githubusercontent.com/grumply/pure/ab5517253f689e5f40e3d4c5a074281764046203/assets/benchmarks_results.png'>
+<img src='https://github.com/grumply/pure/blob/ab5517253f689e5f40e3d4c5a074281764046203/assets/benchmarks_results.png'>
 
 ## About
 
