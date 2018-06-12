@@ -1,6 +1,6 @@
 # <a href='https://github.com/grumply/pure'><img src='https://github.com/grumply/pure/blob/ab5517253f689e5f40e3d4c5a074281764046203/assets/logo.svg' height='60'></a>
 
-A haskell web framework; components + fair diffing + multi-threading + batteries included.
+A haskell web framework.
 
 ## Sample
 
