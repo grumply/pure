@@ -11,7 +11,7 @@ module Main where
 
 import Pure
 
-main = inject body (string "Hello, World!")
+main = inject body "Hello, World!"
 ```
 
 ### Counting
