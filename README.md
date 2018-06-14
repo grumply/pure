@@ -11,7 +11,7 @@ module Main where
 
 import Pure
 
-main = inject body "Hello, World!"
+main = inject body (string "Hello, World!")
 ```
 
 ### Counting
@@ -28,11 +28,11 @@ instance Pure Counter where
     { construct = return (0 :: Int)
     , render = \_ n ->
         Div <||>
-          [ Button <| OnClick (upd succ) |> [ "Increment" ]
+          [ Button <| OnClick (upd succ) |> [ string "Increment" ]
           , Br
           , text n
           , Br
-          , Button <| OnClick (upd pred) |> [ "Decrement" ]
+          , Button <| OnClick (upd pred) |> [ sring "Decrement" ]
           ]
     }
 
