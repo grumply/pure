@@ -22,7 +22,6 @@ import Pure.Data.Time as Export
 -- from pure-txt
 import Pure.Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
 
-#ifdef __GHCJS__
 -- from pure-events
 import Pure.Data.Events as Export
 
@@ -33,7 +32,8 @@ import Pure.Data.HTML.Properties as Export hiding (Children,Data,Style,ContextMe
 -- from pure-styles
 import Pure.Data.Styles as Export
 import Pure.Data.Styles.Patterns as Export
-#else
+
+#ifndef __GHCJS__
 -- from pure-server
 import Pure.Server as Export
 
