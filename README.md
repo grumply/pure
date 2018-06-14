@@ -18,6 +18,7 @@ main = inject body "Hello, World!"
 ### Counting
 
 ```haskell
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Pure
