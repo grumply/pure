@@ -32,7 +32,7 @@ instance Pure Counter where
           , Br
           , text n
           , Br
-          , Button <| OnClick (upd pred) |> [ sring "Decrement" ]
+          , Button <| OnClick (upd pred) |> [ string "Decrement" ]
           ]
     }
 
