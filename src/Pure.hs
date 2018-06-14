@@ -12,7 +12,7 @@ import Pure.Data.Default as Export
 import Pure.DOM as Export
 
 -- from pure-lifted
-import Pure.Data.Lifted as Export (Win(..),Doc(..),Head(..),Body(..),Element(..),Text(..),Node(..),Frag(..),IsNode(..),toJSV,Evt(..),Options(..),prevDef,prevProp,onRaw,(.#),findByTag,findById,same,isNull,getWindow,getBody,getDocument,getHead,body,window,document,head)
+import Pure.Data.Lifted as Export (JSV,Win(..),Doc(..),Head(..),Body(..),Element(..),Text(..),Node(..),Frag(..),IsNode(..),toJSV,Evt(..),Options(..),prevDef,prevProp,onRaw,(.#),findByTag,findById,same,isNull,getWindow,getBody,getDocument,getHead,body,window,document,head)
 import Pure.Animation as Export (addAnimation)
 import Pure.IdleWork as Export (addIdleWork)
 
