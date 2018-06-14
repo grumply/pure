@@ -7,11 +7,12 @@ A haskell web framework.
 ### Hello, World!
 
 ```haskell
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Pure
 
-main = inject body (string "Hello, World!")
+main = inject body "Hello, World!"
 ```
 
 ### Counting
@@ -26,9 +27,12 @@ data Counter = Counter
 instance Pure Counter where
   view = ComponentIO $ \self -> def
     { construct = return (0 :: Int)
-    , render = \_ n ->
-        let btn f t = Button <| OnClick (\_ -> setStatePure_ self (const f)) |> [ string t ]
-        in Div <||> [ btn succ "Increment", text n, btn pred "Decrement" ]
+    , render = \_ n -> let tick f _ = modify_ self (const f) in
+        Div <||>
+          [ Button <| OnClick (tick succ) |> [ "Increment" ]
+          , text n
+          , Button <| OnClick (tick pred) |> [ "Decrement" ]
+          ]
     }
 
 main = inject body (View Counter)
