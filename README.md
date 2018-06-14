@@ -27,8 +27,8 @@ instance Pure Counter where
   view = ComponentIO $ \self -> def
     { construct = return (0 :: Int)
     , render = \_ n ->
-        let button f label = Button <| OnClick (setStatePure_ self . const f) |> [ string label ]
-        in Div <||> [ button succ "Increment", text n, button pred "Decrement" ]
+        let btn f t = Button <| OnClick (\_ -> setStatePure_ self (const f)) |> [ string t ]
+        in Div <||> [ btn succ "Increment", text n, btn pred "Decrement" ]
     }
 
 main = inject body (View Counter)
