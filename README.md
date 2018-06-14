@@ -24,19 +24,17 @@ import Pure
 data Counter = Counter
 
 instance Pure Counter where
-  view = ComponentIO $ \self ->
-    let upd f = setState_ self $ \_ n -> return ( f n , return () )
-    in def
-        { construct = return (0 :: Int)
-        , render = \_ n ->
-            Div <||>
-              [ Button <| OnClick (upd succ) |> [ string "Increment" ]
-              , Br
-              , text n
-              , Br
-              , Button <| OnClick (upd pred) |> [ string "Decrement" ]
-              ]
-        }
+  view = ComponentIO $ \self -> let upd = setStatePure_ self . const in def
+    { construct = return (0 :: Int)
+    , render = \_ n ->
+        Div <||>
+          [ Button <| OnClick (upd succ) |> [ string "Increment" ]
+          , Br
+          , text n
+          , Br
+          , Button <| OnClick (upd pred) |> [ string "Decrement" ]
+          ]
+    }
 
 main = inject body (View Counter)
 ```
