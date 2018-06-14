@@ -7,18 +7,16 @@ A haskell web framework.
 ### Hello, World!
 
 ```haskell
-{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Pure
 
-main = inject body "Hello, World!"
+main = inject body (string "Hello, World!")
 ```
 
 ### Counting
 
 ```haskell
-{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Pure
@@ -36,11 +34,11 @@ instance Pure Counter where
         { construct = return (0 :: Int)
         , render = \_ n ->
             Div <||>
-              [ Button <| OnClick (inc 1) |> [ "Increment" ]
+              [ Button <| OnClick (inc 1) |> [ string "Increment" ]
               , Br
-              , fromTxt (toTxt n)
+              , text n
               , Br
-              , Button <| OnClick (dec 1) |> [ "Decrement" ]
+              , Button <| OnClick (dec 1) |> [ string "Decrement" ]
               ]
         }
 
