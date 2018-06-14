@@ -28,11 +28,11 @@ instance Pure Counter where
     { construct = return (0 :: Int)
     , render = \_ n ->
         Div <||>
-          [ Button <| OnClick (upd succ) |> [ string "Increment" ]
+          [ Button <| OnClick (upd succ) |> [ "Increment" ]
           , Br
           , text n
           , Br
-          , Button <| OnClick (upd pred) |> [ string "Decrement" ]
+          , Button <| OnClick (upd pred) |> [ "Decrement" ]
           ]
     }
 
