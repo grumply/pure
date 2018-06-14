@@ -25,20 +25,16 @@ data Counter = Counter
 
 instance Pure Counter where
   view = ComponentIO $ \self ->
-    let
-        upd f = setState_ self $ \_ n -> return ( f n , return () )
-        inc n _ = upd (+ n)
-        dec n _ = upd (subtract n)
-    in
-      def
+    let upd f = setState_ self $ \_ n -> return ( f n , return () )
+    in def
         { construct = return (0 :: Int)
         , render = \_ n ->
             Div <||>
-              [ Button <| OnClick (inc 1) |> [ string "Increment" ]
+              [ Button <| OnClick (upd succ) |> [ string "Increment" ]
               , Br
               , text n
               , Br
-              , Button <| OnClick (dec 1) |> [ string "Decrement" ]
+              , Button <| OnClick (upd pred) |> [ string "Decrement" ]
               ]
         }
 
