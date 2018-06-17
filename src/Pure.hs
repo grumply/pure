@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 module Pure (module Export) where
 
 -- from pure-core
@@ -32,11 +31,3 @@ import Pure.Data.HTML.Properties as Export hiding (Children,Data,Style,ContextMe
 -- from pure-styles
 import Pure.Data.Styles as Export
 import Pure.Data.Styles.Patterns as Export
-
-#ifndef __GHCJS__
--- from pure-server
-import Pure.Server as Export
-
--- from pure-websocket
-import Pure.WebSocket as Export hiding ((<||>))
-#endif

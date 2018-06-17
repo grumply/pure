@@ -1,11 +1,6 @@
 { mkDerivation, ghc, base, pure-core, pure-default, pure-dom
-, pure-events, pure-html, pure-lifted, pure-server, pure-styles
-, pure-time, pure-txt, pure-websocket, stdenv
-, secure ? false
-, debugws ? false
-, debugapi ? false
-, devel ? false
-, useTemplateHaskell ? true
+, pure-events, pure-html, pure-lifted, pure-styles
+, pure-time, pure-txt, stdenv
 }:
 mkDerivation {
   pname = "pure";
@@ -14,17 +9,7 @@ mkDerivation {
   libraryHaskellDepends = [
     base pure-core pure-default pure-dom pure-events pure-html
     pure-lifted pure-styles pure-time pure-txt
-    ] ++ (if ghc.isGhcjs or false then [ ] else [
-        pure-server pure-websocket
-    ]);
-  configureFlags =
-    [ (secure ? "-fsecure")
-      (debugws ? "-fdebugws")
-      (debugapi ? "-fdebugapi")
-      (devel ? "-fdevel")
-    ] ++ (if useTemplateHaskell then [] else [
-      "-f-use-template-haskell"
-    ]);
+    ];
   homepage = "github.com/grumply/pure";
   license = stdenv.lib.licenses.bsd3;
 }

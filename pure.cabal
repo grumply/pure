@@ -28,9 +28,4 @@ library
   exposed-modules:
     Pure
 
-  if !(impl(ghcjs))
-    build-depends:
-      pure-server >= 0.7 && < 1,
-      pure-websocket >= 0.7 && < 1
-
   default-language: Haskell2010
