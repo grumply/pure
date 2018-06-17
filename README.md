@@ -7,7 +7,6 @@ A haskell web framework.
 ### Hello, World!
 
 ```haskell
-{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Pure
@@ -18,7 +17,6 @@ main = inject body "Hello, World!"
 ### Counting
 
 ```haskell
-{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Pure
@@ -27,8 +25,8 @@ data Counter = Counter
 
 instance Pure Counter where
   view = ComponentIO $ \self -> def
-    { construct = return (0 :: Int)
-    , render = \_ n -> let tick f _ = modify_ self (const f) in
+    { construct = return 0
+    , render = \_ n -> let tick = const . modify_ self . const in
         Div <||>
           [ Button <| OnClick (tick succ) |> [ "Increment" ]
           , text n
