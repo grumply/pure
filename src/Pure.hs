@@ -25,7 +25,7 @@ import Pure.Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
 import Pure.Data.Events as Export
 
 -- from pure-html
-import Pure.Data.HTML as Export hiding (Head,Body,Style)
+import Pure.Data.HTML as Export hiding (Head,Body,Style,Time)
 import Pure.Data.HTML.Properties as Export hiding (Children,Data,Style,ContextMenu,Cite,Code,Form,Label,Span,Summary,Title,Bgcolor,Border,Color,Content,Height,Sizes,Width)
 
 -- from pure-styles
