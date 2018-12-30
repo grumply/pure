@@ -28,6 +28,9 @@ import Pure.Data.Events as Export
 import Pure.Data.HTML as Export hiding (Head,Body,Style,Time)
 import Pure.Data.HTML.Properties as Export hiding (Children,Data,Style,ContextMenu,Cite,Code,Form,Label,Span,Summary,Title,Bgcolor,Border,Color,Content,Height,Sizes,Width)
 
+-- from pure-state
+import Pure.State as Export
+
 -- from pure-styles
 import Pure.Data.Styles as Export
 import Pure.Data.Styles.Patterns as Export

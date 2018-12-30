@@ -19,6 +19,7 @@ library
     pure-events >= 0.7 && < 1,
     pure-html >= 0.7 && < 1,
     pure-lifted >= 0.7 && < 1,
+    pure-state >= 0.7 && < 1,
     pure-styles >= 0.7 && < 1,
     pure-time >= 0.7 && < 1,
     pure-txt >= 0.7 && < 1

@@ -1,5 +1,5 @@
 { mkDerivation, ghc, base, pure-core, pure-default, pure-dom
-, pure-events, pure-html, pure-lifted, pure-styles
+, pure-events, pure-html, pure-lifted, pure-state, pure-styles
 , pure-time, pure-txt, stdenv
 }:
 mkDerivation {
@@ -8,7 +8,7 @@ mkDerivation {
   src = ./.;
   libraryHaskellDepends = [
     base pure-core pure-default pure-dom pure-events pure-html
-    pure-lifted pure-styles pure-time pure-txt
+    pure-lifted pure-state pure-styles pure-time pure-txt
     ];
   homepage = "github.com/grumply/pure";
   license = stdenv.lib.licenses.bsd3;
