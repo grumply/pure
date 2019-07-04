@@ -11,7 +11,7 @@ import Pure.Data.Default as Export
 import Pure.DOM as Export
 
 -- from pure-lifted
-import Pure.Data.Lifted as Export (JSV,Win(..),Doc(..),Head(..),Body(..),Element(..),Text(..),Node(..),Frag(..),IsNode(..),toJSV,Evt(..),Options(..),prevDef,prevProp,onRaw,(.#),findByTag,findById,same,isNull,getWindow,getBody,getDocument,getHead,body,window,document,head)
+import Pure.Data.Lifted as Export (JSV,Win(..),Doc(..),Head(..),Body(..),Element(..),Text(..),Node(..),Frag(..),IsNode(..),toJSV,Evt(..),Options(Options),prevDef,prevProp,onRaw,(.#),findByTag,findById,same,isNull,getWindow,getBody,getDocument,getHead,body,window,document,head)
 import Pure.Animation as Export (addAnimation)
 import Pure.IdleWork as Export (addIdleWork)
 
@@ -22,7 +22,7 @@ import Pure.Data.Time as Export
 import Pure.Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
 
 -- from pure-events
-import Pure.Data.Events as Export
+import Pure.Data.Events as Export hiding (button)
 
 -- from pure-html
 import Pure.Data.HTML as Export hiding (Head,Body,Style,Time)
