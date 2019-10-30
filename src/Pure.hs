@@ -22,11 +22,11 @@ import Pure.Data.Time as Export
 import Pure.Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
 
 -- from pure-events
-import Pure.Data.Events as Export hiding (button)
+import Pure.Data.Events as Export hiding (button,Accept,Alt,Select)
 
 -- from pure-html
 import Pure.Data.HTML as Export hiding (Head,Body,Style,Time)
-import Pure.Data.HTML.Properties as Export hiding (Children,Data,Style,ContextMenu,Cite,Code,Form,Label,Span,Summary,Title,Bgcolor,Border,Color,Content,Height,Sizes,Width)
+import Pure.Data.HTML.Properties as Export hiding (Children,Data,Style,ContextMenu,Cite,Code,Form,Label,Span,Summary,Title,Bgcolor,Border,Color,Content,Height,Sizes,Width,Target)
 
 -- from pure-state
 import Pure.State as Export
