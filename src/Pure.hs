@@ -31,6 +31,8 @@ import Pure.Data.HTML.Properties as Export hiding (Children,Data,Style,ContextMe
 -- from pure-state
 import Pure.State as Export
 
+-- from pure-theme; exports Pure.Data.Styles 
+import Pure.Theme as Export hiding (target,delay)
+
 -- from pure-styles
-import Pure.Data.Styles as Export
 import Pure.Data.Styles.Patterns as Export

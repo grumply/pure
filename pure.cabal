@@ -24,6 +24,7 @@ library
     pure-lifted,
     pure-state,
     pure-styles,
+    pure-theme,
     pure-time,
     pure-txt
 
