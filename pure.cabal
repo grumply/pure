@@ -22,7 +22,6 @@ library
     pure-events,
     pure-html,
     pure-lifted,
-    pure-state,
     pure-styles,
     pure-theme,
     pure-time,
