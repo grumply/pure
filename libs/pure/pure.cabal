@@ -1,0 +1,179 @@
+cabal-version:       2.4
+name:                pure
+version:             0.8.0.0
+
+source-repository head
+  type: git
+  location: https://github.com/grumply/pure.git
+
+library
+  hs-source-dirs: src
+  
+  build-depends:
+    aeson,
+    aeson-pretty,
+    array,
+    async,
+    base,
+    bytestring,
+    containers,
+    deepseq,
+    directory,
+    ef,
+    filepath,
+    ghc-prim,
+    hashable,
+    mtl,
+    origami-fold,
+    random,
+    stm,
+    tagsoup,
+    primitive,
+    template-haskell,
+    text,
+    time,
+    vector,
+    unordered-containers,
+    xss-sanitize,
+    unix
+
+  hs-source-dirs: src
+
+  if impl(ghcjs)
+
+    build-depends:
+      ghcjs-base
+
+    js-sources: 
+      js/intersection-shim.js
+      js/ric-shim.js
+      js/lz-string.js
+
+    other-modules:
+      Data.Fetch.GHCJS
+      Data.JSON.GHCJS
+      Data.Time.GHCJS
+      Data.Txt.GHCJS
+      Data.Websocket.Internal.GHCJS
+
+  if !(impl(ghcjs))
+
+    build-depends:
+        websockets      >= 0.11
+      , network         >= 2.6
+      , io-streams      >= 1.4
+      , text
+      , HsOpenSSL       >= 0.11.1.1 && < 0.12
+      , openssl-streams >= 1.2      && < 1.5
+      , lens
+      , wreq
+      , unix-bytestring
+
+    other-modules:
+      Data.Fetch.GHC
+      Data.JSON.GHC
+      Data.Time.GHC
+      Data.Txt.GHC
+      Data.Websocket.Internal.GHC
+
+  exposed-modules:
+    Pure
+    Browser
+    Server
+    Control.Component
+    Control.Controller
+    Control.Cont
+    Control.Dynamic
+    Control.Error
+    Control.Fold
+    Control.Producer
+    Control.Reader
+    Control.State
+    Control.Writer
+    Data.Animation
+    Data.Bloom
+    Data.Bloom.Limiter
+    Data.Bloom.Scalable
+    Data.Covariance
+    Data.CSS
+    Data.DOM
+    Data.Default
+    Data.Effect
+    Data.Events
+    Data.Exists
+    Data.Fetch
+    Data.HTML
+    Data.Idle
+    Data.JSON
+    Data.Localstorage
+    Data.Marker
+    Data.Queue
+    Data.Random
+    Data.Random.Generator
+    Data.Random.Internal
+    Data.Router
+    Data.Scroll
+    Data.Sorcerer
+    Data.Sorcerer.Sorcery
+    Data.SVG
+    Data.Stream
+    Data.Styles
+    Data.Subscribe
+    Data.Theme
+    Data.Time
+    Data.Time.Internal
+    Data.Try
+    Data.Txt
+    Data.Txt.Trie
+    Data.URI
+    Data.Variance
+    Data.View
+    Data.View.Parse
+    Data.View.Reflect
+    Data.View.Render
+    Data.View.Sanitize
+    Data.View.Transform
+    Data.Websocket
+    Effect.Async
+    Effect.Dimensions
+    Effect.Fetch
+    Effect.Fork
+    Effect.Intersection
+    Effect.Lifecycles
+    Effect.Meta
+    Effect.Mutation
+    Effect.Poll
+    Effect.Router
+    Effect.Script
+    Effect.Stream
+    Effect.Styles
+    Effect.Suspense
+    Effect.Sync
+    Effect.Title
+    Effect.Websocket
+    
+  other-modules:
+    Data.Sorcerer.Aggregable
+    Data.Sorcerer.Aggregate
+    Data.Sorcerer.Aggregator
+    Data.Sorcerer.Dispatcher
+    Data.Sorcerer.JSON
+    Data.Sorcerer.Log
+    Data.Sorcerer.Manager
+    Data.Sorcerer.Queue
+    Data.Sorcerer.Streamable
+    Data.Websocket.API.Implementation
+    Data.Websocket.API.Interface
+    Data.Websocket.API.ProxyList
+    Data.Websocket.API
+    Data.Websocket.Callbacks
+    Data.Websocket.Dispatch
+    Data.Websocket.Endpoint
+    Data.Websocket.Handlers
+    Data.Websocket.Internal
+    Data.Websocket.Identify
+    Data.Websocket.Message
+    Data.Websocket.Request
+    Data.Websocket.TypeRep
+
+  default-language: Haskell2010

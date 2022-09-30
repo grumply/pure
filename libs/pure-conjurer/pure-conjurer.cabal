@@ -1,0 +1,88 @@
+cabal-version:     2.4
+name:              pure-conjurer
+version:           0.8.0.0
+
+library
+  hs-source-dirs:
+      src
+
+  build-depends:
+      base
+    , pure
+    , pure-auth
+    , bytestring
+    , containers
+    , hashable
+    , text
+    , directory
+    , filepath
+    , stm
+
+  exposed-modules:
+    Pure.Conjurer
+    Pure.Conjurer.Analytics
+    Pure.Conjurer.API
+    Pure.Conjurer.Callbacks
+    Pure.Conjurer.Context
+    Pure.Conjurer.Creatable
+    Pure.Conjurer.Fieldable
+    Pure.Conjurer.Formable
+    Pure.Conjurer.Index
+    Pure.Conjurer.Interactions
+    Pure.Conjurer.Listable
+    Pure.Conjurer.Key
+    Pure.Conjurer.Name
+    Pure.Conjurer.Pathable
+    Pure.Conjurer.Permissions
+    Pure.Conjurer.Previewable
+    Pure.Conjurer.Previews
+    Pure.Conjurer.Producible
+    Pure.Conjurer.Readable
+    Pure.Conjurer.Rep
+    Pure.Conjurer.Resource
+    Pure.Conjurer.Rootable
+    Pure.Conjurer.Routable
+    Pure.Conjurer.Slug
+    Pure.Conjurer.Updatable
+
+  default-language: Haskell2010
+
+  default-extensions:
+    DerivingStrategies
+    TypeFamilies
+    FlexibleContexts
+    UndecidableInstances
+    DeriveGeneric
+    DeriveAnyClass
+    FlexibleInstances
+    TemplateHaskell
+    AllowAmbiguousTypes
+    RankNTypes
+    DataKinds
+    PartialTypeSignatures
+    TypeApplications
+    ScopedTypeVariables
+    DuplicateRecordFields
+    StandaloneDeriving
+    MultiParamTypeClasses
+    NamedFieldPuns
+    RecordWildCards
+    PatternSynonyms
+    BlockArguments
+    LambdaCase
+    CPP
+    DerivingVia
+    OverloadedStrings
+    DefaultSignatures
+    TypeOperators
+    InstanceSigs
+    ExistentialQuantification
+    RoleAnnotations
+    FunctionalDependencies
+    ViewPatterns
+    BangPatterns
+    ConstraintKinds
+  
+  if !impl(ghcjs)
+    build-depends:
+      iproute

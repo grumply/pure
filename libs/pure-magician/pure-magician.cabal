@@ -1,0 +1,75 @@
+cabal-version:     2.4
+name:              pure-magician
+version:           0.8.0.0
+
+library
+  hs-source-dirs:
+      src
+
+  build-depends:
+      base
+    , pure
+    , pure-auth
+    , pure-conjurer
+    , pure-convoker
+    , hashable
+
+  exposed-modules:
+    Pure.Magician
+    Pure.Magician.Resources
+    Pure.Magician.Client
+    Pure.Magician.Client.Restore
+
+  if !(impl(ghcjs))
+
+    build-depends:
+      yaml
+
+    exposed-modules:
+      Pure.Magician.Server
+      Pure.Magician.Server.Analytics
+      Pure.Magician.Server.Cache
+      Pure.Magician.Server.Config
+      Pure.Magician.Server.Listen
+      Pure.Magician.Server.Limit
+      Pure.Magician.Server.Serve
+      Pure.Magician.Server.Static
+
+  default-language: Haskell2010
+
+  default-extensions:
+    DerivingStrategies
+    TypeFamilies
+    FlexibleContexts
+    UndecidableInstances
+    DeriveGeneric
+    DeriveAnyClass
+    FlexibleInstances
+    TemplateHaskell
+    AllowAmbiguousTypes
+    RankNTypes
+    DataKinds
+    PartialTypeSignatures
+    TypeApplications
+    ScopedTypeVariables
+    DuplicateRecordFields
+    StandaloneDeriving
+    MultiParamTypeClasses
+    NamedFieldPuns
+    RecordWildCards
+    PatternSynonyms
+    BlockArguments
+    LambdaCase
+    CPP
+    DerivingVia
+    OverloadedStrings
+    DefaultSignatures
+    TypeOperators
+    InstanceSigs
+    ExistentialQuantification
+    RoleAnnotations
+    FunctionalDependencies
+    ViewPatterns
+    BangPatterns
+    PolyKinds
+    ConstraintKinds

@@ -1,0 +1,29 @@
+packages: 
+  ./libs/pure/pure.cabal 
+  ./libs/pure-conjurer/pure-conjurer.cabal 
+  ./libs/pure-convoker/pure-convoker.cabal 
+  ./libs/pure-magician/pure-magician.cabal 
+  ./libs/pure-auth/pure-auth.cabal
+  ./libs/pure-simple-blog/pure-simple-blog.cabal
+  
+  ./dev/dev.cabal
+
+  ./app/backend/backend.cabal
+  ./app/frontend/frontend.cabal
+  ./app/shared/shared.cabal
+
+jobs: $ncpus
+
+optimization: 2
+
+source-repository-package
+  type: git
+  location: https://github.com/grumply/ef.git
+  tag: 848d3a76c51afb07a26f44dadfd82ad1068a9815
+  --sha256: 1zfgdkxi8vw3ybbnxrw32r64prkhgxsc2vvprmrxwbz1h050dr2f
+
+source-repository-package
+  type: git
+  location: https://github.com/grumply/origami-fold.git
+  tag: 99028b8e5ab9ec88e51e8d507506b3daeff0d05e
+  --sha256: 17vycjw7b1893shlkgs7v156jpl2jn8724fd0yl6gnybmjq3c6sf

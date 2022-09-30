@@ -1,0 +1,74 @@
+cabal-version:     2.4
+name:              pure-convoker
+version:           0.8.0.0
+
+library
+  hs-source-dirs:
+      src
+
+  build-depends:
+      base
+    , pure
+    , pure-auth
+    , pure-conjurer
+    , containers
+    , hashable
+    
+  if !(impl(ghcjs))
+    build-depends:
+      pandoc
+
+  exposed-modules:
+    Pure.Convoker
+    Pure.Convoker.Admins
+    Pure.Convoker.Comment
+    Pure.Convoker.Discussion
+    Pure.Convoker.Meta
+    Pure.Convoker.Mods
+    Pure.Convoker.UserVotes
+    Pure.Convoker.Discussion.Threaded
+    Pure.Convoker.Discussion.Shared.Ago
+    Pure.Convoker.Discussion.Shared.Markdown
+    Pure.Convoker.Discussion.Shared.Total
+    Pure.Convoker.Discussion.Simple
+    Pure.Convoker.Discussion.Simple.Comment
+    Pure.Convoker.Discussion.Simple.Meta
+
+  default-language: Haskell2010
+
+  default-extensions:
+    DerivingStrategies
+    TypeFamilies
+    FlexibleContexts
+    UndecidableInstances
+    DeriveGeneric
+    DeriveAnyClass
+    FlexibleInstances
+    TemplateHaskell
+    AllowAmbiguousTypes
+    RankNTypes
+    DataKinds
+    PartialTypeSignatures
+    TypeApplications
+    ScopedTypeVariables
+    DuplicateRecordFields
+    StandaloneDeriving
+    MultiParamTypeClasses
+    NamedFieldPuns
+    RecordWildCards
+    PatternSynonyms
+    BlockArguments
+    LambdaCase
+    CPP
+    DerivingVia
+    OverloadedStrings
+    DefaultSignatures
+    TypeOperators
+    InstanceSigs
+    ExistentialQuantification
+    RoleAnnotations
+    FunctionalDependencies
+    ViewPatterns
+    BangPatterns
+    PolyKinds
+    ConstraintKinds

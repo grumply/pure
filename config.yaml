@@ -1,0 +1,6 @@
+host: 127.0.0.1
+port: 8081
+admin: admin
+password: password
+email: admin@example.org
+refresh: 10000
