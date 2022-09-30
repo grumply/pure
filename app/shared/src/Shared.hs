@@ -1,4 +1,3 @@
-{-# LANGUAGE RecordWildCards, TypeFamilies, DeriveGeneric, DeriveAnyClass, CPP, DuplicateRecordFields, UndecidableInstances, TypeApplications, DerivingVia, DataKinds, FlexibleInstances, MultiParamTypeClasses #-}
 module Shared where
 
 import Pure.Magician

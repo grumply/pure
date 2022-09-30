@@ -55,4 +55,5 @@ executable pure-simple-blog
     DuplicateRecordFields
     BangPatterns
     ParallelListComp
-    TypeOperator 
+    TypeOperators
+    TypeFamilies

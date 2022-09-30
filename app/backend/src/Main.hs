@@ -1,4 +1,3 @@
-{-# language TypeApplications, BlockArguments, RecordWildCards, NamedFieldPuns, FlexibleInstances #-}
 module Main where
 
 import Shared

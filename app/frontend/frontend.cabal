@@ -46,3 +46,4 @@ executable frontend
     BangPatterns
     ParallelListComp
     TypeOperators
+    TypeFamilies

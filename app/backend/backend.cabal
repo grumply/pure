@@ -21,3 +21,32 @@ executable backend
   ghc-options: -O -threaded -rtsopts -with-rtsopts=-N
 
   default-language: Haskell2010
+  
+  default-extensions:
+    BlockArguments
+    TypeApplications
+    DerivingVia
+    DerivingStrategies
+    DeriveAnyClass
+    DeriveGeneric
+    RecordWildCards
+    ConstraintKinds
+    RankNTypes
+    FlexibleContexts 
+    ScopedTypeVariables
+    FlexibleInstances
+    OverloadedStrings
+    PartialTypeSignatures
+    LambdaCase
+    ViewPatterns
+    RoleAnnotations
+    DataKinds
+    KindSignatures
+    PolyKinds
+    NamedFieldPuns
+    PostfixOperators
+    DuplicateRecordFields
+    BangPatterns
+    ParallelListComp
+    TypeOperators
+    TypeFamilies
