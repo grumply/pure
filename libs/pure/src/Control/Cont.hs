@@ -6,14 +6,18 @@ import Control.State (Modify,State,state,put)
 import Control.Producer (stream)
 import Data.Effect (Effect,(#))
 import Data.Exists (Exists,it,using)
+import Data.Function (fix)
 import Data.Typeable (Typeable)
 import Data.View (eager,View,txt,pattern Null)
 
-type Cont c = Modify (c :=> View)
-type Dynamic c = Cont c => c :=> View
+type Cont' c a = Modify (c :=> a)
+type Cont c = Cont' c View
+
+type Dynamic' c a = Cont' c a => c :=> a
+type Dynamic c = Dynamic' c View
 
 -- | Reify a View context.
-reify :: forall c. Typeable c => Dynamic c -> (State (c :=> View) => (c => View)) -> (c => View)
+reify :: forall c a. (Typeable c, Typeable a) => Dynamic' c a -> (State (c :=> a) => (c => View)) -> (c => View)
 reify = state
 {-# INLINE reify #-}
 
@@ -21,17 +25,24 @@ reify = state
 --
 -- Note that the need to wrap dynamic Views arises from the fact that unify is
 -- often used in a context where those constraints are locally satisfied.
-unify :: forall c. Modify (c :=> View) => Dynamic c -> IO ()
+unify :: forall c a. Modify (c :=> a) => Dynamic' c a -> IO ()
 unify = put
 {-# INLINE unify #-}
 
--- | Codify the dynamic View from a matching `reify`d context. Requires type application.
+-- | Call the dynamic value from a matching `reify`d context. 
+-- Requires a type application for `c`.
+call :: forall c a. Exists (c :=> a) => (c => a)
+call = fromDynamic (it :: c :=> a)
+{-# INLINE call #-}
+
+-- | Codify the dynamic View from a matching `reify`d context. 
+-- Requires a type application for `c`.
 codify :: forall c. Exists (c :=> View) => (c => View)
-codify = eager (it :: c :=> View) (fromDynamic @c it)
+codify = eager (it :: c :=> View) (call @c)
 {-# INLINE codify #-}
 
 -- | Reify a View context and call the initial continuation.
-cont :: forall c. Typeable c => Dynamic c -> (c => View)
+cont :: forall c. Typeable c => Dynamic' c View -> (c => View)
 cont d = reify d (codify @c)
 {-# INLINE cont #-}
 
@@ -59,27 +70,28 @@ type Template c = State (Shape c) => Surface c
 --
 -- Requires type application.
 --
--- > type Graph = (Exists Dimensions,State Data)
--- > graph :: Shape Graph -> Surface Graph
--- > graph = surface @Graph { ... }
---
 {-# INLINE surface #-}
 surface :: forall c. Typeable c => Template c -> (Modify (Shape c) => Shape c) -> Surface c
 surface t s = reify @c s t
 
--- Given a template with fillable holes, constructs a surface with those holes
--- filled with the empty shape as a default. The holes can be re-filled with
--- `fill` from within the template.
+-- A self-modifying surface with no holes.
 --
 -- Requires type application.
 --
--- > type Graph = (Exists Dimensions,State Data)
--- > graph :: Surface Graph
--- > graph = flat @Graph { ... }
----
+-- Equivalent to `surface @c (hole @c)`.
+--
+-- Any use of `fill` inside a flat surface will force a full re-render rather
+-- than a reconciliation. To allow reconciliation, use: 
+--
+-- > surface @c (call @c)
+--
+-- to avoid the `eager` within `hole`/`codify`. The `call` approach can be
+-- convenient for mimicking state with continuations when it wouldn't make
+-- sense to re-render on every `fill`.
+--
 {-# INLINE flat #-}
-flat :: forall c. Typeable c => Template c -> Surface c
-flat t = surface @c t empty
+flat :: forall c. Typeable c => (Modify (Shape c) => Shape c) -> Surface c
+flat = surface @c (hole @c)
 
 -- Declare a hole in a surface. A hole is never empty, and will always be 
 -- filled with, at least, the `empty` shape. A hole can be re-filled with 
@@ -94,6 +106,8 @@ flat t = surface @c t empty
 -- >     [ hole @Graph 
 -- >     ]
 --
+-- `hole` force a local re-render rather than a reconciliation through the
+-- `eager` in `codify`.
 {-# INLINE hole #-}
 hole :: forall c. Exists (Shape c) => Surface c
 hole = codify @c
@@ -122,7 +136,10 @@ shape = it
 
 {-# INLINE root #-}
 root :: Template () -> Surface ()
-root = flat @()
+root t = flat @() x
+  where
+    x :: Modify (Shape ()) => Shape ()
+    x = refine @() (fix $ \self -> using (dynamic self :: Shape ()) t)
 
 --------------------------------------------------------------------------------
 -- An implementation of ltr and rtl composition using view continuations. 
