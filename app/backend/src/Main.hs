@@ -8,9 +8,13 @@ import Pure.Convoker.Discussion.Simple
 
 main :: IO ()
 main =
-  serve @Blog defaultUserConfig do
-    sync (activate ask) do
-      Null
+  with pageProduct do
+    with pagePreview do
+      with postProduct do
+        with postPreview do
+          serve @Blog defaultUserConfig do
+            sync (activate ask) do
+              Null
 
 instance Processable Post
 instance Amendable Post

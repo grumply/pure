@@ -6,6 +6,10 @@ import Shared
 
 main :: IO ()
 main = 
-  client @Blog @() "127.0.0.1" 8081 (dispatch ()) do 
-    run @Blog @() do
-      "Not found."
+  with pagePreview do
+    with pageProduct do
+      with postPreview do
+        with postProduct do
+          client @Blog @() "127.0.0.1" 8081 (dispatch ()) do 
+            run @Blog @() do
+              "Not found."

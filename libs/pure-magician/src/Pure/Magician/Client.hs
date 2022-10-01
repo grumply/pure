@@ -24,7 +24,7 @@ import Data.DOM (getPathname,getSearch)
 import Data.Time
 import Data.Txt (Txt)
 import qualified Data.Txt as Txt
-import qualified Data.View (Pure(..))
+import qualified Data.View (Viewable)
 import Data.Router (dispatch,path,map,catchError,getRoutingState,putRoutingState,runRouting)
 import qualified Data.Router as R
 import Data.View
@@ -49,9 +49,13 @@ import Prelude hiding (map,not)
 
 type App domain custom = (WS.Websocket domain, Authentication domain, Router.Router (Either (SomeRoute domain) custom))
 
+type family Viewables (xs :: [*]) :: Constraint where
+  Viewables '[] = ()
+  Viewables (x ': xs) = (Viewable (Product x), Viewable (Preview x),Viewables xs)
+
 client 
   :: forall domain custom. 
-  (Typeable domain, Typeable custom, RouteMany domain) 
+  (Typeable domain, Typeable custom, RouteMany domain, Viewables (Domains domain))
   => String 
   -> Int 
   -> (forall x. R.Routing custom x) 

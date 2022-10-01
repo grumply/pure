@@ -1128,13 +1128,13 @@ generateStatic
     , ToJSON (Name a), FromJSON (Name a), Hashable (Name a), Pathable (Name a), Ord (Name a)
     , ToJSON (Context a), FromJSON (Context a), Hashable (Context a), Pathable (Context a), Ord (Context a)
     , ToJSON (Product a), FromJSON (Product a)
-    , Pure (Product a)
+    , Viewable (Product a)
     ) => IO ()
 generateStatic = generateStaticWith @a "dist/static/" defaultTemplate
 
-defaultTemplate :: (Typeable a, Pure a) => a -> IO Txt
+defaultTemplate :: (Typeable a, Viewable a) => a -> IO Txt
 defaultTemplate a = pure $
-  "<!DOCTYPE html><html><head></head><body>" <> toTxt (View a) <> "</body></html>"
+  "<!DOCTYPE html><html><head></head><body>" <> toTxt (toView a) <> "</body></html>"
 
 generateStaticWith
   :: forall a.

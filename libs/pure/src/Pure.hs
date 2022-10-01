@@ -65,14 +65,6 @@ import Server as Export
 
 import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,even,repeat,span,tan,reverse)
 
-{-# INLINE with #-}
-with :: (Traversable t, Applicative f) => (a -> f b) -> t a -> f (t b)
-with = traverse
-
-{-# INLINE with_ #-}
-with_ :: (Foldable t, Applicative f) => (a -> f b) -> t a -> f ()
-with_ = traverse_
-
 -- | A variant of `fix` 'fixed' to a function (`->`) type with a convenient
 -- ordering for inline usage: `flip fix`. For introducing local anonymous
 -- recursive functions.

@@ -1,5 +1,5 @@
 {-# language RankNTypes, ConstraintKinds, FlexibleContexts, ScopedTypeVariables, AllowAmbiguousTypes #-}
-module Data.Exists (Exists(..), using, may, try, unite, constant) where
+module Data.Exists (Exists(..), using, with, may, try, unite, constant) where
 
 import Control.Concurrent (newEmptyMVar,tryPutMVar,readMVar)
 import qualified Data.Try as Try
@@ -39,6 +39,10 @@ newtype Witness a r = Witness (Exists a => r)
 {-# INLINE [1] using #-}
 using :: forall a r. a -> (Exists a => r) -> r
 using a w = unsafeCoerce (Witness w :: Witness a r) a
+
+{-# INLINE with #-}
+with :: a -> (Exists a => r) -> r
+with = using
 
 {-# INLINE may #-}
 may :: forall a b. Exists (Maybe a) => b -> (Exists a => b) -> b

@@ -90,27 +90,23 @@ instance Fieldable Markdown where
     Textarea <| OnInput (withInput (onchange . fromTxt)) |>
       [ txt initial ]
 
-instance Pure (Product Page) where
-  view PageProduct {..} = 
-    Article <||> 
-      [ Section <||> content
-      ]
+pageProduct PageProduct {..} =
+  Article <||> 
+    [ Section <||> content
+    ]
 
-instance Pure (Preview Page) where
-  view PagePreview {..} =
-    Article <||>
-      [ Section <||> title 
-      ]
+pagePreview PagePreview {..} =
+  Article <||>
+    [ Section <||> title 
+    ]
 
-instance Pure (Product Post) where
-  view PostProduct {..} =
-    Article <||>
-      [ Header <||> title
-      , Section <||> content
-      ]
+postProduct PostProduct {..} =
+  Article <||>
+    [ Header <||> title
+    , Section <||> content
+    ]
 
-instance Pure (Preview Post) where
-  view PostPreview {..} =
-    Article <||>
-      [ Section <||> title
-      ]
+postPreview PostPreview {..} =
+  Article <||>
+    [ Section <||> title
+    ]

@@ -105,7 +105,6 @@ sanitize opts@Options { allowSVG, allowCustomViews, processTag } = go
       tv@TextView{} -> tv
 
       -- These cases must not have come from de-serialization.
-      SomeView a | allowCustomViews -> SomeView a
       LazyView f a | allowCustomViews -> LazyView f a
       TaggedView __w v | allowCustomViews -> TaggedView __w v
       PortalView pp pd pv | allowCustomViews -> PortalView pp pd pv

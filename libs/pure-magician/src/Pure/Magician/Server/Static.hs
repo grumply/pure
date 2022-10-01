@@ -4,7 +4,7 @@ import Pure.Magician.Resources
 import Pure.Magician.Server.Serve
 
 import Pure.Conjurer
-import Data.View (Pure)
+import Data.View (Viewable)
 import Data.Websocket (Websocket)
 
 import Data.Typeable (Typeable)
@@ -24,7 +24,7 @@ instance StaticMany a '[] where
 class Staticable (a :: *) (resource :: *) (static :: Bool) where
   static :: IO ()
 
-instance {-# OVERLAPPABLE #-} (Conjurable resource, Routable resource, Pure (Product resource)) => Staticable a resource True where
+instance {-# OVERLAPPABLE #-} (Conjurable resource, Routable resource, Viewable (Product resource)) => Staticable a resource True where
   static = generateStatic @resource
 
 instance Staticable a resource False where

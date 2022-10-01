@@ -15,7 +15,7 @@ import Data.List as List (null,reverse,filter,length)
 import Data.Maybe (fromJust,isJust)
 import Data.STRef (STRef,newSTRef,readSTRef,modifySTRef',writeSTRef)
 import Data.Traversable (for,traverse)
-import Data.Typeable (Typeable)
+import Data.Typeable (Typeable,typeOf)
 import GHC.Exts (reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#,Any,inline)
 import System.IO.Unsafe (unsafePerformIO)
 import Unsafe.Coerce (unsafeCoerce)
@@ -25,7 +25,7 @@ import Data.Set (Set)
 import qualified Data.Map.Strict as Map (fromList,toList,insert,difference,keys,differenceWith,null,elems,mergeWithKey,mapWithKey)
 import qualified Data.Set as Set (fromList,toList,insert,delete,null)
 
-import Data.View (Pure(..),View(..),Features(..),Listener(..),Lifecycle(..),Comp(..),Target(..),getHost,setProps,queueComponentUpdate,Ref(..),ComponentPatch(..),sameTypeWitness,asProxyOf,ListenerAction(..))
+import Data.View (View(..),Features(..),Listener(..),Lifecycle(..),Comp(..),Target(..),getHost,setProps,queueComponentUpdate,Ref(..),ComponentPatch(..),sameTypeWitness,asProxyOf,ListenerAction(..),toView)
 
 import Data.Animation
 import Data.Idle
@@ -203,7 +203,6 @@ build' mtd = start
             , features = fs
             , children = cs
             }
-        go' (SomeView r) = go (view r)
         go' o@(ComponentView witness _ comp props) = do
           stq_   <- newIORef . Just =<< newQueue
           props_ <- newIORef undefined
@@ -643,13 +642,6 @@ diffDeferred' mounted plan plan' old !mid !new =
               !fs <- diffFeaturesDeferred (coerce $ fromJust $ getHost old) plan (features old) (features mid) (features new)
               return old { features = fs }
 
-          (SomeView m,SomeView n)
-            | sameTypeWitness (__pure_witness (asProxyOf m)) (__pure_witness (asProxyOf n)) ->
-              if m === n then
-                return old
-              else
-                diffDeferred mounted plan plan' old (view m) (view n)
-
           (SVGView{},SVGView{})
             | cmpTag -> diffSVGElementDeferred mounted plan plan' old mid new
 
@@ -692,7 +684,7 @@ diffDeferred' mounted plan plan' old !mid !new =
           _ -> replace
 
 diffElementDeferred :: IORef [IO ()] -> Plan s -> Plan s -> DiffST s View
-diffElementDeferred mounted plan plan' old@(elementHost -> Just e) mid new = do
+diffElementDeferred mounted plan plan' old@(elementHost -> ~(Just e)) mid new = do
   !fs <- diffFeaturesDeferred e plan (features old) (features mid) (features new)
   !cs <- diffChildrenDeferred e mounted plan plan' (children old) (children mid) (children new)
   return old
@@ -701,7 +693,7 @@ diffElementDeferred mounted plan plan' old@(elementHost -> Just e) mid new = do
     }
 
 diffSVGElementDeferred :: IORef [IO ()] -> Plan s -> Plan s -> DiffST s View
-diffSVGElementDeferred mounted plan plan' old@(elementHost -> Just e) mid new = do
+diffSVGElementDeferred mounted plan plan' old@(elementHost -> ~(Just e)) mid new = do
   diffXLinksDeferred e plan (xlinks mid) (xlinks new)
   !fs <- diffFeaturesDeferred e plan (features old) (features mid) (features new)
   !cs <- diffChildrenDeferred e mounted plan plan' (children old) (children mid) (children new)
@@ -744,8 +736,8 @@ diffXLinkMaps = Map.mergeWithKey diff remove add
         | val1 === val2 || val1 == val2
         = Nothing
         | otherwise = Just $ \e -> setAttributeNS e "http://www.w3.org/1999/xlink" nm val2
-      remove = Map.mapWithKey (\k _ -> \e -> removeAttributeNS e "http://www.w3.org/1999/xlink" k)
-      add = Map.mapWithKey (\k v -> \e -> setAttributeNS e "http://www.w3.org/1999/xlink" k v)
+      remove = Map.mapWithKey (\k _ e -> removeAttributeNS e "http://www.w3.org/1999/xlink" k)
+      add = Map.mapWithKey (\k v e -> setAttributeNS e "http://www.w3.org/1999/xlink" k v)
 
 {-# INLINE diffClassesDeferred #-}
 diffClassesDeferred :: Element -> Plan s -> Set Txt -> Set Txt -> ST s ()
@@ -779,8 +771,8 @@ diffStyleMaps = Map.mergeWithKey diff remove add
         | val1 === val2 || val1 == val2
         = Nothing
         | otherwise = Just (\e -> setStyle e nm val2)
-      remove = Map.mapWithKey (\k _ -> \e -> removeStyle e k)
-      add = Map.mapWithKey (\k v -> \e -> setStyle e k v)
+      remove = Map.mapWithKey (\k _ e -> removeStyle e k)
+      add = Map.mapWithKey (\k v e -> setStyle e k v)
 
 {-# INLINE diffAttributesDeferred #-}
 diffAttributesDeferred :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
@@ -800,8 +792,8 @@ diffAttributeMaps = Map.mergeWithKey diff remove add
         | val1 === val2 || val1 == val2
         = Nothing
         | otherwise = Just (\e -> setAttribute e nm val2)
-      remove = Map.mapWithKey (\k _ -> \e -> removeAttribute e k)
-      add = Map.mapWithKey (\k v -> \e -> setAttribute e k v)
+      remove = Map.mapWithKey (\k _ e -> removeAttribute e k)
+      add = Map.mapWithKey (\k v e -> setAttribute e k v)
 
 {-# INLINE diffPropertiesDeferred #-}
 diffPropertiesDeferred :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
@@ -821,8 +813,8 @@ diffPropertyMaps = Map.mergeWithKey diff remove add
         | val1 === val2 || val1 == val2
         = Nothing
         | otherwise = Just (\e -> setProperty e nm val2)
-      remove = Map.mapWithKey (\k _ -> \e -> removeProperty e k)
-      add = Map.mapWithKey (\k v -> \e -> setProperty e k v)
+      remove = Map.mapWithKey (\k _ e -> removeProperty e k)
+      add = Map.mapWithKey (\k v e -> setProperty e k v)
 
 addListenerDeferred :: Element -> Plan s -> Listener -> ST s Listener
 addListenerDeferred e plan l@(On n t o a _ _) = do
@@ -882,7 +874,7 @@ diffListenersDeferred' e p olds mids news =
 
     -- 1+ 0
     (_,[]) -> do
-      for olds (removeListenerDeferred p)
+      for_ olds (removeListenerDeferred p)
       pure news
 
     -- 1+ 1+
@@ -902,10 +894,10 @@ diffListenersDeferred' e p olds mids news =
           return (new' : news')
 
         diff olds _ [] = do
-          for olds (removeListenerDeferred p)
+          for_ olds (removeListenerDeferred p)
           return []
 
-        diff [] _ news = do
+        diff ~[] _ news = do
           for news (addListenerDeferred e p)
 
 diffListenerDeferred :: Element -> Plan s -> Listener -> Listener -> Listener -> ST s Listener
@@ -987,7 +979,7 @@ diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
           removeManyDeferred plan plan' olds
           return []
 
-        diff [] _ news = do
+        diff ~[] _ news = do
           !frag <- unsafeIOToST createFrag
           let n = Just (toNode frag)
           !news' <- unsafeIOToST (for news (build mounted n))
@@ -1017,12 +1009,12 @@ replaceDeferred plan plan' old new = do
   return new
 
 replaceTextContentDeferred :: Plan s -> View -> View -> ST s View
-replaceTextContentDeferred plan old@(textHost -> Just oh) new = do
+replaceTextContentDeferred plan old@(textHost -> ~(Just oh)) new = do
   amendPlan plan (oh `replaceText` content new)
   return new { textHost = Just oh }
 
 diffSVGKeyedElementDeferred :: IORef [IO ()] -> Plan s -> Plan s -> DiffST s View
-diffSVGKeyedElementDeferred mounted plan plan' old@(elementHost -> Just e) mid new = do
+diffSVGKeyedElementDeferred mounted plan plan' old@(elementHost -> ~(Just e)) mid new = do
   !fs <- diffFeaturesDeferred e plan (features old) (features mid) (features new)
   !cs <- diffKeyedChildrenDeferred e mounted plan plan' (keyedChildren old) (keyedChildren mid) (keyedChildren new)
   diffXLinksDeferred e plan (xlinks mid) (xlinks new)
@@ -1032,7 +1024,7 @@ diffSVGKeyedElementDeferred mounted plan plan' old@(elementHost -> Just e) mid n
     }
 
 diffKeyedElementDeferred :: IORef [IO ()] -> Plan s -> Plan s -> DiffST s View
-diffKeyedElementDeferred mounted plan plan' old@(elementHost -> Just e) mid new = do
+diffKeyedElementDeferred mounted plan plan' old@(elementHost -> ~(Just e)) mid new = do
   !fs <- diffFeaturesDeferred e plan (features old) (features mid) (features new)
   !cs <- diffKeyedChildrenDeferred e mounted plan plan' (keyedChildren old) (keyedChildren mid) (keyedChildren new)
   return $ old
@@ -1112,7 +1104,7 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
 
           | mk0 == nk1 && mk1 == nk0 = do
               -- swap mk0 mk1 and diff them in turn
-              let ins (Just _0) (Just _1) = amendPlan plan (insertBefore _1 _0)
+              let ins ~(Just _0) ~(Just _1) = amendPlan plan (insertBefore _1 _0)
               ins (getHost old0) (getHost old1)
               n0' <- dKCD_helper o1 m1 n0
               n1' <- dKCD_helper o0 m0 n1
@@ -1180,12 +1172,7 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
 
         dKCD_ins :: Int -> Int -> View -> ST s (Int,View)
         dKCD_ins i nk new = do
-          let ins (Just a) = amendPlan plan (insertAt (coerce e) a i)
+          let ins ~(Just a) = amendPlan plan (insertAt (coerce e) a i)
           !n' <- unsafeIOToST (build mounted Nothing new)
           ins (getHost n')
           return (nk,n')
-
-
-
-
-

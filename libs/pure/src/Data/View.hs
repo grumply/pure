@@ -1,4 +1,4 @@
-{-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts #-}
+{-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts, ConstraintKinds #-}
 module Data.View (module Data.View,Typeable) where
 
 import Control.Arrow ((&&&))
@@ -6,6 +6,7 @@ import Control.Concurrent (MVar)
 import Control.Monad (void,join)
 import Control.Monad.ST (ST)
 import Data.Coerce (Coercible(),coerce)
+import Data.Exists (Exists,it,using)
 import Data.IORef (IORef,readIORef)
 import Data.List as List (null)
 import Data.Monoid (Monoid(..),(<>))
@@ -183,10 +184,6 @@ data View where
     , keyedChildren :: [(Int,View)]
     } -> View
 
-  SomeView :: (Typeable a, Pure a) =>
-    { renderable :: a
-    } -> View
-
   LazyView ::
     { lazyVal :: a
     , lazyView :: View
@@ -235,35 +232,15 @@ instance FromTxt View where
 asProxyOf :: a -> Proxy a
 asProxyOf _ = Proxy
 
-class Pure a where
-  {-# NOINLINE __pure_witness #-}
-  __pure_witness :: Proxy a -> TypeWitness a
-  default __pure_witness :: Typeable a => Proxy a -> TypeWitness a
-  __pure_witness _ = witness
-  view :: a -> View
-
-instance Pure View where
-  {-# INLINE view #-}
-  view (SomeView a) = view a
-  view a = a
-
 {-# INLINE tyCon #-}
 tyCon :: Typeable t => t -> String
 tyCon = tyConName . typeRepTyCon . typeOf
 
-class ToView a where
-  toView :: a -> View
-  default toView :: (Typeable a, Pure a) => a -> View
-  {-# INLINE toView #-}
-  toView = View
+type Viewable a = Exists (a -> View)
 
-instance ToView View where
-  {-# INLINE toView #-}
-  toView = id
-
-pattern View :: (Typeable x, Pure x) => x -> View
-pattern View x <- (SomeView (cast -> Just x)) where
-  View x = (SomeView x)
+{-# INLINE toView #-}
+toView :: Viewable a => a -> View
+toView = it
 
 {-# INLINE get #-}
 get :: Ref props state -> IO state
@@ -311,7 +288,6 @@ queueComponentUpdate crec cp = do
 getHost :: View -> Maybe Node
 getHost ComponentView {..} = join $! for record (getHost . unsafePerformIO . readIORef . crView)
 getHost TextView      {..} = fmap toNode textHost
-getHost SomeView      {}   = Nothing
 getHost LazyView      {}   = Nothing
 getHost EagerView     {}   = Nothing
 getHost PortalView    {..} = fmap toNode portalProxy
@@ -470,7 +446,6 @@ instance HasFeatures View where
   getFeatures NullView {} = mempty
   getFeatures TextView {} = mempty
   getFeatures ComponentView {} = mempty
-  getFeatures SomeView {} = mempty
   getFeatures PortalView{..} = getFeatures portalView
   getFeatures TaggedView{..} = getFeatures taggedView
   getFeatures Prebuilt {..}  = getFeatures prebuilt
@@ -479,7 +454,6 @@ instance HasFeatures View where
   setFeatures _ v@NullView {} = v
   setFeatures _ v@TextView {} = v
   setFeatures _ v@ComponentView {} = v
-  setFeatures _ v@SomeView {} = v
   setFeatures fs PortalView{..} = PortalView { portalView = setFeatures fs portalView, .. }
   setFeatures fs TaggedView{..} = TaggedView { taggedView = setFeatures fs taggedView, .. }
   setFeatures fs Prebuilt {..}  = Prebuilt { prebuilt = setFeatures fs prebuilt }

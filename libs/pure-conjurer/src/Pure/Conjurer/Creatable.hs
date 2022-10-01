@@ -40,8 +40,8 @@ class Creatable _role resource where
        , FromJSON (Preview resource)
        , FromJSON (Product resource)
        , Formable (Resource resource)
-       , Pure (Preview resource)
-       , Pure (Product resource)
+       , Viewable (Preview resource)
+       , Viewable (Product resource)
        , Theme (Creating resource)
        , Theme (Previewing resource)
        , Authentication _role
@@ -58,8 +58,8 @@ class Creatable _role resource where
           Nothing -> pure "Failed to preview."
           Just (ctx,nm,pre,pro,res) -> pure do
             Div <| Themed @Previewing . Themed @(Previewing resource) |>
-              [ View pre
-              , View pro
+              [ toView pre
+              , toView pro
               ]
 
       onSubmit resource = do
@@ -78,8 +78,8 @@ instance {-# OVERLAPPABLE #-}
   , FromJSON (Preview resource)
   , FromJSON (Product resource)
   , Formable (Resource resource)
-  , Pure (Preview resource)
-  , Pure (Product resource)
+  , Viewable (Preview resource)
+  , Viewable (Product resource)
   , Theme (Creating resource)
   , Theme (Previewing resource)
   , Authentication _role

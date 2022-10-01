@@ -60,8 +60,8 @@ serve userConfig v = do
   analyze @a (Milliseconds refresh 0)
   Pure.run do
     case (,) <$> key <*> cert of
-      Just (k,c) -> Pure.SecureServer host port k c chain (Component.run . WithSocket userConfig v)
-      _ -> Pure.Server host port (Component.run . WithSocket userConfig v)
+      Just (k,c) -> Pure.server (Pure.SecureServer host port k c chain (Component.run . WithSocket userConfig v))
+      _ -> Pure.server (Pure.Server host port (Component.run . WithSocket userConfig v))
   staticAll @a 
   forever (delay Minute)
 

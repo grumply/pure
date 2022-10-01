@@ -31,7 +31,7 @@ class Readable _role resource where
   toRead :: Context resource -> Name resource -> View
   default toRead 
     :: ( Typeable resource, Typeable _role
-       , Pure (Product resource)
+       , Viewable (Product resource)
        , FromJSON (Context resource), ToJSON (Context resource), Ord (Context resource)
        , FromJSON (Name resource), ToJSON (Name resource), Ord (Name resource)
        , FromJSON (Product resource)
@@ -40,7 +40,7 @@ class Readable _role resource where
        , Pathable (Context resource)
        ) => Context resource -> Name resource -> View
   toRead = toReadWith @_role Cached $ \_ _ -> 
-    maybe "Not Found" (\x -> Div <| Themed @Reading |> [ View x ])
+    maybe "Not Found" (\x -> Div <| Themed @Reading |> [ toView x ])
 
 toReadWith
   :: forall _role resource.
@@ -57,7 +57,7 @@ toReadWith policy f ctx nm = request @_role policy (readingAPI @resource) (readP
 
 instance {-# OVERLAPPABLE #-}
   ( Typeable resource, Typeable _role
-  , Pure (Product resource)
+  , Viewable (Product resource)
   , FromJSON (Context resource), ToJSON (Context resource), Ord (Context resource)
   , FromJSON (Name resource), ToJSON (Name resource), Ord (Name resource)
   , FromJSON (Product resource)

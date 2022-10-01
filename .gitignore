@@ -3,7 +3,7 @@
 *.js_o
 *.js_hi
 dist-newstyle/
-conjurer/
-users/
-dist/
-result
+/conjurer/
+/users/
+/dist/
+/result

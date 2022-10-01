@@ -35,7 +35,7 @@ class Listable _role resource where
     :: ( Typeable _role
        , Typeable resource
        , Routable resource
-       , Pure (Preview resource)
+       , Viewable (Preview resource)
        , FromJSON (Preview resource)
        , ToJSON (Context resource), FromJSON (Context resource), Ord (Context resource)
        , ToJSON (Name resource), FromJSON (Name resource), Ord (Name resource)
@@ -53,7 +53,7 @@ toListWith
     ( Typeable _role
     , Typeable resource
     , Routable resource
-    , Pure (Preview resource)
+    , Viewable (Preview resource)
     , FromJSON (Preview resource)
     , ToJSON (Context resource), FromJSON (Context resource), Ord (Context resource)
     , ToJSON (Name resource), FromJSON (Name resource), Ord (Name resource)
@@ -66,7 +66,7 @@ toListWith policy shouldPreloadPreviews ctx =
   request @_role policy (readingAPI @resource) (readListing @resource) ctx do
     Ul <| Themed @Listing . Themed @(Listing resource) |> 
       [ Li <| OnClickWith intercept (\_ -> storeScrollPosition >> goto r) . Href r . preload |> 
-        [ View (p :: Preview resource) ] 
+        [ toView (p :: Preview resource) ] 
       | (nm,p) <- maybe [] id await 
       , let 
           r = toReadRoute ctx nm
@@ -84,7 +84,7 @@ instance {-# OVERLAPPABLE #-}
   ( Typeable _role
   , Typeable resource
   , Routable resource
-  , Pure (Preview resource)
+  , Viewable (Preview resource)
   , FromJSON (Preview resource)
   , ToJSON (Context resource), FromJSON (Context resource), Ord (Context resource)
   , ToJSON (Name resource), FromJSON (Name resource), Ord (Name resource)

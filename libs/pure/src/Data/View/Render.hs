@@ -125,8 +125,6 @@ instance ToJSON View where
 
       go (TaggedView _ v) = go v
 
-      go (SomeView v) = go (view v)
-
       go (TextView _ s) =
         object (if Txt.null s then [] else [ "s" .= s ])
 
@@ -285,8 +283,6 @@ instance Show View where
 
           Just ref -> show $ unsafePerformIO (readIORef (crView ref))
 
-      go n (SomeView c) = go n (view c)
-
       go n (TaggedView _ v) = go n v
 
       go n (LazyView _ f) = go n f
@@ -333,8 +329,6 @@ instance ToTxt View where
         takeMVar mv
 
       Just ref -> toTxt $ unsafePerformIO (readIORef (crView ref))
-
-  toTxt (SomeView c) = toTxt (view c)
 
   toTxt (TaggedView _ v) = toTxt v
 
