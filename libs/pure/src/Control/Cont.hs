@@ -1,5 +1,5 @@
 {-# language TypeApplications, RankNTypes, ScopedTypeVariables, ConstraintKinds, FlexibleContexts, AllowAmbiguousTypes, TypeOperators, PatternSynonyms #-}
-module Control.Cont (root,Cont,Dynamic,reify,unify,codify,cont,compose,(<<-),(->>),(:=>),dynamic,fromDynamic,Surface,Shape,Template,surface,flat,hole,fill,empty,shape,refine) where
+module Control.Cont (Cont,Dynamic,reify,unify,codify,cont,compose,(<<-),(->>),(:=>),dynamic,fromDynamic,Surface,Shape,Template,surface,flat,hole,fill,empty,shape,refine) where
 
 import Control.Dynamic ((:=>),dynamic,fromDynamic)
 import Control.State (Modify,State,state,put)
@@ -89,9 +89,11 @@ surface t s = reify @c s t
 -- convenient for mimicking state with continuations when it wouldn't make
 -- sense to re-render on every `fill`.
 --
+-- Holes inside the template will be, by necessity, filled with the empty shape.
+--
 {-# INLINE flat #-}
-flat :: forall c. Typeable c => (Modify (Shape c) => Shape c) -> Surface c
-flat = surface @c (hole @c)
+flat :: forall c. Typeable c => Template c -> Surface c
+flat t = surface @c (hole @c) (refine @c (using (empty @c) t))
 
 -- Declare a hole in a surface. A hole is never empty, and will always be 
 -- filled with, at least, the `empty` shape. A hole can be re-filled with 
@@ -133,13 +135,6 @@ empty = refine Null
 {-# INLINE shape #-}
 shape :: Exists (Shape c) => Shape c
 shape = it
-
-{-# INLINE root #-}
-root :: Template () -> Surface ()
-root t = flat @() x
-  where
-    x :: Modify (Shape ()) => Shape ()
-    x = refine @() (fix $ \self -> using (dynamic self :: Shape ()) t)
 
 --------------------------------------------------------------------------------
 -- An implementation of ltr and rtl composition using view continuations. 
