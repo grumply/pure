@@ -1,5 +1,5 @@
 {-# language TypeApplications, RankNTypes, ScopedTypeVariables, ConstraintKinds, FlexibleContexts, AllowAmbiguousTypes, TypeOperators, PatternSynonyms #-}
-module Control.Cont (Root,root,Cont,Dynamic,reify,unify,codify,cont,compose,(<<-),(->>),(:=>),dynamic,fromDynamic,Surface,Shape,surface,flat,hole,fill,empty,shape,refine) where
+module Control.Cont (root,Cont,Dynamic,reify,unify,codify,cont,compose,(<<-),(->>),(:=>),dynamic,fromDynamic,Surface,Shape,Template,surface,flat,hole,fill,empty,shape,refine) where
 
 import Control.Dynamic ((:=>),dynamic,fromDynamic)
 import Control.State (Modify,State,state,put)
@@ -36,41 +36,63 @@ cont d = reify d (codify @c)
 {-# INLINE cont #-}
 
 --------------------------------------------------------------------------------
--- A physical interpretation for easier conceptualization.
+-- A physical interpretation for easier conceptualization. The abstraction is
+-- largely trivial.
 
--- A surface is a `View` that knows how to satisfy some constraints, `c`.
+-- A surface is a contextualized `View`.
 -- A surface is a gateway to functionality supplied by `c`.
 type Surface c = c => View
 
 -- A shape is a `View` with some unsatisfied constraints, `c`.
--- A shape is a reified surface.
+-- A shape is a reified surface; a shape is a reified contextualized `View`.
+-- A shape can be reduced to a surface in any context.
 type Shape c = c :=> View
 
--- Given a default shape and a surface definition containing possible holes to
--- match the shape, constructs a surface with those holes filled. The holes can
--- be re-filled with `fill` from within the shape or the surface.
+-- A template is a `View` with some 
+-- A template is a surface with knowledge of a `c`-shape.
+-- A template can be reduced to a surface in a valid context.
+type Template c = State (Shape c) => Surface c
+
+-- Reduce a given template to a surface with a given default shape to fill the
+-- possible holes in the template. The holes can be re-filled with `fill` from
+-- within the shape or the template.
 --
 -- Requires type application.
+--
+-- > type Graph = (Exists Dimensions,State Data)
+-- > graph :: Shape Graph -> Surface Graph
+-- > graph = surface @Graph { ... }
 --
 {-# INLINE surface #-}
-surface :: forall c. Typeable c => (Modify (Shape c) => Shape c) -> (State (Shape c) => Surface c) -> Surface c
-surface = reify @c
+surface :: forall c. Typeable c => Template c -> (Modify (Shape c) => Shape c) -> Surface c
+surface t s = reify @c s t
 
--- Given a surface with fillable holes, constructs a surface with those holes
+-- Given a template with fillable holes, constructs a surface with those holes
 -- filled with the empty shape as a default. The holes can be re-filled with
--- `fill` from within the surface.
+-- `fill` from within the template.
 --
 -- Requires type application.
 --
+-- > type Graph = (Exists Dimensions,State Data)
+-- > graph :: Surface Graph
+-- > graph = flat @Graph { ... }
+---
 {-# INLINE flat #-}
-flat :: forall c. Typeable c => (State (Shape c) => Surface c) -> Surface c
-flat = surface @c empty
+flat :: forall c. Typeable c => Template c -> Surface c
+flat t = surface @c t empty
 
 -- Declare a hole in a surface. A hole is never empty, and will always be 
 -- filled with, at least, the `empty` shape. A hole can be re-filled with 
 -- `fill`.
 --
 -- Requires type application.
+--
+-- > type Graph = (Exists Dimensions,State Data)
+-- > graph :: Shape Graph -> Surface Graph
+-- > graph = surface @Graph do
+-- >   Div <||>
+-- >     [ hole @Graph 
+-- >     ]
 --
 {-# INLINE hole #-}
 hole :: forall c. Exists (Shape c) => Surface c
@@ -88,24 +110,19 @@ fill = unify
 refine :: Surface c -> Shape c
 refine = dynamic
 
--- The empty shape. Fits any hole of shape `c`.
+-- The empty shape. Fits any `c`-shaped hole.
 {-# INLINE empty #-}
 empty :: Shape c
 empty = refine Null
 
--- The current shape in a known hole of shape `c`.
+-- The current shape in a known `c`-shaped hole.
 {-# INLINE shape #-}
 shape :: Exists (Shape c) => Shape c
 shape = it
 
---------------------------------------------------------------------------------
--- A root continuation.
-
-type Root = Cont ()
-
 {-# INLINE root #-}
-root :: (Root => View) -> View
-root r = cont @() (dynamic r)
+root :: Template () -> Surface ()
+root = flat @()
 
 --------------------------------------------------------------------------------
 -- An implementation of ltr and rtl composition using view continuations. 
