@@ -9,16 +9,16 @@ import Pure.Convoker.UserVotes
 import Pure.Auth hiding (Key)
 import Pure.Conjurer
 import Control.Fold as Pure hiding (not,key,pattern Meta,meta)
-import Control.Reader
 import Control.State
 import Data.Default
 import Data.Events
+import Data.Exists
 import Data.HTML
 import Data.JSON (ToJSON,FromJSON)
 import Data.Theme
 import Data.Time
 import Data.Txt
-import Data.View hiding (modify,get,ask,onUpdate)
+import Data.View hiding (modify,get,onUpdate)
 import Data.View.Render
 import Data.Router as R
 import Effect.Async
@@ -116,55 +116,55 @@ instance Typeable domain => Ownable (Discussion domain a) where
   isOwner un _ _ = Admins.isAdmin @domain un
 
 newtype Root domain a = Root (Maybe (Key (Comment domain a)))
-root :: Reader (Root domain a) => Maybe (Key (Comment domain a))
-root = let Root mk = ask in mk
+root :: Exists (Root domain a) => Maybe (Key (Comment domain a))
+root = let Root mk = it in mk
 
 newtype IsAdmin = IsAdmin Bool
-admin :: Reader IsAdmin => Bool
-admin = let IsAdmin ia = ask in ia
+admin :: Exists IsAdmin => Bool
+admin = let IsAdmin ia = it in ia
 
 newtype IsMod = IsMod Bool
-mod :: Reader IsMod => Bool
-mod = let IsMod im = ask in im
+mod :: Exists IsMod => Bool
+mod = let IsMod im = it in im
 
 newtype Refresher = Refresher (IO ())
-refresh :: Reader Refresher => IO ()
-refresh = let Refresher r = ask in r
+refresh :: Exists Refresher => IO ()
+refresh = let Refresher r = it in r
 
 newtype Voter domain a = Voter (Amend (UserVotes domain a) -> IO ())
-vote :: Reader (Voter domain a) => Amend (UserVotes domain a) -> IO ()
-vote = let Voter v = ask in v
+vote :: Exists (Voter domain a) => Amend (UserVotes domain a) -> IO ()
+vote = let Voter v = it in v
 
-admins :: Reader (Product (Admins domain)) => Product (Admins domain)
-admins = ask
+admins :: Exists (Product (Admins domain)) => Product (Admins domain)
+admins = it
 
-mods :: Reader (Product (Mods domain a)) => Product (Mods domain a)
-mods = ask
+mods :: Exists (Product (Mods domain a)) => Product (Mods domain a)
+mods = it
 
-votes :: Reader (Maybe (Product (UserVotes domain a))) => Maybe (Product (UserVotes domain a))
-votes = ask
+votes :: Exists (Maybe (Product (UserVotes domain a))) => Maybe (Product (UserVotes domain a))
+votes = it
 
-meta :: Reader (Product (Meta domain a)) => Product (Meta domain a)
-meta = ask
+meta :: Exists (Product (Meta domain a)) => Product (Meta domain a)
+meta = it
 
-full :: Reader (Product (Discussion domain a)) => Product (Discussion domain a)
-full = ask
+full :: Exists (Product (Discussion domain a)) => Product (Discussion domain a)
+full = it
 
 type DiscussionContext domain a =
   ( Websocket domain
   , Authentication domain
-  , Reader (Context a)
-  , Reader (Name a)
-  , Reader (Root domain a)
-  , Reader IsAdmin
-  , Reader IsMod
-  , Reader (Voter domain a)
-  , Reader Refresher
-  , Reader (Maybe (Product (UserVotes domain a)))
-  , Reader (Product (Admins domain))
-  , Reader (Product (Mods domain a))
-  , Reader (Product (Meta domain a))
-  , Reader (Product (Discussion domain a))
+  , Exists (Context a)
+  , Exists (Name a)
+  , Exists (Root domain a)
+  , Exists IsAdmin
+  , Exists IsMod
+  , Exists (Voter domain a)
+  , Exists Refresher
+  , Exists (Maybe (Product (UserVotes domain a)))
+  , Exists (Product (Admins domain))
+  , Exists (Product (Mods domain a))
+  , Exists (Product (Meta domain a))
+  , Exists (Product (Discussion domain a))
   )
 
 type DiscussionResources domain a = Maybe (Product (Admins domain),Product (Mods domain a),Maybe (Product (UserVotes domain a)),Product (Meta domain a),Product (Discussion domain a))
@@ -182,9 +182,9 @@ discussion
     , FromJSON (Product (Meta domain a))
     , Websocket domain
     , Authentication domain
-    , Reader (Context a)
-    , Reader (Name a)
-    , Reader (Root domain a)
+    , Exists (Context a)
+    , Exists (Name a)
+    , Exists (Root domain a)
     ) => (DiscussionContext domain a => View) -> View
 discussion viewer =
     let
@@ -234,19 +234,19 @@ discussion viewer =
                 onVote (Downvote k) = modify (downvote k)
 
               in
-                reader mods do
-                  reader admins do
-                    reader meta do
-                      reader full do
-                        reader (IsAdmin admin) do
-                          reader (IsMod mod) do
-                            reader (Refresher onRefresh) do
+                with mods do
+                  with admins do
+                    with meta do
+                      with full do
+                        with (IsAdmin admin) do
+                          with (IsMod mod) do
+                            with (Refresher onRefresh) do
                               state votes do
-                                reader (Voter onVote) do
+                                with (Voter onVote) do
                                   viewer
   where
-    producer :: Reader Bool => IO (DiscussionResources domain a)
-    producer = (ask :: Bool) `seq` do
+    producer :: Exists Bool => IO (DiscussionResources domain a)
+    producer = (it :: Bool) `seq` do
 
       let
         getProduct
@@ -266,10 +266,10 @@ discussion viewer =
         u = guarded @domain Nothing Nothing (Just (user @domain))
 
       getAdmins     <- getProduct Cached AdminsContext AdminsName
-      getMods       <- getProduct Cached (ModsContext ask) ModsName
-      getVotes      <- maybe (pure (pure Nothing)) (getProduct Uncached (UserVotesContext ask ask) . UserVotesName) u
-      getMeta       <- getProduct Uncached (MetaContext ask ask) MetaName
-      getDiscussion <- getProduct Uncached (DiscussionContext ask ask) DiscussionName
+      getMods       <- getProduct Cached (ModsContext it) ModsName
+      getVotes      <- maybe (pure (pure Nothing)) (getProduct Uncached (UserVotesContext it it) . UserVotesName) u
+      getMeta       <- getProduct Uncached (MetaContext it it) MetaName
+      getDiscussion <- getProduct Uncached (DiscussionContext it it) DiscussionName
 
       (admins,mods,votes0,meta,full) <-
         (,,,,)
@@ -292,56 +292,56 @@ discussion viewer =
         <*> full
 
 newtype RenderedChildren = RenderedChildren [(Int,View)]
-renderedChildren :: Reader RenderedChildren => [(Int,View)]
-renderedChildren = let RenderedChildren cs = ask in cs
+renderedChildren :: Exists RenderedChildren => [(Int,View)]
+renderedChildren = let RenderedChildren cs = it in cs
 
 newtype Parent domain a = Parent (Maybe (Key (Comment domain a)))
-parent :: Reader (Parent domain a) => Maybe (Key (Comment domain a))
-parent = let Parent mp = ask in mp
+parent :: Exists (Parent domain a) => Maybe (Key (Comment domain a))
+parent = let Parent mp = it in mp
 
 newtype Previous domain a = Previous (Maybe (Key (Comment domain a)))
-previous :: Reader (Previous domain a) => Maybe (Key (Comment domain a))
-previous = let Previous mk = ask in mk
+previous :: Exists (Previous domain a) => Maybe (Key (Comment domain a))
+previous = let Previous mk = it in mk
 
 newtype Next domain a = Next (Maybe (Key (Comment domain a)))
-next :: Reader (Next domain a) => Maybe (Key (Comment domain a))
-next = let Next mk = ask in mk
+next :: Exists (Next domain a) => Maybe (Key (Comment domain a))
+next = let Next mk = it in mk
 
 newtype Descendants = Descendants Int
-descendants :: Reader Descendants => Int
-descendants = let Descendants ds = ask in ds
+descendants :: Exists Descendants => Int
+descendants = let Descendants ds = it in ds
 
 newtype DiscussionComment domain a = DiscussionComment (Product (Comment domain a))
-comment :: Reader (DiscussionComment domain a) => Product (Comment domain a)
-comment = let DiscussionComment dc = ask in dc
+comment :: Exists (DiscussionComment domain a) => Product (Comment domain a)
+comment = let DiscussionComment dc = it in dc
 
 newtype Author = Author Username
-author :: Reader Author => Username
-author = let Author a = ask in a
+author :: Exists Author => Username
+author = let Author a = it in a
 
 type CommentContext domain a =
   ( DiscussionContext domain a
-  , Reader RenderedChildren
-  , Reader (Root domain a)
-  , Reader (Parent domain a)
-  , Reader (Previous domain a)
-  , Reader (Next domain a)
-  , Reader Descendants
-  , Reader (DiscussionComment domain a)
-  , Reader Author
+  , Exists RenderedChildren
+  , Exists (Root domain a)
+  , Exists (Parent domain a)
+  , Exists (Previous domain a)
+  , Exists (Next domain a)
+  , Exists Descendants
+  , Exists (DiscussionComment domain a)
+  , Exists Author
   )
 
 newtype CommentFormCancelAction = CommentFormCancelAction (IO ())
-cancel :: Reader CommentFormCancelAction => IO ()
-cancel = let CommentFormCancelAction c = ask in c
+cancel :: Exists CommentFormCancelAction => IO ()
+cancel = let CommentFormCancelAction c = it in c
 
 newtype NewComment domain a = NewComment (Maybe (Resource (Comment domain a)))
-new :: Reader (NewComment domain a) => Maybe (Resource (Comment domain a))
-new = let NewComment mr = ask in mr
+new :: Exists (NewComment domain a) => Maybe (Resource (Comment domain a))
+new = let NewComment mr = it in mr
 
 type CommentFormContext domain a =
   ( DiscussionContext domain a
-  , Reader CommentFormCancelAction
+  , Exists CommentFormCancelAction
   , State (NewComment domain a)
   )
 
@@ -366,28 +366,28 @@ linear sorter form comment | Discussion {..} <- full =
   Div <| Themed @(Discussion domain a) |>
     (( state False do
         if get then
-          reader (Previous (Nothing :: Maybe (Key (Comment domain a)))) do
-            reader (Next (Nothing :: Maybe (Key (Comment domain a)))) do
-              reader (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
-                reader (CommentFormCancelAction (modify False)) do
+          with (Previous (Nothing :: Maybe (Key (Comment domain a)))) do
+            with (Next (Nothing :: Maybe (Key (Comment domain a)))) do
+              with (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
+                with (CommentFormCancelAction (modify False)) do
                   state (NewComment (Nothing :: Maybe (Resource (Comment domain a))))
                     form
         else
           Button <| OnClick (\_ -> modify True) |> [ "Add Comment" ]
       )
-    : fmap run (seen $ List.sortOn (sorter ask) comments)
+    : fmap run (seen $ List.sortOn (sorter it) comments)
     )
   where
     run (previous,current,next) =
-      reader (Root (Nothing :: Maybe (Key (Comment domain a)))) do
-        reader (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
-          reader (Previous previous) do
-            reader (Next next) do
-              reader (RenderedChildren []) do
-                reader (Descendants 0) do
-                  reader (DiscussionComment current) do
+      with (Root (Nothing :: Maybe (Key (Comment domain a)))) do
+        with (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
+          with (Previous previous) do
+            with (Next next) do
+              with (RenderedChildren []) do
+                with (Descendants 0) do
+                  with (DiscussionComment current) do
                     guarded @domain Null Null do
-                      reader (Author (user @domain)) comment
+                      with (Author (user @domain)) comment
 
     seen :: [Product (Comment domain a)] -> [(Maybe (Key (Comment domain a)),Product (Comment domain a),Maybe (Key (Comment domain a)))]
     seen = start

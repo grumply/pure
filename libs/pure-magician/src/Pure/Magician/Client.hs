@@ -16,9 +16,12 @@ import Pure.Magician.Resources as Export
 
 import qualified Pure (run)
 import Control.Monad.IO.Class
+import Control.Cont
 import Control.Component (run,Component)
 import Control.Reader (Reader,reader)
 import Control.Fold (foldM)
+import Control.State (state')
+import Data.Exists
 import Data.JSON (ToJSON,FromJSON,traceJSON,logJSON)
 import Data.DOM (getPathname,getSearch)
 import Data.Time
@@ -43,7 +46,6 @@ import Data.Maybe
 import Data.Typeable
 import System.IO
 import System.IO.Unsafe
-import Debug.Trace
 
 import Prelude hiding (map,not)
 
@@ -55,11 +57,11 @@ type family Viewables (xs :: [*]) :: Constraint where
 
 client 
   :: forall domain custom. 
-  (Typeable domain, Typeable custom, RouteMany domain, Viewables (Domains domain))
+  ( Typeable domain, Typeable custom, RouteMany domain, Viewables (Domains domain) )
   => String 
   -> Int 
   -> (forall x. R.Routing custom x) 
-  -> (App domain custom => View) 
+  -> Template (App domain custom)
   -> IO ()
 client host port rtng v = do
   hSetBuffering stdout LineBuffering
@@ -68,13 +70,15 @@ client host port rtng v = do
     WS.websocket @domain host port do
       authentication @domain do
         Router.router (R.map Left (routeMany @domain @(Domains domain)) <|> R.map Right rtng) do
-          v
+          eager (Router.route :: Either (SomeRoute domain) custom) do
+            state' (refine @(App domain custom) (using (refine @(App domain custom) Null) v)) do
+              fromDynamic (it :: Shape (App domain custom))
 
-run :: forall domain custom. (App domain custom, WithRoute (CRUL domain) domain) => (Reader custom => View) -> View
+run :: forall domain custom. (App domain custom, WithRoute (CRUL domain) domain, RouteMany domain) => (Reader custom => View) -> View
 run v =
   case Router.route of
     Left sr | Just p <- withRoute @(CRUL domain) @domain sr (pages @domain) -> p
-    Right (custom :: custom) -> reader custom v
+    Right (custom :: custom) -> with custom v
 
 class (Creatable a r, Readable a r, Listable a r, Updatable a r) => CRUL a r
 instance (Creatable a r, Readable a r, Listable a r, Updatable a r) => CRUL a r

@@ -1,12 +1,5 @@
 module Pure.Convoker.Discussion.Simple.Meta
-  ( Meta(..)
-  , Resource(..)
-  , Product(..)
-  , Preview(..)
-  , Amend(..)
-  , Action(..)
-  , Reaction(..)
-  , trySetVote
+  ( trySetVote
   , topSorter
   , popularSorter
   , controversialSorter
