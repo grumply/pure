@@ -74,7 +74,7 @@ client host port rtng v = do
             state' (refine @(App domain custom) (using (refine @(App domain custom) Null) v)) do
               fromDynamic (it :: Shape (App domain custom))
 
-run :: forall domain custom. (App domain custom, WithRoute (CRUL domain) domain, RouteMany domain) => (Reader custom => View) -> View
+run :: forall domain custom. ( App domain custom, WithRoute (CRUL domain) domain ) => (Reader custom => View) -> View
 run v =
   case Router.route of
     Left sr | Just p <- withRoute @(CRUL domain) @domain sr (pages @domain) -> p
