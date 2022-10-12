@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, MultiParamTypeClasses, ScopedTypeVariables, OverloadedStrings, ViewPatterns, RankNTypes, FlexibleContexts, TypeApplications, FlexibleContexts, ConstraintKinds, AllowAmbiguousTypes #-}
 module Effect.Router
-  ( Router
-  , router, onRoute, subrouter, lref, route
+  ( Router, Route
+  , router, onRoute, subrouter, lref, current
   , module Data.Router
   ) where
 
@@ -11,7 +11,7 @@ import Data.Default
 import Data.DOM
 import Data.Events
 import Data.HTML
-import Data.Router hiding (route)
+import Data.Router
 import qualified Data.Router as Router
 import Data.Txt
 import qualified Data.Txt as Txt
@@ -21,11 +21,11 @@ import Effect.Async
 data Route rt = Route Txt rt
 type Router rt = Reader (Route rt)
 
-route :: Router rt => rt
-route = let Route _ rt = ask in rt
+current :: Router rt => rt
+current = let Route _ rt = ask in rt
 
 onRoute :: Router rt => (rt -> IO ()) -> View -> View
-onRoute f = async (f route)
+onRoute f = async (f current)
 
 router :: forall rt. Typeable rt => (forall a. Routing rt a) -> (Router rt => View) -> View
 router rtng v = do

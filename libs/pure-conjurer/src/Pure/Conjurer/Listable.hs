@@ -1,4 +1,4 @@
-module Pure.Conjurer.Listable (Listable(..),ShouldPreloadPreviews,Listing,toListWith) where
+module Pure.Conjurer.Listable (Listable(..),ShouldPreloadPreviews,Listing,toListWith,listing) where
 
 import Pure.Conjurer.API
 import Pure.Conjurer.Context
@@ -9,8 +9,10 @@ import Pure.Conjurer.Resource
 import Pure.Conjurer.Rootable
 import Pure.Conjurer.Routable
 
-import Data.HTML
 import Data.Events
+import Data.Exists
+import Data.HTML
+import Data.Maybe (fromMaybe)
 import Data.Scroll
 import Data.Theme 
 import Data.JSON
@@ -64,21 +66,39 @@ toListWith
   => Policy -> ShouldPreloadPreviews -> Context resource -> View
 toListWith policy shouldPreloadPreviews ctx =
   request @_role policy (readingAPI @resource) (readListing @resource) ctx do
-    Ul <| Themed @Listing . Themed @(Listing resource) |> 
-      [ Li <| OnClickWith intercept (\_ -> storeScrollPosition >> goto r) . Href r . preload |> 
-        [ toView (p :: Preview resource) ] 
-      | (nm,p) <- maybe [] id await 
-      , let 
-          r = toReadRoute ctx nm
-          preload
-            | shouldPreloadPreviews = OnMouseDown load . OnTouchStart load
-            | otherwise             = id
-            where
-              load _ = void $ forkIO $ void $
-                req @_role policy (readingAPI @resource) 
-                  (readProduct @resource) 
-                  (ctx,nm)
-      ]
+    with @[(Name resource, Preview resource)] (fromMaybe [] await) do
+      listing @_role policy shouldPreloadPreviews ctx <| Themed @Listing . Themed @(Listing resource) 
+
+listing 
+  :: forall _role resource.
+    ( Typeable _role
+    , Typeable resource
+    , Routable resource
+    , Viewable (Preview resource)
+    , FromJSON (Preview resource)
+    , ToJSON (Context resource), FromJSON (Context resource), Ord (Context resource)
+    , ToJSON (Name resource), FromJSON (Name resource), Ord (Name resource)
+    , FromJSON (Product resource)
+    , Eq (Context resource)
+    , Exists [(Name resource,Preview resource)]
+    ) 
+  => Policy -> ShouldPreloadPreviews -> Context resource -> View
+listing policy shouldPreloadPreviews ctx =
+  Ul <||> 
+    [ Li <| OnClickWith intercept (\_ -> storeScrollPosition >> goto r) . Href r . preload |> 
+      [ toView (p :: Preview resource) ] 
+    | (nm,p) <- it 
+    , let 
+        r = toReadRoute ctx nm
+        preload
+          | shouldPreloadPreviews = OnMouseDown load . OnTouchStart load
+          | otherwise             = id
+          where
+            load _ = void $ forkIO $ void $
+              req @_role policy (readingAPI @resource) 
+                (readProduct @resource) 
+                (ctx,nm)
+    ]
 
 instance {-# OVERLAPPABLE #-}
   ( Typeable _role

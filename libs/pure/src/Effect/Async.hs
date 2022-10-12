@@ -7,7 +7,7 @@ import Control.Exception
 import qualified Control.Reader as Reader (Reader,ask)
 import Control.State (manage)
 import Data.Coerce (coerce)
-import Data.Exists (using)
+import Data.Exists (with,it)
 import Data.Typeable (Typeable)
 import Data.View (pattern Component,Comp(..),View,eager,ask,modifyM)
 import Effect.Fork
@@ -16,7 +16,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Debug.Trace
 import Data.Default (Default(def))
 
-type Async a = Reader.Reader (MVar a)
+type Async a = Reader.Reader a
 
 data Asynchronous a = Asynchronous (IO a) (Async a :=> View)
 
@@ -76,11 +76,9 @@ async io v = go (Asynchronous io (dynamic v))
               pure old
 
       , render = \_ Model { view, result } -> 
-          using result (fromDynamic view)
+          with (unsafePerformIO (readMVar result)) (fromDynamic view)
 
       }
 
-{-# INLINE await #-}
 await :: forall a. Async a => a
-await = unsafePerformIO (readMVar (coerce (Reader.ask :: MVar a)))
-
+await = it

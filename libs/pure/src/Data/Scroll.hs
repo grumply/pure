@@ -1,5 +1,13 @@
 {-# language CPP, OverloadedStrings #-}
-module Data.Scroll where
+module Data.Scroll 
+  ( scrollTop
+  , setAutoScrollRestoration
+  , setManualScrollRestoration
+  , storeScrollPosition
+  , withScrollPositionFromHistory
+  , restoreScrollPosition
+  , restoreScrollPositionSmooth
+  ) where
 
 import Data.Txt
 
@@ -30,13 +38,9 @@ setManualScrollRestoration :: IO ()
 setManualScrollRestoration = 
   setScrollRestoration ManualScrollRestoration
 
-describe :: Txt -> IO ()
-describe d =
-#ifdef __GHCJS__
-  set_description_js d
-#else
-  pure ()
-#endif
+setAutoScrollRestoration :: IO ()
+setAutoScrollRestoration = 
+  setScrollRestoration AutoScrollRestoration
 
 -- | Store current scroll position in the current `window.history.state`.
 storeScrollPosition :: IO ()
@@ -113,10 +117,6 @@ foreign import javascript unsafe
   "window.scrollTo({ top: $2, left: $1, behavior: 'smooth' })" scroll_to_smooth_js :: Int -> Int -> IO ()
 
 foreign import javascript unsafe
-  "var a = document.querySelector('meta[name=\"description\"]'); if (a) { a.setAttribute('content', $1);} else { var meta = document.createElement('meta'); meta.setAttribute('name','description'); meta.setAttribute('content', $1); document.getElementsByTagName('head')[0].appendChild(meta)};"
-    set_description_js :: Txt -> IO ()
-
-foreign import javascript unsafe
   "if ('scrollRestoration' in history) { history.scrollRestoration = $1;}"
     set_scroll_restoration_js :: Txt -> IO ()
 
@@ -124,3 +124,22 @@ foreign import javascript unsafe
   "window.scrollTo({ top: 0 })" scroll_top_js :: IO ()
 #endif
 
+
+{-
+
+describe :: Txt -> IO ()
+describe d =
+#ifdef __GHCJS__
+  set_description_js d
+#else
+  pure ()
+#endif
+
+
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "var a = document.querySelector('meta[name=\"description\"]'); if (a) { a.setAttribute('content', $1);} else { var meta = document.createElement('meta'); meta.setAttribute('name','description'); meta.setAttribute('content', $1); document.getElementsByTagName('head')[0].appendChild(meta)};"
+    set_description_js :: Txt -> IO ()
+#endif
+
+-}

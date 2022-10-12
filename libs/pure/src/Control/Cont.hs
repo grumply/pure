@@ -1,5 +1,5 @@
 {-# language TypeApplications, RankNTypes, ScopedTypeVariables, ConstraintKinds, FlexibleContexts, AllowAmbiguousTypes, TypeOperators, PatternSynonyms #-}
-module Control.Cont (Cont,Dynamic,reify,unify,codify,cont,compose,(<<-),(->>),(:=>),dynamic,fromDynamic,Surface,Shape,Template,surface,flat,hole,fill,empty,shape,refine) where
+module Control.Cont (Cont,Dynamic,reify,unify,codify,cont,compose,(<<-),(->>),(:=>),dynamic,fromDynamic,Surface,Shape,Template,surface,flat,hole,fill,empty,shape) where
 
 import Control.Dynamic ((:=>),dynamic,fromDynamic)
 import Control.State (Modify,State,state,put)
@@ -57,12 +57,12 @@ type Surface c = c => View
 -- A shape is a `View` with some unsatisfied constraints, `c`.
 -- A shape is a reified surface; a shape is a reified contextualized `View`.
 -- A shape can be reduced to a surface in any context.
-type Shape c = c :=> View
+type Shape c = Modify (c :=> View) => c :=> View
 
 -- A template is a `View` with some 
 -- A template is a surface with knowledge of a `c`-shape.
 -- A template can be reduced to a surface in a valid context.
-type Template c = State (Shape c) => Surface c
+type Template c = State (c :=> View) => Surface c
 
 -- Reduce a given template to a surface with a given default shape to fill the
 -- possible holes in the template. The holes can be re-filled with `fill` from
@@ -71,7 +71,7 @@ type Template c = State (Shape c) => Surface c
 -- Requires type application.
 --
 {-# INLINE surface #-}
-surface :: forall c. Typeable c => Template c -> (Modify (Shape c) => Shape c) -> Surface c
+surface :: forall c. Typeable c => Template c -> Shape c -> Surface c
 surface t s = reify @c s t
 
 -- A self-modifying surface with no holes.
@@ -93,7 +93,7 @@ surface t s = reify @c s t
 --
 {-# INLINE flat #-}
 flat :: forall c. Typeable c => Template c -> Surface c
-flat t = surface @c (hole @c) (refine @c (using (empty @c) t))
+flat t = surface @c (hole @c) (shape @c (using (empty @c) t))
 
 -- Declare a hole in a surface. A hole is never empty, and will always be 
 -- filled with, at least, the `empty` shape. A hole can be re-filled with 
@@ -111,30 +111,25 @@ flat t = surface @c (hole @c) (refine @c (using (empty @c) t))
 -- `hole` force a local re-render rather than a reconciliation through the
 -- `eager` in `codify`.
 {-# INLINE hole #-}
-hole :: forall c. Exists (Shape c) => Surface c
+hole :: forall c. Exists (c :=> View) => Surface c
 hole = codify @c
 
 -- Fill a hole in a known surface. The current shape in the hole can be
 -- accessed with `full` from within the containing surface.
 --
 {-# INLINE fill #-}
-fill :: Modify (Shape c) => Shape c -> IO ()
+fill :: Modify (c :=> View) => Shape c -> IO ()
 fill = unify
 
 -- Construct a shape from a surface.
-{-# INLINE refine #-}
-refine :: Surface c -> Shape c
-refine = dynamic
+{-# INLINE shape #-}
+shape :: Surface c -> Shape c
+shape = dynamic
 
 -- The empty shape. Fits any `c`-shaped hole.
 {-# INLINE empty #-}
 empty :: Shape c
-empty = refine Null
-
--- The current shape in a known `c`-shaped hole.
-{-# INLINE shape #-}
-shape :: Exists (Shape c) => Shape c
-shape = it
+empty = shape Null
 
 --------------------------------------------------------------------------------
 -- An implementation of ltr and rtl composition using view continuations. 

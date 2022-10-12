@@ -2,7 +2,7 @@ module Pure.Conjurer.Formable (Formable(..),overwriteTitle) where
 
 import Control.Component as Component
 import Pure.Conjurer.Fieldable
-import Pure hiding (left,right)
+import Pure hiding (left,right,current)
 
 import Data.Typeable
 import GHC.Generics as G

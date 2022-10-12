@@ -91,22 +91,22 @@ instance Fieldable Markdown where
       [ txt initial ]
 
 pageProduct PageProduct {..} =
-  Article <||> 
+  Main <||> 
     [ Section <||> content
     ]
 
 pagePreview PagePreview {..} =
   Article <||>
-    [ Section <||> title 
+    [ Header <||> title 
     ]
 
 postProduct PostProduct {..} =
-  Article <||>
+  Main <||>
     [ Header <||> title
     , Section <||> content
     ]
 
 postPreview PostPreview {..} =
   Article <||>
-    [ Section <||> title
+    [ Header <||> title
     ]

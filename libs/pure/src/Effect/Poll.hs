@@ -8,7 +8,7 @@ import Control.Monad
 import qualified Control.Reader as Reader (Reader,ask)
 import Control.State (manage)
 import Data.Coerce (coerce)
-import Data.Exists (using)
+import Data.Exists (with)
 import Data.Time
 import Data.Typeable (Typeable)
 import Data.View (pattern Component,Comp(..),View,eager,ask,modifyM,get)
@@ -111,5 +111,5 @@ poll t f v = go (Polling t f (dynamic v))
       , onUnmounted = get self >>= \Model { thread } -> killThread thread
 
       , render = \_ Model { view, result } -> 
-          using result (fromDynamic view)
+          with (unsafePerformIO (readMVar result)) (fromDynamic view)
       }

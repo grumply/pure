@@ -32,8 +32,6 @@ import System.IO
 
 type UserConfig a = Effect (Msg (WithSocket a)) => Websocket -> SessionId -> Export.Config a 
 
-type App = (Reader Websocket, Reader SessionId, Reader (Maybe Username))
-
 serve
   :: forall a resources cache static. 
     ( Typeable a
@@ -47,7 +45,7 @@ serve
     , StaticMany a (Statics a)
     , LimitMany a (Resources a)
     , Analyzeable (Analyze a)
-    ) => UserConfig a -> (App => View) -> IO ()
+    ) => UserConfig a -> (((Reader Websocket, Reader SessionId, Reader (Maybe Username))) => View) -> IO ()
 serve userConfig v = do
   cfg@Config.Config {..} <- Config.getConfig
   hSetBuffering stdout LineBuffering 
@@ -65,7 +63,7 @@ serve userConfig v = do
   staticAll @a 
   forever (delay Minute)
 
-data WithSocket a = WithSocket (Effect (Msg (WithSocket a)) => Websocket -> SessionId -> Config a) (App => View) Websocket
+data WithSocket a = WithSocket (Effect (Msg (WithSocket a)) => Websocket -> SessionId -> Config a) ((Reader Websocket, Reader SessionId, Reader (Maybe Username)) => View) Websocket
 instance (Typeable a, Server a, ServeMany a (Resources a), LimitMany a (Resources a)) => Component (WithSocket a) where
   data Model (WithSocket a) = WithSocketModel (Maybe (Token a)) SessionId
 

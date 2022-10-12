@@ -33,6 +33,7 @@ Frontend:
 -}
 
 type family Resources (a :: *) :: [*]
+type instance Resources () = '[]
 
 class Server (a :: *) where
   type Caches a :: [*]
@@ -46,10 +47,12 @@ class Server (a :: *) where
   
   type Analyze a :: [*]
   type Analyze a = '[]
+instance Server ()
 
 class Client (a :: *) where
   type Domains a :: [*]
   type Domains a = Resources a
+instance Client ()
 
 type family And (x :: Bool) (y :: Bool) :: Bool where
   And False y = False

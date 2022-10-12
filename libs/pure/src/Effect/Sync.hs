@@ -10,8 +10,7 @@ import Data.View (pattern Component,Comp(..),View,eager,ask)
 import GHC.Exts (isTrue#,reallyUnsafePtrEquality#)
 import System.IO.Unsafe
 
-newtype Result a = Result a
-type Sync a = Reader.Reader (Result a)
+type Sync a = Reader.Reader a
 
 data Synchronous a = Synchronous (IO a) (Sync a :=> View)
 data Model a = Model 
@@ -51,8 +50,8 @@ sync io v = go (Synchronous io (dynamic v))
             _ -> do
               pure old
 
-      , render = \_ Model { view, result } -> using (Result result) (fromDynamic view)
+      , render = \_ Model { view, result } -> with result (fromDynamic view)
       }
 
 demand :: Sync a => a
-demand = let Result a = Reader.ask in a
+demand = it

@@ -1,6 +1,9 @@
 module Pure.Magician.Client 
-  ( Pure.Magician.Client.run
-  , client
+  ( client
+  , Pure.Magician.Client.basic
+  , trivial
+  , Trivial
+  , magic
   , withRoute
   , unsafeWithRoute
   , getSomeRoute
@@ -49,36 +52,40 @@ import System.IO.Unsafe
 
 import Prelude hiding (map,not)
 
-type App domain custom = (WS.Websocket domain, Authentication domain, Router.Router (Either (SomeRoute domain) custom))
+type App domain c custom = (WS.Websocket domain, Authentication domain, Router.Router (Either (SomeRoute domain) custom), c)
 
 type family Viewables (xs :: [*]) :: Constraint where
   Viewables '[] = ()
   Viewables (x ': xs) = (Viewable (Product x), Viewable (Preview x),Viewables xs)
 
 client 
-  :: forall domain custom. 
-  ( Typeable domain, Typeable custom, RouteMany domain, Viewables (Domains domain) )
+  :: forall domain c custom. 
+  ( Typeable domain, Typeable custom, RouteMany domain, c )
   => String 
   -> Int 
   -> (forall x. R.Routing custom x) 
-  -> Template (App domain custom)
-  -> IO ()
-client host port rtng v = do
-  hSetBuffering stdout LineBuffering
-  restoreWith (Seconds 3 0) (Milliseconds 100 0)
-  Pure.run do
-    WS.websocket @domain host port do
-      authentication @domain do
-        Router.router (R.map Left (routeMany @domain @(Domains domain)) <|> R.map Right rtng) do
-          eager (Router.route :: Either (SomeRoute domain) custom) do
-            state' (refine @(App domain custom) (using (refine @(App domain custom) Null) v)) do
-              fromDynamic (it :: Shape (App domain custom))
+  -> (App domain c custom => View)
+  -> (c => View)
+client host port rtng v = 
+  WS.websocket @domain host port do
+    authentication @domain do
+      Router.router (R.map Left (routeMany @domain @(Domains domain)) <|> R.map Right rtng) do
+        eager (Router.current :: Either (SomeRoute domain) custom) do
+          v
 
-run :: forall domain custom. ( App domain custom, WithRoute (CRUL domain) domain ) => (Reader custom => View) -> View
-run v =
-  case Router.route of
+basic :: forall custom. Typeable custom => String -> Int -> (forall x. R.Routing custom x) -> (App () () custom => View) -> View
+basic = Pure.Magician.Client.client @() @() @custom
+
+type Trivial = App () () ()
+
+trivial :: String -> Int -> (Trivial => View) -> View
+trivial h p = Pure.Magician.Client.client @() @() @() h p (dispatch ())
+
+magic :: forall domain c custom. (WithRoute (CRUL domain) domain) => (Reader custom => App domain c custom :=> View) -> (App domain c custom => View)
+magic v =
+  case Router.current of
     Left sr | Just p <- withRoute @(CRUL domain) @domain sr (pages @domain) -> p
-    Right (custom :: custom) -> with custom v
+    Right (custom :: custom) -> fromDynamic (with custom v)
 
 class (Creatable a r, Readable a r, Listable a r, Updatable a r) => CRUL a r
 instance (Creatable a r, Readable a r, Listable a r, Updatable a r) => CRUL a r

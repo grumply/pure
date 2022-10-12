@@ -8,9 +8,13 @@ executable frontend
   main-is: Main.hs
   
   other-modules:
+    Admin
+    Listing
+    Page
 
   build-depends:
     base,
+    async,
     pure-magician,
     shared
   
