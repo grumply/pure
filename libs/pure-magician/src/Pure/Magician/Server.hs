@@ -123,8 +123,8 @@ instance (Typeable a, Server a, ServeMany a (Resources a), LimitMany a (Resource
         reader sid do
           v
 
-defaultUserConfig :: forall a. (Effect (Msg (WithSocket a)), Server a, ServeMany a (Resources a), LimitMany a (Resources a), RemoveMany a (Resources a)) => Websocket -> SessionId -> Config a 
-defaultUserConfig socket sid = Config {..}
+defaultAuthConfig :: forall a. (Effect (Msg (WithSocket a)), Server a, ServeMany a (Resources a), LimitMany a (Resources a), RemoveMany a (Resources a)) => Websocket -> SessionId -> Config a 
+defaultAuthConfig socket sid = Config {..}
   where
     blacklist = []
     implicitlyWhitelisted = Prelude.not . (`elem` blacklist)
