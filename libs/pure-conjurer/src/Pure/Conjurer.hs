@@ -1002,6 +1002,19 @@ data Route a
   | CreateR (Context a)
   | UpdateR (Context a) (Name a)
 
+routeContext :: Route resource -> Context resource
+routeContext = \case
+  ReadR   ctx _ -> ctx
+  ListR   ctx   -> ctx
+  CreateR ctx   -> ctx
+  UpdateR ctx _ -> ctx
+
+routeName :: Route resource -> Maybe (Name resource)
+routeName = \case
+  ReadR   _ nm -> Just nm
+  UpdateR _ nm -> Just nm
+  _            -> Nothing
+
 -- Erases a resource type; useful for cases that deal across resource domains, 
 -- like navigational headers that need to match the route to, e.g. highlight
 -- an active menu based on the route/resource.
