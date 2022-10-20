@@ -59,6 +59,7 @@ server = run 80 app -- (compressing app)
 
     fileServer = staticApp (defaultFileServerSettings "dist/")
 
+    addHTMLExtension []     = []
     addHTMLExtension [file] = [file <> ".html"]
     addHTMLExtension (p:ps) = p:addHTMLExtension ps
 
@@ -71,10 +72,10 @@ frontend mgr = do
     forkIO do
       forever do
         takeMVar buildTrigger
-        ec <- spawn "js-unknown-ghcjs-cabal build frontend" 
+        ec <- spawn "js-unknown-ghcjs-cabal build frontend" waitForProcess
         case ec of
           ExitSuccess -> do
-            spawn "cp dist-newstyle/build/js-ghcjs/ghcjs-*/frontend-*/x/frontend/opt/build/frontend/frontend.jsexe/all.js dist/all.js"
+            spawn "cp dist-newstyle/build/js-ghcjs/ghcjs-*/frontend-*/x/frontend/opt/build/frontend/frontend.jsexe/all.js dist/all.js" waitForProcess
             pure ()
           _ -> 
             pure ()
@@ -98,7 +99,7 @@ backend mgr = do
     forkIO do
       forever do
         takeMVar buildTrigger
-        ec <- spawn "cabal build backend" 
+        ec <- spawn "cabal build backend" waitForProcess
         case ec of
           ExitSuccess -> 
             void (tryPutMVar runTrigger ())
@@ -110,12 +111,10 @@ backend mgr = do
       thread <- newEmptyMVar
       forever do
         takeMVar runTrigger
-        tryTakeMVar thread >>= traverse_ killThread 
-        tid <- 
-          forkIO do
-            void do
-              spawn "cabal run backend"
-        putMVar thread tid
+        x <- tryTakeMVar thread >>= traverse_ terminateProcess 
+        forkIO do
+          void do
+            spawn "cabal run backend" (putMVar thread)
 
   watchTree mgr "app/backend" (const True) $ \ev ->
     void (tryPutMVar buildTrigger ())
@@ -128,10 +127,10 @@ backend mgr = do
     killThread runner
     
 
-spawn :: String -> IO ExitCode
-spawn s = do
+spawn :: String -> (ProcessHandle -> IO a) -> IO a
+spawn s wph = do
   Prelude.putStrLn s
-  withCreateProcess (shell s) $ \_ _ _ -> waitForProcess
+  withCreateProcess (shell s) $ \_ _ _ -> wph
 #else
 main = print "dev environment not supported on GHCJS"
 #endif
