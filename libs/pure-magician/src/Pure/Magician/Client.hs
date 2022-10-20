@@ -70,8 +70,7 @@ client host port rtng v =
   WS.websocket @domain host port do
     authentication @domain do
       Router.router (R.map Left (routeMany @domain @(Domains domain)) <|> R.map Right rtng) do
-        eager (Router.current :: Either (SomeRoute domain) custom) do
-          v
+        v
 
 basic :: forall custom. Typeable custom => String -> Int -> (forall x. R.Routing custom x) -> (App () () custom => View) -> View
 basic = Pure.Magician.Client.client @() @() @custom
