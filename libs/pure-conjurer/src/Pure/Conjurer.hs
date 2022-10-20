@@ -1051,10 +1051,10 @@ readPages = \case
 routes :: forall a route. (Typeable a, Routable a)
        => (Route a -> route) -> Routing route ()
 routes lift = do
-  listRoute (\ctx -> lift (ListR ctx))
   updateRoute (\ctx nm -> lift (UpdateR ctx nm))
   createRoute (\ctx -> lift (CreateR ctx))
   readRoute (\ctx nm -> lift (ReadR ctx nm))
+  listRoute (\ctx -> lift (ListR ctx))
 
 location :: Routable a => Route a -> Txt
 location = \case

@@ -78,16 +78,15 @@ class Routable resource where
   listRoute f =
     void do
       path (root @resource) do
-        path "/list" do
-          mctx <- fromPath 
-          case mctx of
-            Just ctx -> dispatch (f ctx)
-            Nothing  -> continue
+        mctx <- fromPath 
+        case mctx of
+          Just ctx -> dispatch (f ctx)
+          Nothing  -> continue
 
   toListRoute :: Context resource -> Txt
   default toListRoute 
     :: ( Rootable resource, Pathable (Context resource)
        ) => Context resource -> Txt
-  toListRoute ctx = root @resource <> "/list" <> toPath ctx
+  toListRoute ctx = root @resource <> toPath ctx
 
 instance {-# OVERLAPPABLE #-} (Typeable a, Pathable (Context a), Pathable (Name a)) => Routable a
