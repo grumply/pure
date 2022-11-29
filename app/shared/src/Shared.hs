@@ -32,6 +32,7 @@ newtype instance Name Post = PostName (Slug Post)
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (ToJSON,FromJSON,Pathable,Hashable)
 
+instance Rootable Post
 instance Routable Post
 
 instance Nameable Post where
@@ -67,6 +68,7 @@ newtype instance Name Page = PageName (Slug Page)
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (ToJSON,FromJSON,Pathable,Hashable)
 
+instance Rootable Page
 instance Routable Page
 
 instance Nameable Page where

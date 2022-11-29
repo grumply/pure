@@ -111,7 +111,7 @@ type family ServeConstraints a resource (discussion :: Bool) :: Constraint where
     , Amendable resource
     , Limit resource
     , Routable resource
-    , Rootable resourc
+    , Rootable resource
     )
 
 -- To satisfy ServeConstraints; not used.

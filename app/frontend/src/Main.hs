@@ -35,7 +35,7 @@ primary = Section <||> [ content ]
         Left sr | Just p <- withRoute @(CRUL Blog) @Blog sr (pages @Blog) -> p
         _ -> 
           async (Listing.recent @Blog 10 PostContext) do
-            listing @Blog Cached True PostContext
+            listing @Blog @Post Cached True
 
 sidebar :: P => View
 sidebar = async action aside 
@@ -47,13 +47,13 @@ sidebar = async action aside
         _ -> 
           ("Recent Posts",Listing.top @Blog 10 PostContext) 
 
-    aside :: Exists [(Name Post,Preview Post)] => View
+    aside :: Exists [(Context Post,Name Post,Preview Post)] => View
     aside 
-      | [] <- it :: [(Name Post,Preview Post)] = Null
+      | [] <- it :: [(Context Post,Name Post,Preview Post)] = Null
       | otherwise =
         Aside <||>
           [ Header <||> [ H2 <||> [ title ] ]
-          , listing @Blog Cached True PostContext
+          , listing @Blog @Post Cached True
           ]
 
 footer :: P => View
