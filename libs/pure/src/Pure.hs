@@ -28,15 +28,19 @@ import Control.Reader as Export hiding (lazy,eager)
 import Control.State as Export hiding (flat)
 import Control.Writer as Export hiding (translate)
 import Control.Fold as Export
+import Data.AB as Export
 import Data.DOM as Export (body,Evt)
 import Data.CSS as Export hiding (root,target,active,checked,wrap,select,empty,stylesheet,CSS_(..))
 import Data.Default as Export
+import Data.Ease as Export
+import Data.Exists as Export
 import Data.Effect as Export hiding (map)
 import Data.Events as Export hiding (button,meta,Select,ContextMenu,Accept,Target)
+import Data.File as Export
 import Data.Hashable as Export
 import Data.HTML as Export hiding (Style,DateTime)
-import Data.Exists as Export
 import Data.JSON as Export hiding (Null,Key,lookup,match)
+import Data.Limiter as Export
 import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list) 
 import Data.Scroll as Export

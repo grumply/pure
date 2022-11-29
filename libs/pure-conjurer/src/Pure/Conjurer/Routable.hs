@@ -88,5 +88,3 @@ class Routable resource where
     :: ( Rootable resource, Pathable (Context resource)
        ) => Context resource -> Txt
   toListRoute ctx = root @resource <> toPath ctx
-
-instance {-# OVERLAPPABLE #-} (Typeable a, Pathable (Context a), Pathable (Name a)) => Routable a

@@ -168,7 +168,7 @@ at :: forall t a. Theme t => CSS a -> CSS ()
 at = void . at' @t
 
 at' :: forall t a. Theme t => CSS a -> CSS a
-at' = has' (subtheme @t)
+at' = is' (subtheme @t)
 
 nest :: forall t a. Theme t => CSS a -> CSS ()
 nest = void . nest' @t

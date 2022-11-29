@@ -66,8 +66,8 @@ toListWith
   => Policy -> ShouldPreloadPreviews -> Context resource -> View
 toListWith policy shouldPreloadPreviews ctx =
   request @_role policy (readingAPI @resource) (readListing @resource) ctx do
-    with @[(Name resource, Preview resource)] (fromMaybe [] await) do
-      listing @_role policy shouldPreloadPreviews ctx <| Themed @Listing . Themed @(Listing resource) 
+    with @[(Context resource, Name resource, Preview resource)] (maybe [] (fmap (\(n,p) -> (ctx,n,p))) await) do
+      listing @_role @resource policy shouldPreloadPreviews <| Themed @Listing . Themed @(Listing resource) 
 
 listing 
   :: forall _role resource.
@@ -80,14 +80,14 @@ listing
     , ToJSON (Name resource), FromJSON (Name resource), Ord (Name resource)
     , FromJSON (Product resource)
     , Eq (Context resource)
-    , Exists [(Name resource,Preview resource)]
+    , Exists [(Context resource,Name resource,Preview resource)]
     ) 
-  => Policy -> ShouldPreloadPreviews -> Context resource -> View
-listing policy shouldPreloadPreviews ctx =
+  => Policy -> ShouldPreloadPreviews -> View
+listing policy shouldPreloadPreviews =
   Ul <||> 
     [ Li <| OnClickWith intercept (\_ -> storeScrollPosition >> goto r) . Href r . preload |> 
       [ toView (p :: Preview resource) ] 
-    | (nm,p) <- it 
+    | (ctx,nm,p) <- it 
     , let 
         r = toReadRoute ctx nm
         preload

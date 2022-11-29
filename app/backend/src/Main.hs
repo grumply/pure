@@ -12,7 +12,7 @@ main =
     with pagePreview do
       with postProduct do
         with postPreview do
-          serve @Blog defaultUserConfig do
+          serve @Blog defaultAuthConfig do
             sync (activate ask) do
               Null
 

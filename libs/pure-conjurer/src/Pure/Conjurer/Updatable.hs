@@ -127,4 +127,5 @@ instance {-# OVERLAPPABLE #-}
   , Theme (Updating resource)
   , Theme (Previewing resource)
   , Authentication _role
+  , Routable resource
   ) => Updatable _role resource

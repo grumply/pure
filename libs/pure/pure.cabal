@@ -90,6 +90,7 @@ library
     Control.Reader
     Control.State
     Control.Writer
+    Data.AB
     Data.Animation
     Data.Bloom
     Data.Bloom.Limiter
@@ -98,13 +99,16 @@ library
     Data.CSS
     Data.DOM
     Data.Default
+    Data.Ease
     Data.Effect
     Data.Events
     Data.Exists
     Data.Fetch
+    Data.File
     Data.HTML
     Data.Idle
     Data.JSON
+    Data.Limiter
     Data.Localstorage
     Data.Marker
     Data.Queue
@@ -113,6 +117,7 @@ library
     Data.Random.Internal
     Data.Router
     Data.Scroll
+    Data.Shadows
     Data.Sorcerer
     Data.Sorcerer.Sorcery
     Data.SVG

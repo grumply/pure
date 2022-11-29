@@ -185,50 +185,90 @@ nominalDiffTime a b = diffMillis (fromTime a) (fromTime b)
 diffTime :: Time -> Time -> DiffTime
 diffTime a b = unsafeCoerce (nominalDiffTime a b)
 
+{-# INLINE nanoseconds #-}
+nanoseconds :: Time -> Double
+nanoseconds = realToFrac . (/Nanosecond)
+
 {-# complete Nanoseconds #-}
 pattern Nanoseconds :: Double -> Time
-pattern Nanoseconds ns <- (realToFrac . (/ Nanosecond) -> ns) where
+pattern Nanoseconds ns <- (nanoseconds -> ns) where
   Nanoseconds ns = Nanosecond * realToFrac ns
+
+{-# INLINE microseconds #-}
+microseconds :: Time -> Double
+microseconds = realToFrac . (/Microsecond)
 
 {-# complete Microseconds #-}
 pattern Microseconds :: Double -> Time -> Time
 pattern Microseconds us rest <- (fmap (* Microsecond) . properFraction . (/ Microsecond) -> (fromIntegral -> us,rest)) where
   Microseconds us rest = Microsecond * realToFrac us + rest
 
+{-# INLINE milliseconds #-}
+milliseconds :: Time -> Double
+milliseconds = realToFrac . (/Millisecond)
+
 {-# complete Milliseconds #-}
 pattern Milliseconds :: Double -> Time -> Time
 pattern Milliseconds ms rest <- (properFraction -> (fromIntegral -> ms,rest)) where
   Milliseconds ms rest = realToFrac ms + rest
+
+{-# INLINE seconds #-}
+seconds :: Time -> Double
+seconds = realToFrac . (/Second)
 
 {-# complete Seconds #-}
 pattern Seconds :: Double -> Time -> Time
 pattern Seconds ss rest <- (fmap (* Second) . properFraction . (/ Second) -> (fromIntegral -> ss,rest)) where
   Seconds ss rest = Second * realToFrac ss + rest
 
+{-# INLINE minutes #-}
+minutes :: Time -> Double
+minutes = realToFrac . (/Minute)
+
 {-# complete Minutes #-}
 pattern Minutes :: Double -> Time -> Time
 pattern Minutes ms rest <- (fmap (* Minute) . properFraction . (/ Minute) -> (fromIntegral -> ms,rest)) where
   Minutes ms rest = Minute * realToFrac ms + rest
+
+{-# INLINE hours #-}
+hours :: Time -> Double
+hours = realToFrac . (/Hour)
 
 {-# complete Hours #-}
 pattern Hours :: Double -> Time -> Time
 pattern Hours hs rest <- (fmap (* Hour) . properFraction . (/ Hour) -> (fromIntegral -> hs,rest)) where
   Hours hs rest = Hour * realToFrac hs + rest
 
+{-# INLINE days #-}
+days :: Time -> Double
+days = realToFrac . (/Day)
+
 {-# complete Days #-}
 pattern Days :: Double -> Time -> Time
 pattern Days ds rest <- (fmap (* Day) . properFraction . (/ Day) -> (fromIntegral -> ds,rest)) where
   Days ds rest = Day * realToFrac ds + rest
+
+{-# INLINE weeks #-}
+weeks :: Time -> Double
+weeks = realToFrac . (/Week)
 
 {-# complete Weeks #-}
 pattern Weeks :: Double -> Time -> Time
 pattern Weeks ws rest <- (fmap (* Week) . properFraction . (/ Week) -> (fromIntegral -> ws,rest)) where
   Weeks ws rest = Week * realToFrac ws + rest
 
+{-# INLINE months #-}
+months :: Time -> Double
+months = realToFrac . (/Month)
+
 {-# complete Months #-}
 pattern Months :: Double -> Time -> Time
 pattern Months ms rest <- (fmap (* Month) . properFraction . (/ Month) -> (fromIntegral -> ms,rest)) where
   Months ms rest = Month * realToFrac ms + rest
+
+{-# INLINE years #-}
+years :: Time -> Double
+years = realToFrac . (/Year)
 
 {-# complete Years #-}
 pattern Years :: Double -> Time -> Time

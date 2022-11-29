@@ -1,4 +1,5 @@
 {-# language AllowAmbiguousTypes #-}
+{-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
 module Listing where
 
 import Pure.Magician

@@ -110,7 +110,13 @@ type family ServeConstraints a resource (discussion :: Bool) :: Constraint where
     , Processable resource
     , Amendable resource
     , Limit resource
+    , Routable resource
+    , Rootable resourc
     )
+
+-- To satisfy ServeConstraints; not used.
+instance Typeable ctx => Rootable (Admins ctx)
+instance Typeable ctx => Routable (Admins ctx)
 
 -- Default instance for a uncached resource with discussion with analyze.
 instance ( ServeConstraints a resource True ) => Servable a resource True True where

@@ -1,8 +1,9 @@
-{-# language CPP, BlockArguments, OverloadedStrings #-}
+{-# language CPP, BlockArguments, OverloadedStrings, LambdaCase, ScopedTypeVariables #-}
 module Main where
 
 #ifndef __GHCJS__
 import Control.Concurrent
+import Control.Exception
 import Control.Monad
 import qualified Data.ByteString as BS
 import Data.Foldable
@@ -13,9 +14,12 @@ import Network.Wai.Handler.Warp
 import System.Exit
 import System.FSNotify hiding (Action)
 import System.Process
+import System.IO
 
 main :: IO ()
 main = do
+  hSetBuffering stdout LineBuffering
+  hSetBuffering stderr LineBuffering
   let 
     config = defaultConfig 
       { confDebounce = Debounce (realToFrac (0.5 :: Double)) 
@@ -72,13 +76,16 @@ frontend mgr = do
     forkIO do
       forever do
         takeMVar buildTrigger
-        ec <- spawn "js-unknown-ghcjs-cabal build frontend" waitForProcess
-        case ec of
-          ExitSuccess -> do
-            spawn "cp dist-newstyle/build/js-ghcjs/ghcjs-*/frontend-*/x/frontend/opt/build/frontend/frontend.jsexe/all.js dist/all.js" waitForProcess
-            pure ()
-          _ -> 
-            pure ()
+        let cmd = proc "js-unknown-ghcjs-cabal" ["build","frontend"]
+        print (cmdspec cmd)
+        withCreateProcess cmd $ \_ _ _ ph ->
+          waitForProcess ph >>= \case
+            ExitSuccess -> do
+              let cmd = shell "cp dist-newstyle/build/js-ghcjs/ghcjs-*/frontend-*/x/frontend/opt/build/frontend/frontend.jsexe/all.js dist/all.js"
+              print (cmdspec cmd)
+              withCreateProcess cmd $ \_ _ _ -> void . waitForProcess
+            _ -> 
+              pure ()
 
   watchTree mgr "app/frontend" (const True) $ \ev ->
     void (tryPutMVar buildTrigger ())
@@ -99,22 +106,23 @@ backend mgr = do
     forkIO do
       forever do
         takeMVar buildTrigger
-        ec <- spawn "cabal build backend" waitForProcess
-        case ec of
-          ExitSuccess -> 
-            void (tryPutMVar runTrigger ())
-          _ -> 
-            pure ()
+        let cmd = proc "cabal" ["build","backend"]
+        print (cmdspec cmd)
+        withCreateProcess cmd $ \_ _ _ ph ->
+          waitForProcess ph >>= \case
+            ExitSuccess -> void (tryPutMVar runTrigger ())
+            _ -> pure ()
 
   runner <- 
     forkIO do
-      thread <- newEmptyMVar
+      takeMVar runTrigger
       forever do
-        takeMVar runTrigger
-        x <- tryTakeMVar thread >>= traverse_ terminateProcess 
-        forkIO do
-          void do
-            spawn "cabal run backend" (putMVar thread)
+        let cmd = proc "cabal" ["run","backend"]
+        print (cmdspec cmd)
+        withCreateProcess cmd { create_group = True } $ \_ _ _ ph -> do
+          catch (takeMVar runTrigger) (\(_ :: AsyncException) -> interruptProcessGroupOf ph)
+          catch (interruptProcessGroupOf ph) (\(_ :: SomeException) -> pure ()) 
+          waitForProcess ph
 
   watchTree mgr "app/backend" (const True) $ \ev ->
     void (tryPutMVar buildTrigger ())
@@ -125,12 +133,6 @@ backend mgr = do
   pure do
     killThread builder 
     killThread runner
-    
-
-spawn :: String -> (ProcessHandle -> IO a) -> IO a
-spawn s wph = do
-  Prelude.putStrLn s
-  withCreateProcess (shell s) $ \_ _ _ -> wph
 #else
 main = print "dev environment not supported on GHCJS"
 #endif
