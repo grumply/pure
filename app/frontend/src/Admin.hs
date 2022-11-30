@@ -4,7 +4,7 @@ import Pure.Magician
 import Shared
 
 administrative :: Authentication Blog => View -> View
-administrative v = guarded @Blog Null Null authenticated
+administrative v = guarded @Blog Null (basic @Blog) authenticated
   where 
     authenticated :: Authenticated Blog => View
     authenticated 
