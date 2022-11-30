@@ -1,6 +1,7 @@
 module Admin where
 
-import Pure.Magician
+import Pure.Auth.Access (basic)
+import Pure.Magician hiding (basic)
 import Shared
 
 administrative :: Authentication Blog => View -> View
