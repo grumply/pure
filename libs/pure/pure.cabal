@@ -86,6 +86,7 @@ library
     Control.Dynamic
     Control.Error
     Control.Fold
+    Control.Form
     Control.Producer
     Control.Reader
     Control.State

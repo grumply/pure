@@ -23,6 +23,7 @@ import Text.Printf as Export (printf)
 
 import Control.Cont as Export hiding (empty)
 import Control.Error as Export
+import Control.Form as Export
 import Control.Producer as Export
 import Control.Reader as Export hiding (lazy,eager)
 import Control.State as Export hiding (flat)
