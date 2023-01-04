@@ -1,4 +1,4 @@
-{-# language CPP #-}
+{-# language CPP, ScopedTypeVariables #-}
 module Pure (module Pure,module Export) where
 
 import Control.Applicative as Export hiding (empty,optional)
@@ -9,7 +9,7 @@ import Data.Bool as Export (bool)
 import Data.Char as Export hiding (Space)
 import Data.Coerce as Export (coerce,Coercible)
 import Data.Foldable as Export (Foldable,for_,traverse_)
-import Data.Function as Export ((&),fix,on)
+import Data.Function as Export ((&),fix)
 import Data.Maybe as Export
 import Data.Monoid as Export hiding (Alt)
 import Data.Traversable as Export (Traversable,for,traverse)
@@ -23,29 +23,24 @@ import Text.Printf as Export (printf)
 
 import Control.Cont as Export hiding (empty)
 import Control.Error as Export
-import Control.Form as Export
 import Control.Producer as Export
 import Control.Reader as Export hiding (lazy,eager)
 import Control.State as Export hiding (flat)
 import Control.Writer as Export hiding (translate)
 import Control.Fold as Export
-import Data.AB as Export
 import Data.DOM as Export (body,Evt)
 import Data.CSS as Export hiding (root,target,active,checked,wrap,select,empty,stylesheet,CSS_(..))
 import Data.Default as Export
-import Data.Ease as Export
-import Data.Exists as Export
 import Data.Effect as Export hiding (map)
 import Data.Events as Export hiding (button,meta,Select,ContextMenu,Accept,Target)
-import Data.File as Export
 import Data.Hashable as Export
 import Data.HTML as Export hiding (Style,DateTime)
+import Data.Exists as Export
 import Data.JSON as Export hiding (Null,Key,lookup,match)
-import Data.Limiter as Export
 import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list) 
 import Data.Scroll as Export
-import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right)
+import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false)
 import Data.Theme as Export
 import Data.Time as Export hiding (Time_)
 import Data.Try as Export hiding (try)
@@ -99,4 +94,82 @@ loop = flip fix
 run :: View -> IO ()
 run = inject body
 
+-- | A rearranged variant of `bool` with a default `id` false branch. Useful for
+-- applying conditional styling if you have trouble remembering the order of
+-- `bool`.
+--
+-- Equivalent to `flip (bool id)`
+--
+-- > Div <| true isVisible (Themed @Visible) |> { ... }
+--
+-- Equivalently:
+--
+-- > Div <| bool id (Themed @Visible) isVisible |> { ... }
+-- 
+-- With `true`, we can write the extracted conditional property in an 
+-- aesthetically pleasing and intuitive way:
+--
+-- > visible :; Exists Visibility => View -> View
+-- > visible =
+-- >   true isVisible do
+-- >     Themed @Visible
+--
+{-# INLINE true #-}
+true :: Bool -> (a -> a) -> a -> a
+true = flip (bool id)
 
+-- | An intuitive synonym of `true` that reads more reactively.
+--
+-- > Div <| on isVisible (Themed @Visible) |> { ... }
+--
+{-# INLINE on #-}
+on :: Bool -> (a -> a) -> a -> a
+on = true
+
+-- | A rearranged variant of `bool` with a default `id` true branch. Useful for
+-- applying conditional styling if you have trouble remembering the order of
+-- `bool`.
+--
+-- Equivalent to `flip (flip bool id)`
+--
+-- > Div <| false isVisible (Themed @Hidden) |> { ... }
+-- 
+-- Equivalently:
+--
+-- > Div <| bool id (Themed @Hidden) isVisible |> { .. }
+-- 
+-- With `false`, we can write the extracted conditional property in an 
+-- aesthetically pleasing and intuitive way:
+--
+-- > hiding :: Exists Visibility => View -> View
+-- > hiding = 
+-- >   false isVisible do
+-- >     Themed @Hidden
+--
+{-# INLINE false #-}
+false :: Bool -> (a -> a) -> a -> a
+false = flip (flip bool id)
+
+-- | An intuitive synonym of `false` that reads more reactively.
+--
+-- > Div <| off isVisible (Themed @Hidden) |> { ... }
+--
+-- Equivalent to:
+-- 
+-- > Div <| on (not isVisible) (Themed @Hidden) |> { ... }
+--
+{-# INLINE off #-}
+off :: Bool -> (a -> a) -> a -> a
+off = false
+
+{-# INLINE just #-}
+just :: Maybe b -> (b -> a -> a) -> a -> a
+just mb f = maybe id f mb
+
+{-# INLINE nothing #-}
+nothing :: Maybe b -> (a -> a) -> a -> a
+nothing mb f = maybe f (const id) mb
+
+{-# INLINE enum #-}
+enum :: forall a. (Bounded a, Enum a) => [a]
+enum = enumFromTo minBound (maxBound :: a)
