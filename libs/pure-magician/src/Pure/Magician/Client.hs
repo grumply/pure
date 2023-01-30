@@ -10,6 +10,7 @@ module Pure.Magician.Client
   , RouteMany(..)
   , RouteMany'(..)
   , WithRoute
+  , Viewables(..)
   , App
   , CRUL
   ) where
