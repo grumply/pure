@@ -1,0 +1,20 @@
+cradle:
+  multi:
+    - path: "./dev"
+      config:
+        cradle:
+          none:
+    - path: "./libs"
+      config:
+        cradle:
+          none:
+    - path: "./app" 
+      config:
+        cradle:
+          cabal:
+            - path: "./app/shared"
+              component: "lib:shared"
+            - path: "./app/frontend"
+              component: "exe:frontend"
+            - path: "./app/backend"
+              component: "exe:backend"

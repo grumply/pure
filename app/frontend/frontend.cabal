@@ -16,6 +16,7 @@ executable frontend
     base,
     async,
     pure-magician,
+    pure-auth,
     shared
   
   if impl(ghcjs)
