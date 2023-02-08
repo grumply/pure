@@ -44,7 +44,7 @@ router rtng v = do
       runRouter
       pure (Nothing,\_ -> stop) 
 
-  manage (\_ -> pure) initialize $ do
+  stateWith (\_ -> pure) initialize $ do
     case ask of
       Nothing -> Null
       Just (sub,rt) -> reader (Route @rt sub rt) v
@@ -58,7 +58,7 @@ subrouter rtng v = do
       mrt <- Router.route (rtng >>= \x -> getPath >>= \p -> pure (p,x)) path
       pure (mrt :: Maybe (Txt,rt),\_ -> pure ())
 
-  manage (\_ -> pure) initialize $ do
+  stateWith (\_ -> pure) initialize $ do
     case ask of
       Nothing -> Null
       Just (sub,rt) -> reader (Route @rt sub rt) v

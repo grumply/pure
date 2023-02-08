@@ -5,7 +5,6 @@ import Control.Concurrent (MVar,newEmptyMVar,putMVar,readMVar,forkIO,ThreadId,my
 import Control.Dynamic
 import Control.Exception
 import qualified Control.Reader as Reader (Reader,ask)
-import Control.State (manage)
 import Data.Coerce (coerce)
 import Data.Exists (with,it)
 import Data.Typeable (Typeable)

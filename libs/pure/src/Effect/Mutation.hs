@@ -62,7 +62,7 @@ data Options = Options
 
 observe :: Options -> View -> (Producer [Mutation] => View)
 observe options v =
-  manage (\_ -> pure) (pure (pure (),id)) 
+  stateWith (\_ -> pure) (pure (pure (),id)) 
     (OnMounted (\node -> observeWith node options yield >>= put >> def) v)
 
 observeWith :: Node -> Options -> ([Mutation] -> IO ()) -> IO (IO ())

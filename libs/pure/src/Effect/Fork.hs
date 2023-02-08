@@ -1,7 +1,7 @@
 {-# language PatternSynonyms, TypeApplications #-}
 module Effect.Fork (fork) where
 
-import Control.State (manage,put)
+import Control.State (put)
 import Control.Reader (ask)
 import Data.Default
 import Data.View (View,Comp(deferred,render),pattern Component)

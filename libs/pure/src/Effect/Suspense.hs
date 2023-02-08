@@ -84,7 +84,7 @@ anticipation t sus = suspense' False [(t,sus)] Null
 -- `prebuild` strategy without incurring a severe performance cost.
 --
 suspense' :: Bool -> [(Time,View)] -> View -> View -> View
-suspense' deep tvs failure v = manage' (\_ -> pure) initialize it
+suspense' deep tvs failure v = stateWith' (\_ -> pure) initialize it
   where
     initialize :: Modify View => IO (View,View -> IO ())
     initialize = do

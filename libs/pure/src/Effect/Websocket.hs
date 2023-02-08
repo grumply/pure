@@ -34,7 +34,7 @@ data Cache domain = Cache
 type Websocket domain = Modify (Cache domain) 
 
 websocket :: forall domain. Typeable domain => String -> Int -> (Websocket domain => View) -> View
-websocket h p = manage (\_ -> pure) initial
+websocket h p = stateWith (\_ -> pure) initial
   where
     initial :: Websocket domain => IO (Cache domain,Cache domain -> IO ())
     initial = do

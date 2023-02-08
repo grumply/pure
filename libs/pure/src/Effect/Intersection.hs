@@ -89,11 +89,11 @@ intersectable :: View -> (Intersectable => View)
 intersectable = OnMounted (\node -> setRoot node >> def)
 
 viewportIntersecting :: Options -> View -> (Effect Intersection => View)
-viewportIntersecting options v = manage (\_ -> pure) (pure (pure (),id)) (OnMounted (\node -> intersectingWith (coerce nullJSV) node options yield >>= put >> def) v)
+viewportIntersecting options v = stateWith (\_ -> pure) (pure (pure (),id)) (OnMounted (\node -> intersectingWith (coerce nullJSV) node options yield >>= put >> def) v)
 
 intersecting :: Intersectable => Options -> View -> (Effect Intersection => View)
 intersecting options v
-  | Just r <- root = manage (\_ -> pure) (pure (pure (),id)) (OnMounted (\node -> intersectingWith r node options yield >>= put >> def) v)
+  | Just r <- root = stateWith (\_ -> pure) (pure (pure (),id)) (OnMounted (\node -> intersectingWith r node options yield >>= put >> def) v)
   | otherwise      = Null
 
 intersectingWith :: Node -> Node -> Options -> (Intersection -> IO ()) -> IO (IO ())

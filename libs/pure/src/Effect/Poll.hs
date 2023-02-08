@@ -6,7 +6,6 @@ import Control.Dynamic
 import Control.Exception
 import Control.Monad
 import qualified Control.Reader as Reader (Reader,ask)
-import Control.State (manage)
 import Data.Coerce (coerce)
 import Data.Exists (with)
 import Data.Time

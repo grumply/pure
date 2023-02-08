@@ -1,5 +1,5 @@
 {-# language ScopedTypeVariables, TypeApplications, ConstraintKinds, FlexibleContexts, RankNTypes, TypeFamilies, AllowAmbiguousTypes, PatternSynonyms, BlockArguments #-}
-module Control.State (Modify,State,state,state',manage,manage',modifyIO,modify,get,put,zoom,zoomIO,ignore,flat,flatBy,toState,toStateWith) where
+module Control.State (Modify,State,state,state',stateWith,stateWith',modifyIO,modify,get,put,zoom,zoomIO,ignore,flat,flatBy,toState,toStateWith) where
 
 import Control.Concurrent (forkIO,killThread,ThreadId,MVar,newEmptyMVar,putMVar,readMVar)
 import Control.Dynamic (dynamic,fromDynamic)
@@ -25,13 +25,13 @@ state a = foldM ($) (pure (a,\_ -> pure ()))
 state' :: forall a. Typeable a => (Modify a => a) -> (State a => View) -> View
 state' a v = eager (dynamic @(Modify a) a) (state a v)
 
-{-# INLINE manage #-}
-manage :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
-manage f = foldM (\g a -> g a >>= f a) 
+{-# INLINE stateWith #-}
+stateWith :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
+stateWith f = foldM (\g a -> g a >>= f a) 
 
-{-# INLINE manage' #-}
-manage' :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
-manage' f i v = eager (dynamic @(Modify a) f,dynamic @(Modify a) i) (manage f i v)
+{-# INLINE stateWith' #-}
+stateWith' :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
+stateWith' f i v = eager (dynamic @(Modify a) f,dynamic @(Modify a) i) (stateWith f i v)
 
 {-# INLINE modifyIO #-}
 modifyIO :: forall a. Modify a => (Exists a => IO a) -> IO ()
