@@ -7,7 +7,17 @@ cradle:
     - path: "./libs"
       config:
         cradle:
-          none:
+          cabal:
+            - path: "./libs/pure"
+              component: "lib:pure"
+            - path: "./libs/pure-auth"
+              component: "lib:pure-auth"
+            - path: "./libs/pure-conjurer"
+              component: "lib:pure-conjurer"
+            - path: "./libs/pure-convoker"
+              component: "lib:pure-convoker"
+            - path: "./libs/pure-magician"
+              component: "lib:pure-magician"
     - path: "./app" 
       config:
         cradle:
