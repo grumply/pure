@@ -68,7 +68,7 @@ clearToken = put (Access Failed :: Access domain)
 -- if the server comes back up and the token does not verify.
 -- 
 authentication :: forall domain. (Websocket domain, Typeable domain) => (Authentication domain => View) -> View
-authentication v = fork (manage (const pure) initialize v)
+authentication v = fork (stateWith (const pure) initialize v)
   where
     initialize :: Modify (Access domain) => IO (Access domain,Access domain -> IO ())
     initialize = do
