@@ -27,7 +27,7 @@ import qualified Data.Localstorage as LS
 import Data.View (View,pattern Null,(<|),(<||>),(|>))
 import Data.HTML (pattern Button,pattern Div,pattern H2,pattern Input,pattern P,pattern Placeholder,pattern TabIndex, pattern Type,pattern Value)
 import Data.Events (pattern OnClick,pattern OnInput,value)
-import Control.State (manage,modifyIO,put,state,zoom,Modify,State,modify)
+import Control.State (stateWith,modifyIO,put,state,zoom,Modify,State,modify)
 import Data.Default (Default(..))
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import Data.Theme (Theme,pattern Themed)
