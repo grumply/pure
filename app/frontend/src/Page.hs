@@ -1,18 +1,21 @@
-module Page (P,run,page,fromPage) where
+module Page (P, run, page, fromPage) where
 
 import Pure.Magician
 import Shared
 
-type P = 
-  ( Viewable (Preview Page)
-  , Viewable (Preview Post)
-  , Viewable (Product Page)
-  , Viewable (Product Post)
-  , App Blog () ()
+type P =
+  ( Viewable (Preview Page),
+    Viewable (Preview Post),
+    Viewable (Product Page),
+    Viewable (Product Post),
+    App Blog () ()
   )
 
+-- | Run a `P`-constrained `View`. Injects the default previewers and product
+-- viewers and enabless routing, authentication, and a websocket connection to
+-- the backend.
 run :: (P :=> View) -> View
-run p = 
+run p =
   with pagePreview do
     with pageProduct do
       with postPreview do
