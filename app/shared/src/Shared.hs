@@ -92,22 +92,26 @@ instance Fieldable Markdown where
     Textarea <| OnInput (withInput (onchange . fromTxt)) |>
       [ txt initial ]
 
+pageProduct :: Product Page -> View
 pageProduct PageProduct {..} =
   Main <||> 
     [ Section <||> content
     ]
 
+pagePreview :: Preview Page -> View
 pagePreview PagePreview {..} =
   Article <||>
     [ Header <||> title 
     ]
 
+postProduct :: Product Post -> View
 postProduct PostProduct {..} =
   Main <||>
     [ Header <||> title
     , Section <||> content
     ]
 
+postPreview :: Preview Post -> View
 postPreview PostPreview {..} =
   Article <||>
     [ Header <||> title
