@@ -6,6 +6,7 @@ import Control.Monad.ST
 import Data.Bits
 import Data.Foldable as F
 import Data.Int
+import qualified Data.List as List
 import Data.Proxy
 import Data.Traversable
 import Data.Word
@@ -294,6 +295,11 @@ independent :: (Seed -> a) -> Generator a
 independent f = do
   seed' <- independentSeed
   pure (f seed')
+
+{-# INLINE list #-}
+list :: Generator a -> Generator [a]
+list gen = go <$> independentSeed
+  where go seed = let (seed',r) = generate gen seed in r : go seed'
 
 {-# INLINE vector #-}
 vector :: forall v a. (G.Vector v a) => Int -> Generator a -> Generator (v a)

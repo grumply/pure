@@ -125,11 +125,6 @@ instance Floating a => Floating (Generator a) where
 int :: Generator Int
 int = Generator (pcg_next &&& pcg_peel)
 
-{-# INLINE list #-}
--- NOTE: list is more than 10x slower than a loop
-list :: Generator a -> Seed -> [a]
-list gen = unfoldr (\seed -> let (!seed',!r) = generate gen seed in Just (r,seed'))
-
 {-# INLINE advance #-}
 advance :: Int -> Seed -> Seed
 advance = flip pcg_advance
