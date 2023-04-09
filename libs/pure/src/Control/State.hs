@@ -1,5 +1,5 @@
 {-# language ScopedTypeVariables, TypeApplications, ConstraintKinds, FlexibleContexts, RankNTypes, TypeFamilies, AllowAmbiguousTypes, PatternSynonyms, BlockArguments #-}
-module Control.State (Modify,State,state,state',stateWith,stateWith',modifyIO,modify,get,put,zoom,zoomIO,ignore,flat,flatBy,toState,toStateWith) where
+module Control.State (Modify,State,state,state',stateWith,stateWith',modifyIO,modify,modifyIt,modifyItIO,get,put,zoom,zoomIO,ignore,flat,flatBy,toState,toStateWith) where
 
 import Control.Concurrent (forkIO,killThread,ThreadId,MVar,newEmptyMVar,putMVar,readMVar)
 import Control.Dynamic (dynamic,fromDynamic)
@@ -34,16 +34,24 @@ stateWith' :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a 
 stateWith' f i v = eager (dynamic @(Modify a) f,dynamic @(Modify a) i) (stateWith f i v)
 
 {-# INLINE modifyIO #-}
-modifyIO :: forall a. Modify a => (Exists a => IO a) -> IO ()
-modifyIO f = yield (\a -> using (a :: a) f)
+modifyIO :: forall a. Modify a => (a -> IO a) -> IO ()
+modifyIO = yield 
 
 {-# INLINE modify #-}
-modify :: forall a. Modify a => (Exists a => a) -> IO ()
-modify f = yield (\a -> using (a :: a) (pure @IO f))
+modify :: forall a. Modify a => (a -> a) -> IO ()
+modify f = yield (\a -> pure @IO (f a))
+
+{-# INLINE modifyIt #-}
+modifyIt :: forall a. Modify a => (Exists a => a) -> IO ()
+modifyIt a = modifyItIO (pure a) 
+
+{-# INLINE modifyItIO #-}
+modifyItIO :: forall a. Modify a => (Exists a => IO a) -> IO ()
+modifyItIO ioa = yield (\a -> using (a :: a) ioa)
 
 {-# INLINE put #-}
 put :: Modify a => a -> IO ()
-put = modify
+put = modify . const
 
 {-# INLINE get #-}
 get :: Exists a => a

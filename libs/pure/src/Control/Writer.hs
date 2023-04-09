@@ -16,7 +16,7 @@ type Writer a = State (Log a)
 
 {-# INLINE tell #-}
 tell :: (Semigroup a, Modify (Log a)) => a -> IO ()
-tell a = modify (it <> Log a)
+tell a = modify (<> Log a)
 
 -- Unlike monadic writers, where discretization of computation is achieved
 -- through wrapping and composition, discretization of projected computational

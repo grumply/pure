@@ -22,7 +22,7 @@ import Effect.Intersection
 type Step a = State (Stream IO a)
 
 step :: forall a. Modify (Stream IO a) => Int -> IO ()
-step n = modifyIO (steps n (it :: Stream IO a))
+step n = modifyIO (steps @IO @a n)
 
 stream :: Typeable a => Stream IO a -> (Step a => View) -> View
 stream = state

@@ -121,10 +121,10 @@ right :: forall a b. Exists (FormableProductState a b) => (forall x. b x)
 right = let FPS _ r = get @(FormableProductState a b) in r
 
 setLeft :: forall a b x. Modify (FormableProductState a b) => a x -> IO ()
-setLeft l = modify @(FormableProductState a b) (it :: FormableProductState a b) { _left = unsafeCoerce l }
+setLeft l = modify @(FormableProductState a b) (\fps -> fps { _left = unsafeCoerce l })
 
 setRight :: forall a b x. Modify (FormableProductState a b) => b x -> IO ()
-setRight r = modify @(FormableProductState a b) (it :: FormableProductState a b) { _right = unsafeCoerce r }
+setRight r = modify @(FormableProductState a b) (\fps -> fps { _right = unsafeCoerce r })
 
 -- Sadly, this instance induces nesting of sequential record fields.
 instance 

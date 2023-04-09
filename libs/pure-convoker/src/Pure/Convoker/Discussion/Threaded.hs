@@ -132,14 +132,14 @@ threads sorter form comment =
     [ state False do
         if get then
           reader (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
-            reader (CommentFormCancelAction (modify False)) do
+            reader (CommentFormCancelAction (put False)) do
               reader (Previous (Nothing :: Maybe (Key (Comment domain a)))) do
                 reader (Next (Nothing :: Maybe (Key (Comment domain a)))) do
                   state (NewComment (Nothing :: Maybe (Resource (Comment domain a)))) do
                     form 
         else
           Header <||>
-            [ Button <| OnClick (\_ -> modify True) |> [ "Add Comment" ] 
+            [ Button <| OnClick (\_ -> put True) |> [ "Add Comment" ] 
             ]
 
     , Keyed Section <||#> do

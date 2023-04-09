@@ -121,6 +121,7 @@ library
     Data.Shadows
     Data.Sorcerer
     Data.Sorcerer.Sorcery
+    Data.Space
     Data.SVG
     Data.Stream
     Data.Styles

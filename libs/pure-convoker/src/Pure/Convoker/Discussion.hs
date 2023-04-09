@@ -189,7 +189,7 @@ discussion
 discussion viewer =
     let
       onRefresh :: Modify Bool => IO ()
-      onRefresh = modify (Prelude.not get)
+      onRefresh = modify Prelude.not
     in
       state False do
         async producer do
@@ -230,8 +230,8 @@ discussion viewer =
                   = get
 
                 onVote :: State (Maybe (Product (UserVotes domain a))) => Amend (UserVotes domain a) -> IO ()
-                onVote (Upvote k) = modify (upvote k)
-                onVote (Downvote k) = modify (downvote k)
+                onVote (Upvote k) = modifyIt (upvote k)
+                onVote (Downvote k) = modifyIt (downvote k)
 
               in
                 with mods do
@@ -369,11 +369,11 @@ linear sorter form comment | Discussion {..} <- full =
           with (Previous (Nothing :: Maybe (Key (Comment domain a)))) do
             with (Next (Nothing :: Maybe (Key (Comment domain a)))) do
               with (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
-                with (CommentFormCancelAction (modify False)) do
+                with (CommentFormCancelAction (put False)) do
                   state (NewComment (Nothing :: Maybe (Resource (Comment domain a))))
                     form
         else
-          Button <| OnClick (\_ -> modify True) |> [ "Add Comment" ]
+          Button <| OnClick (\_ -> put True) |> [ "Add Comment" ]
       )
     : fmap run (seen $ List.sortOn (sorter it) comments)
     )

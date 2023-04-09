@@ -264,11 +264,10 @@ basic = form (cont authenticating)
       let
         handleLogin :: Modify FormState => IO ()
         handleLogin = do
-          modifyIO do
-            let FormState {..} = ask
+          modifyIO \FormState {..} -> do
             success <- login @domain username password
             when success (unify settings)
-            pure ask { problem = Prelude.not success }
+            pure FormState { problem = Prelude.not success, .. }
 
       Div <| Themed @Auth.Login . warning |>
         [ H2 <||> [ "Logging In" ]
@@ -286,11 +285,10 @@ basic = form (cont authenticating)
         step1 = dynamic do
           let
             handleRegister :: Modify FormState => IO ()
-            handleRegister = modifyIO do
-              let FormState {..} = ask
+            handleRegister = modifyIO \FormState {..} -> do
               register @domain username email password
               unify step2
-              pure ask { problem = False }
+              pure FormState { problem = False, .. }
 
           Div <| Themed @Auth.Register . warning |>
             [ H2 <||> [ "Signing Up" ]
@@ -307,11 +305,10 @@ basic = form (cont authenticating)
         step2 = dynamic do
           let
             handleActivate :: Modify FormState => IO ()
-            handleActivate = modifyIO do
-              let FormState {..} = ask
+            handleActivate = modifyIO \FormState {..} -> do
               activated <- activate @domain username activation
               when activated (unify settings)
-              pure ask { problem = False }
+              pure FormState { problem = False, .. }
 
             activationKeyField :: Modify FormState => View
             activationKeyField =
@@ -335,11 +332,10 @@ basic = form (cont authenticating)
         step1 = dynamic do
           let
             handleRecover :: Modify FormState => IO ()
-            handleRecover = modifyIO do
-              let FormState {..} = ask
+            handleRecover = modifyIO \FormState {..} -> do
               initiateRecovery @domain username email
               unify step2
-              pure ask { problem = False }
+              pure FormState { problem = False, .. }
 
           Div <| Themed @Auth.InitiateRecovery . warning |>
             [ H2 <||> [ "Recovering" ]
@@ -355,11 +351,10 @@ basic = form (cont authenticating)
         step2 = dynamic do
           let
             handleValidate :: Modify FormState => IO ()
-            handleValidate = modifyIO do
-              let FormState {..} = ask
+            handleValidate = modifyIO \FormState {..} -> do
               recovered <- recover @domain username password recovery
               when recovered (unify settings)
-              pure ask { problem = False }
+              pure FormState { problem = False, .. }
 
             recoveryKeyField :: Modify FormState => View
             recoveryKeyField =
@@ -384,11 +379,10 @@ basic = form (cont authenticating)
         step1 = dynamic do
           let
             handleDelete :: Modify FormState => IO ()
-            handleDelete = modifyIO do
-              let FormState {..} = ask
+            handleDelete = modifyIO \FormState {..} -> do
               initiateDeletion @domain username email password
               unify step2
-              pure ask { problem = False }
+              pure FormState { problem = False, .. }
 
           Div <| Themed @Auth.InitiateDeletion . warning |>
             [ H2 <||> [ "Deleting" ]
@@ -405,11 +399,10 @@ basic = form (cont authenticating)
         step2 = dynamic do
           let
             handleDelete :: Modify FormState => IO ()
-            handleDelete = modifyIO do
-              let FormState {..} = ask
+            handleDelete = modifyIO \FormState {..} -> do
               recovered <- delete @domain username password email recovery
               when recovered (unify authenticating)
-              pure ask { problem = False }
+              pure FormState { problem = False, .. }
 
             deletionKeyField :: Modify FormState => View
             deletionKeyField =
@@ -432,11 +425,10 @@ basic = form (cont authenticating)
     updatingPassword = dynamic do
       let
         handleUpdate :: Modify FormState => IO ()
-        handleUpdate = modifyIO do
-          let FormState {..} = ask
+        handleUpdate = modifyIO \FormState {..} -> do
           updated <- updatePassword @domain username password newPassword
           when updated (unify settings)
-          pure ask { problem = False }
+          pure FormState { problem = False, .. }
 
       Div <| Themed @Auth.UpdateEmail . warning |>
         [ H2 <||> [ "Updating Password" ]
@@ -451,11 +443,10 @@ basic = form (cont authenticating)
     updatingEmail = dynamic do
       let
         handleUpdate :: Modify FormState => IO ()
-        handleUpdate = modifyIO do
-          let FormState {..} = ask
+        handleUpdate = modifyIO \FormState {..} -> do
           updated <- updateEmail @domain username email password
           when updated (unify settings)
-          pure ask { problem = False }
+          pure FormState { problem = False, .. }
 
       Div <| Themed @Auth.UpdateEmail . warning |>
         [ H2 <||> [ "Updating Email" ]

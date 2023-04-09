@@ -45,8 +45,7 @@ websocket h p = stateWith (\_ -> pure) initial
 onStatus :: forall domain. Websocket domain => (WS.Status -> IO ()) -> IO (IO ())
 onStatus f = do
   mv <- newEmptyMVar
-  modifyIO @(Cache domain) do
-    let c@Cache { socket = s } = ask :: Cache domain
+  modifyIO @(Cache domain) \c@Cache { socket = s } -> do
     putMVar mv s
     pure c
   s <- takeMVar mv
