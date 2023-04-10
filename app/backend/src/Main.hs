@@ -1,9 +1,8 @@
 module Main where
 
 import Shared
-import Markdown
 
-import Pure.Magician hiding (render)
+import Pure.Magician
 import Pure.Convoker.Discussion.Simple
 
 main :: IO ()
@@ -21,13 +20,13 @@ instance Amendable Post
 instance Producible Post where
   produce _ _ Post {..} _ = 
     pure PostProduct
-      { title    = render title
-      , content  = render content
+      { title    = parseMarkdown title
+      , content  = parseMarkdown content
       }
 instance Previewable Post where
   preview _ _ Post { synopsis } PostProduct { title } = 
     pure PostPreview
-      { synopsis = render synopsis
+      { synopsis = parseMarkdown synopsis
       , ..
       }
 
@@ -36,10 +35,10 @@ instance Amendable Page
 instance Producible Page where
   produce _ _ Page {..} _ = 
     pure PageProduct
-      { content = render content
+      { content = parseMarkdown content
       }
 instance Previewable Page where
   preview _ _ Page { title } _ = 
     pure PagePreview
-      { title = render title
+      { title = parseMarkdown title
       }

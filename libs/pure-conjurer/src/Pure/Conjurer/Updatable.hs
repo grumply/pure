@@ -3,6 +3,7 @@ module Pure.Conjurer.Updatable (Updatable(..),Previewing,Updating,cachingToUpdat
 import Pure.Conjurer.API
 import Pure.Conjurer.Context
 import Pure.Conjurer.Formable
+import Pure.Conjurer.Name
 import Pure.Conjurer.Pathable
 import Pure.Conjurer.Previewable
 import Pure.Conjurer.Producible

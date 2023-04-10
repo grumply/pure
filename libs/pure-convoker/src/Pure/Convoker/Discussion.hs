@@ -8,7 +8,7 @@ import Pure.Convoker.UserVotes
 
 import Pure.Auth hiding (Key)
 import Pure.Conjurer
-import Control.Fold as Pure hiding (not,key,pattern Meta,meta)
+import Control.Applicative ((<|>))
 import Control.State
 import Data.Default
 import Data.Events
@@ -16,23 +16,15 @@ import Data.Exists
 import Data.HTML
 import Data.JSON (ToJSON,FromJSON)
 import Data.Theme
-import Data.Time
-import Data.Txt
 import Data.View hiding (modify,get,onUpdate)
-import Data.View.Render
-import Data.Router as R
 import Effect.Async
 import Effect.Websocket
 
-import Data.Hashable
-
 import Control.Concurrent
-import Control.Monad
+import Control.Monad (void)
 import Data.List as List
-import Data.Maybe
 import qualified Data.Graph as G
-import Data.Typeable
-import GHC.Generics hiding (Meta)
+import GHC.Generics (Generic)
 
 data Discussion (domain :: *) (a :: *)
 
@@ -78,11 +70,11 @@ data instance Name (Discussion domain a) = DiscussionName
 instance Nameable (Discussion domain a) where
   toName _ = DiscussionName
 
-instance Amendable (Discussion domain a) where
-  data Amend (Discussion domain a)
-    = SetComment (Product (Comment domain a)) (Preview (Comment domain a))
-    deriving stock Generic
+data instance Amend (Discussion domain a)
+  = SetComment (Product (Comment domain a)) (Preview (Comment domain a))
+  deriving stock Generic
 
+instance Amendable (Discussion domain a) where
   amend (SetComment pro@Comment { key = target } pre) RawDiscussion {..}
     | let match (Comment { key },_) = key == target
     , List.any match comments
@@ -151,7 +143,9 @@ full :: Exists (Product (Discussion domain a)) => Product (Discussion domain a)
 full = it
 
 type DiscussionContext domain a =
-  ( Websocket domain
+  ( Typeable domain
+  , Typeable a
+  , Websocket domain
   , Authentication domain
   , Exists (Context a)
   , Exists (Name a)
@@ -282,7 +276,7 @@ discussion viewer =
       let
         -- if no votes are found, seed the UserVotes with either Nothing if the
         -- user is not logged in, or an empty userVotes if they are
-        votes = maybe (maybe Nothing (Just . emptyUserVotes) u) Just votes0
+        votes = votes0 <|> fmap emptyUserVotes u
 
       pure $ (,,,,)
         <$> admins
@@ -471,5 +465,7 @@ addDiscussionCreationCallbacks mods cbs = cbs { onCreate = onCreate' }
     onCreate' ctx nm res pro pre lst = do
       createDiscussion @domain ctx nm mods
       onCreate cbs ctx nm res pro pre lst
+
+
 
 

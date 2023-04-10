@@ -77,13 +77,13 @@ instance Ownable (UserVotes domain a) where
   isOwner un ctx (Just (UserVotesName un')) = pure (un == un')
   isOwner _ _ _ = pure False
 
-instance Amendable (UserVotes domain a) where
-  data Amend (UserVotes domain a)
-    = Upvote   (Key (Comment domain a)) 
-    | Downvote (Key (Comment domain a)) 
-    deriving stock Generic
-    deriving anyclass (ToJSON,FromJSON)
+data instance Amend (UserVotes domain a)
+  = Upvote   (Key (Comment domain a)) 
+  | Downvote (Key (Comment domain a)) 
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
+instance Amendable (UserVotes domain a) where
   amend (Upvote target) RawUserVotes {..} 
     | target `elem` downvotes =
       Just RawUserVotes

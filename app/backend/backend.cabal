@@ -8,7 +8,6 @@ executable backend
   main-is: Main.hs
 
   other-modules:
-    Markdown
   
   build-depends:
     base,

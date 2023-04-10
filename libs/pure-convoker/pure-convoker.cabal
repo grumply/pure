@@ -33,6 +33,7 @@ library
     Pure.Convoker.Discussion.Simple
     Pure.Convoker.Discussion.Simple.Comment
     Pure.Convoker.Discussion.Simple.Meta
+    Pure.Convoker.Discussion.Simple.Threaded
 
   default-language: Haskell2010
 

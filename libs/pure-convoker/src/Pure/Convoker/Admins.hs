@@ -54,10 +54,10 @@ instance Processable (Admins ctx)
 instance Typeable domain => Ownable (Admins domain) where
   isOwner un _ _ = isAdmin @domain un
 
+data instance Amend (Admins ctx) = AddAdmin Username | RemoveAdmin Username
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 instance Amendable (Admins ctx) where
-  data Amend (Admins ctx) = AddAdmin Username | RemoveAdmin Username
-    deriving stock Generic
-    deriving anyclass (ToJSON,FromJSON)
 
   amend (AddAdmin un) RawAdmins {..} | un `notElem` admins = 
     Just RawAdmins { admins = un : admins }

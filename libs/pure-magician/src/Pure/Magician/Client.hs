@@ -12,7 +12,7 @@ module Pure.Magician.Client
   , WithRoute
   , Viewables(..)
   , App
-  , CRUL
+  , CURL
   ) where
 
 import Pure.Magician.Client.Restore as Export
@@ -81,14 +81,14 @@ type Trivial = App () () ()
 trivial :: String -> Int -> (Trivial => View) -> View
 trivial h p = Pure.Magician.Client.client @() @() @() h p (dispatch ())
 
-magic :: forall domain c custom. (WithRoute (CRUL domain) domain) => (Reader custom => App domain c custom :=> View) -> (App domain c custom => View)
+magic :: forall domain c custom. (WithRoute (CURL domain) domain) => (Reader custom => App domain c custom :=> View) -> (App domain c custom => View)
 magic v =
   case Router.current of
-    Left sr | Just p <- withRoute @(CRUL domain) @domain sr (pages @domain) -> p
     Right (custom :: custom) -> fromDynamic (with custom v)
+    Left sr | ~(Just p) <- withRoute @(CURL domain) @domain sr (pages @domain) -> p
 
-class (Creatable a r, Readable a r, Listable a r, Updatable a r) => CRUL a r
-instance (Creatable a r, Readable a r, Listable a r, Updatable a r) => CRUL a r
+class (Creatable a r, Readable a r, Listable a r, Updatable a r) => CURL a r
+instance (Creatable a r, Readable a r, Listable a r, Updatable a r) => CURL a r
 
 type RouteMany a = RouteMany' a (Domains a)
 type WithRoute f a = WithRoute' f a (Domains a)

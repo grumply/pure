@@ -1,4 +1,4 @@
-{-# language TypeOperators, DefaultSignatures, RecordWildCards, FlexibleInstances, TypeSynonymInstances, DataKinds, FlexibleContexts, UndecidableInstances, DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE TypeOperators, DefaultSignatures, RecordWildCards, FlexibleInstances, DataKinds, FlexibleContexts, UndecidableInstances, DeriveGeneric, DeriveAnyClass, MonoLocalBinds #-}
 module Data.Covariance
   (Covariance,covary,covaries
   ,count,meanX,meanY,minimumX,maximumX,minimumY,maximumY
@@ -91,7 +91,7 @@ instance Semigroup Covariance where
           | cCount c < 2 = 0
           | otherwise    = cMeany2 c
 
-        
+
         minx = min (cMinimumX c1) (cMinimumX c2)
         maxx = max (cMaximumX c1) (cMaximumX c2)
         miny = min (cMinimumY c1) (cMinimumY c2)
@@ -100,7 +100,7 @@ instance Semigroup Covariance where
         cov = Covariance count meanx meany meanx2 meany2 minx maxx miny maxy c
        in
          cov `seq` cov
-        
+
 
 count :: Covariance -> Int
 count = round . cCount
@@ -137,17 +137,17 @@ maximumY c
 
 {-# RULES
 "covary f g a mempty == Convariance {...}"
-    forall f g a. 
-    covary f g a mempty = 
-      let x = realToFrac (f a) 
-          y = realToFrac (g a) 
-      in Covariance 1 x y 0 0 x x y y 0 
+    forall f g a.
+    covary f g a mempty =
+      let x = realToFrac (f a)
+          y = realToFrac (g a)
+      in Covariance 1 x y 0 0 x x y y 0
 "covary f g a (Covariance 0 0 0 0 0 0 0 0 0 0) == Covariance {...}"
-    forall f g a. 
-    covary f g a (Covariance 0 0 0 0 0 0 0 0 0 0) = 
-      let x = realToFrac (f a) 
-          y = realToFrac (g a) 
-      in Covariance 1 x y 0 0 x x y y 0 
+    forall f g a.
+    covary f g a (Covariance 0 0 0 0 0 0 0 0 0 0) =
+      let x = realToFrac (f a)
+          y = realToFrac (g a)
+      in Covariance 1 x y 0 0 x x y y 0
   #-}
 
 {- Are these always better?

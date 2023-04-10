@@ -1,6 +1,7 @@
-module Pure.Conjurer.Producible (Stream(..),Product(..),ProductMsg(..),Producible(..)) where
+module Pure.Conjurer.Producible where
 
 import Pure.Conjurer.Context
+import Pure.Conjurer.Name
 import Pure.Conjurer.Pathable
 import Pure.Conjurer.Rep
 import Pure.Conjurer.Resource

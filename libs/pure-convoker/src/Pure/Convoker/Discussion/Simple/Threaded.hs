@@ -6,39 +6,28 @@ import Pure.Convoker.Discussion.Simple.Comment as SimpleComment
 
 import Pure.Convoker.UserVotes as UserVotes
 
-import Pure.Convoker.Discussion.Threaded as Threaded
-
-import Pure.Auth.Access (Authentication,Authenticated)
+import Pure.Auth.Access (Authentication,Authenticated,guarded)
 
 import qualified Pure.Convoker.UserVotes as UserVotes
 
-import Pure.Convoker.Discussion as Discussion
-import Pure.Convoker.Discussion.Shared.Ago as Export
-import Pure.Convoker.Discussion.Shared.Markdown as Export
-import Pure.Convoker.Discussion.Shared.Total as Export
-import qualified Pure.Convoker.Discussion.Simple.Meta as Meta
+import Pure.Convoker.Discussion as Discussion hiding (comment)
+import qualified Pure.Convoker.Discussion as Discussion (comment)
+import Pure.Convoker.Discussion.Shared.Ago
+import Pure.Convoker.Discussion.Shared.Markdown 
+import Pure.Convoker.Discussion.Shared.Total 
+import Pure.Convoker.Discussion.Simple.Meta
+import Pure.Convoker.Meta (Meta,Votes(..))
 
-import Pure hiding (Meta, jump,mod)
-import Pure.Auth (Username,Authenticated,user)
-import Pure.Conjurer
+import Pure hiding (Created,Delete,Meta,meta,jump,mod,user,next)
+import Pure.Auth (Username,Authenticated,user,guarded)
+import Pure.Conjurer hiding (form,root)
 import Data.Animation
-import Data.Default
-import Data.JSON hiding (Null,Key)
-import Data.Scroll
-import Data.Theme
-import Control.Fold hiding (pattern Meta)
 import Effect.Websocket hiding (Reply)
 import Data.View (View)
 
-import Data.Hashable
-
-import Control.Concurrent
-import Data.Coerce
 import qualified Data.Graph as G
 import Data.List as List
-import Data.Maybe
-import Data.Typeable
-import System.IO.Unsafe
+import Prelude hiding (mod)
 
 {-
 Designed to approximate the Hacker News implementation as a reasonable default.
@@ -49,106 +38,6 @@ is relatively simple: sorts first by vote total and then by key (temporally
 ordered)
 -}
 
-simpleThreaded 
-  :: forall domain a b. 
-    ( Typeable a
-    , Typeable (domain :: *)
-    , Theme (Comment domain a)
-    , Theme (Discussion domain a)
-    , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
-    , Formable (Resource (Comment domain a))
-    , Default (Resource (Comment domain a))
-    , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Eq (Context a)
-    , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Eq (Name a)
-    , Fieldable Markdown
-    , Ord b
-    , Websocket domain
-    , Authentication domain
-    , Reader (Context a)
-    , Reader (Name a)
-    , Reader (Root domain a)
-    ) => CommentSorter domain a b -> View
-simpleThreaded sorter = 
-  threaded @domain sorter (simpleCommentForm defaultSimpleThreadedComment) defaultSimpleThreadedComment
-
-simpleCommentForm 
-  :: forall (domain :: *) (a :: *). 
-    ( Typeable a
-    , Typeable domain
-    , ToJSON (Context a), FromJSON (Context a)
-    , ToJSON (Name a), FromJSON (Name a)
-    , Fieldable Markdown
-    , CommentFormContext domain a 
-    , Websocket domain
-    , Authenticated domain
-    ) => (CommentContext domain a => View) -> View
-simpleCommentForm commentBuilder = 
-  let 
-    onPreview :: Resource (Comment domain a) -> IO View
-    onPreview c = do
-      r <- req @domain Uncached (publishingAPI @(Comment domain a)) (previewResource @(Comment domain a)) 
-            (CommentContext ask ask
-            ,c { SimpleComment.author = Pure.Auth.user
-               , parents = Parents (maybeToList parent)
-               }
-            )
-      case r of
-        Nothing -> pure "Invalid comment."
-        Just (_,_,_,comment,_) -> pure do
-          Div <| Themed @Previewing |>
-            [ commentBuilder
-            {-
-                root = Nothing
-                children = []
-                previous = Nothing
-                next = Nothing
-                size = 0
-                admins = Admins []
-                mods = Mods []
-                votes = Nothing
-                meta = Meta (Votes [])
-                admin = False
-                mod = False
-                withAuthor = txt
-                onVote = \_ -> pure ()
-            -}
-            ]
-          
-    restore =
-      forkIO do
-        void do
-          -- Should be sufficient for most devices?
-          -- The failure mode is simply not restoring 
-          -- the scroll position, which isn't too bad.
-          delay (Millisecond * 100)
-          addAnimation restoreScrollPosition
-
-
-    onSubmit :: Reader (DiscussionComment domain a) => Resource (Comment domain a) -> IO ()
-    onSubmit c@RawComment { content, key } = do
-      -- | Just _ <- Discussion.comment = do
-        b <- req @domain Uncached (publishingAPI @(Comment domain a)) (amendResource @(Comment domain a)) 
-            (CommentContext ask ask,CommentName key,SetContent content)
-        if b then void do 
-          storeScrollPosition >> restore
-        else
-          pure ()
-{-
-      | otherwise = do
-        mi <- req (publishingAPI @(Comment domain a)) (createResource @(Comment domain a)) 
-            (CommentContext discussionContext discussionName
-            ,(c :: Resource (Comment domain a)) 
-              { Comment.author = un
-              , parents = Parents $ maybeToList parent 
-              }
-            )
-        for_ mi (\_ -> storeScrollPosition >> onRefresh >> restore)
--}
-  in 
-    Div <| Themed @Creating |>
-      [ form onSubmit onPreview (fromMaybe def ask)
-      ]
-
 newtype Total = Total Int
 total :: Reader Total => Int
 total = let Total t = ask in t
@@ -157,8 +46,8 @@ newtype Voted = Voted (Maybe Bool)
 voted :: Reader Voted => Maybe Bool
 voted = let Voted v = ask in v
 
-newtype Editing domain a = Editing (Maybe (Resource (Comment domain a)))
-editing :: Reader (Editing domain a) => Maybe (Resource (Comment domain a))
+newtype Editing = Editing Bool
+editing :: Reader Editing => Bool
 editing = let Editing e = ask in e
 
 newtype Replying = Replying Bool
@@ -173,90 +62,144 @@ newtype Removed = Removed Bool
 removed :: Reader Removed => Bool
 removed = let Removed d = ask in d
 
-type ThreadedCommentContext domain a = 
+type ThreadContext domain a = 
   ( State Total
   , State Voted
-  , State (Editing domain a)
+  , State Editing
   , State Replying
   , State Collapsed
   , State Removed
+  , CommentContext domain a
   )
 
-data ThreadedCommentState domain a where
-  ThreadedCommentState ::
+data ThreadState domain a where
+  ThreadState ::
     { _total     :: Total
     , _vote      :: Voted
-    , _editing   :: Editing domain a
+    , _editing   :: Editing
     , _replying  :: Replying
     , _collapsed :: Collapsed
     , _removed   :: Removed
-    } -> ThreadedCommentState domain a
+    } -> ThreadState domain a
 
-usingThreadedCommentState 
-  :: (ThreadedCommentContext domain a => View) 
-  -> (State (ThreadedCommentState domain a) => View)
-usingThreadedCommentState v =
-  zoom _total (\t tcs -> tcs { _total = t }) do
-    zoom _vote (\v tcs -> tcs { _vote = v }) do
-      zoom _editing (\e tcs -> tcs { _editing = e }) do
-        zoom _replying (\r tcs -> tcs { _replying = r }) do
-          zoom _collapsed (\c tcs -> tcs { _collapsed = c }) do
-            zoom _removed (\d tcs -> tcs { _removed = d }) do
+usingThreadState 
+  :: forall domain a. (Typeable domain, Typeable a, CommentContext domain a) =>
+     (ThreadContext domain a => View) 
+  -> (State (ThreadState domain a) => View)
+usingThreadState v =
+  zoom @(ThreadState domain a) _total (\t tcs -> tcs { _total = t }) do
+    zoom @(ThreadState domain a) _vote (\v tcs -> tcs { _vote = v }) do
+      zoom @(ThreadState domain a) _editing (\e tcs -> tcs { _editing = e }) do
+        zoom @(ThreadState domain a) _replying (\r tcs -> tcs { _replying = r }) do
+          zoom @(ThreadState domain a) _collapsed (\c tcs -> tcs { _collapsed = c }) do
+            zoom @(ThreadState domain a) _removed (\d tcs -> tcs { _removed = d }) do
               v
 
-defaultSimpleThreadedComment :: forall domain a. ThreadedCommentContext domain a => View
-defaultSimpleThreadedComment =
-  let 
-    UserVotes { upvotes, downvotes } = maybe (emptyUserVotes (maybe (fromTxt def) id Pure.Auth.user)) id Discussion.votes 
-    Comment.Comment { author, deleted, created, edited, content, key } = cmt
-    Threaded.Created c = created
+thread :: forall domain a. 
+          ( Ord (Context a), ToJSON (Context a), FromJSON (Context a)
+          , Ord (Name a), ToJSON (Name a), FromJSON (Name a)
+          , Ord (Resource (Comment domain a))
+          , Ord (Amend (Comment domain a))
+          , CommentContext domain a
+          ) => View
+thread =
+  state initialize do
+    usingThreadState @domain @a do
+      comment @domain @a
+  where
+    initialize :: CommentContext domain a => ThreadState domain a
+    initialize 
+      | UserVotes {..} <- Discussion.votes @domain @a ? emptyUserVotes (guarded @domain "" "" (Pure.Auth.user @domain))
+      , Meta { votes = Votes vs } <- meta @domain @a
+      = let 
+          Comment.Comment { key, deleted = Deleted removed } = Discussion.comment
+          total = fmap (\(ups,downs,_,_) -> ups - downs) (vs !? key) ? 0
+          vote
+            | List.elem key upvotes   = Just True
+            | List.elem key downvotes = Just False
+            | otherwise               = Nothing
+        in
+          ThreadState 
+            { _editing = Editing False
+            , _replying = Replying False
+            , _collapsed = Collapsed False
+            , _removed = Removed removed
+            , _total = Total total
+            , _vote = Voted vote
+            }
 
-    button name action = Button <| OnClick (\_ -> action) |> [ name ]
+comment 
+  :: forall domain a. 
+    ( Ord (Context a), ToJSON (Context a), FromJSON (Context a)
+    , Ord (Name a), ToJSON (Name a), FromJSON (Name a)
+    , Ord (Resource (Comment domain a))
+    , Ord (Amend (Comment domain a))
+    , ThreadContext domain a 
+    ) => View
+comment =
+  let 
+    UserVotes { upvotes, downvotes } = Discussion.votes @domain @a ? guarded @domain (emptyUserVotes "") (emptyUserVotes "") (emptyUserVotes (user @domain))
+    Comment { author, deleted = Deleted del, created, edited, content, key } = Discussion.comment @domain @a
+    Created c = created
+
+    button name action = Button <| OnClick (const action) |> [ name ]
 
   in 
     Article <| Themed @Comment . Themed @(Comment domain a) . Id (toTxt key) |>
-      [ Footer <| Themed @Meta.Meta |>
-        [ simpleVoteButton 
-        , simpleAuthorAttribution
+      [ Footer <| Themed @Meta |>
+        [ voting
+        , Div <| Themed @Username |> 
+          [ txt author ]
 
-        , let e | Threaded.Edited (Just _) <- edited = Themed @Threaded.Edited | otherwise = id
+        , let e | Edited (Just _) <- edited = Themed @Edited | otherwise = id
           in Section <| Themed @Created . e |>
-              [ SimpleHTML "time" <| Attribute "pubdate" "" . Attribute "datetime" (toZonedDateTime c) |> 
+              [ SimpleHTML "time" <| Attribute "pubdate" "" . Attribute "datetime" (ZonedDateTime c) |> 
                 [ txt (ago c) ]
               ]
         , Section <| Themed @Controls |>
-          [ case previous of
+          [ case previous @domain @a of
               Just k -> button "←" (jump (toTxt k))
               _ -> Null
 
-          , case Discussion.root of
-              Just k | Discussion.root /= parent -> button "↸" (jump (toTxt k))
+          , case root @domain @a of
+              Just k | root @domain @a /= parent -> button "↸" (jump (toTxt k))
               _ -> Null
               
-          , case parent of
+          , case parent @domain @a of
               Just k -> button "↖︎" (jump (toTxt k))
               _ -> Null
 
-          , case Discussion.next of
+          , case next @domain @a of
               Just k -> button "→" (jump (toTxt k))
               _ -> Null
             
           , if collapsed then 
-              button (fromTxt $ "[" <> toTxt (size + 1) <> " more]") (pure ()) -- (command (Uncollapse @domain @a))
+              button (fromTxt $ "[" <> toTxt (size + 1) <> " more]") do
+                put (Collapsed False)
             else 
-              button "[-]" (pure ()) -- (command (Collapse @domain @a))
+              button "[-]" do
+                put (Collapsed True)
 
-          , if author == Pure.Auth.user && isNothing editing then
-              button "edit" (pure ()) -- (command (Editing @domain @a))
-            else if author == Pure.Auth.user && isJust editing then
-              button "cancel" (pure ()) -- (command (Editing @domain @a))
-            else
-              Null
+          , guarded @domain Null Null do
+              if author == user @domain && not editing then
+                button "edit" do
+                  put (Editing True)
+              else if author == user @domain && editing then
+                button "cancel" do
+                  put (Editing False)
+              else
+                Null
 
-          , if (admin || Discussion.mod) && Prelude.not deleted then
-              button "delete" (pure ()) -- (command (Delete @domain @a))
-            else if (admin || Discussion.mod) && del then
-              button "undelete" (pure ()) -- (command (Undelete @domain @a))
+          , if (admin || mod) && not del then
+              button "delete" do
+                req @domain Uncached (publishingAPI @(Comment domain a)) (amendResource @(Comment domain a)) do
+                  (CommentContext it it,CommentName key,Delete)
+                put (Removed True)
+            else if (admin || mod) && del then
+              button "undelete" do
+                req @domain Uncached (publishingAPI @(Comment domain a)) (amendResource @(Comment domain a)) do
+                  (CommentContext it it,CommentName key,Undelete)
+                put (Removed False)
             else
               Null
 
@@ -266,54 +209,36 @@ defaultSimpleThreadedComment =
 
       , if collapsed then
           Null 
-        else if del || removed == Removed True then -- del to avoid a reload for moderators/admins
+        else if del || removed then -- del to avoid a reload for moderators/admins
           Section <| Themed @Markdown |> [ "[ removed ]" ]
         else 
-          Section <| Themed @Markdown |> withContent content
+          Section <| Themed @Markdown |> content -- TODO: extend with `withContent`
 
       , if collapsed then
           Null
         else if replying then 
           Footer <| Themed @Reply |> 
-            [ button "cancel" (pure ()) -- (command (Replying @domain @a)) 
+            [ button "cancel" (put (Replying False)) 
             ]
         else
           Footer <| Themed @Reply |> 
-            [ button "reply" (pure ()) -- (command (Replying @domain @a)) 
+            [ button "reply" (put (Replying True)) 
             ]
 
-      , case replying of
-          True | Nothing <- editing, False <- collapsed -> 
-            Aside <||> -- Section? I kind of like the use of Aside here.
-              [ simpleCommentForm @domain @a defaultSimpleThreadedComment
-              {-
-                  { parent = Just key
-                  , onCancel = command (Replying @domain @a)
-                  , viewer = run . SimpleComment
-                  , comment = Nothing
-                  , .. 
-                  }
-              -}
-              ]
-          _ -> Null
+      , if replying && not editing && not collapsed then
+          Aside <||> -- Section? I kind of like the use of Aside here.
+            [ guarded @domain Null Null (form @domain @a (comment @domain @a)) ]
+        else
+          Null
 
-      , case editing of
-          Just c | False <- replying, False <- collapsed -> 
-            Aside <||> -- Section? I kind of like the use of Aside here.
-              [ simpleCommentForm @domain @a defaultSimpleThreadedComment
-                {-
-                  { parent = Just key
-                  , onCancel = command (Replying @domain @a)
-                  , viewer = run . SimpleComment
-                  , comment = Just c
-                  , .. 
-                  }
-                -}
-              ]
-          _ -> Null
+      , if editing && not replying && not collapsed then
+          Aside <||> -- Section? I kind of like the use of Aside here.
+            [ guarded @domain Null Null (form @domain @a (comment @domain @a)) ]
+        else
+          Null
 
-      , if Prelude.not (Prelude.null children) && Prelude.not collapsed then 
-          Section <| Themed @Children |#> children 
+      , if present renderedChildren && not collapsed then 
+          Section <| Themed @Children |#> renderedChildren 
         else 
           Null 
       ]
@@ -323,56 +248,73 @@ voting
   | removed = Null
   | otherwise = 
     Div <| Themed @UserVotes |>
-      [ case Pure.Auth.user of
-          Just _ -> Button <| OnClick (\_ -> downvote) |> [ if voted == Just False then "▼" else "▽" ]
-          _      -> Null
-
+      [ Button <| OnClick (const downvote) |> [ if voted == Just False then "▼" else "▽" ]
       , txt (simplified total)
-
-      , case Pure.Auth.user of
-          Just _ -> Button <| OnClick (\_ -> upvote) |> [ if voted == Just True then "▲" else "△" ]
-          _      -> Null
-
+      , Button <| OnClick (const upvote) |> [ if voted == Just True then "▲" else "△" ]
       ]
     where
       upvote = 
         case voted of
-          Nothing -> modify (Voted (Just True))
-          Just False -> modify (Voted Nothing)
+          Nothing -> put (Voted (Just True))
+          Just False -> put (Voted Nothing)
           _ -> pure ()
 
       downvote =
         case voted of
-          Nothing -> modify (Voted (Just False))
-          Just True -> modify (Voted Nothing)
+          Nothing -> put (Voted (Just False))
+          Just True -> put (Voted Nothing)
           _ -> pure ()
 
-attribution :: Reader Author => View
-attribution =
-  Div <| Themed @Username |> [ withAuthor Discussion.author ]
+form :: forall (domain :: *) (a :: *). 
+        ( Ord (Context a), ToJSON (Context a), FromJSON (Context a)
+        , Ord (Name a), ToJSON (Name a), FromJSON (Name a)
+        , Ord (Resource (Comment domain a))
+        , Ord (Amend (Comment domain a))
+        , DiscussionContext domain a
+        , Authenticated domain
+        , ThreadContext domain a 
+        ) => View -> View
+form commentBuilder = 
+  let 
+    onPreview :: Resource (Comment domain a) -> IO View
+    onPreview c = do
+      r <- req @domain Uncached (publishingAPI @(Comment domain a)) (previewResource @(Comment domain a)) 
+            (CommentContext ask ask
+            ,c { SimpleComment.author = user @domain
+               , parents = Parents (maybeToList parent)
+               }
+            )
+      case r of
+        Nothing -> pure "Invalid comment."
+        Just (_,_,_,comment,_) -> pure do
+          Div <| Themed @Previewing |>
+            [ commentBuilder ]
+          
+    restore =
+      forkIO do
+        void do
+          -- Should be sufficient for most devices?
+          -- The failure mode is simply not restoring 
+          -- the scroll position, which isn't too bad.
+          delay (Millisecond * 100)
+          addAnimation restoreScrollPosition
 
-simpleComment :: forall domain a. CommentContext domain a => View
-simpleComment =
-  state initialize do
-    usingThreadedCommentState do
-      Null
-  where
-    initialize :: CommentContext domain a => ThreadedCommentState domain a
-    initialize 
-      | UserVotes {..} <- maybe (emptyUserVotes (maybe (fromTxt def) id Pure.Auth.user)) id Discussion.votes
-      , Meta.Meta { votes = Votes vs } <- Discussion.meta 
-      = let 
-          editing = Editing Nothing
-          replying = False
-          collapsed = False
-          Comment.Comment { key, deleted = Deleted deleted } = Discussion.comment
-          total = fromMaybe 0 (fmap (\(ups,downs,_,_) -> ups - downs) (List.lookup key vs))
-          vote 
-            | List.elem key upvotes   = Just True
-            | List.elem key downvotes = Just False
-            | otherwise             = Nothing
-        in
-          ThreadedCommentState {..}
+
+    onSubmit :: Resource (Comment domain a) -> IO ()
+    onSubmit c@RawComment { content, key } = do
+        b <- req @domain Uncached (publishingAPI @(Comment domain a)) (amendResource @(Comment domain a)) 
+            (CommentContext ask ask,CommentName key,SetContent content)
+        if b then void do 
+          storeScrollPosition >> restore
+        else
+          pure ()
+
+  in 
+    Div <| Themed @Creating |>
+      [ Null -- _ onSubmit onPreview (fromMaybe def ask)
+      ]
+
+
 
 data Controls
 data Reply
@@ -444,8 +386,8 @@ instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Theme (Comment do
       
 instance Theme Comment
 instance Theme Meta
--- instance Theme UserVotes
--- instance Theme Edited
+instance Theme UserVotes
+instance Theme Edited
 instance Theme Created
 -- instance Theme Username
 instance Theme Controls
@@ -453,6 +395,9 @@ instance Theme Reply
 instance Theme Markdown
 instance Theme Children
 
+-- This is navigational; when the user clicks on the navigational links associated with
+-- a comment, we use `jump` to scroll the associated comment into view. These links include
+-- `parent`, `next`, `previous`.
 #ifdef __GHCJS__
 foreign import javascript unsafe
   "window.scrollTo(0,document.getElementById($1).offsetTop)"

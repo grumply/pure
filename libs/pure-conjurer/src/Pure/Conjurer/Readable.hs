@@ -2,6 +2,7 @@ module Pure.Conjurer.Readable (Readable(..),Reading,toReadWith) where
 
 import Pure.Conjurer.API
 import Pure.Conjurer.Context
+import Pure.Conjurer.Name
 import Pure.Conjurer.Pathable
 import Pure.Conjurer.Producible
 import Pure.Conjurer.Resource

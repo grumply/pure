@@ -1,17 +1,11 @@
-module Pure.Convoker.Discussion.Threaded 
-  ( module Pure.Convoker.Discussion.Threaded
-  , module Export
-  ) where
+module Pure.Convoker.Discussion.Threaded where
 
-import Pure.Convoker as Export hiding (Upvote,Downvote,authenticatedEndpoints,unauthenticatedEndpoints,endpoints)
+import Pure.Convoker hiding (Upvote,Downvote,authenticatedEndpoints,unauthenticatedEndpoints,endpoints)
 import qualified Pure.Convoker as Convoker
-import Pure.Convoker.Discussion
 
-import Control.Fold
 import Control.Reader
 import Control.State
-import Data.Default
-import Data.Events
+import Data.Events hiding (meta)
 import Data.Foldable as Foldable
 import Data.HTML
 import Data.JSON hiding (Null,Key)
@@ -19,16 +13,12 @@ import Data.Theme
 import Data.View hiding (modify,get)
 import Data.Websocket
 import Pure.Auth hiding (Key)
-import Pure.Conjurer
+import Pure.Conjurer hiding (root)
 import qualified Effect.Websocket as VWS
 
-import Data.Hashable
-
-import qualified Data.Graph as G
+import Data.Graph as G
 import Data.List as List
 import Data.Maybe
-import Data.Typeable
-import System.IO.Unsafe
 
 #ifndef __GHCJS__
 unauthenticatedEndpoints
@@ -103,29 +93,6 @@ authenticatedEndpoints ws un discussionCallbacks commentCallbacks metaCallbacks 
     (interactions (Just un))
 #endif
 
-threaded 
-  :: forall domain a b. 
-    ( Typeable a
-    , Typeable (domain :: *)
-    , Theme (Discussion domain a)
-    , Theme (Comment domain a)
-    , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
-    , Formable (Resource (Comment domain a))
-    , Default (Resource (Comment domain a))
-    , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Eq (Context a), Ord (Context a)
-    , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Eq (Name a), Ord (Name a)
-    , Default (Resource (Comment domain a))
-    , Ord b
-    , FromJSON (Product (Meta domain a))
-    , VWS.Websocket domain
-    , Authentication domain
-    , Reader (Context a)
-    , Reader (Name a)
-    , Reader (Root domain a)
-    ) => (Product (Meta domain a) -> Product (Comment domain a) -> b) -> (CommentFormContext domain a => View) -> (CommentContext domain a => View) -> View
-threaded sorter commentFormBuilder commentBuilder = 
-  discussion @domain @a (threads @domain @a @b sorter commentFormBuilder commentBuilder)
-
 threads :: forall domain a b. DiscussionLayout domain a b
 threads sorter form comment =
   Article <| Themed @(Discussion domain a) |> 
@@ -144,33 +111,32 @@ threads sorter form comment =
 
     , Keyed Section <||#> do
         forest Nothing Nothing do
-          maybe threads isolated Pure.Convoker.Discussion.root
+          maybe threads isolated root
     ]
   where
     Discussion { comments = cs } = full @domain @a 
 
     edges = fmap (\comment@Comment { key, parents = Parents ps } -> (comment,key,ps)) cs
     
-    -- transpose because each vertex in our graph points to predecessors
-    (G.transposeG -> graph,nodeFromVertex,find) = G.graphFromEdges edges
+    (transposeG -> graph,nodeFromVertex,find) = graphFromEdges edges
 
-    threads = G.components graph
+    threads = components graph
 
-    isolated k = G.dfs graph (maybe id (:) (find k) [])
+    isolated k = dfs graph (maybe id (:) (find k) [])
 
     forest rt par ts = 
-      let look (G.Node n _) = let (comment,_,_) = nodeFromVertex n in comment
-          sorted = List.sortOn (sorter Pure.Convoker.Discussion.meta . look) ts 
+      let look (Node n _) = let (comment,_,_) = nodeFromVertex n in comment
+          sorted = sortOn (sorter meta . look) ts 
       in 
         [ tree rt par previous next t
-        | (t,pr,nx) <- zip3 sorted (Nothing : fmap Just sorted) (List.tail (fmap Just sorted ++ [Nothing])) 
+        | (t,pr,nx) <- zip3 sorted (Nothing : fmap Just sorted) (tail (fmap Just sorted ++ [Nothing])) 
         , let 
             rt = if isJust rt then rt else par
             previous = fmap (\(look -> Comment { key }) -> key) pr
             next = fmap (\(look -> Comment { key }) -> key) nx
         ]
     
-    tree root par previous next node@(G.Node (nodeFromVertex -> (c@Comment { key , author },_,_)) sub) =
+    tree root par previous next node@(Node (nodeFromVertex -> (c@Comment { key , author },_,_)) sub) =
       (hash key,
         reader (Parent (par :: Maybe (Key (Comment domain a)))) do
           reader (Previous (previous :: Maybe (Key (Comment domain a)))) do
@@ -181,28 +147,3 @@ threads sorter form comment =
                     reader (Author author) do
                       comment
       )
-{-
-        { children = forest root (Just key) sub
-        , size = Foldable.length node - 1 -- since children are passed lazily pre-rendered
-        , ..
-        }
--}
-
-    {- 
-      What is the performance difference between the above and this?
-      What is the difference heap-wise? My intuition says that they will be the same,
-      but I'm erring on the side of caution here since this is a critical portion of the
-      threaded layout. I'd like to test when I have some extensive mocking or a good 
-      arbitrary instance or when I can look at some core.
-
-      forest mparent ts = 
-        let look (G.Node n _) = let (comment,_,_) = nodeFromVertex n in comment
-        in [ tree t | t <- List.sortOn (sorter meta . look) ts ]
-        where
-          tree (G.Node (nodeFromVertex -> (Comment { key },_,_)) sub) =
-            runCommentBuilder CommentBuilder 
-              { children = forest (Just key) sub
-              , size = Foldable.length node - 1
-              , ..
-              }
-    -}

@@ -116,7 +116,7 @@ deriving instance (Typeable a, Pathable (Context a),Pathable (Name a)) => Pathab
 deriving instance (ToJSON (Context a),ToJSON (Name a)) => ToJSON (Context (Comment domain a))
 deriving instance (FromJSON (Context a),FromJSON (Name a)) => FromJSON (Context (Comment domain a))
 
-data instance Name (Comment domain a) = CommentName (Key (Comment domain a))
+newtype instance Name (Comment domain a) = CommentName (Key (Comment domain a))
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 

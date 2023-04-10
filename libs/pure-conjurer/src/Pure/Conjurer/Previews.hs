@@ -1,6 +1,7 @@
 module Pure.Conjurer.Previews (Stream(..),Previews(..),PreviewsMsg(..),Name(..),Preview(..),defaultPreviewsUpdate) where
 
 import Pure.Conjurer.Context
+import Pure.Conjurer.Name
 import Pure.Conjurer.Pathable
 import Pure.Conjurer.Previewable
 import Pure.Conjurer.Rep

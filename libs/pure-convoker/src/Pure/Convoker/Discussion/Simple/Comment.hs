@@ -1,27 +1,24 @@
+{-# OPTIONS_GHC -Wno-missing-methods #-}
 module Pure.Convoker.Discussion.Simple.Comment where
 
 import Pure.Convoker.Admins 
 import Pure.Convoker.Comment
-import Pure.Convoker.Mods
-import Pure.Convoker.Discussion.Shared.Markdown
+import Pure.Convoker.Mods ( isMod )
+import Pure.Convoker.Discussion.Shared.Markdown (Markdown(..),parseMarkdown)
 
-import Pure.Auth (Username)
+import Pure.Auth.Data.Username (Username)
 import Pure.Conjurer
-import Control.Component
-import Data.Default
+import Control.Component (Component)
+import Data.Default (Default(..))
 import Data.JSON (ToJSON,FromJSON,traceJSON)
-import Data.Time
-import Data.Txt
-import Effect.Websocket
+import Data.Time (time)
+import Data.Txt (FromTxt(..))
 
-import Data.Hashable
+import Data.List as List (take)
+import Data.Typeable (Typeable)
+import GHC.Generics (Generic)
 
-import Data.Coerce
-import Data.List as List
-import Data.Typeable
-import GHC.Generics
-
-import System.IO.Unsafe
+import System.IO.Unsafe (unsafePerformIO)
 
 {-
 Design notes:
@@ -83,14 +80,14 @@ instance Default (Resource (Comment domain a)) where
 instance Nameable (Comment domain a) where
   toName RawComment {..} = CommentName key
 
-instance Amendable (Comment domain a) where
-  data Amend (Comment domain a) 
-    = SetContent Markdown
-    | Delete
-    | Undelete
-    deriving stock Generic
-    deriving anyclass (ToJSON,FromJSON)
+data instance Amend (Comment domain a) 
+  = SetContent Markdown
+  | Delete
+  | Undelete
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
+instance Amendable (Comment domain a) where
   amend (SetContent md) RawComment {..} | Deleted False <- deleted = 
     Just RawComment
       { content = md 

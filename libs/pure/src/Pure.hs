@@ -148,7 +148,7 @@ on = true
 --
 {-# INLINE false #-}
 false :: Bool -> (a -> a) -> a -> a
-false = flip (flip bool id)
+false = flip (`bool` id)
 
 -- | An intuitive synonym of `false` that reads more reactively.
 --
@@ -173,3 +173,17 @@ nothing mb f = maybe f (const id) mb
 {-# INLINE enum #-}
 enum :: forall a. (Bounded a, Enum a) => [a]
 enum = enumFromTo minBound (maxBound :: a)
+
+infixr 0 ?
+{-# INLINE (?) #-}
+(?) :: Maybe a -> a -> a
+(?) = flip fromMaybe
+
+infixr 0 !?
+{-# INLINE (!?) #-}
+(!?) :: Eq a => [(a,b)] -> a -> Maybe b
+(!?) = flip lookup
+
+{-# INLINE present #-}
+present :: [a] -> Bool
+present = not . null

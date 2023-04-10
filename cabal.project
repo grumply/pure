@@ -4,7 +4,6 @@ packages:
   ./libs/pure-convoker/pure-convoker.cabal 
   ./libs/pure-magician/pure-magician.cabal 
   ./libs/pure-auth/pure-auth.cabal
-  ./libs/pure-simple-blog/pure-simple-blog.cabal
   
   ./dev/dev.cabal
 

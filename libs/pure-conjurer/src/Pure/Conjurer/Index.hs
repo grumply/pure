@@ -1,6 +1,7 @@
 module Pure.Conjurer.Index (Stream(..),Index(..),IndexMsg(..),Context(..),Name(..),iterate) where
 
 import Pure.Conjurer.Context
+import Pure.Conjurer.Name
 import Pure.Conjurer.Resource
 import Pure.Conjurer.Rep
 

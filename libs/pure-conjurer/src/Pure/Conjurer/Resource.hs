@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
-module Pure.Conjurer.Resource (Stream(..),Resource(..),ResourceMsg(..),Name(..),Nameable(..),Processable(..),Amendable(..)) where
+module Pure.Conjurer.Resource where
 
 import Pure.Conjurer.Context
 import Pure.Conjurer.Name
@@ -9,8 +9,6 @@ import Pure.Conjurer.Rep
 import Data.JSON
 import Data.Txt
 import Data.Sorcerer as Sorcerer
-
-import Data.Hashable
 
 import Data.Typeable
 import GHC.Generics
@@ -29,9 +27,9 @@ class Processable a where
 
 instance {-# OVERLAPPABLE #-} Processable a
 
+data family Amend a :: *
+
 class Amendable a where
-  data Amend a :: *
-  -- NOTE: Resources are not processed after amend!
   amend :: Amend a -> Resource a -> Maybe (Resource a)
   amend _ = Just
 

@@ -36,7 +36,7 @@ newtype Witness a r = Witness (Exists a => r)
 -- This approach is likely to produce bugs, but the performance improvement over
 -- the magicDict version can be massive. Keep `using` in mind if anything
 -- inexplicable happens.
-{-# INLINE [1] using #-}
+{-# INLINABLE using #-}
 using :: forall a r. a -> (Exists a => r) -> r
 using a w = unsafeCoerce (Witness w :: Witness a r) a
 

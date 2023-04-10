@@ -1,6 +1,7 @@
 module Shared where
 
 import Pure.Magician
+import Pure.Convoker.Discussion.Shared.Markdown
 
 data Blog
 type instance Resources Blog = '[Post,Page]
@@ -10,11 +11,6 @@ instance Server Blog where
   type Statics Blog = Resources Blog
   type Discussions Blog = '[Post]
   type Analyze Blog = '[Post]
-
-newtype Markdown = Markdown Txt
-  deriving stock Generic
-  deriving anyclass (ToJSON,FromJSON)
-  deriving (ToTxt,FromTxt,Default,Ord,Eq) via Txt
 
 data Post
 data instance Resource Post = Post

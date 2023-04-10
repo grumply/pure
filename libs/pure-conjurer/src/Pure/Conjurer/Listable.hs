@@ -2,6 +2,7 @@ module Pure.Conjurer.Listable (Listable(..),ShouldPreloadPreviews,Listing,toList
 
 import Pure.Conjurer.API
 import Pure.Conjurer.Context
+import Pure.Conjurer.Name
 import Pure.Conjurer.Pathable
 import Pure.Conjurer.Previewable
 import Pure.Conjurer.Producible

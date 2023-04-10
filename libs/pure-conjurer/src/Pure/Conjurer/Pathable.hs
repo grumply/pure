@@ -1,6 +1,6 @@
 module Pure.Conjurer.Pathable where
 
-import Pure.Auth
+import Pure.Auth.Data.Username
 import Data.Txt as Txt
 import Data.Marker
 import Data.Router

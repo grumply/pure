@@ -65,11 +65,10 @@ data instance Reaction (Mods domain a) = NoModsReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
+data instance Amend (Mods domain a) = AddMod Username | RemoveMod Username
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 instance Amendable (Mods domain a) where
-  data Amend (Mods domain a) = AddMod Username | RemoveMod Username
-    deriving stock Generic
-    deriving anyclass (ToJSON,FromJSON)
-
   amend (AddMod un) RawMods {..} | un `notElem` mods = 
     Just RawMods { mods = un : mods }
   

@@ -1065,9 +1065,9 @@ routes :: forall a route. (Typeable a, Routable a)
        => (Route a -> route) -> Routing route ()
 routes lift = do
   updateRoute (\ctx nm -> lift (UpdateR ctx nm))
-  createRoute (\ctx -> lift (CreateR ctx))
+  createRoute (lift . CreateR)
   readRoute (\ctx nm -> lift (ReadR ctx nm))
-  listRoute (\ctx -> lift (ListR ctx))
+  listRoute (lift . ListR)
 
 location :: Routable a => Route a -> Txt
 location = \case

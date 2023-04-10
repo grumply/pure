@@ -1,20 +1,10 @@
-module Pure.Convoker.Discussion.Simple.Meta
-  ( trySetVote
-  , topSorter
-  , popularSorter
-  , controversialSorter
-  , bestSorter
-  , worstSorter
-  , newSorter
-  , oldSorter
-  , wilson
-  ) where
+module Pure.Convoker.Discussion.Simple.Meta where
 
 import Control.Component hiding (pattern Meta)
 import Data.Default
 import Data.JSON hiding (Key)
 import Data.Time
-import Pure.Auth hiding (Key)
+import Pure.Auth (Username)
 import Pure.Convoker.Comment
 import Pure.Convoker.Meta
 import Pure.Convoker.Mods
@@ -82,13 +72,13 @@ instance Producible (Meta domain a) where
 instance Previewable (Meta domain a) where
   preview _ _ _ _ = pure NoMetaPreview
 
-instance Amendable (Meta domain a) where
-  data Amend (Meta domain a)
-    = SetVote (AmendVote domain a)
-    deriving stock Generic
-    deriving anyclass (ToJSON,FromJSON)
+data instance Amend (Meta domain a)
+  = SetVote (AmendVote domain a)
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
-  amend (SetVote amnd) RawMeta {..} =
+instance Amendable (Meta domain a) where
+   amend (SetVote amnd) RawMeta {..} =
     Just RawMeta
       { votes = amendVotes amnd votes
       , ..
@@ -115,6 +105,7 @@ trySetVote permissions callbacks ctx nm un k v = fmap isJust do
 
 instance
   ( Typeable domain
+  , Typeable (UserVotes domain a)
   , Typeable a
   , DefaultPermissions (Meta domain a), DefaultCallbacks (Meta domain a)
   , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)

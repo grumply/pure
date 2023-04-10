@@ -32,7 +32,7 @@ primary = Section <||> [ content ]
   where
     content = 
       case current :: Either (SomeRoute Blog) () of
-        Left sr | Just p <- withRoute @(CRUL Blog) @Blog sr (pages @Blog) -> p
+        Left sr | Just p <- withRoute @(CURL Blog) @Blog sr (pages @Blog) -> p
         _ -> 
           async (Listing.recent @Blog 10 PostContext) do
             listing @Blog @Post Cached True

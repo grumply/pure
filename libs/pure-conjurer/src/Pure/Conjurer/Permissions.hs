@@ -1,8 +1,9 @@
 module Pure.Conjurer.Permissions where
 
 import Pure.Conjurer.Context
-import Pure.Conjurer.Resource
 import Pure.Conjurer.Interactions
+import Pure.Conjurer.Name
+import Pure.Conjurer.Resource
 
 import Pure.Auth (Username)
 

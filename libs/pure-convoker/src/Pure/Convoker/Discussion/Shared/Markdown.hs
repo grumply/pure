@@ -1,17 +1,15 @@
 module Pure.Convoker.Discussion.Shared.Markdown (Markdown(..),parseMarkdown) where
 
 import Control.Exception (evaluate)
-import Data.Maybe
-import Control.Monad
-import Data.List as List
-import Data.Typeable
-import GHC.Generics
+import Data.Either (fromRight)
+import Data.Maybe (fromMaybe)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Timeout (timeout)
 
+import Data.Default (Default)
 import Data.JSON (ToJSON,FromJSON)
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
-import Data.View
+import Data.View (View)
 import Data.View.Parse (parseView)
 import qualified Data.View.Sanitize as Sanitize
 
@@ -22,20 +20,22 @@ import Text.Pandoc.Writers.HTML (writeHtml5String)
 import Text.Pandoc.Options as Pandoc (def,ReaderOptions(..),pandocExtensions)
 
 unsafeRender :: Txt -> [View]
-unsafeRender md = either (const []) id $ runPure $ do
-  one <- readMarkdown Pandoc.def { readerExtensions = pandocExtensions } md
-  two <- writeHtml5String Pandoc.def one
-  pure (parseView two)
+unsafeRender md = 
+  fromRight [] do
+    runPure do
+      one <- readMarkdown Pandoc.def { readerExtensions = pandocExtensions } md
+      two <- writeHtml5String Pandoc.def one
+      pure (parseView two)
 #else
 unsafeRender :: Txt -> [View]
 unsafeRender md = []
 #endif
 
 newtype Markdown = Markdown Txt
-  deriving (ToJSON,FromJSON,ToTxt,FromTxt) via Txt
+  deriving (ToJSON,FromJSON,ToTxt,FromTxt,Eq,Ord,Default) via Txt
 
 parseMarkdown :: Markdown -> [View]
-parseMarkdown = maybe [] id . unsafePerformIO . timeout 3000000 . evaluate . fmap (Sanitize.sanitize opts) . unsafeRender . toTxt
+parseMarkdown = fromMaybe [] . unsafePerformIO . timeout 3000000 . evaluate . fmap (Sanitize.sanitize opts) . unsafeRender . toTxt
   where
     whitelistClasses =
       ["sourceCode","sourceLine","footnotes"
