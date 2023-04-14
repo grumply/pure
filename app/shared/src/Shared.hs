@@ -113,4 +113,5 @@ postPreview :: Preview Post -> View
 postPreview PostPreview {..} =
   Article <||>
     [ Header <||> title
+    , Section <||> synopsis
     ]

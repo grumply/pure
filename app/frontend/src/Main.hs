@@ -29,7 +29,7 @@ main = do
 header :: App Blog () => View
 header =
   Header <||>
-    [ H1 <||> [ "My Blog" ]
+    [ H1 <||> [ A <| lref "/" |> [ "My Blog"] ]
     , administration
     ]
 
@@ -58,6 +58,7 @@ post showComments PostProduct {..} =
   Main <||>
     [ Header <||> title
     , Section <||> content
+    , relatedPosts name
     , if showComments then
         with (Root @Blog @Post Nothing) do
           with PostContext do
@@ -68,6 +69,20 @@ post showComments PostProduct {..} =
       else
         Null
     ]
+
+relatedPosts :: App Blog () => Name Post -> View
+relatedPosts name = async action aside
+  where
+    action = Listing.related @Blog 3 PostContext name
+
+    aside :: Exists [(Context Post,Name Post,Preview Post)] => View
+    aside
+      | [] <- it :: [(Context Post,Name Post,Preview Post)] = Null
+      | otherwise =
+        Aside <||>
+          [ Header <||> [ H2 <||> [ "Related Posts" ] ]
+          , with postPreview (listing @Blog @Post Cached True)
+          ]
 
 sidebar :: App Blog () => View
 sidebar = async action aside
@@ -97,9 +112,9 @@ footer =
 
 instance Theme Blog where
   theme c = do
-    is ".RawComment" do
+    is (subtheme @Creating) do
       child (tag H2) do
         display =: none
       has (tag Label) do
-        display =: none
- 
+        display =: block
+
