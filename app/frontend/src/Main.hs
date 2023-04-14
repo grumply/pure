@@ -63,7 +63,7 @@ post showComments PostProduct {..} =
           with PostContext do
             with name do
               with (txt @Username) do
-                simpleThreadedDiscussion @Blog @Post
+                simpleThreadedDiscussion @Blog @Post Nothing
                 
       else
         Null

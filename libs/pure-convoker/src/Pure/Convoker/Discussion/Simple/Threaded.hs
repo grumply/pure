@@ -43,10 +43,10 @@ simpleThreadedDiscussion
      , Exists (Context a), Pathable (Context a), Ord (Context a), ToJSON (Context a), FromJSON (Context a)
      , Exists (Name a), Pathable (Name a), Ord (Name a), ToJSON (Name a), FromJSON (Name a)
      , Fieldable Markdown
-     ) => View
-simpleThreadedDiscussion =
+     ) => Maybe (Key (Comment domain a)) -> View
+simpleThreadedDiscussion root =
     discussion @domain @a do
-      threads @domain @a 
+      threads @domain @a root
         bestSorter 
         (form @domain @a def) 
         (thread @domain @a False)
@@ -363,7 +363,8 @@ form parent done =
                 with (RenderedChildren []) do
                   with (Descendants 0) do
                     with (Author (user @domain)) do
-                      thread @domain @a True
+                      with (Root @domain @a Nothing) do
+                        thread @domain @a True
             ]
           
     delayedJump k =

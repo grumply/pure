@@ -93,8 +93,8 @@ authenticatedEndpoints ws un discussionCallbacks commentCallbacks metaCallbacks 
     (interactions (Just un))
 #endif
 
-threads :: forall domain a b. DiscussionLayout domain a b
-threads sorter form comment =
+threads :: forall domain a b. Maybe (Key (Comment domain a)) -> DiscussionLayout domain a b
+threads root sorter form comment =
   Article <| Themed @(Discussion domain a) |> 
     [ state False do
         reader (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
@@ -139,9 +139,9 @@ threads sorter form comment =
     tree root par previous next node@(Node (nodeFromVertex -> (c@Comment { key , author },_,_)) sub) =
       (hash key,
         reader (Root root) do
-          reader (Parent (par :: Maybe (Key (Comment domain a)))) do
-            reader (Previous (previous :: Maybe (Key (Comment domain a)))) do
-              reader (Next (next :: Maybe (Key (Comment domain a)))) do
+          reader (Parent par) do
+            reader (Previous previous) do
+              reader (Next next) do
                 reader (DiscussionComment c) do
                   reader (RenderedChildren (forest root (Just key) sub)) do
                     reader (Descendants (Foldable.length node - 1)) do

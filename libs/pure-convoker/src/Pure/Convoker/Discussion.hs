@@ -27,7 +27,6 @@ import Data.List as List
 import Data.Maybe (fromMaybe)
 import qualified Data.Graph as G
 import GHC.Generics (Generic)
-import Debug.Trace
 
 import Data.CSS ( (=:), child, has, is )
 import Data.Styles (display,none)
@@ -167,7 +166,6 @@ type DiscussionContext domain a =
   , Authentication domain
   , Exists (Context a)
   , Exists (Name a)
-  , Exists (Root domain a)
   , Exists IsAdmin
   , Exists IsMod
   , Exists (Voter domain a)
@@ -198,7 +196,6 @@ discussion
     , Authentication domain
     , Exists (Context a)
     , Exists (Name a)
-    , Exists (Root domain a)
     ) => (DiscussionContext domain a => View) -> View
 discussion viewer =
   stateWith (\_ -> pure) (produceDiscussionResources @domain @a it it >>= \drs -> pure (drs,def)) do
