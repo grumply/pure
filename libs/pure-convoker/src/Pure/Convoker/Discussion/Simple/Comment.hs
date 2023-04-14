@@ -11,7 +11,7 @@ import Pure.Conjurer
 import Control.Component (Component)
 import Data.Default (Default(..))
 import Data.JSON (ToJSON,FromJSON,traceJSON)
-import Data.Time (time)
+import Data.Time (Time,time)
 import Data.Txt (FromTxt(..))
 
 import Data.List as List (take)
@@ -72,7 +72,7 @@ instance Default (Resource (Comment domain a)) where
     , parents  = Parents []
     , created  = Created (unsafePerformIO time)
     , edited   = Edited Nothing
-    , deleted  = Deleted Nothing
+    , deleted  = Deleted False
     , content  = Markdown ""
     }
 
@@ -86,26 +86,22 @@ data instance Amend (Comment domain a)
   deriving stock (Eq,Ord,Generic)
   deriving anyclass (ToJSON,FromJSON)
 
-{-# INLINE unsafeNow #-}
-unsafeNow = unsafeDupablePerformIO time
-
 instance Amendable (Comment domain a) where
-  amend (SetContent md) RawComment {..} | Deleted Nothing <- deleted = 
+  amend (SetContent md) RawComment {..} | Deleted False <- deleted = 
     Just RawComment
       { content = md 
-      , edited = Edited (Just unsafeNow)
       , ..
       }
       
-  amend Delete RawComment {..} | Deleted Nothing <- deleted =
+  amend Delete RawComment {..} | Deleted False <- deleted =
     Just RawComment
-      { deleted = Deleted (Just unsafeNow)
+      { deleted = Deleted True
       , ..
       }
 
-  amend Undelete RawComment {..} | Deleted (Just _) <- deleted =
+  amend Undelete RawComment {..} | Deleted True <- deleted =
     Just RawComment
-      { deleted = Deleted Nothing
+      { deleted = Deleted False
       , ..
       }
 
@@ -134,11 +130,13 @@ instance {-# OVERLAPPABLE #-} Processable (Comment domain a) where
 
 -- This can be overridden with overlapping instances to customize processing!
 instance {-# OVERLAPPABLE #-} Producible (Comment domain a) where
-  produce context _ RawComment {..} _ =
+  produce context _ RawComment {..} _ = do
+    t <- time
     pure Comment
-      { content = 
+      { edited = Edited (Just t)
+      , content = 
         case deleted of
-          Deleted (Just _) -> [ "[ removed ]" ] 
+          Deleted True -> [ "[ removed ]" ] 
           _ -> parseMarkdown content
       , ..
       }

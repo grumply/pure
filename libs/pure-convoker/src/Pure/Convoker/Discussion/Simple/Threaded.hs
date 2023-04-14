@@ -141,7 +141,7 @@ thread pre =
             { _editing = Editing False
             , _replying = Replying False
             , _collapsed = Collapsed False
-            , _removed = Removed (isJust removed)
+            , _removed = Removed removed
             , _total = Total total
             }
 
@@ -168,8 +168,11 @@ comment =
     Article <| Themed @Comment . Themed @(Comment domain a) . Id (toTxt key) |>
       [ Footer <| Themed @Meta |>
         [ case deleted of
-            Deleted (Just t) -> 
-              let zdt = ZonedDateTime c in 
+            Deleted True -> do
+              let 
+                ~(Edited (Just t)) = edited
+                zdt = ZonedDateTime t
+
               Div <| Themed @Deleted . Title zdt |>
                 [ SimpleHTML "time" <| Attribute "datetime" zdt |> 
                   [ "[removed ", txt (ago now t), "]" ]

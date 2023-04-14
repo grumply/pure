@@ -52,8 +52,8 @@ data Comment (domain :: *) (a :: *)
 instance Fieldable Username where
   field _ _ = Null
 
-newtype Deleted = Deleted (Maybe Time)
-  deriving (Eq,Ord,ToJSON,FromJSON) via (Maybe Time)
+newtype Deleted = Deleted Bool
+  deriving (Eq,Ord,ToJSON,FromJSON) via Bool
 
 instance Fieldable Deleted where
   field _ _ = Null
