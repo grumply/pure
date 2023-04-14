@@ -25,6 +25,8 @@ instance Fieldable (Key a) where
 
 instance Default (Key a) where
   {-# NOINLINE def #-}
+  -- This seems like a bad idea. Keys should /always/ be 
+  -- created on the server and always through `newKey`.
   def = Key (unsafePerformIO markIO)
 
 instance Pathable (Key a) where

@@ -10,11 +10,11 @@ executable frontend
   other-modules:
     Admin
     Listing
-    Page
 
   build-depends:
     base,
     async,
+    pure-convoker,
     pure-magician,
     pure-auth,
     shared

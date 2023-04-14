@@ -18,8 +18,7 @@ import Data.List as List (take)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 
-import System.IO.Unsafe (unsafePerformIO)
-
+import System.IO.Unsafe (unsafePerformIO, unsafeDupablePerformIO)
 {-
 Design notes:
 
@@ -62,7 +61,7 @@ data instance Resource (Comment domain a) = RawComment
   , edited   :: Edited
   , deleted  :: Deleted
   , content  :: Markdown
-  } deriving stock Generic
+  } deriving stock (Eq,Ord,Generic)
     deriving anyclass (ToJSON,FromJSON)
 
 -- the key, author, and creation time are replaced on the server
@@ -73,7 +72,7 @@ instance Default (Resource (Comment domain a)) where
     , parents  = Parents []
     , created  = Created (unsafePerformIO time)
     , edited   = Edited Nothing
-    , deleted  = Deleted False
+    , deleted  = Deleted Nothing
     , content  = Markdown ""
     }
 
@@ -84,26 +83,29 @@ data instance Amend (Comment domain a)
   = SetContent Markdown
   | Delete
   | Undelete
-  deriving stock Generic
+  deriving stock (Eq,Ord,Generic)
   deriving anyclass (ToJSON,FromJSON)
 
+{-# INLINE unsafeNow #-}
+unsafeNow = unsafeDupablePerformIO time
+
 instance Amendable (Comment domain a) where
-  amend (SetContent md) RawComment {..} | Deleted False <- deleted = 
+  amend (SetContent md) RawComment {..} | Deleted Nothing <- deleted = 
     Just RawComment
       { content = md 
-      , edited = Edited (Just (unsafePerformIO time))
+      , edited = Edited (Just unsafeNow)
       , ..
       }
       
-  amend Delete RawComment {..} | Deleted False <- deleted =
+  amend Delete RawComment {..} | Deleted Nothing <- deleted =
     Just RawComment
-      { deleted = Deleted True
+      { deleted = Deleted (Just unsafeNow)
       , ..
       }
 
-  amend Undelete RawComment {..} | Deleted True <- deleted =
+  amend Undelete RawComment {..} | Deleted (Just _) <- deleted =
     Just RawComment
-      { deleted = Deleted False
+      { deleted = Deleted Nothing
       , ..
       }
 
@@ -134,7 +136,10 @@ instance {-# OVERLAPPABLE #-} Processable (Comment domain a) where
 instance {-# OVERLAPPABLE #-} Producible (Comment domain a) where
   produce context _ RawComment {..} _ =
     pure Comment
-      { content = if deleted == Deleted True then [ "[ removed ]" ] else parseMarkdown content
+      { content = 
+        case deleted of
+          Deleted (Just _) -> [ "[ removed ]" ] 
+          _ -> parseMarkdown content
       , ..
       }
 

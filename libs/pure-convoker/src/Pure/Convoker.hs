@@ -188,7 +188,7 @@ authenticatedEndpoints
 authenticatedEndpoints socket un commentPermissions metaPermissions discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks commentInteractions metaInteractions = do 
   -- Notes:
   --   We don't cache Comment, since they're stored in Discussion.
-  --   We don't cache UserVotes to reduce memory overhead.
+  --   We don't cache UserVotes to reduce memory overhead and make UX more intuitive (it's confusing to not see your votes).
   --   We don't enact a publishing endpoint for discussion because
   --     discussions are manually created when their linked resource 
   --     is created.

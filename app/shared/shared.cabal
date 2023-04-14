@@ -11,6 +11,7 @@ library
 
   build-depends:
     base,
+    pure,
     pure-convoker,
     pure-magician
 

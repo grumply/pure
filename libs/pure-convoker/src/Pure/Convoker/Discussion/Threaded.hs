@@ -97,17 +97,17 @@ threads :: forall domain a b. DiscussionLayout domain a b
 threads sorter form comment =
   Article <| Themed @(Discussion domain a) |> 
     [ state False do
-        if get then
-          reader (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
-            reader (CommentFormCancelAction (put False)) do
-              reader (Previous (Nothing :: Maybe (Key (Comment domain a)))) do
-                reader (Next (Nothing :: Maybe (Key (Comment domain a)))) do
-                  state (NewComment (Nothing :: Maybe (Resource (Comment domain a)))) do
-                    form 
-        else
-          Header <||>
-            [ Button <| OnClick (\_ -> put True) |> [ "Add Comment" ] 
-            ]
+        reader (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
+          reader (CommentFormCancelAction (put False)) do
+            reader (Previous (Nothing :: Maybe (Key (Comment domain a)))) do
+              reader (Next (Nothing :: Maybe (Key (Comment domain a)))) do
+                state (NewComment (Nothing :: Maybe (Resource (Comment domain a)))) do
+                  guarded @domain Null (basic @domain) do
+                    Section <||>
+                      [ Header <||> [ Button <| OnClick (\_ -> modify not) |> 
+                        [ if get then "Cancel" else "Add Comment" ] ]
+                      , if get then form (put False) else Null
+                      ]
 
     , Keyed Section <||#> do
         forest Nothing Nothing do
@@ -128,22 +128,23 @@ threads sorter form comment =
       let look (Node n _) = let (comment,_,_) = nodeFromVertex n in comment
           sorted = sortOn (sorter meta . look) ts 
       in 
-        [ tree rt par previous next t
+        [ tree rt' par previous next t
         | (t,pr,nx) <- zip3 sorted (Nothing : fmap Just sorted) (tail (fmap Just sorted ++ [Nothing])) 
         , let 
-            rt = if isJust rt then rt else par
+            rt' = if isJust rt then rt else par
             previous = fmap (\(look -> Comment { key }) -> key) pr
             next = fmap (\(look -> Comment { key }) -> key) nx
         ]
     
     tree root par previous next node@(Node (nodeFromVertex -> (c@Comment { key , author },_,_)) sub) =
       (hash key,
-        reader (Parent (par :: Maybe (Key (Comment domain a)))) do
-          reader (Previous (previous :: Maybe (Key (Comment domain a)))) do
-            reader (Next (next :: Maybe (Key (Comment domain a)))) do
-              reader (DiscussionComment c) do
-                reader (RenderedChildren (forest root (Just key) sub)) do
-                  reader (Descendants (Foldable.length node - 1)) do
-                    reader (Author author) do
-                      comment
+        reader (Root root) do
+          reader (Parent (par :: Maybe (Key (Comment domain a)))) do
+            reader (Previous (previous :: Maybe (Key (Comment domain a)))) do
+              reader (Next (next :: Maybe (Key (Comment domain a)))) do
+                reader (DiscussionComment c) do
+                  reader (RenderedChildren (forest root (Just key) sub)) do
+                    reader (Descendants (Foldable.length node - 1)) do
+                      reader (Author author) do
+                        comment
       )

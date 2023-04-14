@@ -15,6 +15,7 @@ import Data.Events
 import Data.Exists
 import Data.HTML
 import Data.JSON (ToJSON,FromJSON)
+import Data.Time
 import Data.Theme
 import Data.View hiding (modify,get,onUpdate)
 import Effect.Async
@@ -23,12 +24,25 @@ import Effect.Websocket
 import Control.Concurrent
 import Control.Monad (void)
 import Data.List as List
+import Data.Maybe (fromMaybe)
 import qualified Data.Graph as G
 import GHC.Generics (Generic)
+import Debug.Trace
+
+import Data.CSS ( (=:), child, has, is )
+import Data.Styles (display,none)
 
 data Discussion (domain :: *) (a :: *)
 
-instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Theme (Discussion domain a)
+instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Theme (Discussion domain a) where
+  theme c =
+    is c do
+      has ".RawComment" do
+        child (tag H2) do
+          display =: none
+        has (tag Label) do
+          display =: none
+      
 
 data instance Resource (Discussion domain a) = RawDiscussion
   { context  :: Context a
@@ -133,7 +147,7 @@ admins = it
 mods :: Exists (Product (Mods domain a)) => Product (Mods domain a)
 mods = it
 
-votes :: Exists (Maybe (Product (UserVotes domain a))) => Maybe (Product (UserVotes domain a))
+votes :: Exists (Product (UserVotes domain a)) => Product (UserVotes domain a)
 votes = it
 
 meta :: Exists (Product (Meta domain a)) => Product (Meta domain a)
@@ -141,6 +155,10 @@ meta = it
 
 full :: Exists (Product (Discussion domain a)) => Product (Discussion domain a)
 full = it
+
+newtype Now = Now Time
+now :: Exists Now => Time
+now = let Now n = it in n
 
 type DiscussionContext domain a =
   ( Typeable domain
@@ -154,19 +172,21 @@ type DiscussionContext domain a =
   , Exists IsMod
   , Exists (Voter domain a)
   , Exists Refresher
-  , Exists (Maybe (Product (UserVotes domain a)))
+  , Exists Now
   , Exists (Product (Admins domain))
   , Exists (Product (Mods domain a))
+  , Exists (Product (UserVotes domain a))
   , Exists (Product (Meta domain a))
   , Exists (Product (Discussion domain a))
   )
 
-type DiscussionResources domain a = Maybe (Product (Admins domain),Product (Mods domain a),Maybe (Product (UserVotes domain a)),Product (Meta domain a),Product (Discussion domain a))
+type DiscussionResources domain a = Maybe (Product (Admins domain),Product (Mods domain a),Product (UserVotes domain a),Product (Meta domain a),Product (Discussion domain a))
 
 -- Core discussion view generator. Given an active connection, a resource's
 -- context and name, and a method of rendering a `DiscussionBuilder`, this
 -- will build the `DiscussionBuilder` context and render it if the necessary
 -- resources can be retrieved.
+{-# INLINE discussion #-}
 discussion
   :: forall domain a.
     ( Typeable a
@@ -181,109 +201,117 @@ discussion
     , Exists (Root domain a)
     ) => (DiscussionContext domain a => View) -> View
 discussion viewer =
+  stateWith (\_ -> pure) (produceDiscussionResources @domain @a it it >>= \drs -> pure (drs,def)) do
     let
-      onRefresh :: Modify Bool => IO ()
-      onRefresh = modify Prelude.not
-    in
-      state False do
-        async producer do
-          case await :: DiscussionResources domain a of
-            Nothing -> "Problem loading discussion."
-            Just (admins,mods,votes,meta,full) ->
-              let
-                admin =
-                  guarded @domain False False do
-                    let Admins as = admins
-                    user @domain `elem` as
+      onRefresh :: IO ()
+      onRefresh = produceDiscussionResources @domain @a it it >>= put
 
-                mod =
-                  guarded @domain False False do
-                    let Mods ms = mods
-                    user @domain `elem` ms
+      loadUserVotes :: Authenticated domain => IO ()
+      loadUserVotes = do
+          muvs <- req @domain Cached (readingAPI @(UserVotes domain a)) (readProduct @(UserVotes domain a)) 
+                    (UserVotesContext it it,UserVotesName (user @domain))
+          let
+            upd :: Product (UserVotes domain a) -> DiscussionResources domain a -> DiscussionResources domain a
+            upd _ Nothing = Nothing
+            upd uvs (Just (as,ms,_,m,d)) = Just (as,ms,uvs,m,d)
+                        
+          maybe def (modify . upd) muvs
 
-                upvote :: State (Maybe (Product (UserVotes domain a))) => Key (Comment domain a) -> Maybe (Product (UserVotes domain a))
-                upvote k
-                  | Just UserVotes {..} <- get, k `elem` downvotes
-                  = Just UserVotes { downvotes = List.filter (/= k) downvotes, .. }
+    case it :: DiscussionResources domain a of
+      Nothing -> "Problem loading discussion."
+      Just (admins,mods,votes,meta,full) ->
+        let
+          admin =
+            guarded @domain False False do
+              let Admins as = admins
+              user @domain `elem` as
 
-                  | Just UserVotes {..} <- get, k `notElem` upvotes
-                  = Just UserVotes { upvotes = k : upvotes, .. }
+          mod =
+            guarded @domain False False do
+              let Mods ms = mods
+              user @domain `elem` ms
 
-                  | otherwise
-                  = get
+          upvote :: Key (Comment domain a) -> Product (UserVotes domain a) -> Product (UserVotes domain a)
+          upvote k UserVotes {..}
+            | k `elem` downvotes  = UserVotes { downvotes = List.filter (/= k) downvotes, .. }
+            | k `notElem` upvotes = UserVotes { upvotes = k : upvotes, .. }
+            | otherwise           = UserVotes {..}
 
-                downvote :: State (Maybe (Product (UserVotes domain a))) => Key (Comment domain a) -> Maybe (Product (UserVotes domain a))
-                downvote k
-                  | Just UserVotes {..} <- get, k `elem` upvotes
-                  = Just UserVotes { upvotes = List.filter (/= k) upvotes, .. }
+          downvote :: Key (Comment domain a) -> Product (UserVotes domain a) -> Product (UserVotes domain a)
+          downvote k UserVotes {..}
+            | k `elem` upvotes      = UserVotes { upvotes = List.filter (/= k) upvotes, .. }
+            | k `notElem` downvotes = UserVotes { downvotes = k : downvotes, .. }
+            | otherwise             = UserVotes {..}
 
-                  | Just UserVotes {..} <- get, k `notElem` downvotes
-                  = Just UserVotes { downvotes = k : downvotes, .. }
+          onVote :: (Authentication domain, Modify (DiscussionResources domain a)) => Amend (UserVotes domain a) -> IO ()
+          onVote (Upvote k) = do
+            guarded @domain def def do
+              req @domain Uncached (publishingAPI @(UserVotes domain a)) (amendResource @(UserVotes domain a)) 
+                (UserVotesContext it it,UserVotesName (user @domain),Upvote k)
+            modify @(DiscussionResources domain a) (fmap (\(admins,mods,uvs,meta,full) -> (admins,mods,upvote k uvs,meta,full)))
+          onVote (Downvote k) = do
+            guarded @domain def def do
+              req @domain Uncached (publishingAPI @(UserVotes domain a)) (amendResource @(UserVotes domain a)) 
+                (UserVotesContext it it,UserVotesName (user @domain),Downvote k)
+            modify @(DiscussionResources domain a) (fmap (\(admins,mods,uvs,meta,full) -> (admins,mods,downvote k uvs,meta,full)))
 
-                  | otherwise
-                  = get
+        in
+          with mods do
+            with admins do
+              with meta do
+                with full do
+                  with votes do
+                    with (IsAdmin admin) do
+                      with (IsMod mod) do
+                        with (Refresher onRefresh) do
+                          with (Voter onVote) do
+                            stateWith (const pure) (time >>= \n -> forkIO (delay Minute >> time >>= put . Now) >>= \tid -> pure (Now n,const (killThread tid))) do
+                              async (guarded @domain def def loadUserVotes) do
+                                viewer
 
-                onVote :: State (Maybe (Product (UserVotes domain a))) => Amend (UserVotes domain a) -> IO ()
-                onVote (Upvote k) = modifyIt (upvote k)
-                onVote (Downvote k) = modifyIt (downvote k)
+produceDiscussionResources 
+  :: forall domain a. 
+     ( Typeable domain, Typeable a
+     , ToJSON (Context a), FromJSON (Context a), Ord (Context a)
+     , ToJSON (Name a), FromJSON (Name a), Ord (Name a)
+     , FromJSON (Product (Meta domain a))
+     ) => Context a -> Name a -> IO (DiscussionResources domain a)
+produceDiscussionResources ctx nm = do
+  let
+    getProduct
+      :: forall a.
+        ( Typeable a
+        , ToJSON (Context a), FromJSON (Context a), Ord (Context a)
+        , ToJSON (Name a), Ord (Name a)
+        , FromJSON (Product a)
+        ) => Policy -> Context a -> Name a -> IO (IO (Maybe (Product a)))
+    getProduct policy ctx nm = do
+      mv <- newEmptyMVar
+      forkIO do
+        r <- req @domain policy (readingAPI @a) (readProduct @a) (ctx,nm)
+        putMVar mv r
+      pure (takeMVar mv)
 
-              in
-                with mods do
-                  with admins do
-                    with meta do
-                      with full do
-                        with (IsAdmin admin) do
-                          with (IsMod mod) do
-                            with (Refresher onRefresh) do
-                              state votes do
-                                with (Voter onVote) do
-                                  viewer
-  where
-    producer :: Exists Bool => IO (DiscussionResources domain a)
-    producer = (it :: Bool) `seq` do
+  getAdmins     <- getProduct Cached AdminsContext AdminsName
+  getMods       <- getProduct Cached (ModsContext ctx) ModsName
+  getVotes      <- pure (pure (Just (emptyUserVotes "")))
+  getMeta       <- getProduct Uncached (MetaContext ctx nm) MetaName
+  getDiscussion <- getProduct Uncached (DiscussionContext ctx nm) DiscussionName
 
-      let
-        getProduct
-          :: forall a.
-            ( Typeable a
-            , ToJSON (Context a), FromJSON (Context a), Ord (Context a)
-            , ToJSON (Name a), Ord (Name a)
-            , FromJSON (Product a)
-            ) => Policy -> Context a -> Name a -> IO (IO (Maybe (Product a)))
-        getProduct policy ctx nm = do
-          mv <- newEmptyMVar
-          forkIO do
-            r <- req @domain policy (readingAPI @a) (readProduct @a) (ctx,nm)
-            putMVar mv r
-          pure (takeMVar mv)
+  (admins,mods,votes,meta,full) <-
+    (,,,,)
+      <$> getAdmins
+      <*> getMods
+      <*> getVotes
+      <*> getMeta
+      <*> getDiscussion
 
-        u = guarded @domain Nothing Nothing (Just (user @domain))
-
-      getAdmins     <- getProduct Cached AdminsContext AdminsName
-      getMods       <- getProduct Cached (ModsContext it) ModsName
-      getVotes      <- maybe (pure (pure Nothing)) (getProduct Uncached (UserVotesContext it it) . UserVotesName) u
-      getMeta       <- getProduct Uncached (MetaContext it it) MetaName
-      getDiscussion <- getProduct Uncached (DiscussionContext it it) DiscussionName
-
-      (admins,mods,votes0,meta,full) <-
-        (,,,,)
-          <$> getAdmins
-          <*> getMods
-          <*> getVotes
-          <*> getMeta
-          <*> getDiscussion
-
-      let
-        -- if no votes are found, seed the UserVotes with either Nothing if the
-        -- user is not logged in, or an empty userVotes if they are
-        votes = votes0 <|> fmap emptyUserVotes u
-
-      pure $ (,,,,)
-        <$> admins
-        <*> mods
-        <*> pure votes
-        <*> meta
-        <*> full
+  pure $ (,,,,)
+    <$> admins
+    <*> mods
+    <*> votes
+    <*> meta
+    <*> full
 
 newtype RenderedChildren = RenderedChildren [(Int,View)]
 renderedChildren :: Exists RenderedChildren => [(Int,View)]
@@ -335,8 +363,12 @@ new = let NewComment mr = it in mr
 
 type CommentFormContext domain a =
   ( DiscussionContext domain a
+  , Exists (Parent domain a)
+  , Exists (Previous domain a)
+  , Exists (Next domain a)
   , Exists CommentFormCancelAction
   , State (NewComment domain a)
+  , Authenticated domain
   )
 
 type DiscussionLayout (domain :: *) a b =
@@ -351,7 +383,7 @@ type DiscussionLayout (domain :: *) a b =
     , Default (Resource (Comment domain a))
     , Ord b
     ) => CommentSorter domain a b
-      -> (CommentFormContext domain a => View)
+      -> (CommentFormContext domain a => IO () -> View)
       -> (CommentContext domain a => View)
       -> (DiscussionContext domain a => View)
 
@@ -364,8 +396,8 @@ linear sorter form comment | Discussion {..} <- full =
             with (Next (Nothing :: Maybe (Key (Comment domain a)))) do
               with (Parent (Nothing :: Maybe (Key (Comment domain a)))) do
                 with (CommentFormCancelAction (put False)) do
-                  state (NewComment (Nothing :: Maybe (Resource (Comment domain a))))
-                    form
+                  state (NewComment (Nothing :: Maybe (Resource (Comment domain a)))) do
+                    guarded @domain Null (basic @domain) (form (put False))
         else
           Button <| OnClick (\_ -> put True) |> [ "Add Comment" ]
       )

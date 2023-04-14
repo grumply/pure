@@ -2,62 +2,104 @@ module Main where
 
 import Admin
 import Listing
-import Page
 import Pure.Magician
+import Pure.Convoker.Discussion
+import Pure.Convoker.Discussion.Shared.Markdown
+import Pure.Convoker.Discussion.Threaded
+import Pure.Convoker.Discussion.Simple
+import Pure.Convoker.Discussion.Simple.Meta
+import Pure.Convoker.Discussion.Simple.Comment
+import Pure.Convoker.Discussion.Simple.Threaded
 
 import Shared
 
 main :: IO ()
-main = inject body (Page.run blog)
+main = do
+  hSetBuffering stdout LineBuffering
+  inject body do
+    client @Blog @() "127.0.0.1" 8081 (dispatch ()) do
+      Main <| Themed @Blog |>
+        [ header
+        , primary
+        , sidebar
+        , footer
+        ]
 
-blog :: P :=> View
-blog = 
-  page do
-    Main <||> 
-      [ header
-      , primary
-      , sidebar
-      , footer
-      ]
 
-header :: P => View
+header :: App Blog () => View
 header =
-  Header <||> 
+  Header <||>
     [ H1 <||> [ "My Blog" ]
     , administration
     ]
 
-primary :: P => View
+primary :: App Blog () => View
 primary = Section <||> [ content ]
   where
-    content = 
+    content =
       case current :: Either (SomeRoute Blog) () of
-        Left sr | Just p <- withRoute @(CURL Blog) @Blog sr (pages @Blog) -> p
-        _ -> 
+        Left sr
+          | Just (ReadR PostContext nm) <- fromSomeRoute sr ->
+            async (req @Blog Cached (readingAPI @Post) (readProduct @Post) (PostContext,nm)) do
+              maybe "Post not found." (post True) await
+          | Just p <-
+            with pagePreview do
+              with postPreview do
+                with (post False) do 
+                  with pageProduct do
+                    withRoute @(CURL Blog) @Blog sr (pages @Blog) -> p
+        _ ->
           async (Listing.recent @Blog 10 PostContext) do
-            listing @Blog @Post Cached True
+            with postPreview do
+              listing @Blog @Post Cached True
 
-sidebar :: P => View
-sidebar = async action aside 
+post :: App Blog () => Bool -> Product Post -> View
+post showComments PostProduct {..} =
+  Main <||>
+    [ Header <||> title
+    , Section <||> content
+    , if showComments then
+        with (Root @Blog @Post Nothing) do
+          with PostContext do
+            with name do
+              with (txt @Username) do
+                simpleThreadedDiscussion @Blog @Post
+                
+      else
+        Null
+    ]
+
+sidebar :: App Blog () => View
+sidebar = async action aside
   where
-    (title,action) = 
+    (title,action) =
       case current :: Either (SomeRoute Blog) () of
-        Left sr | Just (ReadR _ post) <- fromSomeRoute sr -> 
+        Left sr | Just (ReadR _ post) <- fromSomeRoute sr ->
           ("Related Posts",Listing.related @Blog 10 PostContext post)
-        _ -> 
-          ("Recent Posts",Listing.top @Blog 10 PostContext) 
+        _ ->
+          ("Recent Posts",Listing.top @Blog 10 PostContext)
 
     aside :: Exists [(Context Post,Name Post,Preview Post)] => View
-    aside 
+    aside
       | [] <- it :: [(Context Post,Name Post,Preview Post)] = Null
       | otherwise =
         Aside <||>
           [ Header <||> [ H2 <||> [ title ] ]
-          , listing @Blog @Post Cached True
+          , with postPreview do
+              listing @Blog @Post Cached True
           ]
 
-footer :: P => View
+footer :: View
 footer =
   Footer <||>
     [ "Made with Haskell."
     ]
+
+instance Theme Blog where
+  theme c = do
+    is ".RawComment" do
+      child (tag H2) do
+        display =: none
+      has (tag Label) do
+        display =: none
+ 

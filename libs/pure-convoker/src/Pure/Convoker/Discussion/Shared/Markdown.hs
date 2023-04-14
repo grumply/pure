@@ -3,6 +3,7 @@ module Pure.Convoker.Discussion.Shared.Markdown (Markdown(..),parseMarkdown) whe
 import Control.Exception (evaluate)
 import Data.Either (fromRight)
 import Data.Maybe (fromMaybe)
+import GHC.Generics (Generic)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Timeout (timeout)
 
@@ -31,8 +32,15 @@ unsafeRender :: Txt -> [View]
 unsafeRender md = []
 #endif
 
-newtype Markdown = Markdown Txt
-  deriving (ToJSON,FromJSON,ToTxt,FromTxt,Eq,Ord,Default) via Txt
+data Markdown = Markdown Txt
+  deriving stock (Generic,Eq,Ord)
+  deriving anyclass (ToJSON,FromJSON,Default)
+
+instance ToTxt Markdown where
+  toTxt (Markdown md) = md
+  
+instance FromTxt Markdown where
+  fromTxt = Markdown
 
 parseMarkdown :: Markdown -> [View]
 parseMarkdown = fromMaybe [] . unsafePerformIO . timeout 3000000 . evaluate . fmap (Sanitize.sanitize opts) . unsafeRender . toTxt

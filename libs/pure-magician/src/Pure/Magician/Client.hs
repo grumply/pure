@@ -1,8 +1,5 @@
 module Pure.Magician.Client 
   ( client
-  , Pure.Magician.Client.basic
-  , trivial
-  , Trivial
   , magic
   , withRoute
   , unsafeWithRoute
@@ -53,35 +50,28 @@ import System.IO.Unsafe
 
 import Prelude hiding (map,not)
 
-type App domain c custom = (WS.Websocket domain, Authentication domain, Router.Router (Either (SomeRoute domain) custom), c)
+type App domain custom = (WS.Websocket domain, Authentication domain, Router.Router (Either (SomeRoute domain) custom))
 
 type family Viewables (xs :: [*]) :: Constraint where
   Viewables '[] = ()
   Viewables (x ': xs) = (Viewable (Product x), Viewable (Preview x),Viewables xs)
 
+{-# INLINE client #-}
 client 
-  :: forall domain c custom. 
-  ( Typeable domain, Typeable custom, RouteMany domain, c )
+  :: forall domain custom. 
+  ( Typeable domain, Typeable custom, RouteMany domain)
   => String 
   -> Int 
   -> (forall x. R.Routing custom x) 
-  -> (App domain c custom => View)
-  -> (c => View)
+  -> (App domain custom => View)
+  -> View
 client host port rtng v = 
   WS.websocket @domain host port do
-    authentication @domain do
-      Router.router (R.map Left (routeMany @domain @(Domains domain)) <|> R.map Right rtng) do
+    Router.router (R.map Left (routeMany @domain @(Domains domain)) <|> R.map Right rtng) do
+      authentication @domain do
         v
 
-basic :: forall custom. Typeable custom => String -> Int -> (forall x. R.Routing custom x) -> (App () () custom => View) -> View
-basic = Pure.Magician.Client.client @() @() @custom
-
-type Trivial = App () () ()
-
-trivial :: String -> Int -> (Trivial => View) -> View
-trivial h p = Pure.Magician.Client.client @() @() @() h p (dispatch ())
-
-magic :: forall domain c custom. (WithRoute (CURL domain) domain) => (Reader custom => App domain c custom :=> View) -> (App domain c custom => View)
+magic :: forall domain custom. (WithRoute (CURL domain) domain) => (Reader custom => App domain custom :=> View) -> (App domain custom => View)
 magic v =
   case Router.current of
     Right (custom :: custom) -> fromDynamic (with custom v)

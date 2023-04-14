@@ -80,7 +80,7 @@ instance Ownable (UserVotes domain a) where
 data instance Amend (UserVotes domain a)
   = Upvote   (Key (Comment domain a)) 
   | Downvote (Key (Comment domain a)) 
-  deriving stock Generic
+  deriving stock (Generic,Eq,Ord)
   deriving anyclass (ToJSON,FromJSON)
 
 instance Amendable (UserVotes domain a) where

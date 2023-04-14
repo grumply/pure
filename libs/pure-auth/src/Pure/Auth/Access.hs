@@ -6,6 +6,7 @@ module Pure.Auth.Access
   , simple
   , guarded
   , user
+  , token
   , logout
   , Warn
   , form

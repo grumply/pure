@@ -1,24 +1,18 @@
 module Pure.Convoker.Meta where
 
-import Pure.Convoker.Comment
-import Pure.Convoker.Admins
+import Pure.Convoker.Comment ( Product, Comment, Name, Context )
+import Pure.Convoker.Admins ( isAdmin )
 
-import Pure.Auth (Username)
-import Pure.Conjurer
-import Data.JSON hiding (Key)
-import Data.Time
-import Data.Txt
-import Data.View.Render
-import Effect.Websocket
+import Pure.Auth.Data.Username ( Username )
+import Pure.Conjurer ( Key, Product, Name, Context, Hashable, Pathable, Nameable(..), Ownable(..) )
+import Data.Function (fix)
+import Data.JSON ( FromJSON, ToJSON, traceJSON )
+import Data.Time ( Time, pattern Milliseconds, days )
 
-import Data.Hashable
-
-import Control.Monad
 import Data.Function (on)
 import qualified Data.Graph as G
-import Data.List as List
-import Data.Typeable
-import GHC.Generics hiding (Meta)
+import Data.Typeable ( Typeable )
+import GHC.Generics ( Generic )
 
 {-
 Design notes:
@@ -76,6 +70,7 @@ data AmendVote domain a
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
+{-
 amendVotes :: AmendVote domain a -> Votes domain a -> Votes domain a
 amendVotes (Vote _ target t@(Milliseconds n _) vote) (Votes votes) = Votes (go votes)
   where
@@ -100,9 +95,42 @@ amendVotes (Vote _ target t@(Milliseconds n _) vote) (Votes votes) = Votes (go v
         -- votes have a 1-hour half-life
         -- TODO: figure out how to customize this
         -- TODO: check that this is reasonable in the presence of negative votes (downvotes)? Should I track upvote and downvote decay separately?
-        decay' = decay * 2 ** (l - n / 3.6e6) + fromIntegral vote
+        decay' = decay * 2 ** ((l - n) / 3.6e6) + fromIntegral vote
 
       in
         (ups',dns',t,decay')
+-}
+
+amendVotes :: Double -> AmendVote domain a -> Votes domain a -> Votes domain a
+amendVotes halfLife (Vote _ target t@(Milliseconds n _) vote) (Votes votes) = Votes (go votes)
+  where
+    decayConstant = log 2 / halfLife
+
+    go [] = 
+      let
+        (ups, dns)
+          | vote > 0 = (vote, 0)
+          | otherwise = (0, abs vote)
+      in
+        [(target, (ups, dns, t, fromIntegral vote))]
+
+    go (x : rest) 
+      | fst x == target = fmap go' x : rest
+      | otherwise       = x : go rest
+
+    go' (ups, dns, t0@(Milliseconds l _), total) = 
+      let
+        (ups', dns')
+          | vote > 0  = (ups + vote, dns)
+          | otherwise = (ups, dns + abs vote)
+        
+        elapsed = (n - l) / 3.6e6
+        upvoteDecay = fromIntegral ups * exp (- decayConstant * elapsed)
+        downvoteDecay = fromIntegral dns * exp (- decayConstant * elapsed)
+        
+        total' = upvoteDecay - downvoteDecay + fromIntegral vote
+
+      in
+        (ups', dns', t, total')
 
 type CommentSorter domain a b = Ord b => Product (Meta domain a) -> Product (Comment domain a) -> b

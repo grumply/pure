@@ -1,4 +1,4 @@
-module Pure.Conjurer.Formable (Formable(..),overwriteTitle) where
+module Pure.Conjurer.Formable (Formable(..),PreviewingForm(..),overwriteTitle) where
 
 import Control.Component as Component
 import Pure.Conjurer.Fieldable

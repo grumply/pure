@@ -15,13 +15,15 @@ main =
             sync (activate ask) do
               Null
 
+
 instance Processable Post
 instance Amendable Post
 instance Producible Post where
-  produce _ _ Post {..} _ = 
+  produce _ name Post {..} _ = 
     pure PostProduct
       { title    = parseMarkdown title
       , content  = parseMarkdown content
+      , ..
       }
 instance Previewable Post where
   preview _ _ Post { synopsis } PostProduct { title } = 

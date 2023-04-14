@@ -33,6 +33,7 @@ data Cache domain = Cache
 
 type Websocket domain = Modify (Cache domain) 
 
+{-# INLINE websocket #-}
 websocket :: forall domain. Typeable domain => String -> Int -> (Websocket domain => View) -> View
 websocket h p = stateWith (\_ -> pure) initial
   where

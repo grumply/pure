@@ -215,7 +215,7 @@ tryCreate Permissions {..} Callbacks {..} ctx a0 = do
                 pure ()
               onCreate ctx name new pro pre lst
               pure (Just (name,pro,pre,lst))
-            _ ->
+            _ -> do
               pure Nothing
       else
         pure Nothing

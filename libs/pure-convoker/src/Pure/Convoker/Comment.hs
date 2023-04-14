@@ -52,8 +52,8 @@ data Comment (domain :: *) (a :: *)
 instance Fieldable Username where
   field _ _ = Null
 
-newtype Deleted = Deleted Bool
-  deriving (Eq,Ord,ToJSON,FromJSON) via Bool
+newtype Deleted = Deleted (Maybe Time)
+  deriving (Eq,Ord,ToJSON,FromJSON) via (Maybe Time)
 
 instance Fieldable Deleted where
   field _ _ = Null
@@ -71,7 +71,7 @@ instance Fieldable Edited where
   field _ _ = Null
 
 newtype Parents domain a = Parents [Key (Comment domain a)]
-  deriving (ToJSON,FromJSON) via [Key (Comment domain a)]
+  deriving (ToJSON,FromJSON,Eq,Ord) via [Key (Comment domain a)]
 
 instance Fieldable (Parents domain a) where
   field _ _ = Null

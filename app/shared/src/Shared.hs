@@ -2,6 +2,7 @@ module Shared where
 
 import Pure.Magician
 import Pure.Convoker.Discussion.Shared.Markdown
+import Data.DOM
 
 data Blog
 type instance Resources Blog = '[Post,Page]
@@ -38,7 +39,8 @@ instance Ownable Post where
   isOwner un _ _ = isAdmin @Blog un
 
 data instance Product Post = PostProduct
-  { title    :: [View]
+  { name     :: Name Post
+  , title    :: [View]
   , content  :: [View]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
@@ -85,7 +87,7 @@ newtype instance Preview Page = PagePreview
 
 instance Fieldable Markdown where
   field onchange initial = 
-    Textarea <| OnInput (withInput (onchange . fromTxt)) |>
+    Textarea <| OnMounted (\n -> focusNode n >> pure def) . OnInput (withInput (onchange . fromTxt)) . Width (80ch) . Height (40ch) |>
       [ txt initial ]
 
 pageProduct :: Product Page -> View

@@ -1,6 +1,5 @@
 module Pure.Convoker.Discussion.Simple.Meta where
 
-import Control.Component hiding (pattern Meta)
 import Data.Default
 import Data.JSON hiding (Key)
 import Data.Time
@@ -11,13 +10,11 @@ import Pure.Convoker.Mods
 import Pure.Convoker.UserVotes
 import Pure.Conjurer
 
-import Data.Hashable
-
-import Control.Monad
-import Data.List as List
-import Data.Maybe
-import Data.Typeable
-import GHC.Generics hiding (Meta)
+import Control.Monad ( void )
+import Data.List as List ( lookup )
+import Data.Maybe ( isJust )
+import Data.Typeable ( Typeable )
+import GHC.Generics ( Generic )
 
 {-
 Design notes:
@@ -80,7 +77,7 @@ data instance Amend (Meta domain a)
 instance Amendable (Meta domain a) where
    amend (SetVote amnd) RawMeta {..} =
     Just RawMeta
-      { votes = amendVotes amnd votes
+      { votes = amendVotes 1 amnd votes
       , ..
       }
 

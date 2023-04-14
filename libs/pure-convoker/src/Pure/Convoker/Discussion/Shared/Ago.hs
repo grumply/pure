@@ -4,27 +4,24 @@ import Pure
 
 import System.IO.Unsafe
 
-{-# NOINLINE now #-}
-now :: Time
-now = unsafePerformIO time
-
 -- | Given a time, create a pretty `<time> ago` string. This method is
 -- slightly incorrect at boundaries, e.g.
 --
 -- > ago (now - Weeks 3 (Days 2 0)) == "3 weeks 1 day ago"
 -- > ago (now - Weeks 3 (Days 2 (Seconds 1 0))) == "3 weeks 2 days ago"
 --
-ago :: Time -> Txt
-ago t
-  | Minutes 0 _ <- now - t = "just now"
-  | otherwise              = go
+ago :: Time -> Time -> Txt
+ago now t
+  | Seconds s _ <- now - t, s < 60 = "just now"
+  | Minutes m _ <- now - t, m < 5  = "recently"
+  | otherwise                      = go
   where
     go
-      | ds > 365  = years 
-      | ds > 30   = months
-      | ds > 7    = weeks
-      | hs > 24   = days  
-      | ms > 60   = hours
+      | ds >= 365  = years 
+      | ds >= 30   = months
+      | ds >= 7    = weeks
+      | hs >= 24   = days  
+      | ms >= 60   = hours
       | otherwise = minutes
       where
         ds = ms / 1440
@@ -58,7 +55,4 @@ ago t
 
     minutes =
       let Minutes ms _ = now - t
-      in if ms > 5 then
-          toTxt ms <> " minutes ago"
-         else 
-          "just now"
+      in toTxt (round ms :: Int) <> " minutes ago"
