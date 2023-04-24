@@ -25,6 +25,7 @@ import Control.Cont as Export hiding (empty)
 import Control.Error as Export
 import Control.Producer as Export
 import Control.Reader as Export hiding (lazy,eager)
+import Control.Retry as Export (retry,recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci)
 import Control.State as Export hiding (flat)
 import Control.Writer as Export hiding (translate)
 import Control.Fold as Export
@@ -35,10 +36,10 @@ import Data.Effect as Export hiding (map)
 import Data.Events as Export hiding (button,meta,Select,ContextMenu,Accept,Target)
 import Data.Hashable as Export
 import Data.HTML as Export hiding (Style,DateTime)
-import Data.Exists as Export
+import Data.Exists as Export hiding (constant)
 import Data.JSON as Export hiding (Null,Key,lookup,match)
 import Data.Marker as Export hiding (hex)
-import Data.Random as Export hiding (normal,int,next,list) 
+import Data.Random as Export hiding (normal,int,next,list,exponential) 
 import Data.Scroll as Export
 import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false)
 import Data.Theme as Export
