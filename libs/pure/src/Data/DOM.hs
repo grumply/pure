@@ -324,6 +324,15 @@ foreign import javascript unsafe
   "$r = window.pageXOffset" page_x_offset_js :: IO Int
 
 foreign import javascript unsafe
+  "$r = getSelection($1)" get_selection_js :: Node -> IO JSV
+
+foreign import javascript unsafe
+  "setSelection($1,$2,$3)" set_selection_js :: Node -> Int -> Int -> IO ()
+
+foreign import javascript unsafe
+  "replaceTextInRange($1,$2,$3,$4)" replace_range_js :: Node -> Int -> Int -> Txt -> IO ()
+
+foreign import javascript unsafe
   "$r = document.documentElement.clientWidth" client_width_js :: IO Int
 
 foreign import javascript unsafe
@@ -665,6 +674,24 @@ offsetWidth = offset_width_js
 offsetHeight :: Node -> IO Int
 offsetHeight = offset_height_js
 
+{-# INLINE getSelection #-}
+getSelection :: Node -> IO (Int,Int)
+getSelection node = do
+  jsv <- get_selection_js node
+  pure $
+    fromMaybe (0,0) $ do
+      start <- jsv .# "start"
+      end <- jsv .# "end"
+      pure (start,end)
+
+{-# INLINE setSelection #-}
+setSelection :: Node -> Int -> Int -> IO ()
+setSelection = set_selection_js
+
+{-# INLINE replaceTextInRange #-}
+replaceTextInRange :: Node -> Int -> Int -> Txt -> IO ()
+replaceTextInRange = replace_range_js
+
 setTitle :: Txt -> IO ()
 setTitle = set_title_js
 #else
@@ -911,6 +938,15 @@ offsetWidth _ = return 0
 
 offsetHeight :: Node -> IO Int
 offsetHeight _ = return 0
+
+getSelection :: Node -> IO (Int,Int)
+getSelection _ = return (0,0)
+
+setSelection :: Node -> Int -> Int -> IO ()
+setSelection _ _ _ = return ()
+
+replaceTextInRange :: Node -> Int -> Int -> Txt -> IO ()
+replaceTextInRange _ _ _ _ = return ()
 
 setTitle :: Txt -> IO ()
 setTitle _ = pure ()

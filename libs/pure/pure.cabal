@@ -48,6 +48,7 @@ library
       js/intersection-shim.js
       js/ric-shim.js
       js/lz-string.js
+      js/selection.js
 
     other-modules:
       Data.Fetch.GHCJS
