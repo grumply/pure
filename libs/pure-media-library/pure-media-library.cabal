@@ -1,0 +1,67 @@
+cabal-version:     2.4
+name:              pure-media-library
+version:           0.8.0.0
+
+library
+  hs-source-dirs:
+      src
+
+  build-depends:
+      base
+    , pure
+    , pure-auth
+    , directory
+    , filepath
+    , hashable
+
+  exposed-modules:
+      Pure.Media.Library
+    , Pure.Media.Library.API
+    , Pure.Media.Library.Browser
+    , Pure.Media.Library.Data.Library
+    , Pure.Media.Library.Data.Media
+    
+
+  if !(impl(ghcjs))
+
+    exposed-modules:
+      Pure.Media.Library.GHC.Library
+
+  default-language: Haskell2010
+
+  default-extensions:
+    DerivingStrategies
+    TypeFamilies
+    FlexibleContexts
+    UndecidableInstances
+    DeriveGeneric
+    DeriveAnyClass
+    FlexibleInstances
+    TemplateHaskell
+    AllowAmbiguousTypes
+    RankNTypes
+    DataKinds
+    PartialTypeSignatures
+    TypeApplications
+    ScopedTypeVariables
+    DuplicateRecordFields
+    StandaloneDeriving
+    MultiParamTypeClasses
+    NamedFieldPuns
+    RecordWildCards
+    PatternSynonyms
+    BlockArguments
+    LambdaCase
+    CPP
+    DerivingVia
+    OverloadedStrings
+    DefaultSignatures
+    TypeOperators
+    InstanceSigs
+    ExistentialQuantification
+    RoleAnnotations
+    FunctionalDependencies
+    ViewPatterns
+    BangPatterns
+    PolyKinds
+    ConstraintKinds

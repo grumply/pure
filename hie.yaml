@@ -18,6 +18,8 @@ cradle:
               component: "lib:pure-convoker"
             - path: "./libs/pure-magician"
               component: "lib:pure-magician"
+            - path: "./libs/pure-media-library"
+              component: "lib:pure-media-library"
     - path: "./app" 
       config:
         cradle:
