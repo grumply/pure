@@ -90,6 +90,7 @@ library
     Control.Form
     Control.Producer
     Control.Reader
+    Control.Retry
     Control.State
     Control.Writer
     Data.AB
