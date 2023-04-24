@@ -253,18 +253,12 @@ send' ws_ m = go True
         Opened ->
           case wsSocket ws of
             Just (ws,_,_,_,_,_) -> do
-#if defined(DEBUGWS) || defined(DEVEL)
-              putStrLn $ "send' sending: " ++ show (fmap pretty v)
-#endif
               send_js ws (either id (encode . toJSON) m)
               return (Right Sent)
         _ -> do
           cb <- newIORef undefined
           st <- onStatus ws_ $ \case
             Opened -> do
-#if defined(DEBUGWS) || defined(DEVEL)
-              liftIO $ putStrLn $ "send' sending after websocket state changed: " ++ show (fmap pretty m)
-#endif
               send' ws_ m
               readIORef cb >>= scCleanup
             _ -> return ()
@@ -275,9 +269,6 @@ data SendStatus = Buffered | Sent
 
 foreign import javascript unsafe
   "$1.send($2);" send_js :: JSV -> Txt -> IO ()
-
-foreign import javascript unsafe
-  "Math.floor((Math.random() * $1) + 1)" random :: Int -> IO Int
 
 send :: (ToJSON a) => Websocket -> Txt -> a -> IO (Either Status SendStatus)
 send ws_ h = send' ws_ . Right . Dispatch h . toJSON

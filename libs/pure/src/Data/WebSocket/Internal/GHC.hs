@@ -48,6 +48,16 @@ import System.IO.Unsafe
 import Text.Read hiding (get,lift)
 import Unsafe.Coerce
 
+import Control.Exception (handle)
+import Control.Monad (when)
+import Data.Binary.Get (Get, runGet, getWord8, getWord16be, getWord64be)
+import Data.Bits (shiftR, xor, (.&.))
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as S
+import Data.Word (Word8, Word16, Word64)
+import System.IO.Streams (InputStream)
+import qualified System.IO.Streams as Streams
+
 -- from network
 import qualified Network.Socket as S
 
@@ -83,6 +93,8 @@ import qualified Data.Text.Lazy.Encoding as TL
 
 -- from unordered-containers
 import qualified Data.HashMap.Strict as Map
+
+import System.Timeout
 
 data Websocket_
   = Websocket
@@ -136,7 +148,23 @@ onDispatch ws_ hdr f = do
 defaultStreamReader :: StreamReader
 defaultStreamReader = \i ->
   E.handle (return . Left)
-    (maybe (Left (toException UnexpectedClosure)) Right <$> Streams.read i)
+    (maybe (Left (toException UnexpectedClosure)) Right <$> read i)
+  where
+    read i = do
+      x <- Streams.read i
+      case x of
+        Just b 
+          | S.length b < 4096 -> pure (Just b)
+          | otherwise -> do
+            -- allow a maximum of 30 seconds to complete the full message. 
+            -- This is the simplest possible implementation; this is not a
+            -- robust implementation.
+            x <- timeout 30000000 (read i)
+            case x of
+              Just r -> pure (Just b <> r)
+              _ -> pure Nothing
+        Nothing -> pure Nothing
+
 
 defaultStreamWriter :: StreamWriter
 defaultStreamWriter = \o bs ->
@@ -345,28 +373,20 @@ receiveLoop :: Websocket -> WS.Connection -> IO ()
 receiveLoop ws_ c = go
   where
     go = do
-      eem0 <- E.handle (\(_ :: WS.ConnectionException) -> return (Left (Closed InvalidMessage))) $
-              Right <$> WS.receiveDataMessage c
-      let eem = case eem0 of
-                  Left e -> Left (Closed UnexpectedClosure)
-                  Right (WS.Binary b) -> Right b
-                  Right (WS.Text t _) -> Right t
+      eem <- E.handle (\(_ :: WS.ConnectionException) -> return (Left UnexpectedClosure)) (Right <$> WS.receiveData c)
       case eem of
         Right str ->
           case eitherDecode' str of
-            Left _  -> do
-              close ws_ InvalidMessage
+            Left _  -> close ws_ InvalidMessage
             Right m -> do
               ws <- readIORef ws_
               case Map.lookup (ep m) (wsDispatchCallbacks ws) of
-                Nothing -> do
-                  go
+                Nothing -> go
                 Just cbs -> do
                   for_ cbs (readIORef >=> ($ m))
                   go
 
-        Left (Closed cr) -> do
-          close ws_ cr
+        Left cr -> close ws_ cr
 
 sslSetupServer keyFile certFile mayChainFile = SSL.withOpenSSL $ do
   ctx <- SSL.context
