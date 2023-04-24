@@ -14,6 +14,8 @@ executable frontend
   build-depends:
     base,
     async,
+    pure,
+    pure-media-library,
     pure-convoker,
     pure-magician,
     pure-auth,

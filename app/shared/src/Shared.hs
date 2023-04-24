@@ -3,6 +3,7 @@ module Shared where
 import Pure.Magician
 import Pure.Convoker.Discussion.Shared.Markdown
 import Data.DOM
+import Pure.Media.Library.Browser
 
 data Blog
 type instance Resources Blog = '[Post,Page]
@@ -84,11 +85,6 @@ newtype instance Preview Page = PagePreview
   { title :: [View]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
-
-instance Fieldable Markdown where
-  field onchange initial = 
-    Textarea <| OnMounted (\n -> focusNode n >> pure def) . OnInput (withInput (onchange . fromTxt)) . Width (80ch) . Height (40ch) |>
-      [ txt initial ]
 
 pageProduct :: Product Page -> View
 pageProduct PageProduct {..} =

@@ -3,6 +3,7 @@
 module Listing where
 
 import Pure.Magician
+import Pure.Magician.Client
 import Control.Concurrent.Async (forConcurrently)
 
 recent :: forall domain resource. _ => Int -> Context resource -> IO [(Context resource,Name resource,Preview resource)]

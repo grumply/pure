@@ -12,8 +12,10 @@ executable backend
   build-depends:
     base,
     pure,
+    pure-auth,
     pure-convoker,
     pure-magician,
+    pure-media-library,
     shared,
     
   if !(impl(ghcjs))

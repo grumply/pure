@@ -12,6 +12,7 @@ library
   build-depends:
     base,
     pure,
+    pure-media-library,
     pure-convoker,
     pure-magician
 
