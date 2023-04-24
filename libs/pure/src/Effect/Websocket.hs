@@ -31,7 +31,7 @@ data Cache domain = Cache
   , cache  :: Map TypeRep RequestMap
   }
 
-type Websocket domain = Modify (Cache domain) 
+type Websocket domain = (Typeable domain, Modify (Cache domain))
 
 {-# INLINE websocket #-}
 websocket :: forall domain. Typeable domain => String -> Int -> (Websocket domain => View) -> View
