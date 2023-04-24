@@ -49,7 +49,7 @@ import Data.Typeable
 -- Unexported.
 newtype Access domain = Access { fromAccess :: Try (Token domain) }
 
-type Authentication domain = State (Access domain)
+type Authentication domain = (Typeable domain, Websocket domain, State (Access domain))
 
 setToken :: forall domain. Modify (Access domain) => Token domain -> IO ()
 setToken = put . Access . Done
