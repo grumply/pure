@@ -25,7 +25,7 @@ import Control.Cont as Export hiding (empty)
 import Control.Error as Export
 import Control.Producer as Export
 import Control.Reader as Export hiding (lazy,eager)
-import Control.Retry as Export (retry,recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci)
+import Control.Retry as Export (retry,recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci)
 import Control.State as Export hiding (flat)
 import Control.Writer as Export hiding (translate)
 import Control.Fold as Export

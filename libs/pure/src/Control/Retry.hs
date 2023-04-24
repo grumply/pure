@@ -1,5 +1,5 @@
 {-# language AllowAmbiguousTypes, TypeApplications, LambdaCase, ScopedTypeVariables, RecordWildCards #-}
-module Control.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci) where
+module Control.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci) where
 
 import Control.Exception
 import Data.Random (newSeed,uniformR,generate)
@@ -79,13 +79,17 @@ retrying (Policy policy) io = newInitialStatus >>= go
             Nothing -> pure Nothing
             Just t  -> delay t >> go Status { retries = retries + 1, .. }
 
--- | Stop retrying after a `n` attempts.
+-- | Stop retrying after `n` retries.
 limitRetries :: Int -> Policy -> Policy
 limitRetries n (Policy p) = Policy p'
   where
     p' status@Status {..}
       | retries >= n = pure Nothing
       | otherwise = p status
+
+-- | Stop trying after `n` tries.
+limitTries :: Int -> Policy -> Policy
+limitTries n = limitRetries (n - 1)
 
 -- | Set a maximum delay on a policy.
 limitDelay :: Time -> Policy -> Policy
