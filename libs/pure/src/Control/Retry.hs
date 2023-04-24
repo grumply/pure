@@ -9,6 +9,16 @@ import Data.Time
 
 Inspired by `retry` with simplified dynamics via throw. 
 
+>>> start <- time
+>>> retrying (exponential Second & limitRetries 5) (time >>= \now -> let Seconds elapsed _ = now - start in print elapsed >> retry)
+0.0
+1.0
+3.0
+7.0
+15.0
+31.0
+Nothing
+
 -}
 
 data Retry = Retry deriving Show
