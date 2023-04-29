@@ -10,6 +10,7 @@ import Pure.Magician.Server.Serve
 import Pure.Magician.Server.Static
 import Pure.Magician.Server.Limit
 
+import Control.Log (Logging)
 import Pure.Auth as Export (Config(..),Token(..),Username(..),Password,Email,auth,authDB,tryCreateUser) 
 import Pure.Conjurer as Export hiding (Cache,cache)
 import Pure.Conjurer.Analytics
@@ -19,7 +20,7 @@ import Pure hiding (Server)
 import qualified Pure
 import Control.Component as Component
 import qualified Data.Txt as Txt
-import Data.Websocket ( Websocket, enact, repeal, clientWS, activate )
+import Data.Websocket ( Websocket, enact, repeal, client, activate )
 import qualified Data.Websocket as WS
 
 import Control.Monad ( liftM2, forever, void )
@@ -45,6 +46,7 @@ serve
     , StaticMany a (Statics a)
     , LimitMany a (Resources a)
     , Analyzeable (Analyze a)
+    , Logging
     ) => UserConfig a -> (((Reader Websocket, Reader SessionId, Reader (Maybe Username))) => View) -> IO ()
 serve userConfig v = do
   cfg@Config.Config {..} <- Config.getConfig
@@ -64,7 +66,7 @@ serve userConfig v = do
   forever (delay Minute)
 
 data WithSocket a = WithSocket (Effect (Msg (WithSocket a)) => Websocket -> SessionId -> Config a) ((Reader Websocket, Reader SessionId, Reader (Maybe Username)) => View) Websocket
-instance (Typeable a, Server a, ServeMany a (Resources a), LimitMany a (Resources a)) => Component (WithSocket a) where
+instance (Typeable a, Server a, ServeMany a (Resources a), LimitMany a (Resources a), Logging) => Component (WithSocket a) where
   data Model (WithSocket a) = WithSocketModel (Maybe (Token a)) SessionId
 
   initialize (WithSocket _ _ socket) = do

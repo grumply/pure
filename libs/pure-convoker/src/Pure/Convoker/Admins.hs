@@ -1,6 +1,7 @@
 {-# language CPP, ConstraintKinds, KindSignatures #-}
 module Pure.Convoker.Admins where
 
+import Control.Log (Logging)
 import Pure.Auth (Username)
 import Pure.Conjurer
 import Control.Component
@@ -51,7 +52,7 @@ instance Nameable (Admins ctx) where
 
 instance Processable (Admins ctx)
 
-instance Typeable domain => Ownable (Admins domain) where
+instance (Typeable domain, Logging) => Ownable (Admins domain) where
   isOwner un _ _ = isAdmin @domain un
 
 data instance Amend (Admins ctx) = AddAdmin Username | RemoveAdmin Username
@@ -76,7 +77,7 @@ data instance Reaction (Admins ctx) = NoAdminsReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance Typeable domain => DefaultPermissions (Admins domain) where
+instance (Typeable domain, Logging) => DefaultPermissions (Admins domain) where
   permissions Nothing = readPermissions
   permissions (Just un) = readPermissions { canAmend = canAmend' }
     where
@@ -96,7 +97,7 @@ tryRemoveAdmin permissions callbacks un = fmap isJust do
   tryAmend permissions callbacks AdminsContext AdminsName
     (RemoveAdmin un)
 
-isAdmin :: forall (domain :: *). Typeable domain => Username -> IO Bool
+isAdmin :: forall (domain :: *). (Typeable domain, Logging) => Username -> IO Bool
 isAdmin un = 
 #ifdef __GHCJS__
   WS.req @domain WS.Cached (readingAPI @(Admins domain)) (readProduct @(Admins domain)) (AdminsContext,AdminsName) >>= \case
@@ -111,11 +112,13 @@ isAdmin un =
 defaultIsOwner :: forall (domain :: *) a. 
   ( Typeable domain
   , Ownable a
+  , Logging
   ) => Username -> Context a -> Maybe (Name a) -> IO Bool
 defaultIsOwner un ctx nm = liftM2 (||) (isOwner un ctx nm) (isAdmin @domain un)
 
 adminPermissions :: forall (domain :: *) resource. 
   ( Typeable domain
+  , Logging
   ) => Username -> Permissions resource
 adminPermissions un = Permissions {..}
   where

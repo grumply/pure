@@ -1,6 +1,7 @@
 {-# language UndecidableInstances #-}
 module Main where
 
+import Control.Log
 import Data.DOM
 import Effect.Stream
 import Admin
@@ -22,13 +23,14 @@ main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
   inject body do
-    client @Blog @() "127.0.0.1" 8081 (dispatch ()) do
-      Main <| Themed @Blog |>
-        [ header
-        , primary
-        , sidebar
-        , footer
-        ]
+    logger pPrinter do
+      client @Blog @() "127.0.0.1" 8081 (dispatch ()) do
+        Main <| Themed @Blog |>
+          [ header
+          , primary
+          , sidebar
+          , footer
+          ]
 
 header :: App Blog () => View
 header =

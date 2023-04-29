@@ -6,6 +6,7 @@ import Pure.Convoker.Comment
 import Pure.Convoker.Mods ( isMod )
 import Pure.Convoker.Discussion.Shared.Markdown (Markdown(..),parseMarkdown)
 
+import Control.Log (Logging)
 import Pure.Auth.Data.Username (Username)
 import Pure.Conjurer
 import Control.Component (Component)
@@ -146,6 +147,7 @@ instance
   , Typeable a 
   , Pathable (Context a), Hashable (Context a), Ord (Context a), ToJSON (Context a), FromJSON (Context a)
   , Pathable (Name a), Hashable (Name a), Ord (Name a), ToJSON (Name a), FromJSON (Name a)
+  , Logging
   ) => DefaultPermissions (Comment domain a) 
   where
     permissions Nothing = readPermissions

@@ -60,15 +60,18 @@ library
   if !(impl(ghcjs))
 
     build-depends:
-        websockets      >= 0.11
-      , network         >= 2.6
-      , io-streams      >= 1.4
+        binary
       , text
-      , HsOpenSSL       >= 0.11.1.1 && < 0.12
-      , openssl-streams >= 1.2      && < 1.5
       , lens
       , wreq
       , unix-bytestring
+      , websockets
+      , connection
+      , network
+      , io-streams
+      , HsOpenSSL
+      , openssl-streams
+      , iproute
 
     other-modules:
       Data.Fetch.GHC
@@ -88,6 +91,7 @@ library
     Control.Error
     Control.Fold
     Control.Form
+    Control.Log
     Control.Producer
     Control.Reader
     Control.Retry
@@ -178,6 +182,7 @@ library
     Data.Websocket.Callbacks
     Data.Websocket.Dispatch
     Data.Websocket.Endpoint
+    Data.Websocket.Events
     Data.Websocket.Handlers
     Data.Websocket.Internal
     Data.Websocket.Identify

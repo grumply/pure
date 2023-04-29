@@ -2,6 +2,7 @@ module Pure.Convoker.Mods where
 
 import Pure.Convoker.Admins hiding (Add,Remove)
 
+import Control.Log (Logging)
 import Pure.Auth (Username)
 import Pure.Conjurer
 import Data.JSON
@@ -31,7 +32,7 @@ data instance Preview (Mods domain a) = NoModsPreview
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance (Typeable domain, Pathable (Context a), Hashable (Context a), Ord (Context a), Typeable a ) => Ownable (Mods domain a) where
+instance (Typeable domain, Pathable (Context a), Hashable (Context a), Ord (Context a), Typeable a, Logging ) => Ownable (Mods domain a) where
   isOwner un ctx _ = liftM2 (||) (isMod @domain ctx un) (isAdmin @domain un)
 
 data instance Context (Mods domain a) = ModsContext (Context a)
@@ -109,6 +110,7 @@ modPermissions :: forall domain a.
   ( Typeable domain
   , Typeable a
   , Pathable (Context (Mods domain a)), Hashable (Context (Mods domain a)), Ord (Context a)
+  , Logging
   ) => Username -> Permissions (Mods domain a)
 modPermissions un = readPermissions { canAmend = canAmend' }
   where
@@ -118,6 +120,7 @@ isMod :: forall (domain :: *) a.
   (Typeable domain
   , Pathable (Context a), Hashable (Context a), Ord (Context a)
   , Typeable a
+  , Logging
   ) => Context a -> Username -> IO Bool
 isMod ctx un =
   tryReadProduct (fullPermissions @(Mods domain a)) (callbacks @(Mods domain a) (Just un)) (ModsContext @domain ctx) (ModsName @domain) >>= \case

@@ -6,6 +6,7 @@ import Pure.Convoker.Meta
 import Pure.Convoker.Mods
 import Pure.Convoker.UserVotes
 
+import Control.Log (Logging)
 import Pure.Auth hiding (Key)
 import Pure.Conjurer
 import Control.Applicative ((<|>))
@@ -117,7 +118,7 @@ data instance Reaction (Discussion domain a) = NoDiscussionReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance Typeable domain => Ownable (Discussion domain a) where
+instance (Typeable domain, Logging) => Ownable (Discussion domain a) where
   isOwner un _ _ = Admins.isAdmin @domain un
 
 newtype Root domain a = Root (Maybe (Key (Comment domain a)))
@@ -272,6 +273,7 @@ produceDiscussionResources
      , ToJSON (Context a), FromJSON (Context a), Ord (Context a)
      , ToJSON (Name a), FromJSON (Name a), Ord (Name a)
      , FromJSON (Product (Meta domain a))
+     , Logging
      ) => Context a -> Name a -> IO (DiscussionResources domain a)
 produceDiscussionResources ctx nm = do
   let

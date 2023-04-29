@@ -1,38 +1,36 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE MagicHash #-}
-{-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE UnliftedFFITypes #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module Data.Websocket.Internal.GHCJS where
 
 -- internal
+import Control.Log as Log
+import Control.Retry as Retry hiding (Status)
+import qualified Control.Retry as Retry
+import Data.Function
 import Data.DOM
-import Data.JSON as AE
+import Data.JSON as JSON hiding (Error)
+import qualified Data.JSON as JSON
 import Data.Random
+import Data.Time as Time
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import Data.Websocket.API
 import Data.Websocket.Callbacks
 import Data.Websocket.Dispatch
 import Data.Websocket.Endpoint
+import Data.Websocket.Events
 import Data.Websocket.Identify
 import Data.Websocket.Message
 import Data.Websocket.TypeRep
@@ -65,6 +63,7 @@ import Data.Monoid
 import GHC.Generics
 import Text.Read hiding (lift,get)
 import Unsafe.Coerce
+import Prelude hiding (log)
 
 -- from unordered-containers
 import qualified Data.HashMap.Strict as Map
@@ -123,95 +122,111 @@ websocket = do
   newIORef Websocket
     { wsSocket            = Nothing
     , wsDispatchCallbacks = Map.empty
-    , wsStatus            = Unopened
+    , wsStatus            = Initialized
     , wsStatusCallbacks   = []
     }
 
-newWS :: String -> Int -> Bool -> IO Websocket
+newWS :: Logging => String -> Int -> Bool -> IO Websocket
 newWS host port secure = do
   -- TODO: make the delay method configurable.
   ws <- websocket
   activate ws host port secure
   pure ws
 
-activateGHCJS :: Websocket -> String -> Int -> Bool -> IO ()
+activateGHCJS :: Logging => Websocket -> String -> Int -> Bool -> IO ()
 activateGHCJS = activate
 
+activate :: Logging => Websocket -> String -> Int -> Bool -> IO ()
+activate ws host port secure = activateWith policy ws host port secure
+  where
+    context = location 
+    
+    policy = 
+      jittered Second 
+        & limitDelay (Seconds 30 0) 
+        & logRetry Warn retrying
+        & logFailure Error failed
 
-type FailedAttempts = Int
-type Milliseconds = Int
-type Backoff = Seed -> FailedAttempts -> IO Seed
+    retrying Retry.Status { retries, current, start } _ = do
+      let 
+        status = Connecting
 
-defaultExponentialBackoffWithJitter :: Milliseconds -> Backoff
-defaultExponentialBackoffWithJitter maximum seed failed = do
-  let (seed',jitter) = generate (uniformR 1 1000) seed
-      potential = 2 ^ (min 20 failed) * 1000 -- `min 20 failed` prevents overflow, but allows a reasonably high `maximum`
-      delay = (min maximum potential + jitter) * 1000
-  threadDelay delay
-  pure seed'
+      ConnectionEvent {..} 
 
-activate :: Websocket -> String -> Int -> Bool -> IO ()
-activate = activateWith (defaultExponentialBackoffWithJitter 32000)
+    failed Retry.Status { retries, current, start  } = do
+      let
+        status = Closed Disconnect 
 
-activateWith :: Backoff -> Websocket -> String -> Int -> Bool -> IO ()
-activateWith backoff ws host port secure = do
+      ConnectionEvent {..}
+
+activateWith :: Logging => Retry.Policy -> Websocket -> String -> Int -> Bool -> IO ()
+activateWith policy ws_ host port secure = do
   s <- newSeed
   void $ do
     forkIO $ do
-      connectWith ws 0 s
-  where
-    connectWith ws_ n s = do
-      let retry = connectWith ws_ (n + 1) =<< backoff s (n + 1)
-
-      msock <- tryNewWebsocket (toTxt $ (if secure then "wss://" else "ws://") ++ host ++ ':': show port)
-
-      case msock of
-        Nothing -> retry
-
-        Just sock -> do
-
-          openCallback    <- CB.syncCallback1 CB.ContinueAsync $ \_ -> setStatus ws_ Opened
-          closeCallback   <- CB.syncCallback1 CB.ContinueAsync $ \_ -> setStatus ws_ (Closed UnexpectedClosure)
-          errorCallback   <- CB.syncCallback1 CB.ContinueAsync $ \err -> setStatus ws_ (Errored err)
-          messageCallback <- CB.syncCallback1 CB.ContinueAsync $ \ev -> do
-            case WME.getData $ unsafeCoerce ev of
-              WME.StringData sd -> do
-                case fromJSON (js_JSON_parse sd) of
-                  Error e -> putStrLn $ "fromJSON failed with: " ++ e
-                  Success m -> do
-                    ws <- readIORef ws_
-                    case Map.lookup (ep m) (wsDispatchCallbacks ws) of
-                      Nothing   -> putStrLn $ "No handler found: " ++ show (ep m)
-                      Just dcbs -> for_ dcbs (readIORef >=> ($ m))
-
-              _ -> return ()
-
-          addEventListener sock "open" openCallback False
-          addEventListener sock "close" closeCallback False
-          addEventListener sock "error" errorCallback False
-          addEventListener sock "message" messageCallback False
-
-          scb <- onStatus ws_ $ \case
-            Closed UnexpectedClosure -> do
-              ws <- readIORef ws_
-              let Just (_,ocb,ccb,ecb,mcb,scb) = wsSocket ws
-              CB.releaseCallback ocb
-              CB.releaseCallback ccb
-              CB.releaseCallback ecb
-              CB.releaseCallback mcb
-              scCleanup scb
-              modifyIORef' ws_ $ \ws -> ws { wsSocket = Nothing }
-              void (forkIO retry)
+      msock <- retrying policy $
+        tryNewWebsocket (toTxt $ (if secure then "wss://" else "ws://") ++ host ++ ':': show port) 
+          >>= maybe retry pure
+      for_ msock $ \sock -> do
+        openCallback    <- CB.syncCallback1 CB.ContinueAsync $ \_ -> setStatus ws_ Opened
+        closeCallback   <- CB.syncCallback1 CB.ContinueAsync $ \_ -> setStatus ws_ (Closed Disconnect)
+        errorCallback   <- CB.syncCallback1 CB.ContinueAsync $ \err -> setStatus ws_ (Closed Disconnect)
+        messageCallback <- CB.syncCallback1 CB.ContinueAsync $ \ev -> do
+          case WME.getData $ unsafeCoerce ev of
+            WME.StringData sd -> do
+              case fromJSON (js_JSON_parse sd) of
+                JSON.Error e -> do
+                  now <- Time.time
+                  log Log.Error UnknownMessage
+                    { content = sd
+                    , ..
+                    }
+                Success m -> do
+                  ws <- readIORef ws_
+                  case Map.lookup (ep m) (wsDispatchCallbacks ws) of
+                    Nothing -> do
+                      now <- Time.time
+                      log Log.Error UnknownMessage
+                        { content = sd
+                        , ..
+                        }
+                    Just dcbs -> do
+                      now <- Time.time
+                      log Trace DispatchedMessage
+                        { endpoint = ep m
+                        , payload = pl m
+                        , .. 
+                        }
+                      for_ dcbs (readIORef >=> ($ m))
 
             _ -> return ()
 
-          modifyIORef' ws_ $ \ws -> ws
-            { wsSocket = Just (sock,openCallback,closeCallback,errorCallback,messageCallback,scb) }
+        addEventListener sock "open" openCallback False
+        addEventListener sock "close" closeCallback False
+        addEventListener sock "error" errorCallback False
+        addEventListener sock "message" messageCallback False
 
-clientWS :: String -> Int -> IO Websocket
+        scb <- onStatus ws_ $ \case
+          Closed _ -> do
+            ws <- readIORef ws_
+            let Just (_,ocb,ccb,ecb,mcb,scb) = wsSocket ws
+            CB.releaseCallback ocb
+            CB.releaseCallback ccb
+            CB.releaseCallback ecb
+            CB.releaseCallback mcb
+            scCleanup scb
+            modifyIORef' ws_ $ \ws -> ws { wsSocket = Nothing }
+            void (forkIO retry)
+
+          _ -> return ()
+
+        modifyIORef' ws_ $ \ws -> ws
+          { wsSocket = Just (sock,openCallback,closeCallback,errorCallback,messageCallback,scb) }
+
+clientWS :: Logging => String -> Int -> IO Websocket
 clientWS h p = newWS h p False
 
-clientWSS :: String -> Int -> IO Websocket
+clientWSS :: Logging => String -> Int -> IO Websocket
 clientWSS h p = newWS h p True
 
 foreign import javascript unsafe
@@ -231,8 +246,8 @@ tryNewWebsocket url = do
 foreign import javascript unsafe
   "$1.close()" ws_close_js :: JSV -> Int -> Txt -> IO ()
 
-close :: Websocket -> CloseReason -> IO ()
-close ws_ cr = do
+close :: Websocket -> IO ()
+close ws_ = do
   ws <- readIORef ws_
   forM_ (wsSocket ws) $ \(sock,o,c,e,m,scb) -> do
     scCleanup scb
@@ -242,7 +257,7 @@ close ws_ cr = do
     CB.releaseCallback e
     CB.releaseCallback m
     writeIORef ws_ ws { wsSocket = Nothing }
-  setStatus ws_ (Closed cr)
+  setStatus ws_ (Closed Disconnect)
 
 send' :: Websocket -> Either Txt Dispatch -> IO (Either Status SendStatus)
 send' ws_ m = go True

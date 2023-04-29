@@ -2,29 +2,34 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveAnyClass #-}
-module Data.Websocket.Internal.GHC (module Data.Websocket.Internal.GHC, S.SockAddr, S.Socket, WS.makeListenSocket, S.accept) where
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
+module Data.Websocket.Internal.GHC where
 
 -- internal
-import Data.JSON as AE
+import Control.Retry as Retry hiding (Status)
+import qualified Control.Retry as Retry
+import Control.Log as Log
+import Data.JSON as AE hiding (Error)
+import Data.Time as Time
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import Data.Random
 import Data.Websocket.API
 import Data.Websocket.Callbacks
 import Data.Websocket.Dispatch
 import Data.Websocket.Endpoint
+import Data.Websocket.Events
 import Data.Websocket.Identify
 import Data.Websocket.Message
 import Data.Websocket.TypeRep
@@ -35,6 +40,7 @@ import Control.Concurrent
 import Control.Exception as E
 import Control.Monad
 import Data.Foldable (for_)
+import Data.Function
 import Data.IORef
 import Data.Int
 import Data.List as List
@@ -52,14 +58,8 @@ import Control.Exception (handle)
 import Control.Monad (when)
 import Data.Binary.Get (Get, runGet, getWord8, getWord16be, getWord64be)
 import Data.Bits (shiftR, xor, (.&.))
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.Word (Word8, Word16, Word64)
-import System.IO.Streams (InputStream)
-import qualified System.IO.Streams as Streams
-
--- from network
-import qualified Network.Socket as S
 
 -- from websockets
 import           Network.WebSockets.Stream     (Stream)
@@ -68,25 +68,14 @@ import qualified Network.WebSockets as WS
 import qualified Network.WebSockets.Stream as WS
 
 -- from bytestring
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy.Char8 as BLC
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.Internal as BL
-import qualified Data.ByteString        as S
-import qualified Data.ByteString.Internal as S
-import qualified Data.ByteString.Unsafe as S
-import qualified Data.ByteString.Lazy as BSL hiding (putStrLn)
-
--- from HsOpenSSL
-import OpenSSL as SSL
-import OpenSSL.Session as SSL
-
--- from openssl-streams
-import qualified System.IO.Streams.SSL as Streams
-
--- from io-streams
-import qualified System.IO.Streams as Streams
-import qualified System.IO.Streams.Internal as Streams
+import qualified Data.ByteString as Strict
+import qualified Data.ByteString        as Strict
+import qualified Data.ByteString.Internal as Strict
+import qualified Data.ByteString.Unsafe as Strict
+import qualified Data.ByteString.Lazy.Char8 as Lazy
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.ByteString.Lazy.Internal as Lazy
+import qualified Data.ByteString.Lazy as Lazy hiding (putStrLn)
 
 -- from text
 import qualified Data.Text.Lazy.Encoding as TL
@@ -94,28 +83,41 @@ import qualified Data.Text.Lazy.Encoding as TL
 -- from unordered-containers
 import qualified Data.HashMap.Strict as Map
 
+import System.IO.Error as IO.Error
+import Network.Connection as C
+import Network.Socket as S ( Socket, getPeerName )
+
+import GHC.Stack
 import System.Timeout
+
+import Prelude hiding (log)
+
+import OpenSSL as SSL
+import OpenSSL.Session as SSL
+import System.IO.Streams.SSL as Streams
+import System.IO.Streams as Streams
+
+import qualified Data.IP as IPR (IP(..),fromSockAddr)
+
+{-
+This is all a bit hacked together because we want a unified 
+implementation for both client and server. What we're lacking
+to clean it up is an implementation of server connections from
+Network.Connection.
+-}
 
 data Websocket_
   = Websocket
-    { wsSocket            :: Maybe (S.SockAddr,S.Socket,WS.Connection,WS.Stream)
+    { wsSocket            :: Maybe (C.Connection,WS.Connection,WS.Stream)
     , wsDispatchCallbacks :: !(Map.HashMap Txt [IORef (Dispatch -> IO ())])
     , wsStatus            :: Status
     , wsStatusCallbacks   :: ![IORef (Status -> IO ())]
-    , wsStreamReader      :: StreamReader
-    , wsStreamWriter      :: StreamWriter
-    , wsConnectionOptions :: WS.ConnectionOptions
-    , wsReceivers         :: [ThreadId]
+    , wsReceiver          :: Maybe ThreadId
     }
-
-type StreamReader = Streams.InputStream B.ByteString -> IO (Either E.SomeException B.ByteString)
-type StreamWriter = Streams.OutputStream B.ByteString -> Maybe BSL.ByteString -> IO (Maybe E.SomeException)
 
 type Websocket = IORef Websocket_
 
-type LazyByteString = BSL.ByteString
-
-type RequestCallback request response = IO () -> Either Dispatch (Either LazyByteString response -> IO (Either Status ()),request) -> IO ()
+type RequestCallback request response = IO () -> Either Dispatch (Either Lazy.ByteString response -> IO (Either Status ()),request) -> IO ()
 
 -- | Construct a status callback. This is a low-level method.
 onStatus :: Websocket -> (Status -> IO ()) -> IO StatusCallback
@@ -145,31 +147,6 @@ onDispatch ws_ hdr f = do
   return $ DispatchCallback cb $
     atomicModifyIORef' ws_ $ \ws -> (ws { wsDispatchCallbacks = Map.adjust (List.filter (/= cb)) hdr (wsDispatchCallbacks ws) },())
 
-defaultStreamReader :: StreamReader
-defaultStreamReader = \i ->
-  E.handle (return . Left)
-    (maybe (Left (toException UnexpectedClosure)) Right <$> read i)
-  where
-    read i = do
-      x <- Streams.read i
-      case x of
-        Just b 
-          | S.length b < 4096 -> pure (Just b)
-          | otherwise -> do
-            -- allow a maximum of 30 seconds to complete the full message. 
-            -- This is the simplest possible implementation; this is not a
-            -- robust implementation.
-            x <- timeout 30000000 (read i)
-            case x of
-              Just r -> pure (Just b <> r)
-              _ -> pure Nothing
-        Nothing -> pure Nothing
-
-
-defaultStreamWriter :: StreamWriter
-defaultStreamWriter = \o bs ->
-  E.handle (return . Just)
-    (Streams.write (fmap BL.toStrict bs) o *> pure Nothing)
 
 -- | Initialize a websocket without connecting.
 websocket :: IO Websocket
@@ -177,261 +154,215 @@ websocket = do
   newIORef Websocket
     { wsSocket            = Nothing
     , wsDispatchCallbacks = Map.empty
-    , wsStatus            = Unopened
+    , wsStatus            = Initialized
     , wsStatusCallbacks   = []
-    , wsStreamReader      = defaultStreamReader
-    , wsStreamWriter      = defaultStreamWriter
-    , wsConnectionOptions = WS.defaultConnectionOptions
-    , wsReceivers         = []
+    , wsReceiver          = Nothing
     }
 
-makeStream :: Websocket -> (Streams.InputStream B.ByteString,Streams.OutputStream B.ByteString) -> IO WS.Stream
-makeStream ws_ (i,o) = WS.makeStream reader' writer'
-  where
-    reader' = do
-      rd <- wsStreamReader <$> readIORef ws_
-      r <- rd i
-      case r of
-        Left e
-          | Just e <- fromException e -> close ws_ e >> pure Nothing
-          | otherwise                 -> close ws_ UnexpectedClosure >> pure Nothing
-        Right bs ->
-          pure (Just bs)
+reader :: C.Connection -> IO (Maybe Strict.ByteString)
+reader c =
+  catchIOError 
+    (Just <$> C.connectionGetChunk c)
+    (\e -> pure Nothing)
 
-    writer' mbs = do
-      wrt <- wsStreamWriter <$> readIORef ws_
-      me <- wrt o mbs
-      case me of
-        Just se
-          | Just e <- fromException se -> close ws_ e
-          | otherwise                  -> close ws_ UnexpectedClosure
-        Nothing ->
-          pure ()
-
--- Construct a default server with unlimited reader, writer, and default websocket options without deflate.
-serverWS :: S.Socket -> IO Websocket
-serverWS = serverWSWith defaultStreamReader defaultStreamWriter WS.defaultConnectionOptions
+writer :: C.Connection -> Maybe Lazy.ByteString -> IO ()
+writer _ Nothing = pure ()
+writer c (Just bytes) = C.connectionPut c (Lazy.toStrict bytes)
 
 -- Construct a server websocket from an open socket with reader, writer, and websocket options.
-serverWSWith :: StreamReader -> StreamWriter -> WS.ConnectionOptions -> S.Socket -> IO Websocket
-serverWSWith reader writer options sock = do
+server :: Logging => WS.ConnectionOptions -> S.Socket -> IO Websocket
+server options sock = do
+  ctx <- C.initConnectionContext
   sa <- S.getPeerName sock
+  let (show -> h,fromIntegral -> p) = fromJust (IPR.fromSockAddr sa)
   ws_ <- websocket
-  modifyIORef' ws_ $ \ws -> ws
-    { wsStreamReader = reader
-    , wsStreamWriter = writer
-    , wsConnectionOptions = options
+  conn <- C.connectFromSocket ctx sock C.ConnectionParams
+    { connectionHostname = h
+    , connectionPort = p
+    , connectionUseSecure = Nothing
+    , connectionUseSocks = Nothing
     }
-  streams <- Streams.socketToStreams sock
-  wsStream <- makeStream ws_ streams
+  wsStream <- WS.makeStream (reader conn) (writer conn)
   pc <- WS.makePendingConnectionFromStream wsStream options
   c <- WS.acceptRequest pc
-  modifyIORef' ws_ $ \ws -> ws { wsSocket = Just (sa,sock,c,wsStream), wsStatus = Opened }
+  modifyIORef' ws_ $ \ws -> ws { wsSocket = Just (conn,c,wsStream) }
+  onStatus ws_ $ \case
+    status -> do
+      now <- Time.time
+      log Info ConnectionEvent
+        { host = h
+        , port = fromIntegral p
+        , secure = False
+        , ..
+        }
+  setStatus ws_ Opened
   return ws_
 
-activate :: Websocket -> IO ()
-activate ws_ = do
-  ws <- readIORef ws_
-  case wsSocket ws of
-    Nothing -> pure ()
-    Just (_,sock,c,_) -> do
-      rt <- forkIO $ receiveLoop ws_ c
-      modifyIORef' ws_ $ \ws -> ws { wsReceivers = rt : wsReceivers ws }
-
-activateGHCJS :: Websocket -> String -> Int -> Bool -> IO ()
-activateGHCJS ws _ _ _ = activate ws
-
-clientWS :: String -> Int -> IO Websocket
-clientWS = clientWSWith (defaultExponentialBackoffWithJitter 32000) defaultStreamReader defaultStreamWriter WS.defaultConnectionOptions
-
-type FailedAttempts = Int
-type Milliseconds = Int
-type Backoff = Seed -> FailedAttempts -> IO Seed
-
-defaultExponentialBackoffWithJitter :: Milliseconds -> Backoff
-defaultExponentialBackoffWithJitter maximum seed failed = do
-  let (seed',jitter) = generate (uniformR 1 1000) seed
-      potential = 2 ^ (min 20 failed) * 1000 -- `min 20 failed` prevents overflow, but allows a reasonably high `maximum`
-      delay = (min maximum potential + jitter) * 1000
-  threadDelay delay
-  pure seed'
-
-clientWSWith :: Backoff -> StreamReader -> StreamWriter -> WS.ConnectionOptions -> String -> Int -> IO Websocket
-clientWSWith backoff reader writer options host port = do
-  ws <- websocket
-  modifyIORef' ws $ \ws -> ws
-    { wsStreamReader = reader
-    , wsStreamWriter = writer
-    , wsConnectionOptions = options
-    }
-  forkIO $ do
-    s <- newSeed -- open system random source once per outbound websocket connection
-    connectWith True ws 0 s
-  return ws
+{- This likely has the same issue with message buffers of the old insecure
+   implementation.
+-}
+fromSecureStreams (i,o) = WS.makeStream reader writer
   where
-    connectWith first ws_ n s = do
-      msock <- newClientSocket host port
-      case msock of
-        Nothing -> do
-          setStatus ws_ Connecting
-          connectWith first ws_ (n + 1) =<< backoff s (n + 1) 
-        Just sock -> do
-          sa <- S.getPeerName sock
-          streams <- Streams.socketToStreams sock
-          ws <- readIORef ws_
-          wsStream <- makeStream ws_ streams
-          c <- WS.runClientWithStream wsStream host "/" (wsConnectionOptions ws) [] return
-          ws <- readIORef ws_
-          when first $ do
-            void $ do
-              onStatus ws_ $ \status ->
-                case status of
-                  Closed _ -> do
-                    void (forkIO (connectWith False ws_ 0 s))
-                  _        -> return ()
-          rt <- forkIO $ receiveLoop ws_ c
-          modifyIORef' ws_ $ \ws -> ws
-            { wsSocket = Just (sa,sock,c,wsStream)
-            , wsReceivers = rt:wsReceivers ws
-            }
-          setStatus ws_ Opened
+    reader = Streams.read i
+    writer = flip Streams.write o . fmap Lazy.toStrict
 
-serverWSS :: S.Socket -> SSL -> IO Websocket
-serverWSS = serverWSSWith defaultStreamReader defaultStreamWriter WS.defaultConnectionOptions
-
-serverWSSWith :: StreamReader -> StreamWriter -> WS.ConnectionOptions -> S.Socket -> SSL -> IO Websocket
-serverWSSWith reader writer options sock ssl = SSL.withOpenSSL $ do
+secureServer :: WS.ConnectionOptions -> S.Socket -> SSL -> IO Websocket
+secureServer options sock ssl = SSL.withOpenSSL $ do
+  ctx <- C.initConnectionContext
   sa <- S.getPeerName sock
+  let (show -> h,fromIntegral -> p) = fromJust (IPR.fromSockAddr sa)
   ws_ <- websocket
-  modifyIORef' ws_ $ \ws -> ws
-    { wsStreamReader = reader
-    , wsStreamWriter = writer
-    , wsConnectionOptions = options
+  conn <- C.connectFromSocket ctx sock C.ConnectionParams
+    { connectionHostname = h
+    , connectionPort = fromIntegral p
+    , connectionUseSecure = Nothing
+    , connectionUseSocks = Nothing
     }
   streams <- Streams.sslToStreams ssl
-  wsStream <- makeStream ws_ streams
+  wsStream <- fromSecureStreams streams
   pc <- WS.makePendingConnectionFromStream wsStream options
   c <- WS.acceptRequest pc
   modifyIORef' ws_ $ \ws -> ws
-    { wsSocket = Just (sa,sock,c,wsStream)
+    { wsSocket = Just (conn,c,wsStream)
     , wsStatus = Opened
     }
   return ws_
 
-clientWSS :: String -> Int -> IO Websocket
-clientWSS = clientWSSWith (defaultExponentialBackoffWithJitter 32000) defaultStreamReader defaultStreamWriter WS.defaultConnectionOptions
+activate :: Logging => Websocket -> IO ()
+activate ws_ = do
+  ws <- readIORef ws_
+  case wsReceiver ws of
+    Just _ -> pure ()
+    Nothing -> 
+      case wsSocket ws of
+        Nothing -> pure ()
+        Just (conn,c,_) -> do
+          let (host,port) = C.connectionID conn
+          rt <- forkIO $ receiveLoop host (fromIntegral port) ws_ c
+          modifyIORef' ws_ $ \ws -> ws { wsReceiver = Just rt }
 
-clientWSSWith :: Backoff -> StreamReader -> StreamWriter -> WS.ConnectionOptions -> String -> Int -> IO Websocket
-clientWSSWith backoff reader writer options host port = SSL.withOpenSSL $ do
-  ws <- websocket
-  modifyIORef' ws $ \ws -> ws
-    { wsStreamReader = reader
-    , wsStreamWriter = writer
-    , wsConnectionOptions = options
-    }
-  forkIO $ do
-    s <- newSeed -- open system random source once per outbound websocket connection
-    connectWith ws 0 s
-  return ws
+receiveLoop :: Logging => String -> Int -> Websocket -> WS.Connection -> IO ()
+receiveLoop host port ws_ c = go
   where
-    connectWith ws_ n s = do
-      msock <- newClientSocket host port
-      case msock of
-        Nothing -> do
-          setStatus ws_ Connecting
-          connectWith ws_ (n + 1) =<< backoff s (n + 1) 
-        Just sock -> do
-          sa <- S.getPeerName sock
-          ssl <- sslConnect sock
-          streams <- Streams.sslToStreams ssl
-          ws <- readIORef ws_
-          wsStream <- makeStream ws_ streams
-          c <- WS.runClientWithStream wsStream host "/" (wsConnectionOptions ws) [] return
-          _ <- onStatus ws_ $ \status ->
-            case status of
-              Closed _ -> void (forkIO (connectWith ws_ 0 s))
-              _        -> return ()
-          rt <- forkIO $ receiveLoop ws_ c
-          modifyIORef' ws_ $ \ws -> ws
-            { wsSocket = Just (sa,sock,c,wsStream)
-            , wsReceivers = rt : wsReceivers ws
-            }
-          setStatus ws_ Opened
+    go = do
+      eem <- E.handle (\(_ :: WS.ConnectionException) -> return (Left Disconnect)) (Right <$> WS.receiveData c)
+      case eem of
+        Left cr -> close ws_ cr
+        Right t 
+          | Right m <- eitherDecode' t -> do
+            ws <- readIORef ws_
+            case Map.lookup (ep m) (wsDispatchCallbacks ws) of
+              Nothing -> do
+                -- Unknown endpoint; close the connection.
+                now <- Time.time
+                log Error UnknownMessage
+                  { content = toTxt t
+                  , ..
+                  }
+                close ws_ InvalidMessage
+              Just cbs -> do
+                for_ cbs (readIORef >=> ($ m))
+                now <- Time.time
+                log Debug DispatchedMessage
+                  { endpoint = ep m
+                  , payload = pl m
+                  , .. 
+                  }
+                go
+          | otherwise -> do
+            -- unparseable messages mean the client does not
+            -- understand the messaging protocol; close the
+            -- connection.
+            now <- Time.time
+            log Error UnknownMessage
+              { content = toTxt t
+              , .. 
+              }
+            close ws_ InvalidMessage
 
 close :: Websocket -> CloseReason -> IO ()
 close ws_ cr = do
   ws <- readIORef ws_
-  forM_ (wsSocket ws) $ \(sa,sock,c,s) -> do
-    S.close sock
+  for_ (wsSocket ws) $ \(conn,_,s) -> do
     WS.close s
-    writeIORef ws_ ws
-      { wsSocket = Nothing }
+    C.connectionClose conn
+    writeIORef ws_ ws { wsSocket = Nothing, wsReceiver = Nothing }
+  for_ (wsReceiver ws) killThread
   setStatus ws_ (Closed cr)
-  for_ (wsReceivers ws) killThread
 
-receiveLoop :: Websocket -> WS.Connection -> IO ()
-receiveLoop ws_ c = go
+-- Connect via the given ConnectionParams. The default retry policy is jittered
+-- with a minimum delay of 1 second and a maximum delay of 30 seconds. Retries
+-- and failures are logged.
+client :: Logging => C.ConnectionParams -> WS.ConnectionOptions -> IO Websocket
+client ps = clientWith "/" policy ps
   where
-    go = do
-      eem <- E.handle (\(_ :: WS.ConnectionException) -> return (Left UnexpectedClosure)) (Right <$> WS.receiveData c)
-      case eem of
-        Right str ->
-          case eitherDecode' str of
-            Left _  -> close ws_ InvalidMessage
-            Right m -> do
-              ws <- readIORef ws_
-              case Map.lookup (ep m) (wsDispatchCallbacks ws) of
-                Nothing -> go
-                Just cbs -> do
-                  for_ cbs (readIORef >=> ($ m))
-                  go
+    policy = 
+      jittered Second 
+        & limitDelay (Seconds 30 0) 
+        & logRetry Warn retrying
+        & logFailure Error failed
 
-        Left cr -> close ws_ cr
+    retrying Retry.Status { retries, current, start } _ = do
+      let 
+        host = C.connectionHostname ps
+        port = fromIntegral (C.connectionPort ps)
+        secure = isJust (C.connectionUseSecure ps)
+        status = Connecting
 
-sslSetupServer keyFile certFile mayChainFile = SSL.withOpenSSL $ do
-  ctx <- SSL.context
-  SSL.contextSetPrivateKeyFile ctx keyFile
-  SSL.contextSetCertificateFile ctx certFile
-  forM_ mayChainFile (SSL.contextSetCertificateChainFile ctx)
-  SSL.contextSetCiphers ctx "HIGH"
-  SSL.contextSetVerificationMode ctx (VerifyPeer True True Nothing)
-  return ctx
+      ConnectionEvent {..} 
 
-sslAccept conn = do
-  ctx <- SSL.context
-  ssl <- SSL.connection ctx conn
-  SSL.accept ssl
-  return ssl
+    failed Retry.Status { retries, current, start  } = do
+      let
+        host = C.connectionHostname ps
+        port = fromIntegral (C.connectionPort ps)
+        secure = isJust (C.connectionUseSecure ps)
+        status = Closed Disconnect 
 
-sslConnect conn = do
-  ctx <- SSL.context
-  ssl <- SSL.connection ctx conn
-  SSL.connect ssl
-  return ssl
+      ConnectionEvent {..}
 
--- TODO: figure out what's going on when setting NoDelay.
-newClientSocket host port = E.handle (\(_ :: IOException) -> return Nothing) $ do
-  let hints = S.defaultHints { S.addrSocketType = S.Stream }
-      fullHost = host ++ ":" ++ show port
-  (addrInfo:_) <- S.getAddrInfo (Just hints) (Just host) (Just $ show port)
-  sock <- S.socket (S.addrFamily addrInfo) S.Stream S.defaultProtocol
-  S.setSocketOption sock S.NoDelay 1 -- prevents proper messaging...?
-  S.connect sock (S.addrAddress addrInfo) 
-  pure (Just sock)
+clientWith :: Logging => String -> Retry.Policy -> C.ConnectionParams -> WS.ConnectionOptions -> IO Websocket
+clientWith root policy params options = do
+  ws_ <- websocket
+  let
+    cce now status = ConnectionEvent
+      { host = C.connectionHostname params
+      , port = fromIntegral (C.connectionPort params)
+      , secure = isJust (C.connectionUseSecure params)
+      , ..
+      }
+  now <- Time.time
+  log Info (cce now Initialized)
+  onStatus ws_ $ \ev -> do
+    now <- Time.time
+    log Info (cce now ev)
+  forkIO $ do 
+    fix $ \restart -> do
+      ctx <- C.initConnectionContext
+      mconn <- retrying policy (C.connectTo ctx params)
+      for_ mconn $ \conn -> do
+        start <- Time.time
+        stream <- WS.makeStream (reader conn) (writer conn)
+        c <- WS.newClientConnection stream (C.connectionHostname params) root options []
+        modifyIORef' ws_ $ \ws -> ws { wsSocket = Just (conn,c,stream) }
+        setStatus ws_ Opened
+        onStatus ws_ $ \case
+          Closed _ -> void (forkIO restart)
+          _ -> pure ()
+  return ws_
 
 --------------------------------------------------------------------------------
 -- Custom file reading utilities
 
-readFile8k :: FilePath -> IO LazyByteString
+readFile8k :: FilePath -> IO Lazy.ByteString
 readFile8k = readFileN 8192
 
-readFile16k :: FilePath -> IO LazyByteString
+readFile16k :: FilePath -> IO Lazy.ByteString
 readFile16k = readFileN 16384
 
-readFileN :: Int -> FilePath -> IO LazyByteString
+readFileN :: Int -> FilePath -> IO Lazy.ByteString
 readFileN chk f = openBinaryFile f ReadMode >>= hGetContentsN chk
 
-hGetContentsN :: Int -> Handle -> IO LazyByteString
+hGetContentsN :: Int -> Handle -> IO Lazy.ByteString
 hGetContentsN chk h = streamRead
   where
     streamRead = unsafeInterleaveIO loop
@@ -439,34 +370,40 @@ hGetContentsN chk h = streamRead
     loop = do
         c <- S.hGetSome h chk
         if S.null c
-          then hClose h >> return BL.Empty
-          else do cs <- streamRead
-                  return (BL.Chunk c cs)
+          then hClose h >> return Lazy.empty
+          else Lazy.chunk c <$> streamRead
 
 --------------------------------------------------------------------------------
 -- Raw byte-level websocket access
 
-sendRaw :: Websocket -> LazyByteString -> IO (Either Status SendStatus)
+sendRaw :: Logging => Websocket -> Lazy.ByteString -> IO (Either Status SendStatus)
 sendRaw ws_ b = do
   Websocket {..} <- readIORef ws_
   case wsSocket of
-    Just (_,_,c,_) -> do
+    Just (conn,c,_) -> do
       eum <- E.handle (\(e :: IOException) -> return (Left ()))
                  (Right <$> WS.sendTextData c (TL.decodeUtf8 b))
+      let (h,p) = C.connectionID conn
+      now <- Time.time
+      log Trace SentMessage
+        { host = h
+        , port = fromIntegral p
+        , payload = toJSON (toTxt b)
+        , ..
+        }
       case eum of
         Left _ -> do
-          close ws_ InvalidMessage
-          return (Left (Closed InvalidMessage))
+          close ws_ Disconnect
+          return (Left (Closed Disconnect))
         _ -> do
           return (Right Sent)
     Nothing -> do
       cb <- newIORef undefined
-      st <- onStatus ws_ $ \s -> 
-        case s of
-          Opened -> void $ do
-            readIORef cb >>= scCleanup
-            sendRaw ws_ b
-          _ -> pure ()
+      st <- onStatus ws_ $ \case
+        Opened -> void $ do
+          readIORef cb >>= scCleanup
+          sendRaw ws_ b
+        _ -> pure ()
       writeIORef cb st
       return (Right Buffered)
 
@@ -482,6 +419,7 @@ request :: ( Request rqTy
            , I request ~ rqI
            , Rsp rqTy ~ rsp
            , FromJSON rsp
+           , Logging
            )
          => Websocket
          -> Proxy rqTy
@@ -494,7 +432,8 @@ request ws_ rqty_proxy req f = do
       bhvr m = f (readIORef s_ >>= dcCleanup) (maybe (Left m) Right (decodeDispatch m))
   dpc <- onDispatch ws_ header bhvr
   writeIORef s_ dpc
-  sendRaw ws_ $ encodeBS $ encodeDispatch (requestHeader rqty_proxy) req
+  let rqHeader = requestHeader rqty_proxy
+  sendRaw ws_ $ encodeBS $ encodeDispatch rqHeader req
   return dpc
 
 apiRequest :: ( Request rqTy
@@ -505,6 +444,7 @@ apiRequest :: ( Request rqTy
               , Rsp rqTy ~ response
               , FromJSON response
               , (rqTy ∈ rqs) ~ 'True
+              , Logging
               )
            => API msgs rqs
            -> Websocket
@@ -521,10 +461,11 @@ respond :: ( Request rqTy
            , FromJSON request
            , Rsp rqTy ~ response
            , ToJSON response
+           , Logging
            )
         => Websocket
         -> Proxy rqTy
-        -> (IO () -> Either Dispatch (Either LazyByteString response -> IO (Either Status ()),request) -> IO ())
+        -> (IO () -> Either Dispatch (Either Lazy.ByteString response -> IO (Either Status ()),request) -> IO ())
         -> IO DispatchCallback
 respond ws_ rqty_proxy f = do
   s_ <- newIORef undefined
@@ -539,7 +480,7 @@ respond ws_ rqty_proxy f = do
   writeIORef s_ dcb
   return dcb
 
-message :: ( Message mTy , M mTy ~ msg , ToJSON msg )
+message :: ( Message mTy , M mTy ~ msg , ToJSON msg, Logging )
         => Websocket
         -> Proxy mTy
         -> msg
@@ -547,7 +488,7 @@ message :: ( Message mTy , M mTy ~ msg , ToJSON msg )
 message ws_ mty_proxy m =
   sendRaw ws_ $ encodeBS $ encodeDispatch (messageHeader mty_proxy) m
 
-apiMessage :: ( Message mTy , M mTy ~ msg , ToJSON msg , (mTy ∈ msgs) ~ 'True )
+apiMessage :: ( Message mTy , M mTy ~ msg , ToJSON msg , (mTy ∈ msgs) ~ 'True, Logging )
            => API msgs rqs
            -> Websocket
            -> Proxy mTy

@@ -1,10 +1,11 @@
-{-# language RankNTypes, TypeApplications, ScopedTypeVariables, ConstraintKinds, FlexibleContexts, AllowAmbiguousTypes, BlockArguments, DataKinds, TypeOperators, RecordWildCards, TypeFamilies, ExistentialQuantification #-}
-module Effect.Websocket (Policy(..),Websocket,Effect.Websocket.websocket,Effect.Websocket.onStatus,Cache(socket),req,msg,Effect.Websocket.request,flush,flushMany,flushAll) where
+{-# language RankNTypes, TypeApplications, ScopedTypeVariables, ConstraintKinds, FlexibleContexts, AllowAmbiguousTypes, BlockArguments, DataKinds, TypeOperators, RecordWildCards, TypeFamilies, ExistentialQuantification, CPP #-}
+module Effect.Websocket (Effect.Websocket.Policy(..),Websocket,Effect.Websocket.websocket,Effect.Websocket.onStatus,Cache(socket),req,msg,Effect.Websocket.request,flush,flushMany,flushAll) where
 
 import Control.Concurrent
 import Control.Reader
 import Control.State
 import Control.Fold
+import Control.Log
 import Data.Foldable
 import Data.IORef
 import Data.JSON
@@ -19,6 +20,10 @@ import Data.Websocket as WS hiding (Websocket)
 import qualified Data.Websocket as WS
 import Effect.Async
 import Effect.Fork
+#ifndef __GHCJS__
+import Network.Connection as C
+import Network.WebSockets as C
+#endif
 import System.IO.Unsafe
 import Unsafe.Coerce
 
@@ -31,16 +36,27 @@ data Cache domain = Cache
   , cache  :: Map TypeRep RequestMap
   }
 
-type Websocket domain = (Typeable domain, Modify (Cache domain))
+type Websocket domain = (Typeable domain, Modify (Cache domain), Logging)
 
 {-# INLINE websocket #-}
-websocket :: forall domain. Typeable domain => String -> Int -> (Websocket domain => View) -> View
-websocket h p = stateWith (\_ -> pure) initial
+websocket :: forall domain. (Logging, Typeable domain) => String -> Int -> Bool -> (Websocket domain => View) -> View
+websocket h p secure = stateWith (\_ -> pure) initial
   where
     initial :: Websocket domain => IO (Cache domain,Cache domain -> IO ())
     initial = do
       subscribe @(Cache domain -> IO (Cache domain))
-      ws <- WS.clientWS h p
+#ifdef __GHCJS__
+      ws <- (if secure then WS.clientWSS else WS.clientWS) h p
+#else
+      let 
+        params = C.ConnectionParams
+          { connectionHostname  = h
+          , connectionPort      = fromIntegral p
+          , connectionUseSecure = if secure then Just (TLSSettingsSimple False False False) else Nothing
+          , connectionUseSocks  = Nothing
+          }
+      ws <- WS.client params C.defaultConnectionOptions
+#endif
       pure (Cache ws mempty,\_ -> pure ())
 
 onStatus :: forall domain. Websocket domain => (WS.Status -> IO ()) -> IO (IO ())
@@ -57,7 +73,7 @@ onStatus f = do
 
 request' 
   :: forall domain rq rqs msgs pl. 
-  ( WS.Request rq, WS.Req rq ~ (Int,pl), Ord pl, ToJSON pl, FromJSON (Rsp rq), rq ∈ rqs ~ True, Typeable domain )
+  ( WS.Request rq, WS.Req rq ~ (Int,pl), Ord pl, ToJSON pl, FromJSON (Rsp rq), rq ∈ rqs ~ True, Typeable domain, Logging )
   => Bool -> Bool -> WS.API msgs rqs -> Proxy rq -> pl -> (WS.Rsp rq -> IO (WS.Rsp rq)) -> (WS.Rsp rq -> IO ()) 
   -> IO ()
 request' force bypass api p pl process cb
@@ -185,8 +201,9 @@ req
   , Req request ~ (Int, payload)
   , Rsp request ~ response
   , Typeable domain
+  , Logging
   )
-  => Policy -> WS.API msgs reqs -> Proxy request -> payload -> IO response
+  => Effect.Websocket.Policy -> WS.API msgs reqs -> Proxy request -> payload -> IO response
 req Uncached api rq pl = do
   mv <- newEmptyMVar
   request' @domain True True api rq pl pure (putMVar mv)
@@ -206,6 +223,7 @@ msg
   , (message ∈ msgs) ~ 'True
   , M message ~ payload
   , Typeable domain
+  , Logging
   )
   => WS.API msgs reqs -> Proxy message -> payload -> IO ()
 msg api endpoint pl = publish go
@@ -223,8 +241,9 @@ request
   , Rsp request ~ response
   , Typeable response
   , Typeable domain
+  , Logging
   ) 
-  => Policy -> WS.API msgs reqs -> Proxy request -> payload -> (Async response => View) -> View
+  => Effect.Websocket.Policy -> WS.API msgs reqs -> Proxy request -> payload -> (Async response => View) -> View
 request policy api rq pl v = async (req @domain policy api rq pl) v
 
 flush 

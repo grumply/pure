@@ -2,8 +2,11 @@ module Main where
 
 import Shared
 
+import Control.Log
+import Data.Sorcerer
 import qualified Pure.Auth as Auth
 import Pure.Auth.Data.Token
+import Pure.Media.Library
 import Pure.Magician
 import Pure.Convoker.Discussion.Simple
 import qualified Pure.Media.Library as Media
@@ -11,16 +14,19 @@ import qualified Pure.Media.Library.API as Media
 import qualified Data.Websocket as WS
 
 main :: IO ()
-main =
-  with pageProduct do
-    with pagePreview do
-      with postProduct do
-        with postPreview do
-          serve @Blog authConfig do
-            sync (WS.activate it) do
-              Null
+main = do
+  sorcerer @(LibraryMsg Blog) @'[Library Blog] 
+  logger (printer & ignoring (< Debug)) do
+    with pageProduct do
+      with pagePreview do
+        with postProduct do
+          with postPreview do
+            serve @Blog authConfig do
+              sync (WS.activate it) do
+                Null
 
-authConfig :: UserConfig Blog
+
+authConfig :: Logging => UserConfig Blog
 authConfig ws sid = (defaultAuthConfig @Blog ws sid)
   { Auth.onTokenChange = \mt -> do
       -- print (isJust mt)
@@ -29,7 +35,7 @@ authConfig ws sid = (defaultAuthConfig @Blog ws sid)
       Auth.onTokenChange (defaultAuthConfig @Blog ws sid) mt
   }
 
-libraryConfig :: Username -> Media.Config Blog
+libraryConfig :: Logging => Username -> Media.Config Blog
 libraryConfig un = 
   Media.Config
     { root      = def
@@ -71,3 +77,4 @@ instance Previewable Page where
     pure PagePreview
       { title = parseMarkdown title
       }
+

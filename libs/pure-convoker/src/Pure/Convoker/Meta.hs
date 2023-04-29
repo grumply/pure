@@ -3,6 +3,7 @@ module Pure.Convoker.Meta where
 import Pure.Convoker.Comment ( Product, Comment, Name, Context )
 import Pure.Convoker.Admins ( isAdmin )
 
+import Control.Log (Logging)
 import Pure.Auth.Data.Username ( Username )
 import Pure.Conjurer ( Key, Product, Name, Context, Hashable, Pathable, Nameable(..), Ownable(..) )
 import Data.Function (fix)
@@ -54,7 +55,7 @@ data instance Name (Meta domain a) = MetaName
 instance Nameable (Meta domain a) where
   toName _ = MetaName
 
-instance Typeable domain => Ownable (Meta domain a) where
+instance (Typeable domain, Logging) => Ownable (Meta domain a) where
   isOwner un _ _ = isAdmin @domain un
 
 --------------------------------------------------------------------------------

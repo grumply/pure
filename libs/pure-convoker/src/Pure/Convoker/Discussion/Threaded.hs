@@ -3,6 +3,7 @@ module Pure.Convoker.Discussion.Threaded where
 import Pure.Convoker hiding (Upvote,Downvote,authenticatedEndpoints,unauthenticatedEndpoints,endpoints)
 import qualified Pure.Convoker as Convoker
 
+import Control.Log (Logging)
 import Control.Reader
 import Control.State
 import Data.Events hiding (meta)
@@ -11,7 +12,7 @@ import Data.HTML
 import Data.JSON hiding (Null,Key)
 import Data.Theme
 import Data.View hiding (modify,get)
-import Data.Websocket
+import Data.Websocket hiding (reader)
 import Pure.Auth hiding (Key)
 import Pure.Conjurer hiding (root)
 import qualified Effect.Websocket as VWS
@@ -34,6 +35,8 @@ unauthenticatedEndpoints
     
     , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
     , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
+
+    , Logging
 
     ) => Websocket -> Callbacks (Discussion domain a) -> Callbacks (Meta domain a) -> Callbacks (Mods domain a) ->  IO (IO ())
 unauthenticatedEndpoints = Convoker.unauthenticatedEndpoints 
@@ -71,6 +74,8 @@ authenticatedEndpoints
     , ToJSON (Reaction (Comment domain a)), FromJSON (Reaction (Comment domain a))
     , ToJSON (Reaction (Meta domain a))
     , ToJSON (Amend (Comment domain a)), FromJSON (Amend (Comment domain a))
+
+    , Logging
       
     ) => Websocket 
       -> Username 

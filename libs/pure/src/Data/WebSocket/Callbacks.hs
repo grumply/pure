@@ -1,17 +1,22 @@
+{-# language DerivingStrategies, DeriveAnyClass, DeriveGeneric #-}
 module Data.Websocket.Callbacks where
 
 import Control.Exception
 import Data.IORef
-
+import Data.JSON
+import Data.Txt
 import Data.DOM
 import Data.Websocket.Dispatch
+import Data.ByteString.Lazy as Lazy
+import GHC.Generics
 
-data CloseReason = MessageLengthExceeded | InvalidMessage | UnexpectedClosure
-  deriving (Show)
+data CloseReason = Disconnect | MessageLengthExceeded | InvalidMessage
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
-instance Exception CloseReason
-
-data Status = Unopened | Closed CloseReason | Opened | Errored JSV | Connecting
+data Status = Initialized | Connecting | Opened | Closed CloseReason
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
 data DispatchCallback = DispatchCallback
   { dcRef :: IORef (Dispatch -> IO ())

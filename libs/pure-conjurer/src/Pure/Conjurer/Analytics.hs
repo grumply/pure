@@ -1,6 +1,7 @@
 {-# language GADTs, ScopedTypeVariables, DuplicateRecordFields #-}
 module Pure.Conjurer.Analytics where
 
+import Control.Log (Logging)
 import Pure.Auth (Username)
 import Pure.Conjurer
 import Data.Bloom as Bloom
@@ -8,7 +9,7 @@ import Data.Bloom.Scalable as Scalable
 import Data.Default
 import Data.JSON hiding (encode,decode)
 import Data.Txt
-import Data.Time
+import Data.Time as Time
 import Data.Marker
 import Data.Router (route)
 import Data.Sorcerer hiding (events)
@@ -37,6 +38,7 @@ import Data.Set as Set
 
 #ifndef __GHCJS__
 import qualified Data.IP as IPR (IP(..),fromSockAddr)
+import qualified Network.Connection as C
 #endif
 
 -- NOTES:
@@ -63,15 +65,12 @@ fromWebsocket ws_ = do
   let
     -- 192.0.2.0 is reserved for documentation and examples, 
     -- so should be safe as a default.
-    ip = fromMaybe (Prelude.read "192.0.2.0") do 
-      (sa,_,_,_) <- wsSocket ws
-      (ip,_) <- IPR.fromSockAddr sa
-      pure ip
+    !ip = fromMaybe (Prelude.read "192.0.2.0") do 
+      (c,_,_) <- wsSocket ws
+      let (h,_) = C.connectionID c
+      pure (toTxt h)
 
-  pure $!
-    case ip of
-      IPR.IPv4 ipv4 -> IP (toTxt (show ipv4))
-      IPR.IPv6 ipv6 -> IP (toTxt (show ipv6))
+  pure (IP ip)
 #else
   pure (IP def)
 #endif
@@ -170,7 +169,7 @@ oldestSession :: IO Time
 oldestSession =
   Sorcerer.read SessionsStream >>= \case
     Just (Sessions t _) -> pure t
-    _ -> time
+    _ -> Time.time
 
 listSessions :: IO [SessionId]
 listSessions = fmap getSessionId <$> Sorcerer.events SessionsStream
@@ -276,7 +275,7 @@ analyzeAll _decay@(Milliseconds d _) = do
   let start = Analyzer Map.empty Map.empty b
   evs <- Sorcerer.events GlobalAnalyticsStream
   analyzer <- foldM analyzeGlobalStream start evs
-  now <- time
+  now <- Time.time
   pure (analyses (finalize _decay now analyzer))
   where
     analyzeGlobalStream Analyzer {..} = \case
@@ -349,7 +348,7 @@ data Analyzed a = Analyzed
   , recentByContext          :: Map (Context a) [(Context a,Name a)]
   , relatedPopularByResource :: Map (Context a,Name a) [Txt]
   , relatedTopByResource     :: Map (Context a,Name a) [Txt]
-  }
+  } deriving stock Generic
 
 toAnalyzed :: forall a. (Rootable a, Routable a, Ord (Context a), Ord (Name a),ToJSON (Name a),ToJSON (Context a)) => Analyses -> Analyzed a
 toAnalyzed analyses = Analyzed {..}
@@ -449,7 +448,7 @@ recordStart :: Websocket -> IO SessionId
 recordStart ws = do
   ip  <- fromWebsocket ws
   sid <- newSessionId
-  now <- time
+  now <- Time.time
   Sorcerer.write SessionsStream do
     SessionCreated now sid
   Sorcerer.write (SessionStream sid) do
@@ -458,7 +457,7 @@ recordStart ws = do
 
 recordUser :: SessionId -> Username -> IO ()
 recordUser sid un = do
-  now <- time 
+  now <- Time.time 
   Sorcerer.write (SessionStream sid) do
     SessionUser now un
 
@@ -472,7 +471,7 @@ recordRead
     , Hashable (Name a), Pathable (Name a), Ord (Name a)
     ) => SessionId -> IP -> Context a -> Name a -> IO ()
 recordRead sid ip ctx nm = do
-  now <- time
+  now <- Time.time
   let r = toReadRoute ctx nm
   Sorcerer.write (SessionStream sid) do
     SessionEvent now r
@@ -489,19 +488,19 @@ recordCreate
     , Hashable (Name a), Pathable (Name a), Ord (Name a)
     ) => SessionId -> Context a -> Name a -> IO ()
 recordCreate sid ctx nm = do
-  now <- time
+  now <- Time.time
   Sorcerer.write GlobalAnalyticsStream do
     GlobalResourceCreated now sid (toReadRoute ctx nm) 
 
 recordEvent :: SessionId -> Txt -> IO ()
 recordEvent sid evt = do
-  now <- time
+  now <- Time.time
   Sorcerer.write (SessionStream sid) do
     SessionEvent now evt
 
 recordEnd :: SessionId -> IO ()
 recordEnd sid = do
-  now <- time
+  now <- Time.time
   Sorcerer.write (SessionStream sid) do
     SessionEnd now
   Sorcerer.write GlobalAnalyticsStream do
@@ -905,6 +904,7 @@ analytics
   :: ( Typeable a
      , FromJSON (Context a), ToJSON (Context a), Ord (Context a)
      , FromJSON (Name a), ToJSON (Name a), Ord (Name a)
+     , Logging
      ) => Permissions a -> Endpoints '[] (AnalyticsAPI a) '[] (AnalyticsAPI a)
 analytics ps = Endpoints analyticsAPI msgs reqs
   where

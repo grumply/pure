@@ -10,6 +10,7 @@ import Pure.Conjurer.Resource
 import Pure.Conjurer.Rootable
 import Pure.Conjurer.Routable
 
+import Control.Log (Logging)
 import Data.Events
 import Data.Exists
 import Data.HTML
@@ -46,6 +47,7 @@ class Listable _role resource where
        , Pathable (Context resource), Pathable (Name resource)
        , Theme (Listing resource)
        , FromJSON (Product resource)
+       , Logging
        ) => Context resource -> View
   toList = toListWith @_role Cached True 
       
@@ -63,6 +65,7 @@ toListWith
     , FromJSON (Product resource)
     , Eq (Context resource)
     , Theme (Listing resource)
+    , Logging
     ) 
   => Policy -> ShouldPreloadPreviews -> Context resource -> View
 toListWith policy shouldPreloadPreviews ctx =
@@ -82,6 +85,7 @@ listing
     , FromJSON (Product resource)
     , Eq (Context resource)
     , Exists [(Context resource,Name resource,Preview resource)]
+    , Logging
     ) 
   => Policy -> ShouldPreloadPreviews -> View
 listing policy shouldPreloadPreviews =
@@ -113,4 +117,5 @@ instance {-# OVERLAPPABLE #-}
   , Pathable (Context resource), Pathable (Name resource)
   , Theme (Listing resource)
   , FromJSON (Product resource)
+  , Logging
   ) => Listable _role resource

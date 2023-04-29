@@ -24,6 +24,7 @@ import Pure.Auth.Data.Token
 import Pure.Auth.Data.Username
 
 import Control.Cont
+import Control.Log
 import qualified Data.Localstorage as LS
 import Data.View (View,pattern Null,(<|),(<||>),(|>))
 import Data.HTML (pattern Button,pattern Div,pattern H2,pattern Input,pattern P,pattern Placeholder,pattern TabIndex, pattern Type,pattern Value)
@@ -49,7 +50,7 @@ import Data.Typeable
 -- Unexported.
 newtype Access domain = Access { fromAccess :: Try (Token domain) }
 
-type Authentication domain = (Typeable domain, Websocket domain, State (Access domain))
+type Authentication domain = (Typeable domain, Websocket domain, State (Access domain), Logging)
 
 setToken :: forall domain. Modify (Access domain) => Token domain -> IO ()
 setToken = put . Access . Done

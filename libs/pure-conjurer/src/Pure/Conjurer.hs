@@ -24,6 +24,7 @@ import Pure.Conjurer.Routable as Export
 import Pure.Conjurer.Slug as Export
 import Pure.Conjurer.Updatable as Export
 
+import Control.Log (Logging)
 import Pure.Auth (Authentication)
 import Data.JSON (ToJSON(..),FromJSON(..),encodeBS,decodeBS)
 import Data.Txt as Txt
@@ -462,6 +463,7 @@ publishing ::
   , Pathable (Context a), Hashable (Context a), Ord (Context a)
   , Pathable (Name a), Hashable (Name a), Ord (Name a)
   , FromJSON (Amend a), ToJSON (Amend a)
+  , Logging
   ) => Permissions a -> Callbacks a -> Interactions a
     -> WS.Endpoints '[] (PublishingAPI a) '[] (PublishingAPI a)
 publishing ps cs i = WS.Endpoints publishingAPI msgs reqs
@@ -485,6 +487,7 @@ reading ::
   , ToJSON (Name a), FromJSON (Name a)
   , Pathable (Context a), Hashable (Context a), Ord (Context a)
   , Pathable (Name a), Hashable (Name a), Ord (Name a)
+  , Logging
   ) => Permissions a -> Callbacks a
     -> WS.Endpoints '[] (ReadingAPI a) '[] (ReadingAPI a)
 reading ps cs = WS.Endpoints readingAPI msgs reqs

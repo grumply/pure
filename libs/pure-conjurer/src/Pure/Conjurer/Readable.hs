@@ -11,6 +11,7 @@ import Pure.Conjurer.Rootable
 import qualified Data.View
 import Data.JSON
 import Control.Component hiding (root)
+import Control.Log (Logging)
 import Control.State
 import Data.Router as Router
 import Data.Theme
@@ -39,6 +40,7 @@ class Readable _role resource where
        , Eq (Context resource)
        , Eq (Name resource)
        , Pathable (Context resource)
+       , Logging
        ) => Context resource -> Name resource -> View
   toRead = toReadWith @_role Cached $ \_ _ -> 
     maybe "Not Found" (\x -> Div <| Themed @Reading |> [ toView x ])
@@ -52,6 +54,7 @@ toReadWith
     , FromJSON (Product resource)
     , Eq (Context resource)
     , Eq (Name resource)
+    , Logging
     ) 
   => Policy -> (Context resource -> Name resource -> Maybe (Product resource) -> View) -> Context resource -> Name resource -> View
 toReadWith policy f ctx nm = request @_role policy (readingAPI @resource) (readProduct @resource) (ctx,nm) (f ctx nm await)
@@ -65,4 +68,5 @@ instance {-# OVERLAPPABLE #-}
   , Eq (Context resource)
   , Eq (Name resource)
   , Pathable (Context resource)
+  , Logging
   ) => Readable _role resource

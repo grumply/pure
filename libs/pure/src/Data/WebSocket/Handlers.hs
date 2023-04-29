@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP, TypeOperators, GADTs, FlexibleContexts, DataKinds, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, TypeFamilies, ScopedTypeVariables #-}
 module Data.Websocket.Handlers where
 
+import Control.Log
 import Data.JSON
 import Data.Proxy
 import Data.Txt (Txt)
@@ -138,6 +139,7 @@ instance ( GetHandler RequestHandler request rqs'
          , Rsp request ~ response
          , ToJSON req
          , FromJSON response
+         , Logging
          )
   => EnactImplementation (Interface Request) RequestHandler (request ': rqs) rqs' where
   enactImplementation ws_ (InterfaceCons pm ms) mhs =

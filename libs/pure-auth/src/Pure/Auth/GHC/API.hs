@@ -1,4 +1,4 @@
-{-# language LambdaCase, NamedFieldPuns, RecordWildCards, BlockArguments, DuplicateRecordFields, PartialTypeSignatures, ScopedTypeVariables, DuplicateRecordFields, TypeApplications, OverloadedStrings #-}
+{-# language LambdaCase, NamedFieldPuns, RecordWildCards, BlockArguments, DuplicateRecordFields, PartialTypeSignatures, ScopedTypeVariables, DuplicateRecordFields, TypeApplications, OverloadedStrings, FlexibleContexts #-}
 module Pure.Auth.GHC.API (Config(..),auth,fromWebsocket) where
 
 import Pure.Auth.API as API
@@ -11,8 +11,9 @@ import Pure.Auth.Data.Password (Password(..))
 import Pure.Auth.Data.Token (Token(..))
 import Pure.Auth.Data.Username (Username,normalize)
 
+import Control.Log
 import qualified Data.Bloom.Limiter as Limiter
-import Data.Time
+import Data.Time as Time
 import Data.Txt as Txt
 import Data.Websocket as WS
 import Data.Sorcerer hiding (event,Deleted)
@@ -26,6 +27,8 @@ import Data.Typeable
 import Prelude hiding (read)
 import System.IO.Unsafe
 
+import Network.Connection as C
+
 import qualified Data.IP as IP (IP(..),fromSockAddr)
 
 fromWebsocket :: Websocket -> Txt
@@ -37,21 +40,18 @@ fromWebsocket ws_ = unsafePerformIO $ do
     -- so should be safe as a default. Though I'm not sure
     -- that it should ever appear.
     ip = fromMaybe "192.0.2.0" do 
-      (sa,_,_,_) <- wsSocket ws
-      (ip,_) <- IP.fromSockAddr sa
+      (c,_,_) <- wsSocket ws
+      let (ip,_) = C.connectionID c
       pure ip
 
-  pure $!
-    case ip of
-      IP.IPv4 ipv4 -> toTxt (show ipv4)
-      IP.IPv6 ipv6 -> toTxt (show ipv6)
+  pure $! toTxt ip
 
 -- TODO: use buffered to protect timing information
 buffered :: MonadIO m => Time -> m a -> m a 
 buffered t m = do
-  start <- liftIO time
+  start <- liftIO Time.time
   a <- m
-  end <- liftIO time
+  end <- liftIO Time.time
   let delta = end - start
   if delta < t then do
     liftIO (delay (t - delta))
@@ -71,7 +71,7 @@ data Config _role = Config
   , onDelete         :: Username -> Email -> Key -> IO ()
   }
 
-auth :: Typeable _role => Websocket -> Config _role -> Endpoints (AuthMessages _role) (AuthRequests _role) (AuthMessages _role) (AuthRequests _role)
+auth :: (Typeable _role, Logging) => Websocket -> Config _role -> Endpoints (AuthMessages _role) (AuthRequests _role) (AuthMessages _role) (AuthRequests _role)
 auth ws config = Endpoints API.api msgs reqs
   where
     ip = fromWebsocket ws

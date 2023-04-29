@@ -21,6 +21,7 @@ import Control.Cont
 import Control.Component (run,Component)
 import Control.Reader (Reader,reader)
 import Control.Fold (foldM)
+import Control.Log
 import Control.State (state')
 import Data.Exists
 import Data.JSON (ToJSON,FromJSON,traceJSON,logJSON)
@@ -59,14 +60,14 @@ type family Viewables (xs :: [*]) :: Constraint where
 {-# INLINE client #-}
 client 
   :: forall domain custom. 
-  ( Typeable domain, Typeable custom, RouteMany domain)
+  ( Typeable domain, Typeable custom, RouteMany domain, Logging )
   => String 
   -> Int 
   -> (forall x. R.Routing custom x) 
   -> (App domain custom => View)
   -> View
 client host port rtng v = 
-  WS.websocket @domain host port do
+  WS.websocket @domain host port False do
     Router.router (R.map Left (routeMany @domain @(Domains domain)) <|> R.map Right rtng) do
       authentication @domain do
         v

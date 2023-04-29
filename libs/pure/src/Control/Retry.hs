@@ -1,9 +1,15 @@
-{-# language AllowAmbiguousTypes, TypeApplications, LambdaCase, ScopedTypeVariables, RecordWildCards #-}
-module Control.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci) where
+{-# language AllowAmbiguousTypes, TypeApplications, LambdaCase, ScopedTypeVariables, RecordWildCards, FlexibleContexts #-}
+module Control.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci,logRetry,logFailure,onRetry,onFailure) where
 
 import Control.Exception
+import Data.Foldable
+import Data.JSON
 import Data.Random (newSeed,uniformR,generate)
 import Data.Time
+
+import GHC.Stack
+
+import Control.Log as Log hiding (Policy)
 
 {-
 
@@ -32,6 +38,15 @@ data Status = Status
   , start   :: Time
   , current :: Time
   }
+
+instance ToJSON Status where
+  toJSON Status {..} = 
+    toJSON (retries,RFC3339 start,RFC3339 current)
+  
+instance FromJSON Status where
+  parseJSON value = do
+    (retries,RFC3339 start,RFC3339 current) <- parseJSON value
+    pure Status {..}
 
 newInitialStatus :: IO Status
 newInitialStatus = time >>= \t -> pure (Status 0 t t)
@@ -119,6 +134,28 @@ limitDuration t (Policy p) = Policy p'
     p' status@Status {..}
       | current < start + t = p status
       | otherwise           = pure Nothing
+
+onRetry :: (Status -> Time -> IO ()) -> Policy -> Policy
+onRetry f (Policy p) = Policy p'
+  where
+    p' status = do
+      mt <- p status
+      for_ mt (f status)
+      pure mt
+
+onFailure :: (Status -> IO ()) -> Policy -> Policy
+onFailure f (Policy p) = Policy p'
+  where
+    p' status = do
+      mt <- p status
+      maybe (f status) (const (pure ())) mt
+      pure mt
+
+logRetry :: (Logging, ToJSON a) => Level -> (Status -> Time -> a) -> Policy -> Policy
+logRetry lvl f = onRetry (\status time -> Log.log lvl (f status time))
+
+logFailure :: (Logging, ToJSON a) => Level -> (Status -> a) -> Policy -> Policy
+logFailure lvl f = onFailure (Log.log lvl . f)
 
 -- | Constant delay policy.
 constant :: Time -> Policy

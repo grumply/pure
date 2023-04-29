@@ -3,6 +3,7 @@ module Pure.Convoker.Comment where
 import Pure.Convoker.Mods
 import Pure.Convoker.Admins
 
+import Control.Log (Logging)
 import Pure.Auth (Username)
 import Pure.Conjurer
 import Control.Component hiding (not,key,pattern Meta)
@@ -104,7 +105,7 @@ data instance Preview (Comment domain a) = CommentPreview
 deriving instance (ToJSON (Context (Comment domain a))) => ToJSON (Preview (Comment domain a))
 deriving instance (FromJSON (Context (Comment domain a))) => FromJSON (Preview (Comment domain a))
 
-instance Typeable domain => Ownable (Comment domain a) where 
+instance (Typeable domain, Logging) => Ownable (Comment domain a) where 
   isOwner un _ _ = isAdmin @domain un
 
 data instance Context (Comment domain a) = CommentContext (Context a) (Name a)
@@ -128,6 +129,7 @@ canEditComment :: forall domain a.
   , Typeable a
   , Pathable (Context a), Hashable (Context a), Ord (Context a), ToJSON (Context a), FromJSON (Context a)
   , Pathable (Name a), Hashable (Name a), Ord (Name a), ToJSON (Name a), FromJSON (Name a)
+  , Logging
   ) => Context a -> Name a -> Key (Comment domain a) -> Username -> IO Bool
 canEditComment ctx nm k un = 
   tryReadProduct (fullPermissions @(Comment domain a)) (callbacks @(Comment domain a) (Just un)) (CommentContext ctx nm) (CommentName k) >>= \case

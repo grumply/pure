@@ -24,9 +24,15 @@ module Data.Websocket
     module Export
   ) where
 
-import Data.JSON (ToJSON,FromJSON,fromJSON,Result(..),logJSON)
+import Control.Log hiding (error)
+import Data.JSON (ToJSON,FromJSON,fromJSON,logJSON)
+import qualified Data.JSON as JSON
+
 import Data.Txt (Txt)
-import Data.Time (time)
+import Data.Time as Time (time)
+
+import Data.ByteString.Lazy as Lazy
+
 
 import Data.Websocket.API       as Export
 import Data.Websocket.Callbacks as Export
@@ -93,6 +99,7 @@ request :: ( Request rqTy
           , Rsp rqTy ~ response
           , FromJSON response
           , (rqTy Export.∈ rqs) ~ 'True
+          , Logging
           )
        => API msgs rqs
        -> Websocket
@@ -119,6 +126,7 @@ requestDebug :: forall msgs rqTy request response rqs.
                , Rsp rqTy ~ response
                , FromJSON response
                , (rqTy Export.∈ rqs) ~ 'True
+               , Logging
                )
             => API msgs rqs
             -> Export.Websocket
@@ -129,15 +137,15 @@ requestDebug :: forall msgs rqTy request response rqs.
 requestDebug api ws p rq f = do
   u   <- hashUnique <$> newUnique
   void $ forkIO $ void $ do
-    s <- time
+    s <- Time.time
     logJSON ("sending",u,rq)
     Export.apiRequest api ws p (u,rq) $ \_ rsp -> do
-      e <- time
+      e <- Time.time
       case rsp of
         Left Dispatch {..} -> 
           case fromJSON pl of 
-            Error err -> logJSON ("message parse failure",u,rsp,err,e - s)
-            Success (a :: response) -> error "Invariant broken; twice parsed, once successful"
+            JSON.Error err -> logJSON ("message parse failure",u,rsp,err,e - s)
+            JSON.Success (a :: response) -> error "Invariant broken; twice parsed, once successful"
         Right r ->
           f r
 
@@ -145,6 +153,7 @@ message :: ( Message msgTy
           , M msgTy ~ message
           , ToJSON message
           , (msgTy Export.∈ msgs) ~ 'True
+          , Logging
           )
        => API msgs rqs
        -> Websocket
@@ -158,7 +167,7 @@ type ResponseString =
 #ifdef __GHCJS__
   Txt
 #else
-  LazyByteString
+  Lazy.ByteString
 #endif
 
 class Stop m where

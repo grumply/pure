@@ -1,5 +1,6 @@
 module Shared where
 
+import Control.Log (Logging)
 import Pure.Magician
 import Pure.Convoker.Discussion.Shared.Markdown
 import Data.DOM
@@ -36,7 +37,7 @@ instance Routable Post
 instance Nameable Post where
   toName Post {..} = PostName (fromTxt (toTxt title))
 
-instance Ownable Post where
+instance Logging => Ownable Post where
   isOwner un _ _ = isAdmin @Blog un
 
 data instance Product Post = PostProduct
@@ -73,7 +74,7 @@ instance Routable Page
 instance Nameable Page where
   toName Page {..} = PageName (fromTxt (toTxt title))
 
-instance Ownable Page where
+instance Logging => Ownable Page where
   isOwner un _ _ = isAdmin @Blog un
 
 newtype instance Product Page = PageProduct

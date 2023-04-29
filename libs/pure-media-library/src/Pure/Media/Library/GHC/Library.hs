@@ -5,6 +5,7 @@ import Pure.Media.Library.API as API
 import Pure.Media.Library.Data.Library hiding (library)
 import Pure.Media.Library.Data.Media
 
+import Control.Log
 import Pure.Auth.Data.Username
 import qualified Data.Bloom.Limiter as Limiter
 import Data.Txt (Txt,FromTxt(..),ToTxt(..))
@@ -27,7 +28,7 @@ data Config domain = Config
   , validate  :: File -> IO (Maybe (Media domain))
   }
 
-library :: forall domain. Typeable domain => Config domain -> Endpoints _ _ _ _
+library :: forall domain. (Logging, Typeable domain) => Config domain -> Endpoints _ _ _ _
 library config = Endpoints (API.api @domain) msgs reqs
   where
     msgs = WS.non

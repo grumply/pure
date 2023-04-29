@@ -7,6 +7,7 @@ import Pure.Convoker.Mods as Export
 import Pure.Convoker.Admins as Export
 import Pure.Convoker.UserVotes as Export
 
+import Control.Log (Logging)
 import Pure.Auth (Username)
 import Pure.Conjurer
 import Data.Default
@@ -91,6 +92,8 @@ unauthenticatedEndpoints
 
     , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
     , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
+    
+    , Logging
 
     ) => Websocket -> Callbacks (Discussion domain a) -> Callbacks (Meta domain a) -> Callbacks (Mods domain a) ->  IO (IO ())
 unauthenticatedEndpoints socket discussionCallbacks metaCallbacks modsCallbacks = do
@@ -172,6 +175,8 @@ authenticatedEndpoints
     , DefaultPermissions (UserVotes domain a)
 
     , DefaultCallbacks (UserVotes domain a) 
+    
+    , Logging
 
     ) => Websocket 
       -> Username 

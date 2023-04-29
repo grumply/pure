@@ -3,6 +3,7 @@ module Pure.Magician.Server.Serve where
 import Pure.Magician.Resources
 import Pure.Magician.Server.Limit (limiting,Limit,LimitMany)
 
+import Control.Log (Logging)
 import Pure.Auth (Username(..))
 import Pure.Conjurer.Analytics
 import Pure.Conjurer as Conjurer
@@ -65,7 +66,7 @@ serveAll = serveMany @a @(Resources a)
 class ServeMany (a :: *) (xs :: [*]) where
   serveMany :: Websocket -> SessionId -> Maybe Username -> IO ()
 
-instance Typeable a => ServeMany a '[] where
+instance (Logging, Typeable a) => ServeMany a '[] where
   serveMany socket sid mu = void do
     defaultServe @a @(Admins a) socket sid mu 
 
@@ -112,6 +113,7 @@ type family ServeConstraints a resource (discussion :: Bool) :: Constraint where
     , Limit resource
     , Routable resource
     , Rootable resource
+    , Logging
     )
 
 -- To satisfy ServeConstraints; not used.
