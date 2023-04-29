@@ -5,6 +5,7 @@ import Data.JSON
 
 import Control.Exception
 import Control.Lens ((^.),(.~),(&))
+import Data.ByteString
 import Data.Txt
 import Data.String
 import qualified Network.Wreq as Wreq
@@ -68,13 +69,13 @@ postRaw hs0 url payload = do
   let
     hs = fmap (\(h,v) -> (fromString (fromTxt h),fromString (fromTxt v))) hs0 
     opts = defaults & headers .~ hs
-  rsp <- handle @SomeException (pure . Left) (Right <$> Wreq.postWith opts (fromTxt url) (toJSON payload))
+  rsp <- handle @SomeException (pure . Left) (Right <$> Wreq.postWith opts (fromTxt url) (fromTxt payload :: ByteString))
   pure $
     case rsp of
       Left se -> Left (OtherError url se)
       Right r -> let code = r ^. responseStatus . statusCode in
         case code of
-          _ | code >= 200 && code < 300 -> either (Left . ParseError url) Right (decodeBSEither $ r ^. responseBody)
+          _ | code >= 200 && code < 300 -> Right (toTxt $ r ^. responseBody)
             | otherwise                 -> Left (StatusError url code)
 
 postForm :: FromJSON a => Txt -> [(Txt,Txt)] -> IO (Either XHRError a)
