@@ -85,4 +85,5 @@ library
   
   if !impl(ghcjs)
     build-depends:
-      iproute
+      iproute,
+      connection
