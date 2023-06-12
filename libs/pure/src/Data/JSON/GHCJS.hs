@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, CPP, ViewPatterns #-}
+{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, CPP, ViewPatterns, TypeFamilies #-}
 module Data.JSON.GHCJS (module Data.JSON.GHCJS, module Export) where
 
 import Data.Txt
@@ -17,6 +17,7 @@ import GHCJS.Marshal.Pure
 
 import qualified JavaScript.JSON.Types as O (Object)
 
+import GHC.Exts (IsList(..))
 import Unsafe.Coerce
 
 withText :: String -> (Txt -> Parser a) -> Value -> Parser a
@@ -83,3 +84,8 @@ decode = parseMaybe parseJSON . js_JSON_parse
 
 decodeEither :: FromJSON a => Txt -> Either String a
 decodeEither = parseEither parseJSON . js_JSON_parse
+
+instance IsList Obj where
+  type Item Obj = (Txt,Value)
+  toList obj = objectAssocs obj
+  fromList = object

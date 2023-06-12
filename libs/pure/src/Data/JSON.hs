@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP #-}
-module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,module Export) where
+{-# LANGUAGE CPP, ConstraintKinds #-}
+module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,JSON,module Export) where
 
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
@@ -15,6 +15,8 @@ import qualified Data.JSON.GHC   as GHC
 #endif
 
 import System.IO.Unsafe (unsafePerformIO)
+
+type JSON a = (ToJSON a, FromJSON a)
 
 {-# INLINE parse #-}
 parse = flip parseMaybe

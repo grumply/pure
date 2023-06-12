@@ -15,6 +15,7 @@ import Data.Typeable
 import Prelude hiding (lookup)
 import System.IO
 
+import Data.String
 import Data.Txt
 
 import qualified Data.Text.Lazy as TL
@@ -69,3 +70,8 @@ instance ToTxt Value where
    {-# INLINE toTxt #-}
    toTxt = TL.toStrict . TL.decodeUtf8 . encode
 
+instance ToTxt Key where
+  toTxt = toTxt . show
+
+instance FromTxt Key where
+  fromTxt = fromString . fromTxt
