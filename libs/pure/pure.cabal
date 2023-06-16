@@ -59,9 +59,6 @@ library
 
   if !(impl(ghcjs))
 
-    exposed-modules:
-      Data.Txt.Interpolate
-
     build-depends:
         binary
       , text
@@ -75,8 +72,6 @@ library
       , HsOpenSSL
       , openssl-streams
       , iproute
-      , template-haskell
-      , haskell-src-meta
 
     other-modules:
       Data.Fetch.GHC

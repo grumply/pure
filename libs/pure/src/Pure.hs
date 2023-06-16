@@ -41,7 +41,7 @@ import Data.JSON as Export hiding (Null,Key,lookup,match)
 import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list,exponential) 
 import Data.Scroll as Export
-import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false)
+import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url)
 import Data.Theme as Export
 import Data.Time as Export hiding (Time_)
 import Data.Try as Export hiding (try)

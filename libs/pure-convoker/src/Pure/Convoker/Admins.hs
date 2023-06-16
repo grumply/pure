@@ -41,6 +41,9 @@ data instance Name (Admins ctx) = AdminsName
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
+instance Typeable ctx => Rootable (Admins ctx)
+instance Typeable ctx => Routable (Admins ctx)
+
 instance Producible (Admins ctx) where
   produce _ _ RawAdmins {..} _ = pure Admins {..}
 

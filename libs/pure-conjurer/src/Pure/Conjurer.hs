@@ -1096,12 +1096,8 @@ ref = go . location
   where
     go t a = OnClickWith intercept (\_ -> storeScrollPosition >> Router.goto t) (Href t a)
 
-resource :: Routable a => Route a -> IO ()
-resource = go . location
-  where
-    go r = do
-      storeScrollPosition
-      Router.goto r
+resource :: Routable a => Route a -> Txt
+resource = location
 
 preload
   :: forall _role a v.

@@ -1,12 +1,16 @@
+{-# language UndecidableSuperClasses #-}
 module Pure.Magician.Client 
   ( client
   , magic
   , withRoute
   , unsafeWithRoute
   , getSomeRoute
+  , Magic()
+  , currently
   , RouteMany(..)
   , RouteMany'(..)
   , WithRoute
+  , WithRoute'(..)
   , Viewables(..)
   , App
   , CURL
@@ -78,8 +82,20 @@ magic v =
     Right (custom :: custom) -> fromDynamic (with custom v)
     Left sr | ~(Just p) <- withRoute @(CURL domain) @domain sr (pages @domain) -> p
 
+currently :: forall domain f custom x. (WithRoute (Magic domain f) domain, App domain custom) => (forall a. Magic domain f a => C.Route a -> x) -> (custom -> x) -> Maybe x
+currently f g =
+  case Router.current :: Either (SomeRoute domain) custom of
+    Left sr -> withRoute @(Magic domain f) sr f
+    Right c -> Just (g c)
+
 class (Creatable a r, Readable a r, Listable a r, Updatable a r) => CURL a r
 instance (Creatable a r, Readable a r, Listable a r, Updatable a r) => CURL a r
+
+class (Conjurable r, f r) => Magic d f r
+instance (Conjurable r, f r) => Magic d f r
+
+class (Conjurable r, Creatable a r, Readable a r, Listable a r, Updatable a r) => CRUL a r
+instance (Conjurable r, Creatable a r, Readable a r, Listable a r, Updatable a r) => CRUL a r
 
 type RouteMany a = RouteMany' a (Domains a)
 type WithRoute f a = WithRoute' f a (Domains a)

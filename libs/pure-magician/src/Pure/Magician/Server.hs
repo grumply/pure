@@ -30,6 +30,7 @@ import Data.List as List
 import Data.Typeable ( Typeable, Proxy(..) )
 import GHC.Generics hiding (Meta)
 import System.IO
+import System.IO.Unsafe
 
 type UserConfig a = Effect (Msg (WithSocket a)) => Websocket -> SessionId -> Export.Config a 
 
@@ -47,23 +48,24 @@ serve
     , LimitMany a (Resources a)
     , Analyzeable (Analyze a)
     , Logging
-    ) => UserConfig a -> (((Reader Websocket, Reader SessionId, Reader (Maybe Username))) => View) -> IO ()
+    ) => UserConfig a -> (((Reader Websocket, Reader SessionId, Reader (Maybe Username))) => View) -> View
 serve userConfig v = do
-  cfg@Config.Config {..} <- Config.getConfig
-  hSetBuffering stdout LineBuffering 
-  listenAll @a
-  tryCreateUser @a admin email password 
-  tryReadProduct fullPermissions def (AdminsContext :: Context (Admins a)) AdminsName >>= \case
-    Just (Admins _) -> pure ()
-    Nothing -> void (tryCreateAdmins @a [admin])
-  cacheAll @a
-  analyze @a (Milliseconds refresh 0)
-  Pure.run do
+  let 
+    cfg@Config.Config {..} = unsafePerformIO Config.getConfig
+    start = do
+      hSetBuffering stdout LineBuffering 
+      listenAll @a
+      tryCreateUser @a admin email password 
+      tryReadProduct fullPermissions def (AdminsContext :: Context (Admins a)) AdminsName >>= \case
+        Just (Admins _) -> pure ()
+        Nothing -> void (tryCreateAdmins @a [admin])
+      cacheAll @a
+      analyze @a (Milliseconds refresh 0)
+      forkIO (staticAll @a)
+  onStart start do
     case (,) <$> key <*> cert of
       Just (k,c) -> Pure.server (Pure.SecureServer host port k c chain (Component.run . WithSocket userConfig v))
       _ -> Pure.server (Pure.Server host port (Component.run . WithSocket userConfig v))
-  staticAll @a 
-  forever (delay Minute)
 
 data WithSocket a = WithSocket (Effect (Msg (WithSocket a)) => Websocket -> SessionId -> Config a) ((Reader Websocket, Reader SessionId, Reader (Maybe Username)) => View) Websocket
 instance (Typeable a, Server a, ServeMany a (Resources a), LimitMany a (Resources a), Logging) => Component (WithSocket a) where

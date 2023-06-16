@@ -47,8 +47,8 @@ restoreWith max d =
                 withScrollPositionFromHistory $ \ox oy -> do
                   ch <- clientHeight
                   cw <- clientWidth
-                  sh <- scrollHeight
-                  sw <- scrollWidth
+                  sh <- pageScrollHeight
+                  sw <- pageScrollWidth
                   if sw >= ox + cw && sh >= oy + ch then do
                     addAnimation restoreScrollPosition
                     release
@@ -56,18 +56,18 @@ restoreWith max d =
                     delay d
                     loop (remaining - d)
 
-scrollHeight :: IO Int
-scrollHeight =
+pageScrollHeight :: IO Int
+pageScrollHeight =
 #ifdef __GHCJS__
-  scroll_height_js
+  page_scroll_height_js
 #else
   pure 0
 #endif
 
-scrollWidth :: IO Int
-scrollWidth =
+pageScrollWidth :: IO Int
+pageScrollWidth =
 #ifdef __GHCJS__
-  scroll_width_js
+  page_scroll_width_js
 #else
   pure 0
 #endif
@@ -75,9 +75,9 @@ scrollWidth =
 #ifdef __GHCJS__
 foreign import javascript unsafe
   "$r = document.documentElement.scrollHeight" 
-    scroll_height_js :: IO Int
+    page_scroll_height_js :: IO Int
 
 foreign import javascript unsafe
   "$r = document.documentElement.scrollWidth"
-    scroll_width_js :: IO Int
+    page_scroll_width_js :: IO Int
 #endif

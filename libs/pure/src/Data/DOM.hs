@@ -345,6 +345,12 @@ foreign import javascript unsafe
   "$r = $1.offsetHeight" offset_height_js :: Node -> IO Int
 
 foreign import javascript unsafe
+  "$r = $1.scrollWidth" scroll_width_js :: Node -> IO Int
+
+foreign import javascript unsafe
+  "$r = $1.scrollHeight" scroll_height_js :: Node -> IO Int
+
+foreign import javascript unsafe
   "document.title = $1" set_title_js :: Txt -> IO ()
 
 {-# INLINE prevDef #-}
@@ -674,6 +680,14 @@ offsetWidth = offset_width_js
 offsetHeight :: Node -> IO Int
 offsetHeight = offset_height_js
 
+{-# INLINE scrollWidth #-}
+scrollWidth :: Node -> IO Int
+scrollWidth = scroll_width_js
+
+{-# INLINE scrollHeight #-}
+scrollHeight :: Node -> IO Int
+scrollHeight = scroll_height_js
+
 {-# INLINE getSelection #-}
 getSelection :: Node -> IO (Int,Int)
 getSelection node = do
@@ -938,6 +952,12 @@ offsetWidth _ = return 0
 
 offsetHeight :: Node -> IO Int
 offsetHeight _ = return 0
+
+scrollWidth :: Node -> IO Int
+scrollWidth _ = return 0
+
+scrollHeight :: Node -> IO Int
+scrollHeight _ = return 0
 
 getSelection :: Node -> IO (Int,Int)
 getSelection _ = return (0,0)

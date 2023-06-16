@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, PatternSynonyms, ViewPatterns, TypeSynonymInstances, OverloadedStrings, QuasiQuotes #-}
+{-# LANGUAGE CPP, PatternSynonyms, ViewPatterns, TypeSynonymInstances, OverloadedStrings, QuasiQuotes, BangPatterns #-}
 module Data.Txt 
   ( module Data.Txt 
   , module Export
@@ -23,6 +23,9 @@ import qualified Data.ByteString.Lazy.Char8 as BSLC
 
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy.Encoding as TL
+
+import Data.Bits
+import Data.Word
 
 {-
 It is important to note that ToTxt/FromTxt can throw exceptions!
@@ -130,3 +133,14 @@ unindent = Export.concat . removeIndentation . trimLastLine . removeLeadingEmpty
         safeMinimum x xs = case xs of
           [] -> x
           _ -> List.minimum xs
+
+-- FNV-1a 
+{-# INLINE fnv64 #-}
+fnv64 :: Txt -> Word64
+fnv64 = Export.foldl' h 0xcbf29ce484222325
+  where
+    {-# INLINE h #-}
+    h :: Word64 -> Char -> Word64
+    h !i c = 
+      let i' = i `xor` fromIntegral (ord c) 
+      in i' * 0x100000001b3

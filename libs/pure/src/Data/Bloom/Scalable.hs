@@ -16,7 +16,7 @@ module Data.Bloom.Scalable
 
 import qualified Data.Bloom as Bloom
 
-import Data.Txt as Txt (Txt,ToTxt(..),foldl')
+import Data.Txt as Txt (Txt,ToTxt(..),foldl',fnv64)
 import Data.JSON hiding ((!),encode,decode)
 
 import Control.Monad.IO.Class
@@ -167,17 +167,6 @@ test Bloom {..} (toTxt -> val) = liftIO do
 size :: MonadIO m => Bloom -> m Int
 size Bloom { quota } = liftIO do
   snd <$> readIORef quota
-
--- FNV-1a 
-{-# INLINE fnv64 #-}
-fnv64 :: Txt -> Word64
-fnv64 = Txt.foldl' h 0xcbf29ce484222325
-  where
-    {-# INLINE h #-}
-    h :: Word64 -> Char -> Word64
-    h !i c = 
-      let i' = i `xor` fromIntegral (ord c) 
-      in i' * 0x100000001b3
 
 {-# INLINE hash #-}
 hash :: Bloom.Bloom -> Txt -> [Int]

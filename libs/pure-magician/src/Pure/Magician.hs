@@ -16,6 +16,6 @@ import Pure.Magician.Resources as Export
 import Pure.Magician.Client as Export
 import Pure.Magician.Client.Restore as Export
 #else
-import Pure.Magician.Client as Export (App,CURL,withRoute,client,magic,Viewables)
+import Pure.Magician.Client as Export (App,CURL,withRoute,client,magic,Viewables,currently)
 import Pure.Magician.Server as Export
 #endif

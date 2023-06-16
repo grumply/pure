@@ -350,7 +350,7 @@ data Analyzed a = Analyzed
   , relatedTopByResource     :: Map (Context a,Name a) [Txt]
   } deriving stock Generic
 
-toAnalyzed :: forall a. (Rootable a, Routable a, Ord (Context a), Ord (Name a),ToJSON (Name a),ToJSON (Context a)) => Analyses -> Analyzed a
+toAnalyzed :: forall a. (Rootable a, Routable a, Rootable a, Ord (Context a), Ord (Name a),ToJSON (Name a),ToJSON (Context a)) => Analyses -> Analyzed a
 toAnalyzed analyses = Analyzed {..}
   where
 
@@ -465,6 +465,7 @@ recordRead
   :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , ToJSON (Context a), FromJSON (Context a)
     , Hashable (Context a), Pathable (Context a), Ord (Context a)
     , ToJSON (Name a), FromJSON (Name a)
@@ -482,6 +483,7 @@ recordCreate
   :: forall a.
     ( Typeable a
     , Routable a
+    , Rootable a
     , ToJSON (Context a), FromJSON (Context a)
     , Hashable (Context a), Pathable (Context a), Ord (Context a)
     , ToJSON (Name a), FromJSON (Name a)
@@ -512,6 +514,7 @@ addAnalytics
   :: forall a.
     ( Typeable a
     , Routable a
+    , Rootable a
     , ToJSON (Context a), FromJSON (Context a)
     , Hashable (Context a), Pathable (Context a), Ord (Context a)
     , ToJSON (Name a), FromJSON (Name a)
@@ -716,6 +719,7 @@ addPopularForNamespaceToCache
   :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , Hashable (Context a), Pathable (Context a), Ord (Context a), ToJSON (Context a)
     , Hashable (Name a), Pathable (Name a), Ord (Name a), ToJSON (Name a)
     ) => [(Context a,Name a)] -> IO ()
@@ -728,6 +732,7 @@ addTopForNamespaceToCache
   :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , Hashable (Context a), Pathable (Context a), Ord (Context a), ToJSON (Context a)
     , Hashable (Name a), Pathable (Name a), Ord (Name a), ToJSON (Name a)
     ) => [(Context a,Name a)] -> IO ()
@@ -740,6 +745,7 @@ addRecentForNamespaceToCache
    :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , Hashable (Context a), Pathable (Context a), Ord (Context a), ToJSON (Context a)
     , Hashable (Name a), Pathable (Name a), Ord (Name a), ToJSON (Name a)
     ) => [(Context a,Name a)] -> IO ()
@@ -752,6 +758,7 @@ addPopularForContextToCache
   :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , Hashable (Context a), Pathable (Context a), Ord (Context a), ToJSON (Context a)
     , Hashable (Name a), Pathable (Name a), Ord (Name a), ToJSON (Name a)
     ) => Context a -> [(Context a,Name a)] -> IO ()
@@ -766,6 +773,7 @@ addTopForContextToCache
   :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , Hashable (Context a), Pathable (Context a), Ord (Context a), ToJSON (Context a)
     , Hashable (Name a), Pathable (Name a), Ord (Name a), ToJSON (Name a)
     ) => Context a -> [(Context a,Name a)] -> IO ()
@@ -780,6 +788,7 @@ addRecentForContextToCache
   :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , Hashable (Context a), Pathable (Context a), Ord (Context a), ToJSON (Context a)
     , Hashable (Name a), Pathable (Name a), Ord (Name a), ToJSON (Name a)
     ) => Context a -> [(Context a,Name a)] -> IO ()
@@ -794,6 +803,7 @@ addRelatedPopularForResourceToCache
   :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , Hashable (Context a), Pathable (Context a), Ord (Context a)
     , Hashable (Name a), Pathable (Name a), Ord (Name a)
     ) => Context a -> Name a -> [Txt] -> IO ()
@@ -808,6 +818,7 @@ addRelatedTopForResourceToCache
   :: forall a. 
     ( Typeable a
     , Routable a
+    , Rootable a
     , Hashable (Context a), Pathable (Context a), Ord (Context a)
     , Hashable (Name a), Pathable (Name a), Ord (Name a)
     ) => Context a -> Name a -> [Txt] -> IO ()

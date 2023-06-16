@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, MultiParamTypeClasses, ScopedTypeVariables, OverloadedStrings, ViewPatterns, RankNTypes, FlexibleContexts, TypeApplications, FlexibleContexts, ConstraintKinds, AllowAmbiguousTypes #-}
 module Effect.Router
   ( Router, Route
-  , router, onRoute, subrouter, lref, current
+  , router, onRoute, subrouter, lref, current, url
   , module Data.Router
   ) where
 
@@ -20,6 +20,9 @@ import Effect.Async
 
 data Route rt = Route Txt rt
 type Router rt = Reader (Route rt)
+
+url :: forall rt. Router rt => Txt
+url = let Route u _ = ask :: Route rt in u
 
 current :: Router rt => rt
 current = let Route _ rt = ask in rt

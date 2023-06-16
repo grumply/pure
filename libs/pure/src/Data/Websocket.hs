@@ -45,6 +45,11 @@ import Data.Websocket.Message   as Export
 import Data.Websocket.Request   as Export
 import Data.Websocket.TypeRep   as Export
 
+#ifndef __GHCJS__
+import Network.Connection as Export (ConnectionParams(..))
+import Network.WebSockets as Export (ConnectionOptions(..),defaultConnectionOptions)
+#endif
+
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
@@ -172,6 +177,7 @@ type ResponseString =
 
 class Stop m where
     stop :: m ()
+    stopper :: m (IO ())
 
 class Acquire a m | m -> a where
     acquire :: m a
@@ -179,6 +185,7 @@ class Acquire a m | m -> a where
 class Reply a m | m -> a where
     reply :: a -> m ()
     replyRaw :: ResponseString -> m ()
+    replyer :: m (Either ResponseString a -> IO ())
 
 newtype Responding request response a = Responding { unResponding :: ReaderT (request,IO (),Either ResponseString response -> IO ()) IO a }
     deriving (Functor,Applicative,Monad,Alternative,MonadFail,MonadFix,MonadPlus)
@@ -198,11 +205,17 @@ instance Reply response (Responding request response) where
     replyRaw s = Responding $ do
       (_,_,send) <- ask
       lift $ send (Left s)
+    replyer = Responding $ do
+      (_,_,send) <- ask
+      pure send
 
 instance Stop (Responding request response) where
     stop = Responding $ do
       (_,f,_) <- ask
       lift f
+    stopper = Responding $ do
+      (_,f,_) <- ask
+      pure f
 
 responding :: forall rqTy request response.
               ( Request rqTy
@@ -263,6 +276,7 @@ instance Acquire message (Awaiting message) where
 
 instance Stop (Awaiting message) where
     stop = Awaiting (asks snd >>= lift)
+    stopper = Awaiting (asks snd)
 
 awaiting :: forall msgTy message.
           ( Message msgTy
