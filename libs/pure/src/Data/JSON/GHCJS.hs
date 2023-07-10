@@ -20,6 +20,8 @@ import qualified JavaScript.JSON.Types as O (Object)
 import GHC.Exts (IsList(..))
 import Unsafe.Coerce
 
+import Data.Tree
+
 withText :: String -> (Txt -> Parser a) -> Value -> Parser a
 withText _ f (match -> String txt) = f txt
 withText expected _ v = typeMismatch expected v

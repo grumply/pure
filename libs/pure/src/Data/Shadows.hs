@@ -14,9 +14,8 @@ data Shadow = Shadow
   , spread     :: Double
   }
 
-shadow :: Shadow -> CSS Txt
-shadow Shadow { color = (r,g,b), .. } = 
-  box-Pure.shadow =: elems (Prelude.reverse (fmap go [1..layers]))
+shadow :: Shadow -> Txt
+shadow Shadow { color = (r,g,b), .. } = elems (Prelude.reverse (fmap go [1..layers]))
   where
     go :: Int -> Txt
     go layer = let (xOff,yOff,zOff,i) = generateLayer layer in

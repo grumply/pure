@@ -1,5 +1,5 @@
 {-# language ScopedTypeVariables, TypeApplications, ConstraintKinds, FlexibleContexts, RankNTypes, TypeFamilies, AllowAmbiguousTypes, PatternSynonyms, BlockArguments #-}
-module Control.State (Modify,State,state,state',stateWith,stateWith',modifyIO,modify,modifyIt,modifyItIO,get,put,zoom,zoomIO,ignore,flat,flatBy,toState,toStateWith) where
+module Control.State (Modify,State,state,stateIO,state',stateIO',stateWith,stateWith',modifyIO,modify,modifyIt,modifyItIO,get,put,zoom,zoomIO,ignore,flat,flatBy,toState,toStateWith) where
 
 import Control.Concurrent (forkIO,killThread,ThreadId,MVar,newEmptyMVar,putMVar,readMVar)
 import Control.Dynamic (dynamic,fromDynamic)
@@ -21,9 +21,17 @@ type State a = (Modify a, Exists a)
 state :: Typeable a => (Modify a => a) -> (State a => View) -> View
 state a = foldM ($) (pure (a,\_ -> pure ()))
 
+{-# INLINE stateIO #-}
+stateIO :: Typeable a => (Modify a => IO a) -> (State a => View) -> View
+stateIO ioa = foldM ($) (ioa >>= \a -> pure (a,\_ -> pure ()))
+
 {-# INLINE state' #-}
 state' :: forall a. Typeable a => (Modify a => a) -> (State a => View) -> View
 state' a v = eager (dynamic @(Modify a) a) (state a v)
+
+{-# INLINE stateIO' #-}
+stateIO' :: forall a. Typeable a => (Modify a => IO a) -> (State a => View) -> View
+stateIO' ioa v = eager (dynamic @(Modify a) ioa) (stateIO ioa v)
 
 {-# INLINE stateWith #-}
 stateWith :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
@@ -95,3 +103,20 @@ flatBy pred v =
         go _ []     = []
         go 0 (_:as) = a : as
         go n (a:as) = a : go (n - 1) as
+--
+-- {-# INLINE some #-}
+-- some :: (Typeable a, State a) => a -> (State a => View) -> View
+-- some = state
+--
+-- {-# INLINE one #-}
+-- one :: Exists a => a
+-- one = it
+--
+-- {-# INLINE many #-}
+-- many :: forall a. (Typeable a, State (Maybe a)) => (State (Maybe a) => View) -> View
+-- many = state @(Maybe a) Nothing
+--
+-- {-# INLINE any #-}
+-- any :: Exists (Maybe a) => Maybe a
+-- any = it
+--

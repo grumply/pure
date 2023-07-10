@@ -47,7 +47,7 @@ import System.IO.Unsafe (unsafePerformIO)
 -- to the supplied target view will be seen, without added suspense.
 --
 suspense :: Time -> View -> View -> View
-suspense t sus = suspense' True [(t,sus)] Null
+suspense t sus = suspense' True [(t,sus)]
 
 {-# INLINE anticipation #-}
 -- | Shallow suspense. Does not cross component boundaries. 
@@ -69,7 +69,7 @@ suspense t sus = suspense' True [(t,sus)] Null
 -- to the supplied target view will be seen, without added suspense.
 --
 anticipation :: Time -> View -> View -> View
-anticipation t sus = suspense' False [(t,sus)] Null
+anticipation t sus = suspense' False [(t,sus)]
 
 {-# INLINE suspense' #-}
 -- | suspense' allows for a sequence of replacing transclusions at timed
@@ -83,8 +83,8 @@ anticipation t sus = suspense' False [(t,sus)] Null
 -- immediately obvious how to make `suspense'` deeply reactive with the
 -- `prebuild` strategy without incurring a severe performance cost.
 --
-suspense' :: Bool -> [(Time,View)] -> View -> View -> View
-suspense' deep tvs failure v = stateWith' (\_ -> pure) initialize it
+suspense' :: Bool -> [(Time,View)] -> View -> View
+suspense' deep tvs v = stateWith' (\_ -> pure) initialize it
   where
     initialize :: Modify View => IO (View,View -> IO ())
     initialize = do

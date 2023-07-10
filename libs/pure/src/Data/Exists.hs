@@ -1,5 +1,5 @@
 {-# language RankNTypes, ConstraintKinds, FlexibleContexts, ScopedTypeVariables, AllowAmbiguousTypes #-}
-module Data.Exists (Exists(..), using, with, may, try, unite, constant) where
+module Data.Exists (Exists(..), using, with, may, try, unite) where
 
 import Control.Concurrent (newEmptyMVar,tryPutMVar,readMVar)
 import qualified Data.Try as Try
@@ -56,11 +56,4 @@ try trying failed done = Try.try trying failed (\a -> using a done) (it :: Try.T
 unite :: forall a b c. Exists (Either a b) => (Exists a => c) -> (Exists b => c) -> c
 unite left right = either (\a -> using a left) (\b -> using b right) (it :: Either a b)
 
-{-# INLINE constant #-}
-constant :: a -> a
-constant a =
-  let
-    {-# NOINLINE ref #-}
-    ref = unsafePerformIO newEmptyMVar
-  in
-    unsafePerformIO (tryPutMVar ref a >> readMVar ref)
+

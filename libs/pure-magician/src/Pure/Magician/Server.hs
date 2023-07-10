@@ -1,7 +1,7 @@
 {-# language AllowAmbiguousTypes, DuplicateRecordFields, UndecidableInstances #-}
-module Pure.Magician.Server (module Pure.Magician.Server, Server(..), Limit(..), activate) where
+module Pure.Magician.Server (module Pure.Magician.Server, Resources.Server(..), Limit(..), activate) where
 
-import Pure.Magician.Resources 
+import Pure.Magician.Resources as Resources
 import Pure.Magician.Server.Analytics
 import Pure.Magician.Server.Cache
 import qualified Pure.Magician.Server.Config as Config
@@ -9,6 +9,7 @@ import Pure.Magician.Server.Listen
 import Pure.Magician.Server.Serve
 import Pure.Magician.Server.Static
 import Pure.Magician.Server.Limit
+import Pure.Magician.Server.Server as Server
 
 import Control.Log (Logging)
 import Pure.Auth as Export (Config(..),Token(..),Username(..),Password,Email,auth,authDB,tryCreateUser) 
@@ -32,12 +33,12 @@ import GHC.Generics hiding (Meta)
 import System.IO
 import System.IO.Unsafe
 
-type UserConfig a = Effect (Msg (WithSocket a)) => Websocket -> SessionId -> Export.Config a 
+type UserConfig a = Effect (Component.Msg (WithSocket a)) => Websocket -> SessionId -> Export.Config a 
 
 serve
   :: forall a resources cache static. 
     ( Typeable a
-    , Server a
+    , Resources.Server a
     , Subset (Caches a) (Resources a) ~ True
     , Subset (Statics a) (Resources a) ~ True
     , Subset (Analyze a) (Resources a) ~ True
@@ -64,11 +65,11 @@ serve userConfig v = do
       forkIO (staticAll @a)
   onStart start do
     case (,) <$> key <*> cert of
-      Just (k,c) -> Pure.server (Pure.SecureServer host port k c chain (Component.run . WithSocket userConfig v))
-      _ -> Pure.server (Pure.Server host port (Component.run . WithSocket userConfig v))
+      Just (k,c) -> Server.server (Server.SecureServer host port k c chain (Component.run . WithSocket userConfig v))
+      _ -> Server.server (Server.Server host port (Component.run . WithSocket userConfig v))
 
-data WithSocket a = WithSocket (Effect (Msg (WithSocket a)) => Websocket -> SessionId -> Config a) ((Reader Websocket, Reader SessionId, Reader (Maybe Username)) => View) Websocket
-instance (Typeable a, Server a, ServeMany a (Resources a), LimitMany a (Resources a), Logging) => Component (WithSocket a) where
+data WithSocket a = WithSocket (Effect (Component.Msg (WithSocket a)) => Websocket -> SessionId -> Config a) ((Reader Websocket, Reader SessionId, Reader (Maybe Username)) => View) Websocket
+instance (Typeable a, Resources.Server a, ServeMany a (Resources a), LimitMany a (Resources a), Logging) => Component (WithSocket a) where
   data Model (WithSocket a) = WithSocketModel (Maybe (Token a)) SessionId
 
   initialize (WithSocket _ _ socket) = do
@@ -127,7 +128,7 @@ instance (Typeable a, Server a, ServeMany a (Resources a), LimitMany a (Resource
         reader sid do
           v
 
-defaultAuthConfig :: forall a. (Effect (Msg (WithSocket a)), Server a, ServeMany a (Resources a), LimitMany a (Resources a), RemoveMany a (Resources a)) => Websocket -> SessionId -> Config a 
+defaultAuthConfig :: forall a. (Effect (Component.Msg (WithSocket a)), Resources.Server a, ServeMany a (Resources a), LimitMany a (Resources a), RemoveMany a (Resources a)) => Websocket -> SessionId -> Config a 
 defaultAuthConfig socket sid = Config {..}
   where
     blacklist = []

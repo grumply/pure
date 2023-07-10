@@ -28,7 +28,7 @@ map f = using (Handler (\m io -> effect' (f m) io))
 -- also f = using (Handler (\m io -> effect' m (io >> f m)))
 
 {-# INLINE (#) #-}
-infixr 0 #
+infixr 9 #
 (#) :: forall a b x. (a -> b) -> (Effect a => x) -> (Effect b => x)
 (#) = map
 

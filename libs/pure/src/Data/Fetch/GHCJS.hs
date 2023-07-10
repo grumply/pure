@@ -12,7 +12,7 @@ import Data.Foldable
 
 -- XHRErrors contain the target URL
 data XHRError 
-  = StatusError Txt Int
+  = StatusError Txt Int Txt
   | ParseError Txt String
   | InvalidURLError Txt Txt
   | OtherError Txt SomeException
@@ -22,7 +22,7 @@ instance ToTxt XHRError where
   toTxt = toTxt . show
 
 xhrErrorURL :: XHRError -> Txt
-xhrErrorURL (StatusError     u _) = u
+xhrErrorURL (StatusError     u _ _) = u
 xhrErrorURL (ParseError      u _) = u
 xhrErrorURL (InvalidURLError u _) = u
 xhrErrorURL (OtherError      u _) = u
@@ -93,8 +93,9 @@ getRaw headers url = do
           _ | s >= 200 && s < 300 -> do
               t <- response_text_js xhr
               putMVar mv (Right t)
-            | otherwise -> 
-              putMVar mv $ Left (StatusError url s)
+            | otherwise -> do
+              t <- response_text_js xhr
+              putMVar mv $ Left (StatusError url s t)
       _ -> pure ()
   on_ready_js xhr cb
   open_get_js xhr url
@@ -128,8 +129,9 @@ postRaw headers url payload = do
           _ | s >= 200 && s < 300 -> do
               t <- response_text_js xhr
               putMVar mv (Right t)
-            | otherwise -> 
-              putMVar mv $ Left (StatusError url s)
+            | otherwise -> do
+              t <- response_text_js xhr
+              putMVar mv $ Left (StatusError url s t)
       _ -> pure ()
   on_ready_js xhr cb
   open_post_js xhr url
@@ -163,8 +165,9 @@ postFormRaw headers url payload = do
           _ | s >= 200 && s < 300 -> do
               t <- response_text_js xhr
               putMVar mv (Right t)
-            | otherwise -> 
-              putMVar mv $ Left (StatusError url s)
+            | otherwise -> do
+              t <- response_text_js xhr
+              putMVar mv $ Left (StatusError url s t)
       _ -> pure ()
   on_ready_js xhr cb
   open_post_js xhr url

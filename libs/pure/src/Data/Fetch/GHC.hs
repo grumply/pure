@@ -13,7 +13,7 @@ import Network.Wreq (headers,defaults,responseBody,responseStatus,statusCode,For
 
 -- XHRErrors contain the target URL
 data XHRError 
-  = StatusError Txt Int
+  = StatusError Txt Int Txt
   | ParseError Txt String
   | InvalidURLError Txt Txt
   | OtherError Txt SomeException
@@ -23,7 +23,7 @@ instance ToTxt XHRError where
   toTxt = toTxt . show
 
 xhrErrorURL :: XHRError -> Txt
-xhrErrorURL (StatusError     u _) = u
+xhrErrorURL (StatusError     u _ _ ) = u
 xhrErrorURL (ParseError      u _) = u
 xhrErrorURL (InvalidURLError u _) = u
 xhrErrorURL (OtherError      u _) = u
@@ -51,7 +51,7 @@ getRaw hs0 url = do
       Right r -> let code = r ^. responseStatus . statusCode in
         case code of
           _ | code >= 200 && code < 300 -> Right (toTxt $ r ^. responseBody)
-            | otherwise                 -> Left (StatusError url code)
+            | otherwise                 -> Left (StatusError url code (toTxt $ r ^. responseBody))
 
 post :: (ToJSON a,FromJSON b) => Txt -> a -> IO (Either XHRError b)
 post = postWith [("Content-Type","application/json"),("Accept","application/json")]
@@ -76,7 +76,7 @@ postRaw hs0 url payload = do
       Right r -> let code = r ^. responseStatus . statusCode in
         case code of
           _ | code >= 200 && code < 300 -> Right (toTxt $ r ^. responseBody)
-            | otherwise                 -> Left (StatusError url code)
+            | otherwise                 -> Left (StatusError url code (toTxt $ r ^. responseBody))
 
 postForm :: FromJSON a => Txt -> [(Txt,Txt)] -> IO (Either XHRError a)
 postForm = postFormWith [("Content-Type","application/x-www-form-urlencoded"),("Accept","application/json")]
@@ -101,6 +101,6 @@ postFormRaw hs0 url payload = do
       Right r -> let code = r ^. responseStatus . statusCode in
         case code of
           _ | code >= 200 && code < 300 -> Right (toTxt $ r ^. responseBody)
-            | otherwise                 -> Left (StatusError url code)
+            | otherwise                 -> Left (StatusError url code (toTxt $ r ^. responseBody))
   where
     params = fmap (\(k,v) -> fromTxt k := v) payload

@@ -35,7 +35,9 @@ library
     vector,
     unordered-containers,
     xss-sanitize,
-    unix
+    unix,
+    wai, 
+    http-types
 
   hs-source-dirs: src
 
@@ -72,6 +74,8 @@ library
       , HsOpenSSL
       , openssl-streams
       , iproute
+      , warp
+      , base64-bytestring
 
     other-modules:
       Data.Fetch.GHC
@@ -84,6 +88,7 @@ library
     Pure
     Browser
     Server
+    Control.Channel
     Control.Component
     Control.Controller
     Control.Cont
@@ -93,6 +98,7 @@ library
     Control.Form
     Control.Log
     Control.Producer
+    Control.React
     Control.Reader
     Control.Retry
     Control.State
@@ -163,6 +169,23 @@ library
     Effect.Sync
     Effect.Title
     Effect.Websocket
+    Web.DataTransfer
+    Web.Events.Animation
+    Web.Events.Clipboard
+    Web.Events.Composition
+    Web.Events.Drag
+    Web.Events.Focus
+    Web.Events.Input
+    Web.Events.Keyboard
+    Web.Events.Mouse
+    Web.Events.Pointer
+    Web.Events.Scroll
+    Web.Events.Touch
+    Web.Events.Transition
+    Web.Events.Wheel
+    Web.File
+    Web.Iterable
+    Web.Range
     
   other-modules:
     Data.Sorcerer.Aggregable

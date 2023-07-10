@@ -23,7 +23,14 @@ library
   if !(impl(ghcjs))
 
     build-depends:
-      yaml
+      yaml, 
+      containers, 
+      network, 
+      websockets, 
+      HsOpenSSL,
+      openssl-streams,
+      io-streams
+
 
     exposed-modules:
       Pure.Magician.Server

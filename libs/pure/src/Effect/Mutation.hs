@@ -134,12 +134,12 @@ mkMutation jsv =
 #endif
 
 #ifdef __GHCJS__
-foreign import javascript unsafe
+foreign import javascript safe
   "$r = new MutationObserver($1)" observer_js :: Callback (JSV -> IO ()) -> IO JSV
 
-foreign import javascript unsafe
+foreign import javascript safe
   "$1.observe($2,$3)" observe_js :: JSV -> Node -> JSV -> IO ()
 
-foreign import javascript unsafe
+foreign import javascript safe
   "$1.disconnect()" disconnect_js :: JSV -> IO ()
 #endif

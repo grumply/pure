@@ -9,6 +9,16 @@ import Data.Monoid
 import Data.Ratio
 import Data.Word
 
+import Data.Set as S (Set,empty) 
+import Data.Map as M (Map,empty)
+import Data.Sequence (Seq)
+import Data.IntMap (IntMap)
+import Data.IntSet (IntSet)
+import Data.Tree (Tree(..))
+
+import Data.ByteString as BS
+import Data.ByteString.Lazy as BSL
+
 import GHC.Generics
 
 class Default a where
@@ -30,26 +40,6 @@ instance Default a => Default (Const a b) where def = Const def
 instance Default (Maybe a) where def = Nothing
 instance Default [a] where def = []
 
--- Note that (def :: Try a) /= mempty
--- instance Default (Try a) where def = Trying
-
--- instance Default Txt where def = mempty
-
--- instance (Eq a, Hashable a) => Default (HashMap.HashMap a b) where
---   def = mempty
-
--- instance Default Value where
---   def =
--- #ifdef __GHCJS__
---     nullValue
--- #else
---     Null
--- #endif
-
--- instance Default Obj where def = mempty
-
--- instance Default Micros where def = 0
--- instance Default Millis where def = 0
 instance Default Int where def = 0
 instance Default Int8 where def = 0
 instance Default Int16 where def = 0
@@ -76,6 +66,16 @@ instance (Default a, Default b, Default c, Default d) => Default (a, b, c, d) wh
 instance (Default a, Default b, Default c, Default d, Default e) => Default (a, b, c, d, e) where def = (def, def, def, def, def)
 instance (Default a, Default b, Default c, Default d, Default e, Default f) => Default (a, b, c, d, e, f) where def = (def, def, def, def, def, def)
 instance (Default a, Default b, Default c, Default d, Default e, Default f, Default g) => Default (a, b, c, d, e, f, g) where def = (def, def, def, def, def, def, def)
+
+instance Default (Map a b) where def = M.empty
+instance Default (IntMap a) where def = mempty
+instance Default (Set a) where def = S.empty
+instance Default IntSet where def = mempty
+instance Default (Seq a) where def = mempty
+instance Default a => Default (Tree a) where def = Node def []
+
+instance Default BS.ByteString where def = BS.empty
+instance Default BSL.ByteString where def = BSL.empty
 
 -- Inspired by Lukas Mai's data-default-class with a default instance for
 -- sum types based on lexicographical order - similar to the Ord and Enum
