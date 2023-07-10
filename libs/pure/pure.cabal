@@ -36,8 +36,7 @@ library
     unordered-containers,
     xss-sanitize,
     unix,
-    wai, 
-    http-types
+    base64-bytestring
 
   hs-source-dirs: src
 
@@ -61,6 +60,9 @@ library
 
   if !(impl(ghcjs))
 
+    exposed-modules:
+      Server
+
     build-depends:
         binary
       , text
@@ -75,7 +77,8 @@ library
       , openssl-streams
       , iproute
       , warp
-      , base64-bytestring
+      , wai
+      , http-types
 
     other-modules:
       Data.Fetch.GHC
@@ -87,7 +90,7 @@ library
   exposed-modules:
     Pure
     Browser
-    Server
+    Client
     Control.Channel
     Control.Component
     Control.Controller

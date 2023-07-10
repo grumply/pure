@@ -1,10 +1,12 @@
-{-# LANGUAGE CPP, MultiParamTypeClasses, ScopedTypeVariables, OverloadedStrings, ViewPatterns, RankNTypes, FlexibleContexts, TypeApplications, FlexibleContexts, ConstraintKinds, AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP, MultiParamTypeClasses, ScopedTypeVariables, OverloadedStrings, ViewPatterns, RankNTypes, FlexibleContexts, TypeApplications, FlexibleContexts, ConstraintKinds, AllowAmbiguousTypes, TypeOperators, AllowAmbiguousTypes #-}
 module Effect.Router
   ( Router, Route
   , router, onRoute, subrouter, lref, current, url
-  , module Data.Router
+  , Routes, routes, routes_, Effect.Router.route
+  , module Export
   ) where
 
+import Control.Dynamic
 import Control.Reader
 import Control.State
 import Data.Default
@@ -12,6 +14,7 @@ import Data.DOM
 import Data.Events
 import Data.HTML
 import Data.Router
+import qualified Data.Router as Export hiding (route)
 import qualified Data.Router as Router
 import Data.Txt
 import qualified Data.Txt as Txt
@@ -65,6 +68,17 @@ subrouter rtng v = do
     case ask of
       Nothing -> Null
       Just (sub,rt) -> reader (Route @rt sub rt) v
+
+type Routes ctx = forall a. Routing (ctx :=> View) a
+
+routes :: forall ctx. Typeable ctx => Routes ctx -> (ctx => View)
+routes rs = router rs (fromDynamic (current :: ctx :=> View))
+
+routes_ :: Routes () -> View
+routes_ = routes
+
+route :: forall ctx. (ctx => View) -> (forall a. Routing (ctx :=> View) a)
+route v = dispatch (dynamic @ctx v)
 
 lref :: HasFeatures a => Txt -> a -> a
 lref t a = OnClickWith intercept (\_ -> goto t) (Href t a)
