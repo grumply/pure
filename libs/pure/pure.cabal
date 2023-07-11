@@ -77,8 +77,10 @@ library
       , openssl-streams
       , iproute
       , warp
+      , warp-tls
       , wai
       , http-types
+      , cryptonite
 
     other-modules:
       Data.Fetch.GHC
@@ -88,6 +90,7 @@ library
       Data.Websocket.Internal.GHC
 
   exposed-modules:
+    Auth
     Pure
     Browser
     Client
@@ -172,6 +175,7 @@ library
     Effect.Sync
     Effect.Title
     Effect.Websocket
+    Endpoint
     Web.DataTransfer
     Web.Events.Animation
     Web.Events.Clipboard

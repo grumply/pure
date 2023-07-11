@@ -352,7 +352,7 @@ form :: forall (domain :: *) (a :: *).
         ) => Maybe (Key (Comment domain a)) -> IO () -> View
 form parent done = 
   let 
-    onPreview :: (Authenticated domain) => Resource (Comment domain a) -> IO View
+    onPreview :: (Pure.Auth.Authenticated domain) => Resource (Comment domain a) -> IO View
     onPreview c = do
       r <- req @domain Uncached (publishingAPI @(Comment domain a)) (previewResource @(Comment domain a)) 
             ( CommentContext ask ask

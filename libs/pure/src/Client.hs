@@ -1,7 +1,7 @@
-{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, LambdaCase, BangPatterns, PatternSynonyms, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, NamedFieldPuns, DeriveGeneric, DeriveAnyClass, TypeApplications, RankNTypes, AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, InstanceSigs, ScopedTypeVariables #-}
 module Client 
-  ( Client.post, post_
-  , Client.get, get_
+  ( Client.post
+  , Client.get
   -- ,ws,wssend,wsmessage,wserror
   , Fetch.XHRError, Fetch.err, Fetch.response
   , sseWith, sse
@@ -34,23 +34,65 @@ import Data.View
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.Fetch as Fetch
 import qualified Effect.Fetch as Fetch (response,err)
+import Endpoint
 
-post :: forall rsp req. (Typeable req, Typeable rsp, ToJSON req, FromJSON rsp) => Txt -> Txt -> req -> IO (Either Fetch.XHRError rsp)
-post host ep = Fetch.postWith @req @rsp [] (host <> "/" <> ep) 
+class Post req where
+  post :: Txt -> Endpoint req -> req
 
-post_ :: forall req. (Typeable req, ToJSON req) => Txt -> Txt -> req -> IO (Either Fetch.XHRError ())
-post_ = post @() 
+instance (Typeable a, Typeable r, ToJSON a, FromJSON r) => Post (a -> IO r) where
+  post host ep a = Fetch.postWith @a @r [] (host <> "/" <> toTxt ep) a >>= either throw pure
+ 
+instance (Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Post (a -> b -> IO r) where
+  post host ep a b = post host (fromTxt (toTxt ep)) (a,b)
 
-get :: forall rsp req. (Typeable req, Typeable rsp, ToJSON req, FromJSON rsp) => Txt -> Txt -> req -> IO (Either Fetch.XHRError rsp)
-get host ep req = do
+instance (Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Post (a -> b -> c -> IO r) where
+  post host ep a b c = post host (fromTxt (toTxt ep)) (a,b,c)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Post (a -> b -> c -> d -> IO r) where
+  post host ep a b c d = post host (fromTxt (toTxt ep)) (a,b,c,d)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Post (a -> b -> c -> d -> e -> IO r) where
+  post host ep a b c d e = post host (fromTxt (toTxt ep)) (a,b,c,d,e)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Post (a -> b -> c -> d -> e -> f -> IO r) where
+  post host ep a b c d e f = post host (fromTxt (toTxt ep)) (a,b,c,d,e,f)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Post (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  post host ep a b c d e f g = post host (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
+
+class Get req where
+  get :: Txt -> Endpoint req -> req
+
+instance (Typeable r, FromJSON r) => Get (IO r) where
+  get host ep = Fetch.getWith @r [] (host <> "/" <> toTxt ep) >>= either throw pure
+
+instance (Typeable a, Typeable r, ToJSON a, FromJSON r) => Get (a -> IO r) where
+  get host ep a = 
 #ifdef __GHCJS__
-  Fetch.getWith @rsp [] (host <> "/" <> ep <> "?payload=" <> encodeURIComponent (btoa_js (encode req)))
+    Fetch.getWith @r [] (host <> "/" <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a)))
+      >>= either throw pure
 #else
-  Fetch.getWith @rsp [] (host <> "/" <> ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (encode req))))
+    Fetch.getWith @r [] (host <> "/" <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (encode a))))
+      >>= either throw pure
 #endif
 
-get_ :: forall rsp. (Typeable rsp, FromJSON rsp) => Txt -> Txt -> IO (Either Fetch.XHRError rsp)
-get_ host ep = Client.get @rsp host ep ()
+instance (Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Get (a -> b -> IO r) where
+  get host ep a b = Client.get host (fromTxt (toTxt ep)) (a,b)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Get (a -> b -> c -> IO r) where
+  get host ep a b c = Client.get host (fromTxt (toTxt ep)) (a,b,c)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Get (a -> b -> c -> d -> IO r) where
+  get host ep a b c d = Client.get host (fromTxt (toTxt ep)) (a,b,c,d)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Get (a -> b -> c -> d -> e -> IO r) where
+  get host ep a b c d e = Client.get host (fromTxt (toTxt ep)) (a,b,c,d,e)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Get (a -> b -> c -> d -> e -> f -> IO r) where
+  get host ep a b c d e f = Client.get host (fromTxt (toTxt ep)) (a,b,c,d,e,f)
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Get (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  get host ep a b c d e f g = Client.get host (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
 #ifdef __GHCJS__
 foreign import javascript unsafe

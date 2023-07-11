@@ -10,7 +10,9 @@ import Data.Foldable
 import Network.Wai
 import Network.Wai.Application.Static
 import Network.Wai.Handler.Warp
+import Network.Wai.Handler.WarpTLS
 -- import Network.Wai.Middleware.Gzip
+import System.Directory
 import System.Exit
 import System.FSNotify hiding (Action)
 import System.Process
@@ -31,7 +33,12 @@ main = do
     server
 
 server :: IO ()
-server = run 80 app -- (compressing app)
+server = do
+  fe <- doesFileExist "server.crt"
+  let p = if fe then 443 else 80
+  (if fe then runTLS (tlsSettings "server.crt" "server.key") else runSettings)
+    (setServerName "pure-dev" (setPort p defaultSettings)) 
+    app
   where
     -- compressing = gzip def { gzipFiles = GzipCacheFolder "dist/cache" }
 

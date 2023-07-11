@@ -19,6 +19,7 @@ data XHRError
   | OtherError Txt SomeException
   deriving (Show)
 
+instance Exception XHRError
 instance ToTxt XHRError where
   toTxt = toTxt . show
 

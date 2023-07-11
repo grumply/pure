@@ -59,9 +59,9 @@ import Effect.Suspense as Export
 import Effect.Sync as Export
 import Effect.Title as Export
 import Effect.Poll as Export
-
+import Endpoint as Export
 import Browser as Export
-
+import Auth as Export
 import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,even,repeat,span,tan,reverse)
 
 -- | A variant of `fix` 'fixed' to a function (`->`) type with a convenient

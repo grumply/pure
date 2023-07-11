@@ -24,6 +24,7 @@ executable dev
       , wai-app-static
       , wai-extra
       , warp
+      , warp-tls
 
   ghc-options: -O -threaded -rtsopts -with-rtsopts=-N
 
