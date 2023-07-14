@@ -40,7 +40,7 @@ class Post req where
   post :: Txt -> Endpoint req -> req
 
 instance (Typeable a, Typeable r, ToJSON a, FromJSON r) => Post (a -> IO r) where
-  post host ep a = Fetch.postWith @a @r [] (host <> "/" <> toTxt ep) a >>= either throw pure
+  post host ep a = Fetch.postWith @a @r [] (host <> toTxt ep) a >>= either throw pure
  
 instance (Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Post (a -> b -> IO r) where
   post host ep a b = post host (fromTxt (toTxt ep)) (a,b)
@@ -64,15 +64,15 @@ class Get req where
   get :: Txt -> Endpoint req -> req
 
 instance (Typeable r, FromJSON r) => Get (IO r) where
-  get host ep = Fetch.getWith @r [] (host <> "/" <> toTxt ep) >>= either throw pure
+  get host ep = Fetch.getWith @r [] (host <> toTxt ep) >>= either throw pure
 
 instance (Typeable a, Typeable r, ToJSON a, FromJSON r) => Get (a -> IO r) where
   get host ep a = 
 #ifdef __GHCJS__
-    Fetch.getWith @r [] (host <> "/" <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a)))
+    Fetch.getWith @r [] (host <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a)))
       >>= either throw pure
 #else
-    Fetch.getWith @r [] (host <> "/" <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (encode a))))
+    Fetch.getWith @r [] (host <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (encode a))))
       >>= either throw pure
 #endif
 
@@ -121,7 +121,7 @@ sseWith policy host ep =
               retrying policy do
                 mv <- newEmptyMVar
                 pl <- ask self
-                es <- new_event_source_js (host <> "/" <> ep <> "?payload=" <> encodeURIComponent (btoa_js (encode pl)))
+                es <- new_event_source_js (host <> ep <> "?payload=" <> encodeURIComponent (btoa_js (encode pl)))
 
                 msgs <- onRaw es "message" def \_ msg ->
                   case msg .# "data" of

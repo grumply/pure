@@ -17,11 +17,7 @@ module Pure.Auth.Access
   ) where
 
 import qualified Pure.Auth.API as Auth
-import Pure.Auth.Data.Email
-import Pure.Auth.Data.Key
-import Pure.Auth.Data.Password
-import Pure.Auth.Data.Token
-import Pure.Auth.Data.Username
+import Pure.Auth.Data
 
 import Control.Cont
 import Control.Log

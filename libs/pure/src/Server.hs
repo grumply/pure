@@ -1,21 +1,17 @@
-{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, LambdaCase, BangPatterns, PatternSynonyms, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, NamedFieldPuns, DeriveGeneric, DeriveAnyClass, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances #-}
+{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, PatternSynonyms, ScopedTypeVariables, FlexibleContexts, BlockArguments, NamedFieldPuns, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, DerivingVia #-}
 module Server 
   ( Handler
   , serve
   , lambda, channel
-  , middleware, cache, logging
+  , middleware, cache, logging, withIdentity
+  , unauthorized
+  , Host(..), Agent(..)
   , Request(..)
-  , withSecret, newSecret, secretFile
-  , sign
-  , authorized
-  , Unauthorized
   , WarpTLS.tlsSettings
   ) where
 
-import Auth
-
 import Control.Concurrent
-import Control.Exception (Exception,throw,handle)
+import Control.Exception (Exception,throw,handle,catch)
 import Control.Monad
 import Control.Producer (Producer,yield)
 import Control.Retry
@@ -25,7 +21,7 @@ import qualified Control.Log as Log
 import Data.DOM
 import Data.Foldable
 import Data.Function ((&))
-import Data.Aeson as JSON
+import Data.Aeson as JSON hiding (Key)
 import Data.Default
 import Data.Exists
 import Data.IORef
@@ -38,6 +34,7 @@ import Data.View
 import GHC.Generics
 import System.IO.Unsafe
 import System.Directory
+import System.Posix.Files
 
 import Crypto.Hash
 import qualified Crypto.Random.Types as CRT
@@ -62,7 +59,7 @@ serve port mtlss = Component $ \self ->
         tid <- forkIO do
           maybe Warp.runSettings WarpTLS.runTLS mtlss (Warp.setServerName "pure" (Warp.setPort port Warp.defaultSettings)) $ \request respond -> do
             eps <- readIORef ref
-            let p = Txt.intercalate "/" (pathInfo request)
+            let p = toTxt (rawPathInfo request)
             case List.find (\Handler { methods, path } -> p == path && requestMethod request `Prelude.elem` methods) eps of
               Nothing -> respond (responseLBS status404 [] mempty)
               Just (Handler f _ _) -> f request respond
@@ -141,7 +138,7 @@ instance (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [r]) where
                 )
 
 instance (Typeable a, Typeable b, FromJSON a, FromJSON b, ToJSON r) => Channel (a -> b -> IO [r]) where
-  channel path l = channel (fromTxt (toTxt path)) (\(a,b) -> l a b)
+  channel path l = channel (fromTxt (toTxt path)) (uncurry l)
 
 instance (Typeable a, Typeable b, Typeable c, FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Channel (a -> b -> c -> IO [r]) where
   channel path l = channel (fromTxt (toTxt path)) (\(a,b,c) -> l a b c)
@@ -158,8 +155,6 @@ instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, FromJSON g, ToJSON r) => Channel (a -> b -> c -> d -> e -> f -> g -> IO [r]) where
   channel path l = channel (fromTxt (toTxt path)) (\(a,b,c,d,e,f,g) -> l a b c d e f g)
 
--- lambda (endpoint "get" :: Endpoint (IO r))
-
 class Lambda a where
   lambda :: Endpoint a -> a -> Handler
 
@@ -172,9 +167,10 @@ instance {-# OVERLAPPING #-} ToJSON r => Lambda (IO r) where
         | requestMethod request == methodOptions =
           respond (responseLBS status200 [(hAllow,"POST, GET, OPTIONS")] def)
 
-        | otherwise =
-          handle (\Unauthorized -> respond $ responseLBS status401 [] def) $
-            respond . responseLBS status200 [(hContentType,"application/json")] . encode =<< l
+        | otherwise = do
+          r <- handle (\Unauthorized -> pure (responseLBS unauthorized401 [] def)) do
+            responseLBS status200 [(hContentType,"application/json")] . encode <$> l
+          respond r
 
 instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where 
   lambda (Endpoint (path,_)) l = Handler {..}
@@ -196,14 +192,14 @@ instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where
               | otherwise = consumeRequestBodyLazy request
 
           pl <- payload
-          case eitherDecode pl of
-            Left e -> respond (responseLBS status400 [] (encode e))
+          respond =<< case eitherDecode pl of
+            Left e -> pure (responseLBS status400 [] (encode e))
             Right (a :: a) ->
-              handle (\Unauthorized -> respond $ responseLBS status401 [] def) $
-                respond . responseLBS status200 [(hContentType,"application/json")] . encode =<< l a
+              handle (\Unauthorized -> pure (responseLBS unauthorized401 [] def)) do
+                responseLBS status200 [(hContentType,"application/json")] . encode <$> l a
 
 instance (Typeable a, Typeable b, FromJSON a, FromJSON b, ToJSON r) => Lambda (a -> b -> IO r) where
-  lambda path l = lambda (fromTxt (toTxt path)) (\(a,b) -> l a b)
+  lambda path l = lambda (fromTxt (toTxt path)) (uncurry l)
 
 instance (Typeable a, Typeable b, Typeable c, FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Lambda (a -> b -> c -> IO r) where
   lambda path l = lambda (fromTxt (toTxt path)) (\(a,b,c) -> l a b c)
@@ -236,56 +232,23 @@ logging :: Log.Logging => Log.Level -> Middleware
 logging level app request respond = do
   Log.log level (show request)
   app request respond
-
-newtype Secret = Secret ByteString
-  deriving Show
-
-instance ToJSON Secret where
-  toJSON (Secret sec) = toJSON (show sec)
-
-instance FromJSON Secret where
-  parseJSON v = Secret . read <$> parseJSON v
-
-newSecret :: IO Secret
-newSecret = Secret . fromStrict <$> CRT.getRandomBytes 100
-
-withSecret :: IO Secret -> (Exists Secret => View) -> View
-withSecret = async
-
-secretFile :: FilePath -> IO Secret
-secretFile fp = do
-  fe <- doesFileExist fp
-  if fe then do
-    ms <- decode <$> BSL.readFile fp
-    case ms of
-      Nothing -> do
-        sec <- newSecret
-        encodeFile fp sec
-        pure sec
-      Just s -> 
-        pure s
-  else do
-    sec <- newSecret
-    encodeFile fp sec
-    pure sec
-
-sign :: Exists Secret => [Txt] -> Token
-sign claims = Token {..}
+ 
+withIdentity :: Lambda r => Endpoint r -> (Host -> Agent -> r) -> Handler
+withIdentity ep f = Handler (go :: Application) [methodPost,methodGet,methodOptions] (toTxt ep)
   where
-    Secret s = it
-    proof = fromString (show (hashWith SHA256 (toStrict (s <> encode claims))))
+    go request respond =
+      let 
+        h = fromTxt (Txt.init (Txt.dropWhileEnd (/= ':') (toTxt (show (remoteHost request)))))
+        ua = fromTxt (maybe def toTxt (requestHeaderUserAgent request))
 
-data Unauthorized = Unauthorized
-  deriving Show
+      in
+        Server.endpoint (lambda ep (f h ua)) request respond
+
+-- Note that Unauthorized is not exported; only lambda and channel can catch Unauthorized.
+-- lambda: sends unauthorized401
+-- channel: stops SSE connection
+data Unauthorized = Unauthorized deriving Show
 instance Exception Unauthorized
 
-authorized :: Exists Secret => Txt -> r -> Token -> r
-authorized prove r t 
-  | Secret s <- it
-  , prove `Data.Foldable.elem` claims t
-  , h <- fromString (show (hashWith SHA256 (toStrict (s <> encode (claims t)))))
-  , h == proof t
-  = r
-
-  | otherwise 
-  = throw Unauthorized
+unauthorized :: a
+unauthorized = throw Unauthorized

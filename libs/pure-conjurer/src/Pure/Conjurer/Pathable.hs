@@ -1,6 +1,6 @@
 module Pure.Conjurer.Pathable where
 
-import Pure.Auth.Data.Username
+import Pure.Auth.Data (Username())
 import Data.Txt as Txt
 import Data.Marker
 import Data.Router
@@ -45,7 +45,7 @@ instance Pathable () where
   toPath _ = ""
   fromPath = pure (Just ())
 
-instance Pathable Username where
+instance Pathable (Username c) where
   toPath un = "/" <> toTxt un
   fromPath = path' "/:username" "username"
 

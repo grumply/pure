@@ -1,6 +1,8 @@
+{-# language DerivingVia #-}
 module Endpoint where
 
 import Data.Proxy
+import Data.JSON
 import Data.String
 import Data.Txt
 
@@ -20,3 +22,16 @@ instance FromTxt (Endpoint a) where
 
 endpoint :: Txt -> Endpoint a
 endpoint path = Endpoint (path,Proxy)
+
+instance Monoid (Endpoint a) where
+  mempty = Endpoint (mempty,Proxy)
+
+instance Semigroup (Endpoint a) where
+  (<>) (Endpoint (pl,_)) (Endpoint (pr,_)) = Endpoint (pl <> pr,Proxy)
+
+newtype Host = Host Txt
+  deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
+
+newtype Agent = Agent Txt
+  deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
+ 

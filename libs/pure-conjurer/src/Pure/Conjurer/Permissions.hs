@@ -8,7 +8,7 @@ import Pure.Conjurer.Resource
 import Pure.Auth (Username)
 
 class Ownable resource where
-  isOwner :: Username -> Context resource -> Maybe (Name resource) -> IO Bool
+  isOwner :: Username c -> Context resource -> Maybe (Name resource) -> IO Bool
 
 data Permissions resource = Permissions
   { canCreate   :: Context resource -> Name resource -> Resource resource -> IO Bool
@@ -71,8 +71,8 @@ defaultPermissions = \case
       -- figure out why rather than being surprised that resources are disappearing!
 
 class DefaultPermissions x where
-  permissions :: Maybe Username -> Permissions x
-  default permissions :: Ownable x => Maybe Username -> Permissions x
+  permissions :: Maybe (Username c) -> Permissions x
+  default permissions :: Ownable x => Maybe (Username c) -> Permissions x
   permissions = defaultPermissions
 
 instance {-# OVERLAPPABLE #-} Ownable x => DefaultPermissions x

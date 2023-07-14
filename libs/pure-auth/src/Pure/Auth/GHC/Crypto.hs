@@ -1,27 +1,37 @@
-{-# language BlockArguments, RankNTypes, TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables #-}
+{-# language BlockArguments, RankNTypes, TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables, RecordWildCards, NamedFieldPuns, FlexibleContexts, AllowAmbiguousTypes, BangPatterns #-}
 module Pure.Auth.GHC.Crypto where
 
-import Pure.Auth.Data.Email (Email(..))
-import Pure.Auth.Data.Hash (Hash(..))
-import Pure.Auth.Data.Key (Key(..))
-import Pure.Auth.Data.Password (Password(..))
-import Pure.Auth.Data.Token (Token(..))
-import Pure.Auth.Data.Username (Username)
-
-import Data.Txt as Txt (Txt,ToTxt(..),FromTxt(..),toLower,length)
-
-import Crypto.Random (SystemRandom,newGenIO,genBytes)
-import Crypto.PasswordStore as PW (makePassword,verifyPassword)
-import Data.ByteString.Char8 as BS (filter)
-
-import Control.Monad.IO.Class (MonadIO(..))
-
 import Control.Concurrent (MVar,newMVar,modifyMVar)
+import Control.Exception
+import Control.State
+import Crypto.Hash
+import Crypto.PasswordStore as PW (makePassword,verifyPassword)
+import Crypto.Random
+import qualified Crypto.Random.Types as CRT
+import Data.Aeson as JSON (encode,encodeFile,decode,decodeFileStrict)
+import Data.ByteString as BS (ByteString)
+import Data.ByteString.Char8 as BS (filter)
+import Data.ByteString.Lazy as BSL
 import Data.Char (isHexDigit)
+import Data.Exists
+import Data.JSON (encode)
+import Data.List as List
+import Data.String
+import Data.Time
+import Data.Typeable
 import Data.Maybe (listToMaybe,mapMaybe)
 import Data.Proxy (Proxy(..))
+import Data.Txt as Txt (Txt,ToTxt(..),FromTxt(..),toLower,length,null)
+import Data.View
+import Effect.Async
 import GHC.TypeNats (Nat,KnownNat(..),natVal)
+import Pure.Auth.Data
+import System.Directory
+import System.IO
 import System.IO.Unsafe (unsafePerformIO)
+import Server (unauthorized)
+
+import Debug.Trace
 
 {- NOTES
 
@@ -44,27 +54,22 @@ TODO: Consider making the generator per-connection to improve performance
       be used in a multi-threaded fashion, or does it incur a global lock while
       accessing its entropy source?
 
+A token is a valid proof of authentication for the associated token owner.
+
+
+
 -}
-
---------------------------------------------------------------------------------
--- Global generator
-
-{-# NOINLINE generator #-}
-generator :: MVar SystemRandom
-generator = unsafePerformIO do
-  sr <- newGenIO @SystemRandom
-  newMVar sr
 
 --------------------------------------------------------------------------------
 -- Generic low-level hashing using pwstore-fast for pbkdf2 hashing.
 
-hashTxt :: forall n m x. (KnownNat n, MonadIO m) => Txt -> m (Hash n x)
-hashTxt bs = fmap build make 
+hashTxt :: forall n x. KnownNat n => Txt -> IO (Hash n x)
+hashTxt bs = fmap build make
   where
     rounds = fromIntegral (natVal (Proxy :: Proxy n))
     tbs    = fromTxt bs
-    build  = Hash . toTxt
-    make   = liftIO (PW.makePassword tbs rounds)
+    build  = fromTxt . toTxt
+    make   = PW.makePassword tbs rounds
 
 unsafeCheckHash :: forall n a b. ToTxt a => a -> Hash n b -> Bool
 unsafeCheckHash a h =
@@ -86,7 +91,7 @@ checkHashes = unsafeCheckHashes
 --------------------------------------------------------------------------------
 -- Passwords
 
-hashPassword :: forall n m. (KnownNat n, MonadIO m) => Password -> m (Hash n Password)
+hashPassword :: forall n. (KnownNat n) => Password -> IO (Hash n Password)
 hashPassword = hashTxt . toTxt
 
 --------------------------------------------------------------------------------
@@ -94,42 +99,119 @@ hashPassword = hashTxt . toTxt
 --   Used internally as a generic cryptographic primitive for one-time keys and
 --   larger structures, like tokens.
 
-newKey :: MonadIO m => Int -> m Key
-newKey n = fmap build make
-  where
-    build = Key 
-    make = liftIO (modifyMVar generator (go [] n))
-      where
-        go acc 0 gen = return (gen,Txt.toLower $ mconcat acc)
-        go acc m gen =
-          case genBytes m gen of
-            Left _ -> newGenIO >>= go acc m
-            Right (bs,gen') ->
-              let t = toTxt (BS.filter isHexDigit bs)
-              in go (t : acc) (m - Txt.length t) gen' 
+newKey :: Int -> IO Key
+newKey n = fromTxt . toTxt . show . (hash :: BS.ByteString -> Digest SHA3_512) <$> getRandomBytes n
 
-hashKey :: forall n m. (KnownNat n, MonadIO m) => Key -> m (Hash n Key)
+hashKey :: forall n. KnownNat n => Key -> IO (Hash n Key)
 hashKey = hashTxt . toTxt
 
-newHashKey :: forall n m. (KnownNat n, MonadIO m) => Int -> m (Hash n Key)
+newHashKey :: forall n. KnownNat n => Int -> IO (Hash n Key)
 newHashKey n = hashKey =<< newKey n
 
 
 --------------------------------------------------------------------------------
 -- Email
 
-hashEmail :: forall n m. (KnownNat n, MonadIO m) => Email -> m (Hash n Email)
+hashEmail :: forall n. (KnownNat n) => Email -> IO (Hash n Email)
 hashEmail = hashTxt . toTxt
 
 --------------------------------------------------------------------------------
+-- Username
+
+hashUsername :: forall n c. (KnownNat n) => Username c -> IO (Hash n (Username c))
+hashUsername = hashTxt . toTxt
+
+--------------------------------------------------------------------------------
 -- Token
---   Used to authenticate sessions.
 
-newToken :: MonadIO m => Username -> m (Token _role)
-newToken un = ((Token .) . (,)) <$> pure un <*> newKey 64
+hashToken :: Token c -> Hash 1 (Token c)
+hashToken = fromTxt . proof
 
-hashToken :: (KnownNat n, MonadIO m) => Token _role -> m (Hash n (Token _role))
-hashToken (Token (_,token)) = hashTxt (toTxt token)
+--------------------------------------------------------------------------------
 
-checkToken :: Token _role -> [Hash n (Token _role)] -> Maybe (Hash n (Token _role))
-checkToken (Token (_,token)) = unsafeCheckHashes (toTxt token)
+withPool :: forall c. Typeable c => FilePath -> (Pool c => View) -> View
+withPool fp = stateIO (createDirectoryIfMissing True fp >> pure (Pool fp :: Pool_ c))
+
+withSecret :: forall c. Typeable c => IO (Secret_ c) -> (Secret c => View) -> View
+withSecret = async 
+
+-- | Warning! Assumes that if a token is materialized, it is valid.
+withProofs :: forall c a. Token c -> (Proofs c => a) -> a
+withProofs token = with (Proofs token :: Proofs_ c)
+
+newSecret :: IO (Secret_ c)
+newSecret = Secret <$> CRT.getRandomBytes 16
+
+secretFile :: FilePath -> IO (Secret_ c)
+secretFile fp = do
+  fe <- doesFileExist fp
+  if fe then do
+    !ms <- decodeFileStrict fp
+    case ms of
+      Nothing -> do
+        !sec <- newSecret
+        encodeFile fp sec
+        pure sec
+      Just s -> do
+        pure s
+  else do
+    !sec <- newSecret
+    encodeFile fp sec
+    pure sec
+
+pool :: forall c. Pool c => FilePath
+pool = let Pool p = it :: Pool_ c in p
+
+sign :: forall c. (Pool c, Secret c) => Username c -> Time -> [(Txt,Txt)] -> Token c
+sign owner expires@(Seconds i _) claims = 
+  let 
+    t = fromIntegral (round i :: Int)
+    f = pool @c <> fromTxt proof
+  in
+    unsafePerformIO (openFile f WriteMode >>= hClose) `seq` Token {..}
+  where
+    Secret s = it :: Secret_ c
+    proof = toTxt (show (hashWith SHA256 (s <> BSL.toStrict (JSON.encode (owner,expires,claims)))))
+
+revoke :: forall c. Pool c => Txt -> IO ()
+revoke proof = removeFile (pool @c <> fromTxt proof)
+
+authenticated :: forall c r. (Pool c, Secret c) => (Proofs c => r) -> (Token c -> r)
+authenticated r t@Token {..} 
+  | Secret s <- it :: Secret_ c
+  , h <- show (hashWith SHA256 (s <> BSL.toStrict (JSON.encode (owner,expires,claims))))
+  , h == fromTxt proof
+  , unsafePerformIO (doesFileExist (pool @c <> h))
+  , unsafePerformIO ((expires >) <$> time)
+  = withProofs @c t r
+
+  | otherwise 
+  = trace "unauthorized" unauthorized
+
+authorized :: forall c r. Proofs c => Txt -> r -> r
+authorized c r =
+  case proove @c c of
+    Just x -> r
+    _      -> unauthorized
+
+authorized' :: forall c r. (Pool c, Proofs c) => Txt -> r -> r
+authorized' c r =
+  case proove' @c c of
+    Just x -> r
+    _      -> unauthorized
+
+proofs :: forall c. Proofs c => [(Txt,Txt)]
+proofs = let Proofs Token { claims } = it :: Proofs_ c in claims
+
+proove :: forall c. Proofs c => Txt -> Maybe Txt
+proove claim = List.lookup claim (proofs @c)
+
+proove' :: forall c. (Pool c, Proofs c) => Txt -> Maybe Txt
+proove' claim
+  | Proofs Token { claims, proof } :: Proofs_ c <- it
+  , unsafePerformIO (doesFileExist (pool @c <> fromTxt proof)) 
+  = List.lookup claim claims
+
+  | otherwise 
+  = Nothing
+

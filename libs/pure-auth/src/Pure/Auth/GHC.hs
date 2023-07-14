@@ -1,40 +1,39 @@
-{-# language AllowAmbiguousTypes, TypeApplications, ScopedTypeVariables, RecordWildCards, PatternSynonyms, DataKinds #-}
+{-# language AllowAmbiguousTypes, TypeApplications, ScopedTypeVariables, RecordWildCards, PatternSynonyms, DataKinds, LambdaCase, ViewPatterns, OverloadedStrings #-}
 module Pure.Auth.GHC (module Export,authDB,tryCreateUser) where
 
-import Pure.Auth.Data.Email
-import Pure.Auth.Data.Password
-import Pure.Auth.Data.Username
+import Data.Sorcerer (sorcerer,read,write,observe,pattern Added)
+import Data.Txt (FromTxt(..))
+import Data.Typeable
+import qualified Data.Time as Time
+import Prelude hiding (read)
+import Pure.Auth.Data
 import Pure.Auth.GHC.API as Export
 import Pure.Auth.GHC.Auth as Export (AuthEvent(Deleted),Stream(AuthEventStream),Auth)
 import Pure.Auth.GHC.Auth
-import Pure.Auth.GHC.Crypto
+import Pure.Auth.GHC.Crypto as Export
 
-import Data.Sorcerer (sorcerer,read,write,observe,pattern Added)
+authDB :: forall c. Typeable c => IO ()
+authDB = sorcerer @(AuthEvent c) @'[Auth c]
 
-import Data.Typeable
+tryCreateUser :: forall c. Typeable c => Username c -> Email -> Password -> IO Bool
+tryCreateUser (normalize -> un) em pw = do
+  let host = fromTxt "localhost"
+      agent = fromTxt ""
+  read (AuthEventStream un :: Stream (AuthEvent c)) >>= \case
 
-import Prelude hiding (read)
+    Just (_ :: Auth c) -> do
+      pure False
 
-authDB :: forall _role. Typeable _role => IO ()
-authDB = sorcerer @(AuthEvent _role) @'[(Auth _role)]
-
-tryCreateUser :: forall _role. Typeable _role => Username -> Email -> Password -> IO Bool
-tryCreateUser un em pw =
-  read (AuthEventStream un :: Stream (AuthEvent _role)) >>= \a ->
-    case a of
-
-      Just (_ :: Auth _role) -> 
-        pure False
-
-      _ -> do
-        k     <- newKey 64
-        email <- hashEmail em
-        key   <- hashKey k
-        pass  <- hashPassword pw
-        r     <- let username = un in observe (AuthEventStream un :: Stream (AuthEvent _role)) (Registered {..} :: AuthEvent _role)
-        case r of
-          Added (_ :: Auth _role) -> do
-            write (AuthEventStream un :: Stream (AuthEvent _role)) (Activated :: AuthEvent _role)
-            pure True
-          _ -> 
-            pure False
+    _ -> do
+      time     <- Time.time
+      k        <- newKey 64
+      email    <- hashEmail em
+      key      <- hashKey k
+      pass     <- hashPassword pw
+      username <- hashUsername un
+      observe (AuthEventStream un :: Stream (AuthEvent c)) (Registered {..} :: AuthEvent c) >>= \case
+        Added (_ :: Auth c) -> do
+          write (AuthEventStream un :: Stream (AuthEvent c)) (Activated time host agent :: AuthEvent c)
+          pure True
+        _ -> do
+          pure False

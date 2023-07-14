@@ -90,7 +90,6 @@ library
       Data.Websocket.Internal.GHC
 
   exposed-modules:
-    Auth
     Pure
     Browser
     Client

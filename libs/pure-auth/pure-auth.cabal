@@ -7,26 +7,22 @@ library
       Pure.Auth
     , Pure.Auth.API
     , Pure.Auth.Data
-    , Pure.Auth.Data.Email
-    , Pure.Auth.Data.Hash
-    , Pure.Auth.Data.Key
-    , Pure.Auth.Data.Password
-    , Pure.Auth.Data.Token
-    , Pure.Auth.Data.Username
-    , Pure.Auth.Access
+--     , Pure.Auth.Access
 
   build-depends:
     base,
     pure,
+    bytestring,
     hashable
 
   if !(impl(ghcjs))
     build-depends:
-      bytestring,
-      crypto-api, 
+      directory,
+      filepath,
+      cryptonite,
       pwstore-fast,
-      iproute,
-      connection
+      connection,
+      aeson
 
     exposed-modules:
         Pure.Auth.GHC

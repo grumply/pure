@@ -42,7 +42,7 @@ data Interactions a = Interactions
   }
 
 class Typeable a => DefaultInteractions a where
-  interactions :: Maybe Username -> Interactions a
+  interactions :: Maybe (Username c) -> Interactions a
   interactions _ = 
     let 
       tc = fromTxt (rep @a)
