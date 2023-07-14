@@ -1,10 +1,6 @@
 packages: 
   ./libs/pure/pure.cabal 
-  ./libs/pure-conjurer/pure-conjurer.cabal 
-  ./libs/pure-convoker/pure-convoker.cabal 
-  ./libs/pure-magician/pure-magician.cabal 
   ./libs/pure-auth/pure-auth.cabal
-  ./libs/pure-media-library/pure-media-library.cabal
   
   ./dev/dev.cabal
 
