@@ -71,13 +71,13 @@ startManager builder evs sm@(StreamManager (stream,callback)) =
       Read f -> do
         let
           test :: Aggregator ev -> Maybe (IO ())
-          test (Aggregator _ mag _ _ _) =
+          test (Aggregator _ mag tid _ _) =
             case cast mag of
               Nothing -> Nothing
-              Just x  -> Just (f x)
+              Just x  -> Just (f tid x)
         case catMaybes (fmap test ags) of
           (g : _) -> g
-          _ -> f Nothing
+          _ -> f tid Nothing
         pure acc
 
       Write e -> do
@@ -136,7 +136,7 @@ startManager builder evs sm@(StreamManager (stream,callback)) =
           where
             go = \case
               [] -> loop
-              (Read f : evs) -> f Nothing >> go evs
+              (Read f : evs) -> f 0 Nothing >> go evs
               evs -> do
                 createDirectoryIfMissing True (takeDirectory fp)
                 (log,tid) <- resume @ev fp

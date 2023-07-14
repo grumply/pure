@@ -28,13 +28,13 @@ class Streamable ev where
 -- constraint). We know that all events (new lines) are immutable after commit,
 -- so it is safe to read those events, and we can stream them on demand.
 {-# INLINE events #-}
-events :: forall ev m. (MonadIO m, Streamable ev, FromJSON ev) => Stream ev -> m [ev]
-events s = liftIO do
+events :: forall ev m. (MonadIO m, Streamable ev, FromJSON ev) => Int -> Stream ev -> m [ev]
+events n s = liftIO do
   let fp = stream s
   fe <- doesFileExist fp
   if fe then do
     cnts <- BSLC.readFile fp
-    pure $ fmap snd $ catMaybes $ fmap (decode_ @(Int,ev)) $ List.drop 1 $ BSLC.lines cnts
+    pure $ fmap snd $ catMaybes $ fmap (decode_ @(Int,ev)) $ List.drop (n + 1) $ BSLC.lines cnts
   else
     pure []
 
@@ -43,7 +43,7 @@ data Event
     { event :: ev
     }
   | forall ag. (Typeable ag) => Read
-    { callback :: Maybe ag -> IO ()
+    { callback :: Int -> Maybe ag -> IO ()
     }
   | forall ev ag. (Typeable ev, Typeable ag, ToJSON ev) => Transact
     { event   :: ev

@@ -23,8 +23,6 @@ import Unsafe.Coerce
 type Listeners = [(Either Unique ThreadId,[Event] -> IO ())]
 type Sink = MVar ([Event] -> IO ())
 
--- Not using a strict map so the CAS of atomicModifyIORef' can be faster.
--- Since everything inside `Streams` is simple and static, this should be okay.
 type Streams ev = Map (Stream ev) (Listeners,Maybe Sink)
 
 {-# NOINLINE dispatchers #-}
@@ -155,7 +153,7 @@ getListeners s = do
   ds <- readIORef dispatchers
   case Map.lookup ty (unsafeCoerce ds) of
     Just (untargeted,streams) | Just (ls,Just mv) <- Map.lookup s streams ->
-      -- The fast path. A single readIORef and two map lookups for an open stream.
+      -- The fast path. Two map lookups for an open stream.
       let composed evs = traverse_ (($ evs) . snd) (untargeted ++ ls)
       in pure (composed,Right (StreamManager (s,mv)))
     _ -> do

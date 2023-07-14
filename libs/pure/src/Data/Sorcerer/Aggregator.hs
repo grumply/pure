@@ -53,7 +53,7 @@ toAggregator s latest = do
       | latest == 0 -> pure (Aggregator path (Nothing :: Maybe ag) 0 False False)
 
       | otherwise -> do
-        evs0 :: [ev] <- events s
+        evs0 :: [ev] <- events 0 s
         let
           mkAggregatorEvent tid ev = (tid,Write ev)
           evs = zipWith mkAggregatorEvent [1 ..] evs0
@@ -63,10 +63,10 @@ toAggregator s latest = do
       | tid == latest -> pure (Aggregator path mag latest False False)
 
       | otherwise -> do
-        evs0 :: [ev] <- events s
+        evs0 :: [ev] <- events tid s
         let
           mkAggregatorEvent tid ev = (tid,Write ev)
-          evs = zipWith mkAggregatorEvent [tid + 1 ..] (Prelude.drop tid evs0)
+          evs = zipWith mkAggregatorEvent [tid + 1 ..] evs0
         foldM integrate (Aggregator path mag tid True False) evs
 
 integrate :: forall ev. (Typeable ev) => Aggregator ev -> (TransactionId,Event) -> IO (Aggregator ev)
