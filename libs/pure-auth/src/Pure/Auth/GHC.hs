@@ -16,7 +16,7 @@ authDB :: forall c. Typeable c => IO ()
 authDB = sorcerer @(AuthEvent c) @'[Auth c]
 
 tryCreateUser :: forall c. Typeable c => Username c -> Email -> Password -> IO Bool
-tryCreateUser (normalize -> un) em pw = do
+tryCreateUser un em pw = do
   let host = fromTxt "localhost"
       agent = fromTxt ""
   read (AuthEventStream un :: Stream (AuthEvent c)) >>= \case

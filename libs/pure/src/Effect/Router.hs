@@ -50,7 +50,7 @@ router rtng v = do
       runRouter
       pure (Nothing,const stop)
 
-  stateWith (const pure) initialize $ do
+  stateWith' (const pure) initialize $ do
     case it of
       Nothing -> Null
       Just (sub,rt) -> with (Route @rt sub rt) v
@@ -64,7 +64,7 @@ subrouter rtng v = do
       mrt <- Router.route (rtng >>= \x -> getPath >>= \p -> pure (p,x)) path
       pure (mrt :: Maybe (Txt,rt),\_ -> pure ())
 
-  stateWith (const pure) initialize $ do
+  stateWith' (const pure) initialize $ do
     case it of
       Nothing -> Null
       Just (sub,rt) -> with (Route @rt sub rt) v
@@ -75,7 +75,7 @@ routes :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx :=> View) => Vi
 routes rs v = router rs (let (d :: ctx :=> View) = current in with d v)
 
 page :: forall ctx. Exists (ctx :=> View) => (ctx => View)
-page = fromDynamic (it :: ctx :=> View)
+page = eager (it :: ctx :=> View) (fromDynamic (it :: ctx :=> View))
 
 routes_ :: Routes () -> View
 routes_ rs = routes @() rs (page @())

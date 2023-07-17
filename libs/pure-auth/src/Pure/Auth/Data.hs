@@ -4,11 +4,13 @@ module Pure.Auth.Data where
 import Data.JSON hiding (Key)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
+import Data.Char
 import Data.Exists
 import Data.Hashable
+import Data.List as List
 import Data.String
 import Data.Time
-import Data.Txt
+import Data.Txt as Txt
 import GHC.Generics
 import GHC.TypeLits
 
@@ -21,12 +23,18 @@ newtype Password = Password Txt
   deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
 
 newtype Username c = Username Txt
-  deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord,IsString,Hashable) via Txt
+  deriving (ToJSON,ToTxt,Show,Eq,Ord,Hashable) via Txt
 
 type role Username nominal
 
-normalize :: Username c -> Username c
-normalize (Username un) = Username (toLower un)
+instance FromTxt (Username c) where
+  fromTxt = Username . Txt.toLower . Txt.filter isPrint
+
+instance FromJSON (Username c) where
+  parseJSON = fmap fromTxt . parseJSON 
+
+instance IsString (Username c) where
+  fromString = fromTxt . fromString
 
 newtype Key = Key Txt
   deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt

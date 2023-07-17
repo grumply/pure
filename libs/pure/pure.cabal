@@ -136,6 +136,7 @@ library
     Data.Router
     Data.Scroll
     Data.Shadows
+    Data.Slug
     Data.Sorcerer
     Data.Sorcerer.Sorcery
     Data.SVG
@@ -186,6 +187,7 @@ library
     Web.Events.Mouse
     Web.Events.Pointer
     Web.Events.Scroll
+    Web.Events.Selection
     Web.Events.Touch
     Web.Events.Transition
     Web.Events.Wheel

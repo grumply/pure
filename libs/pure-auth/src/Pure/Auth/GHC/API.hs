@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, NamedFieldPuns, RecordWildCards, BlockArguments, DuplicateRecordFields, PartialTypeSignatures, ScopedTypeVariables, OverloadedStrings, FlexibleContexts, ViewPatterns, AllowAmbiguousTypes, RankNTypes, ConstraintKinds, KindSignatures, TypeApplications #-}
+{-# LANGUAGE LambdaCase, NamedFieldPuns, RecordWildCards, BlockArguments, DuplicateRecordFields, PartialTypeSignatures, ScopedTypeVariables, OverloadedStrings, FlexibleContexts, ViewPatterns, AllowAmbiguousTypes, RankNTypes, ConstraintKinds, KindSignatures, TypeApplications, UndecidableInstances #-}
 module Pure.Auth.GHC.API where
 
 import Control.Exception as E
@@ -32,8 +32,8 @@ simpleLimiter per delta = Limiter \host un ->
     (Limiter.allowed per "pure-auth" (toTxt host) delta)
     (Limiter.allowed per "pure-auth" (toTxt un) delta)
 
-register :: forall c. (Typeable c, Limiter c) => (Username c -> IO Bool) -> (Host -> Agent -> Username c -> Email -> Key -> IO () -> IO ()) -> Host -> Agent -> Username c -> Email -> Password -> IO ()
-register checkUsername onSuccess host agent (normalize -> un) e p = do
+register :: forall c. (Typeable c, Limiter c) => (Username c -> IO Bool) -> (Host -> Agent -> Username c -> Email -> Key -> IO () -> IO ()) -> Host -> Agent -> Username c -> Email -> Password -> IO Bool
+register checkUsername onSuccess host agent un e p = do
 
   allow <- allowed it host un
 
@@ -41,11 +41,11 @@ register checkUsername onSuccess host agent (normalize -> un) e p = do
 
     valid <- checkUsername un
 
-    when valid do
+    if valid then do
 
       read (AuthEventStream un :: Stream (AuthEvent c)) >>= \case
 
-        Just (_ :: Auth c) -> pure ()
+        Just (_ :: Auth c) -> pure False
 
         _ -> do
           time <- Time.time
@@ -58,14 +58,17 @@ register checkUsername onSuccess host agent (normalize -> un) e p = do
           let activate = write (AuthEventStream un :: Stream (AuthEvent c)) (Activated {..} :: AuthEvent c)
           case r of
             -- Check if `Added` to prevent re-initialization after deletion.
-            Added (_ :: Auth c) -> onSuccess host agent un e k activate
-            _ -> pure ()
+            Added (_ :: Auth c) -> onSuccess host agent un e k activate >> pure True
+            _ -> pure False
+
+    else
+      pure False
 
   else
-    pure ()
+    pure False
 
 startRecover :: forall c. (Typeable c, Limiter c) => (Host -> Agent -> Username c -> Email -> Key -> IO ()) -> Host -> Agent -> Username c -> Email -> IO ()
-startRecover onSuccess host agent (normalize -> un) e = do
+startRecover onSuccess host agent un e = do
 
   allow <- allowed it host un
 
@@ -85,8 +88,8 @@ startRecover onSuccess host agent (normalize -> un) e = do
   else
     pure ()
 
-activate :: forall c. (Typeable c, Limiter c, Pool c, Secret c) => (Host -> Agent -> Username c -> Email -> IO ()) -> Time -> Host -> Agent -> Key -> Username c -> Email -> IO (Maybe (Token c))
-activate onSuccess dur host agent key (normalize -> un) email = do
+activate :: forall c. (Typeable c, Limiter c, Pool c, Secret c) => (Host -> Agent -> Username c -> Email -> IO (Token c)) -> Time -> Host -> Agent -> Key -> Username c -> Email -> IO (Maybe (Token c))
+activate onSuccess dur host agent key un email = do
 
   allow <- allowed it host un
 
@@ -96,13 +99,11 @@ activate onSuccess dur host agent key (normalize -> un) email = do
 
       Just (Auth { key = Just a, email = e } :: Auth c)
         | checkHash key a, checkHash email e -> do
+          t <- onSuccess host agent un email
+          let token = proof t
           time <- Time.time
-          let
-            t = sign un (time + dur) []
-            token = proof t
           write (AuthEventStream un :: Stream (AuthEvent c)) (Activated {..} :: AuthEvent c)
           write (AuthEventStream un :: Stream (AuthEvent c)) (LoggedIn {..} :: AuthEvent c)
-          onSuccess host agent un email
           pure (Just t)
 
       _ ->
@@ -112,7 +113,7 @@ activate onSuccess dur host agent key (normalize -> un) email = do
     pure Nothing
 
 updateEmail :: forall c. (Typeable c, Limiter c, Secret c) => (Host -> Agent -> Username c -> Email -> IO ()) -> Host -> Agent -> Username c -> Password -> Email -> Email -> IO Bool
-updateEmail onSuccess host agent (normalize -> un) password old new = do
+updateEmail onSuccess host agent un password old new = do
 
   allow <- allowed it host un
 
@@ -181,11 +182,10 @@ logoutAll onSuccess host agent un password = do
     pure ()
 
 
-login :: forall c. (Typeable c, Limiter c, Pool c, Secret c) => (Host -> Agent -> Username c -> IO ()) -> Time -> Host -> Agent -> Username c -> Password -> IO (Maybe (Token c))
-login onSuccess dur host agent (normalize -> un) password = do
+login :: forall c. (Typeable c, Limiter c, Pool c, Secret c) => (Host -> Agent -> Username c -> IO (Token c)) -> Time -> Host -> Agent -> Username c -> Password -> IO (Maybe (Token c))
+login onSuccess dur host agent un password = do
 
   allow <- allowed it host un
-
 
   if allow then do
 
@@ -194,12 +194,11 @@ login onSuccess dur host agent (normalize -> un) password = do
     read (AuthEventStream un :: Stream (AuthEvent c)) >>= \case
 
       Just (Auth { key = Nothing, pass = p, tokens } :: Auth c) | checkHash password p -> do
-        let t = sign un (time + dur) []
-            token = proof t
+        t <- onSuccess host agent un
+        let token = proof t
             (_,expired) = List.splitAt 9 tokens
         for_ expired (revoke @c)
         write (AuthEventStream un :: Stream (AuthEvent c)) (LoggedIn {..} :: AuthEvent c)
-        onSuccess host agent un
         pure (Just t)
 
       _ -> do
@@ -210,7 +209,7 @@ login onSuccess dur host agent (normalize -> un) password = do
     pure Nothing
 
 updatePassword :: forall c. (Typeable c, Limiter c, Pool c, Secret c) => (Host -> Agent -> Username c -> Email -> IO ()) -> Time -> Host -> Agent -> Username c -> Password -> Email -> Password -> IO Bool
-updatePassword onSuccess dur host agent (normalize -> un) old email new = do
+updatePassword onSuccess dur host agent un old email new = do
 
   allow <- allowed it host un
 
@@ -238,8 +237,8 @@ updatePassword onSuccess dur host agent (normalize -> un) old email new = do
   else
     pure False
 
-recover :: forall c. (Typeable c, Limiter c, Pool c, Secret c) => (Host -> Agent -> Username c -> Email -> IO ()) -> Time -> Host -> Agent -> Username c -> Email -> Password -> Key -> IO (Maybe (Token c))
-recover onSuccess dur host agent (normalize -> un) email password key = do
+recover :: forall c. (Typeable c, Limiter c, Pool c, Secret c) => (Host -> Agent -> Username c -> Email -> IO (Token c)) -> Time -> Host -> Agent -> Username c -> Email -> Password -> Key -> IO (Maybe (Token c))
+recover onSuccess dur host agent un email password key = do
 
   allow <- allowed it host un
 
@@ -251,16 +250,15 @@ recover onSuccess dur host agent (normalize -> un) email password key = do
 
       Just (Auth { key = Just r, email = e } :: Auth c)
         | checkHash email e, key == r -> do
-          time <- Time.time
-          let t = sign un (time + dur) []
+          t <- onSuccess host agent un email
 
+          time <- Time.time
           pass <- hashPassword password
           write (AuthEventStream un :: Stream (AuthEvent c)) (ChangedPassword {..} :: AuthEvent c)
 
           let token = proof t
           write (AuthEventStream un :: Stream (AuthEvent c)) (LoggedIn {..} :: AuthEvent c)
 
-          onSuccess host agent un email
           pure (Just t)
 
       _ ->
@@ -270,7 +268,7 @@ recover onSuccess dur host agent (normalize -> un) email password key = do
     pure Nothing
 
 startDelete :: forall c. (Typeable c, Limiter c) => (Host -> Agent -> Username c -> Email -> Key -> IO ()) -> Host -> Agent -> Username c -> Email -> Password -> IO ()
-startDelete onSuccess host agent (normalize -> un) e p = do
+startDelete onSuccess host agent un e p = do
 
   allow <- allowed it host un
 
@@ -293,7 +291,7 @@ startDelete onSuccess host agent (normalize -> un) e p = do
     pure ()
 
 delete :: forall c. (Typeable c, Limiter c) => (Host -> Agent -> Username c -> Email -> IO ()) -> Host -> Agent -> Username c -> Email -> Key -> IO Bool
-delete onSuccess host agent (normalize -> un) email key = do
+delete onSuccess host agent un email key = do
 
   allow <- allowed it host un
 
@@ -339,12 +337,12 @@ data Config c = Config
   , duration :: Time
   , validate :: Username c -> IO Bool -- You might want to blacklist certain user names. 
   , onRegister :: Host -> Agent -> Username c -> Email -> Key -> IO () -> IO ()
-  , onActivate :: Host -> Agent -> Username c -> Email -> IO ()
-  , onLogin :: Host -> Agent -> Username c -> IO ()
+  , onActivate :: Host -> Agent -> Username c -> Email -> IO (Token c)
+  , onLogin :: Host -> Agent -> Username c -> IO (Token c)
   , onLogout :: Host -> Agent -> Username c -> IO ()
   , onLogoutAll :: Host -> Agent -> Username c -> IO ()
   , onStartRecover :: Host -> Agent -> Username c -> Email -> Key -> IO ()
-  , onRecover :: Host -> Agent -> Username c -> Email -> IO ()
+  , onRecover :: Host -> Agent -> Username c -> Email -> IO (Token c)
   , onStartDelete :: Host -> Agent -> Username c -> Email -> Key -> IO ()
   , onDelete :: Host -> Agent -> Username c -> Email -> IO ()
   , onUpdateEmail :: Host -> Agent -> Username c -> Email -> IO ()
@@ -352,18 +350,18 @@ data Config c = Config
   , onListRecentAuthEvents :: Host -> Agent -> Username c -> IO ()
   }
 
-instance Default (Config c) where
+instance (Secret c, Pool c) => Default (Config c) where
   def = Config
     { base = ""
     , duration = Month
     , validate = \un -> pure True
     , onRegister = \h ua un e pw activate -> activate
-    , onActivate = \h ua un e -> pure ()
-    , onLogin = \h ua un -> pure ()
+    , onActivate = \h ua un e -> Time.time >>= \t -> pure (sign un (t + Month) [])
+    , onLogin = \h ua un -> Time.time >>= \t -> pure (sign un (t + Month) [])
     , onLogout = \h ua un -> pure ()
     , onLogoutAll = \h ua un -> pure ()
     , onStartRecover = \h ua un e k -> pure ()
-    , onRecover = \h ua un e -> pure ()
+    , onRecover = \h ua un e -> Time.time >>= \t -> pure (sign un (t + Month) [])
     , onStartDelete = \h ua un e k -> pure ()
     , onDelete = \h ua un e -> pure ()
     , onUpdateEmail = \h ua un e -> pure ()

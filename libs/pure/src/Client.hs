@@ -106,7 +106,7 @@ sse _ _ _ = Data.View.Null
 sse = sseWith @e (jittered Second & limitDelay (Seconds 30 0))
 #endif
 
-sseWith :: forall e a. (Producer e, FromJSON e, Typeable a, ToJSON a) => Policy -> Txt -> Txt -> a -> View
+sseWith :: forall e a. (FromJSON e, Typeable a, ToJSON a) => Policy -> Txt -> Txt -> a -> (Producer e => View)
 sseWith policy host ep = 
 #ifndef __GHCJS__
   const Data.View.Null

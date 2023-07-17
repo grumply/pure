@@ -1,12 +1,15 @@
-{-# language CPP, ScopedTypeVariables #-}
-module Pure (module Pure,module Export) where
+{-# language CPP, ScopedTypeVariables, DuplicateRecordFields #-}
+module Pure 
+  (module Pure
+  ,module Export
+  ) where
 
 import Control.Applicative as Export hiding (empty,optional)
 import Control.Concurrent as Export hiding (yield)
 import Control.Monad as Export (void,join,when,unless,(>=>),(<=<),forever)
 import Data.Bifunctor as Export (Bifunctor(..))
 import Data.Bool as Export (bool)
-import Data.Char as Export hiding (Space)
+import Data.Char as Export hiding (Space,Control)
 import Data.Coerce as Export (coerce,Coercible)
 import Data.Foldable as Export (Foldable,for_,traverse_)
 import Data.Function as Export ((&),fix)
@@ -30,18 +33,18 @@ import Control.State as Export hiding (flat)
 import Control.Writer as Export hiding (translate)
 import Control.Fold as Export
 import Data.DOM as Export (body,Evt)
-import Data.CSS as Export hiding (root,target,active,checked,wrap,select,empty,stylesheet,CSS_(..))
+import Data.CSS as Export hiding (root,target,active,checked,wrap,select,empty,stylesheet,CSS_(..),focus)
 import Data.Default as Export
 import Data.Effect as Export hiding (map)
-import Data.Events as Export hiding (button,meta,Select,ContextMenu,Accept,Target)
 import Data.Hashable as Export
-import Data.HTML as Export hiding (Style,DateTime)
+import Data.HTML as Export hiding (Style,DateTime,Select,Accept,Alt,ContextMenu,Meta)
 import Data.Exists as Export hiding (constant)
-import Data.JSON as Export hiding (Null,Key,lookup,match)
+import Data.JSON as Export hiding (Null,Key,lookup,match,Number)
 import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list,exponential) 
 import Data.Scroll as Export
-import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url)
+import Data.Slug as Export
+import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat)
 import Data.Theme as Export
 import Data.Time as Export hiding (Time_)
 import Data.Try as Export hiding (try)
@@ -59,6 +62,20 @@ import Effect.Suspense as Export
 import Effect.Sync as Export
 import Effect.Title as Export
 import Effect.Poll as Export
+import Web.Events.Animation as Export hiding (eventObject) 
+import Web.Events.Clipboard as Export hiding (eventObject) 
+import Web.Events.Composition as Export hiding (eventObject)
+import Web.Events.Drag as Export hiding (eventObject)
+import Web.Events.Focus as Export hiding (eventObject)
+import Web.Events.Input as Export hiding (eventObject)
+import Web.Events.Keyboard as Export hiding (eventObject,ContextMenu,Paste,Copy,Select,Cut)
+import Web.Events.Mouse as Export hiding (eventObject,Other)
+import Web.Events.Pointer as Export hiding (eventObject,Touch)
+import Web.Events.Scroll as Export hiding (eventObject)
+import Web.Events.Selection as Export hiding (eventObject)
+import Web.Events.Touch as Export hiding (eventObject)
+import Web.Events.Transition as Export hiding (eventObject)
+import Web.Events.Wheel as Export  hiding (eventObject)
 import Endpoint as Export
 import Browser as Export
 import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,even,repeat,span,tan,reverse)

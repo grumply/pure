@@ -11,7 +11,7 @@ import Pure.Auth.Data
 
 type Authenticated c x = Endpoint (Token c -> x)
 
-register :: Endpoint (Username c -> Email -> Password -> IO ())
+register :: Endpoint (Username c -> Email -> Password -> IO Bool)
 register = "/auth/register"
 
 activate :: Endpoint (Key -> Username c -> Email -> IO (Maybe (Token c)))

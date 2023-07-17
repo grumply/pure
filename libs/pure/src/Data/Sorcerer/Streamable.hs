@@ -24,9 +24,6 @@ class Streamable ev where
   batch :: Stream ev -> Int
   batch _ = 1
 
--- lazily read events from a FD (to avoid GHCs single-writer OR multiple reader
--- constraint). We know that all events (new lines) are immutable after commit,
--- so it is safe to read those events, and we can stream them on demand.
 {-# INLINE events #-}
 events :: forall ev m. (MonadIO m, Streamable ev, FromJSON ev) => Int -> Stream ev -> m [ev]
 events n s = liftIO do

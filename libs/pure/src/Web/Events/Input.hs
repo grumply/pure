@@ -59,10 +59,10 @@ beforeInput = beforeInputWith def yield
 beforeInputs :: (Exists BeforeInput => IO ()) -> View -> View
 beforeInputs f = events @BeforeInput f beforeInput
 
-newtype Input = Input InputEvent
+newtype Input = In InputEvent
 
 inputWith :: Options -> (Input -> IO ()) -> View -> View
-inputWith opts f = OnWith opts "input" (f . Input . toInputEvent)
+inputWith opts f = OnWith opts "input" (f . In . toInputEvent)
 
 input :: View -> (Producer Input => View)
 input = inputWith def yield

@@ -7,7 +7,7 @@ library
       Pure.Auth
     , Pure.Auth.API
     , Pure.Auth.Data
---     , Pure.Auth.Access
+    , Pure.Auth.Access
 
   build-depends:
     base,

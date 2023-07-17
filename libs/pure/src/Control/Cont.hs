@@ -1,5 +1,5 @@
-{-# language TypeApplications, RankNTypes, ScopedTypeVariables, ConstraintKinds, FlexibleContexts, AllowAmbiguousTypes, TypeOperators, PatternSynonyms #-}
-module Control.Cont (Cont,Dynamic,reify,unify,codify,cont,compose,(<<-),(->>),(:=>),dynamic,fromDynamic,Surface,Shape,Template,surface,flat,hole,fill,empty,shape) where
+{-# language TypeApplications, RankNTypes, ScopedTypeVariables, ConstraintKinds, FlexibleContexts, AllowAmbiguousTypes, TypeOperators, PatternSynonyms, PolyKinds, TypeFamilies #-}
+module Control.Cont (C(..),Cont,Dynamic,reify,unify,codify,cont,compose,(<<-),(->>),(:=>),dynamic,fromDynamic,Surface,Shape,Template,surface,flat,hole,fill,empty,shape) where
 
 import Control.Dynamic ((:=>),dynamic,fromDynamic)
 import Control.State (Modify,State,state,put)
@@ -7,8 +7,12 @@ import Control.Producer (stream)
 import Data.Effect (Effect,(#))
 import Data.Exists (Exists,it,using)
 import Data.Function (fix)
+import Data.Kind (Constraint)
 import Data.Typeable (Typeable)
 import Data.View (eager,View,txt,pattern Null)
+
+type family C (a :: k) :: Constraint
+type instance C (a :: Constraint) = a
 
 type Cont' c a = Modify (c :=> a)
 type Cont c = Cont' c View

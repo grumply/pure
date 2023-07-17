@@ -6,6 +6,7 @@ module Data.Theme
   , hasTheme
   , themed
   , themedWith
+  , rep
   , subtheme
   , and, and'
   , at, at'

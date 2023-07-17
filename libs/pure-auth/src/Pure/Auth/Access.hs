@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, TypeApplications, RecordWildCards, NamedFieldPuns, RankNTypes, OverloadedStrings, DuplicateRecordFields, TypeFamilies, FlexibleContexts, ScopedTypeVariables, AllowAmbiguousTypes, UndecidableInstances, DataKinds, BlockArguments, ConstraintKinds, PatternSynonyms #-}
+{-# LANGUAGE TypeApplications, RankNTypes, OverloadedStrings, DuplicateRecordFields, TypeFamilies, FlexibleContexts, ScopedTypeVariables, AllowAmbiguousTypes, UndecidableInstances, DataKinds, BlockArguments, ConstraintKinds, PatternSynonyms, DerivingStrategies, DerivingVia, PolyKinds #-}
 module Pure.Auth.Access
   ( Authentication
   , Authenticated
@@ -6,35 +6,33 @@ module Pure.Auth.Access
   , simple
   , guarded
   , user
+  , role
   , token
-  , logout
-  , Warn
-  , form
-  , basic
-  , FormState(..)
-  , Form
-  , login, register, activate, initiateRecovery, recover, initiateDeletion, delete, updateEmail, updatePassword
+  , Token
+  , auth
   ) where
 
 import qualified Pure.Auth.API as Auth
 import Pure.Auth.Data
-
+import Pure hiding (user)
+import Client
 import Control.Cont
 import Control.Log
+import Control.Producer as Producer
+import Data.Kind
+import Data.Exists
+import Data.List as List
 import qualified Data.Localstorage as LS
+import Data.String
 import Data.View (View,pattern Null,(<|),(<||>),(|>))
 import Data.HTML (pattern Button,pattern Div,pattern H2,pattern Input,pattern P,pattern Placeholder,pattern TabIndex, pattern Type,pattern Value)
 import Data.Events (pattern OnClick,pattern OnInput,value)
 import Control.State (stateWith,modifyIO,put,state,zoom,Modify,State,modify)
 import Data.Default (Default(..))
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
-import Data.Theme (Theme,pattern Themed)
+import Data.Theme (Theme,pattern Themed,rep)
 import Data.Foldable (for_,traverse_)
 import Effect.Fork (fork)
-import Control.Reader (ask,reader,Reader)
-
-import qualified Data.Websocket as WS
-import Effect.Websocket as EWS
 
 import Control.Concurrent
 import Control.Monad
@@ -42,123 +40,148 @@ import Data.Maybe
 import Data.Try
 import Data.Typeable
 
--- Wrapper to avoid exposing a primitive `State (Try (Token domain))`.
--- Unexported.
-newtype Access domain = Access { fromAccess :: Try (Token domain) }
+import qualified Data.Localstorage as Localstorage
 
-type Authentication domain = (Typeable domain, Websocket domain, State (Access domain), Logging)
+readToken :: forall domain. Typeable domain => IO (Maybe (Token domain))
+readToken = Localstorage.get ("token/" <> rep @domain) 
+
+storeToken :: forall domain. Typeable domain => Token domain -> IO ()
+storeToken = void . Localstorage.put ("token/" <> rep @domain)
+
+deleteToken :: forall domain. Typeable domain => IO ()
+deleteToken = void (Localstorage.delete ("token/" <> rep @domain))
+
+newtype Access domain = Access { fromAccess :: Maybe (Token domain) }
+
+type Authentication domain = (Typeable domain, State (Access domain), Logging)
 
 setToken :: forall domain. Modify (Access domain) => Token domain -> IO ()
-setToken = put . Access . Done
+setToken = put . Access . Just
 
 clearToken :: forall domain. Modify (Access domain) => IO ()
-clearToken = put (Access Failed :: Access domain)
+clearToken = put (Access Nothing :: Access domain)
 
--- | Handle an Authentication context. Requires a Websocket context for the same
--- domain. Requires a type application of the domain for use. The domain allows
--- for multiple authentication contexts to coexist.
---
--- See `simple` for an explanation of common usage.
---
--- This approach should avoid flashing the login form before the asynchronous
--- token verification has completed, and shouldn't remove an active view in the
--- case that the server disconnected - it will only remove an authenticated view
--- if the server comes back up and the token does not verify.
--- 
-authentication :: forall domain. (Websocket domain, Typeable domain) => (Authentication domain => View) -> View
-authentication v = fork (stateWith (const pure) initialize v)
-  where
-    initialize :: Modify (Access domain) => IO (Access domain,Access domain -> IO ())
-    initialize = do
-      valid <- newEmptyMVar
-      thread <- newEmptyMVar
-      cleanup <-
-        EWS.onStatus @domain \case
+authentication :: forall domain. (Typeable domain, Logging) => (Authentication domain => View) -> View
+authentication = stateIO (Access <$> readToken @domain)
 
-          -- Note that if the websocket is open or is re-opened,
-          -- we must re/authenticate, as we have a new connection
-          -- with a new session on the, possibly new, host.
-          WS.Opened -> do
-            mtid <- tryTakeMVar thread
-            for_ mtid killThread
-            tid <- forkIO do
-              mv <- tryReadMVar valid
-              authenticate >>= \case
-                Nothing -> clearToken @domain
-                Just t 
-                  -- If we have previously authenticated, don't update the 
-                  -- token on reconnection, or the view will re-render.
-                  | Just () <- mv -> pure ()
+newtype User domain = User (Token domain)
 
-                  | otherwise -> do
-                    putMVar valid ()
-                    setToken @domain t
-
-            putMVar thread tid
-
-          _ ->
-            pure ()
-
-      pure (Access Trying,\_ -> cleanup >> tryReadMVar thread >>= traverse_ killThread)
-
-    authenticate :: IO (Maybe (Token domain))
-    authenticate =
-      getStoredToken @domain >>= \case
-        Nothing -> pure Nothing
-        Just t  -> do
-          valid <- req @domain Uncached (Auth.api @domain) (Auth.verify @domain) (Auth.VerifyRequest t)
-          if valid then pure (Just t) else do
-            deleteStoredToken @domain
-            pure Nothing
+type Authenticated domain = (Authentication domain, Exists (User domain))
 
 -- | Wraps up a common approach to authentication.
 --
--- `simple @MyApp v` is equivalent to:
+-- `simple @domain v` is equivalent to:
 --
--- > authentication @MyApp (guarded @domain Null (basic @domain) v)
+-- > authentication @domain (guarded @domain Null (basic @domain) v)
 --
--- The downside of `simple` is that it requires authentication before rendering
--- the given View, regardless of the View! This is okay in some situations, but
--- you probably don't want such a naive approach applied globally. It often
--- makes more sense to introduce the `authentication` handler at the root of
--- your effect stack and then use `guarded` on a per-route or per-View basis.
-simple :: forall domain. (Websocket domain, Typeable domain) => (Authenticated domain => View) -> View
-simple v = authentication @domain (guarded @domain Null (basic @domain) v)
+simple :: forall domain. (Logging, Typeable domain) => Txt -> (Authenticated domain => View) -> View
+simple api v = authentication @domain (guarded @domain (auth @domain api) v)
 
-token :: Authentication domain => Maybe (Token domain)
-token = try Nothing Nothing Just (fromAccess ask)
-
-newtype User domain = User Username
-type Authenticated domain = Reader (User domain)
+token :: forall domain. Authenticated domain => Token domain
+token = let User t = it :: User domain in t
 
 -- The Username of the currently authenticated user for a given domain. Can
 -- only be used within the authenticated branch of `guarded @domain`.
-user :: forall domain. Authenticated domain => Username
-user = let User un = ask :: User domain in un
+user :: forall domain. Authenticated domain => Username domain
+user = owner (token @domain)
+
+role :: forall domain. Authenticated domain => Maybe Txt
+role = List.lookup "role" (claims (token @domain))
 
 -- | A generic authorization primitive for a given authentication domain. 
---
--- Given the following:
---
--- > guarded @MyApp x y z
---
--- `guarded` will evaluate to `x` only if `authentication @MyApp` has not yet
--- completed its first attempt at authentication. Otherwise, it will always
--- evaluate to `y` or `z`.
---
--- The `z` branch is granted access to the authenticated `Username` via `user`.
---
--- A common use is the display of an authentication form when unauthenticated:
---
--- > guarded @domain Null (basic @domain) do
--- >   { ... someProtectedView ... }
---
-guarded :: forall domain a. Authentication domain => a -> a -> (Authenticated domain => a) -> a
-guarded authenticating unauthenticated authenticated = 
-  try authenticating unauthenticated 
-    (\(Token (un,_)) -> reader (User @domain un) authenticated) 
-    (fromAccess (ask :: Access domain))
+guarded :: forall domain a. Authentication domain => a -> (Authenticated domain => a) -> a
+guarded unauthenticated authenticated = 
+  maybe unauthenticated 
+    (\t -> with (User @domain t) authenticated) 
+    (fromAccess (it :: Access domain))
 
+logout :: forall domain. Authenticated domain => Txt -> IO ()
+logout api = do
+  post api Auth.logout (token @domain)
+  deleteToken @domain
+  clearToken @domain
+
+newtype API = API Txt
+  deriving (ToTxt,FromTxt,IsString,Eq,Ord) via Txt
+
+auth :: forall domain. Typeable domain => Authentication domain => Txt -> View
+auth api = 
+  stream (\t -> storeToken @domain t >> setToken t) do
+    cont @(Producer (Token domain)) do
+      loginForm @domain api
+
+logoutForm :: forall domain. (Typeable domain, Authenticated domain) => Txt -> View
+logoutForm api = Div <||> [ Button <| clicks (logout @domain api) |> [ "Logout" ] ]
+
+loginForm :: forall domain. Typeable domain => Txt -> Dynamic (Producer (Token domain)) 
+loginForm api = dynamic do
+  state (def :: Txt,def:: Txt) do
+    let 
+      (un,pw) = it
+
+      setUsername,setPassword :: Exists Input => IO ()
+      setUsername = let In InputEvent { value = un } = it in put (un,pw)
+      setPassword = let In InputEvent { value = pw } = it in put (un,pw)
+
+      login = post api (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def Producer.yield
+
+    Div <||>
+      [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]
+      , Label <| Display block |> [ "Password: ", Input <| inputs setPassword ]
+      , Div <||> [ Button <| clicks login |> [ "Login" ] ]
+      , Div <||>
+        [ Button <| clicks (unify (registerForm @domain api)) |> [ "Register" ]
+        , Button <| clicks (unify (recoverForm @domain api)) |> [ "Recover" ]
+        ]
+      ]
+
+recoverForm :: forall domain. Typeable domain => Txt -> Dynamic (Producer (Token domain)) 
+recoverForm api = dynamic do
+  state (def :: Txt,def:: Txt) do
+    let 
+      (un,em) = it
+
+      setUsername,setEmail :: Exists Input => IO ()
+      setUsername = let In InputEvent { value = un } = it in put (un,em)
+      setEmail = let In InputEvent { value = em } = it in put (un,em)
+
+      recover = post api (Auth.startRecover @domain) (fromTxt un) (fromTxt em)
+
+    Div <||>
+      [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]
+      , Label <| Display block |> [ "Email: ", Input <| inputs setEmail ]
+      , Div <||> [ Button <| clicks recover |> [ "Recover" ] ]
+      , Div <||>
+        [ Button <| clicks (unify (loginForm @domain api)) |> [ "Login" ]
+        , Button <| clicks (unify (registerForm @domain api)) |> [ "Register" ]
+        ]
+      ]
+
+registerForm :: forall domain. Typeable domain => Txt -> Dynamic (Producer (Token domain))
+registerForm api = dynamic do
+  state (def :: Txt,def :: Txt,def :: Txt) do
+    let
+      (un,pw,em) = it
+
+      setUsername,setPassword,setEmail :: Exists Input => IO ()
+      setUsername = let In InputEvent { value = un } = it in put (un,pw,em)
+      setPassword = let In InputEvent { value = pw } = it in put (un,pw,em)
+      setEmail    = let In InputEvent { value = em } = it in put (un,pw,em)
+
+      register = do
+        post api (Auth.register @domain) (fromTxt un) (fromTxt em) (fromTxt pw) 
+        -- TODO
+        -- post api (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def Producer.yield
+
+    Div <||>
+      [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]
+      , Label <| Display block |> [ "Password: ", Input <| inputs setPassword ]
+      , Label <| Display block |> [ "Email: ", Input <| inputs setEmail ]
+      , Div <||> [ Button <| clicks (void register) |> [ "Register" ] ]
+      , Div <||> [ Button <| clicks (unify (loginForm @domain api)) |> [ "Login" ] ]
+      ]
+
+{-
 --------------------------------------------------------------------------------
 -- Basic fully-featured authentication form.
 
@@ -229,33 +252,33 @@ instance Theme Key
 basic :: forall domain. (Typeable domain, Authentication domain) => View
 basic = form (cont authenticating)
   where
-    warning :: Reader FormState => View -> View
-    warning = if problem ask then Themed @Warn else id
+    warning :: Exists FormState => View -> View
+    warning = if problem it then Themed @Warn else id
 
     usernameField :: Form => View
     usernameField =
       zoom (\FormState { username } -> username) (\un fs -> (fs :: FormState){ username = un, problem = False }) do
-        Input <| Themed @Username . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Username) . value) . Placeholder "Username" . Type "name" . Value (toTxt @Username ask)
+        Input <| Themed @Username . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Username) . value) . Placeholder "Username" . Type "name" . Value (toTxt @Username it)
 
     emailField :: Form => View
     emailField =
       zoom (\FormState { email } -> email) (\e fs -> (fs :: FormState) { email = e, problem = False }) do
-        Input <| Themed @Email . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Email) . value) . Placeholder "Email" . Type "email" . Value (toTxt @Email ask)
+        Input <| Themed @Email . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Email) . value) . Placeholder "Email" . Type "email" . Value (toTxt @Email it)
 
     passwordField :: Form => View
     passwordField =
       zoom (\FormState { password } -> password) (\pw fs -> (fs :: FormState) { password = pw, problem = False }) do
-        Input <| Themed @Password . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Password) . value) . Placeholder "Password" . Type "password" . Value (toTxt @Password ask)
+        Input <| Themed @Password . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Password) . value) . Placeholder "Password" . Type "password" . Value (toTxt @Password it)
 
     oldPasswordField :: Form => View
     oldPasswordField =
       zoom (\FormState { password } -> password) (\pw fs -> (fs :: FormState) { password = pw, problem = False }) do
-        Input <| Themed @Password . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Password) . value) . Placeholder "Old Password" . Type "password" . Value (toTxt @Password ask)
+        Input <| Themed @Password . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Password) . value) . Placeholder "Old Password" . Type "password" . Value (toTxt @Password it)
 
     newPasswordField :: Form => View
     newPasswordField =
       zoom (\FormState { newPassword } -> newPassword) (\pw fs -> (fs :: FormState) { newPassword = pw, problem = False }) do
-        Input <| Themed @Password . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Password) . value) . Placeholder "New Password" . Type "password" . Value (toTxt @Password ask)
+        Input <| Themed @Password . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Password) . value) . Placeholder "New Password" . Type "password" . Value (toTxt @Password it)
 
     authenticating :: Dynamic Form
     authenticating = dynamic do
@@ -311,7 +334,7 @@ basic = form (cont authenticating)
             activationKeyField :: Modify FormState => View
             activationKeyField =
               zoom (\FormState { activation } -> activation) (\a fs -> (fs :: FormState) { activation = a }) do
-                Input <| Themed @Username . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Key) . value) . Placeholder "Activation Code" . Type "text" . Value (toTxt @Key ask)
+                Input <| Themed @Username . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Key) . value) . Placeholder "Activation Code" . Type "text" . Value (toTxt @Key it)
 
           Div <| Themed @Auth.Activate . warning |>
             [ H2 <||> [ "Activating" ]
@@ -350,14 +373,13 @@ basic = form (cont authenticating)
           let
             handleValidate :: Modify FormState => IO ()
             handleValidate = modifyIO \FormState {..} -> do
-              recovered <- recover @domain username password recovery
               when recovered (unify settings)
               pure FormState { problem = False, .. }
 
             recoveryKeyField :: Modify FormState => View
             recoveryKeyField =
               zoom (\FormState { recovery } -> recovery) (\r fs -> (fs :: FormState) { recovery = r }) do
-                Input <| Themed @Key . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Key) . value) . Placeholder "Recovery Code" . Type "text" . Value (toTxt @Key ask)
+                Input <| Themed @Key . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Key) . value) . Placeholder "Recovery Code" . Type "text" . Value (toTxt @Key it)
 
           Div <| Themed @Auth.Recover . warning |>
             [ H2 <||> [ "Validating" ]
@@ -405,7 +427,7 @@ basic = form (cont authenticating)
             deletionKeyField :: Modify FormState => View
             deletionKeyField =
               zoom (\FormState { recovery } -> recovery) (\r fs -> (fs :: FormState) { recovery = r }) do
-                Input <| Themed @Key . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Key) . value) . Placeholder "Verification Code" . Type "text" . Value (toTxt @Key ask)
+                Input <| Themed @Key . TabIndex 0 . OnInput (traverse_ (put . fromTxt @Key) . value) . Placeholder "Verification Code" . Type "text" . Value (toTxt @Key it)
 
           Div <| Themed @Auth.Delete . warning |>
             [ H2 <||> [ "Validating" ]
@@ -465,93 +487,6 @@ basic = form (cont authenticating)
         , Button <| Themed @Auth.InitiateRecovery . TabIndex 0 . OnClick (\_ -> unify recovering) |> [ "Recover" ]
         , Button <| Themed @Auth.InitiateDeletion . TabIndex 0 . OnClick (\_ -> unify deleting) |> [ "Delete" ]
         ]
+-}
 
---------------------------------------------------------------------------------
--- Internal communication API
--- 
--- These methods are used to construct the form, and are exposed for the case of
--- custom authentication forms.
---
 
-login :: forall domain. (Typeable domain, Authentication domain) => Username -> Password -> IO Bool
-login username password =
-  req @domain Uncached (Auth.api @domain) (Auth.login @domain) Auth.LoginRequest {..} >>= \case
-    Nothing -> pure False
-    Just t  -> do
-      storeToken @domain t
-      setToken t
-      pure True
-
-logout :: forall domain. (Typeable domain, Authentication domain) => IO ()
-logout = do
-  deleteStoredToken @domain
-  clearToken @domain
-  for_ (token @domain) $ \t ->
-    msg @domain (Auth.api @domain) (Auth.logout @domain) (Auth.LogoutMessage t)
-
-register :: forall domain. (Typeable domain, Authentication domain) => Username -> Email -> Password -> IO ()
-register username email password =
-  msg @domain (Auth.api @domain) (Auth.register @domain) Auth.RegisterMessage {..}
-
-activate :: forall domain. (Typeable domain, Authentication domain) => Username -> Key -> IO Bool
-activate username key =
-  req @domain Uncached (Auth.api @domain) (Auth.activate @domain) Auth.ActivateRequest {..} >>= \case
-    Nothing -> pure False
-    Just t -> do
-      storeToken @domain t
-      setToken t
-      pure True
-
-initiateRecovery :: forall domain. (Typeable domain, Authentication domain) => Username -> Email -> IO ()
-initiateRecovery username email =
-  msg @domain (Auth.api @domain) (Auth.initiateRecovery @domain) Auth.InitiateRecoveryMessage {..}
-
-recover :: forall domain. (Typeable domain, Authentication domain) => Username -> Password -> Key -> IO Bool
-recover username password key = do
-  req @domain Uncached (Auth.api @domain) (Auth.recover @domain) Auth.RecoverRequest {..} >>= \case
-    Nothing -> pure False
-    Just t -> do
-      storeToken @domain t
-      setToken t
-      pure True
-
-initiateDeletion :: forall domain. (Typeable domain, Authentication domain) => Username -> Email -> Password -> IO ()
-initiateDeletion username email password =
-  msg @domain (Auth.api @domain) (Auth.initiateDeletion @domain) Auth.InitiateDeletionMessage {..}
-
-delete :: forall domain. (Typeable domain, Authentication domain) => Username -> Password -> Email -> Key -> IO Bool
-delete username password email key = do
-  deleted <- req @domain Uncached (Auth.api @domain) (Auth.delete @domain) Auth.DeleteRequest {..}
-  when deleted do
-    deleteStoredToken @domain
-    clearToken @domain
-  pure deleted
-
-updateEmail :: forall domain. (Typeable domain, Authentication domain) => Username -> Email -> Password -> IO Bool
-updateEmail username email password =
-  req @domain Uncached (Auth.api @domain) (Auth.updateEmail @domain) Auth.UpdateEmailRequest {..}
-
-updatePassword :: forall domain. (Typeable domain, Authentication domain) => Username -> Password -> Password -> IO Bool
-updatePassword username oldPassword newPassword =
-  req @domain Uncached (Auth.api @domain) (Auth.updatePassword @domain) Auth.UpdatePasswordRequest {..} >>= \case
-    Nothing -> pure False
-    Just t -> do
-      storeToken @domain t
-      setToken t
-      pure True
-
---------------------------------------------------------------------------------
--- Internal Storage API
-
-session :: forall domain. Typeable domain => Txt
-session = "pure-auth-session-" <> tc
-  where tc = toTxt (show (typeRepTyCon (typeRep (Proxy :: Proxy domain))))
-
-storeToken :: forall domain. Typeable domain => Token domain -> IO Bool
-storeToken = LS.put (session @domain)
-
-deleteStoredToken :: forall domain. Typeable domain => IO ()
-deleteStoredToken = LS.delete (session @domain)
-
-getStoredToken :: forall domain. Typeable domain => IO (Maybe (Token domain))
-getStoredToken = LS.get (session @domain)

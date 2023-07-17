@@ -28,6 +28,7 @@ import GHC.TypeNats (Nat,KnownNat(..),natVal)
 import Pure.Auth.Data
 import System.Directory
 import System.IO
+import System.IO.Error
 import System.IO.Unsafe (unsafePerformIO)
 import Server (unauthorized)
 
@@ -174,30 +175,30 @@ sign owner expires@(Seconds i _) claims =
     proof = toTxt (show (hashWith SHA256 (s <> BSL.toStrict (JSON.encode (owner,expires,claims)))))
 
 revoke :: forall c. Pool c => Txt -> IO ()
-revoke proof = removeFile (pool @c <> fromTxt proof)
+revoke proof = handle (\(ioe :: IOError) -> if isDoesNotExistError ioe then pure () else throw ioe) (removeFile (pool @c <> fromTxt proof))
 
-authenticated :: forall c r. (Pool c, Secret c) => (Proofs c => r) -> (Token c -> r)
+authenticated :: forall c r. (Pool c, Secret c) => ((Exists (Username c), Proofs c) => r) -> (Token c -> r)
 authenticated r t@Token {..} 
   | Secret s <- it :: Secret_ c
   , h <- show (hashWith SHA256 (s <> BSL.toStrict (JSON.encode (owner,expires,claims))))
   , h == fromTxt proof
   , unsafePerformIO (doesFileExist (pool @c <> h))
   , unsafePerformIO ((expires >) <$> time)
-  = withProofs @c t r
+  = with owner (withProofs @c t r)
 
   | otherwise 
-  = trace "unauthorized" unauthorized
+  = unauthorized
 
-authorized :: forall c r. Proofs c => Txt -> r -> r
+authorized :: forall c r. Proofs c => Txt -> (Txt -> r) -> r
 authorized c r =
   case proove @c c of
-    Just x -> r
+    Just x -> r x
     _      -> unauthorized
 
-authorized' :: forall c r. (Pool c, Proofs c) => Txt -> r -> r
+authorized' :: forall c r. (Pool c, Proofs c) => Txt -> (Txt -> r) -> r
 authorized' c r =
   case proove' @c c of
-    Just x -> r
+    Just x -> r x
     _      -> unauthorized
 
 proofs :: forall c. Proofs c => [(Txt,Txt)]
