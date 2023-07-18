@@ -244,11 +244,4 @@ withIdentity ep f = Handler (go :: Application) [methodPost,methodGet,methodOpti
       in
         Server.endpoint (lambda ep (f h ua)) request respond
 
--- Note that Unauthorized is not exported; only lambda and channel can catch Unauthorized.
--- lambda: sends unauthorized401
--- channel: stops SSE connection
-data Unauthorized = Unauthorized deriving Show
-instance Exception Unauthorized
 
-unauthorized :: a
-unauthorized = throw Unauthorized

@@ -1,4 +1,4 @@
-{-# language BlockArguments, RankNTypes, TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables, RecordWildCards, NamedFieldPuns, FlexibleContexts, AllowAmbiguousTypes, BangPatterns #-}
+{-# language BlockArguments, RankNTypes, TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables, RecordWildCards, NamedFieldPuns, FlexibleContexts, AllowAmbiguousTypes, BangPatterns, ConstraintKinds #-}
 module Pure.Auth.GHC.Crypto where
 
 import Control.Concurrent (MVar,newMVar,modifyMVar)
@@ -136,10 +136,6 @@ withPool fp = stateIO (createDirectoryIfMissing True fp >> pure (Pool fp :: Pool
 withSecret :: forall c. Typeable c => IO (Secret_ c) -> (Secret c => View) -> View
 withSecret = async 
 
--- | Warning! Assumes that if a token is materialized, it is valid.
-withProofs :: forall c a. Token c -> (Proofs c => a) -> a
-withProofs token = with (Proofs token :: Proofs_ c)
-
 newSecret :: IO (Secret_ c)
 newSecret = Secret <$> CRT.getRandomBytes 16
 
@@ -160,9 +156,6 @@ secretFile fp = do
     encodeFile fp sec
     pure sec
 
-pool :: forall c. Pool c => FilePath
-pool = let Pool p = it :: Pool_ c in p
-
 sign :: forall c. (Pool c, Secret c) => Username c -> Time -> [(Txt,Txt)] -> Token c
 sign owner expires@(Seconds i _) claims = 
   let 
@@ -177,42 +170,5 @@ sign owner expires@(Seconds i _) claims =
 revoke :: forall c. Pool c => Txt -> IO ()
 revoke proof = handle (\(ioe :: IOError) -> if isDoesNotExistError ioe then pure () else throw ioe) (removeFile (pool @c <> fromTxt proof))
 
-authenticated :: forall c r. (Pool c, Secret c) => ((Exists (Username c), Proofs c) => r) -> (Token c -> r)
-authenticated r t@Token {..} 
-  | Secret s <- it :: Secret_ c
-  , h <- show (hashWith SHA256 (s <> BSL.toStrict (JSON.encode (owner,expires,claims))))
-  , h == fromTxt proof
-  , unsafePerformIO (doesFileExist (pool @c <> h))
-  , unsafePerformIO ((expires >) <$> time)
-  = with owner (withProofs @c t r)
 
-  | otherwise 
-  = unauthorized
-
-authorized :: forall c r. Proofs c => Txt -> (Txt -> r) -> r
-authorized c r =
-  case proove @c c of
-    Just x -> r x
-    _      -> unauthorized
-
-authorized' :: forall c r. (Pool c, Proofs c) => Txt -> (Txt -> r) -> r
-authorized' c r =
-  case proove' @c c of
-    Just x -> r x
-    _      -> unauthorized
-
-proofs :: forall c. Proofs c => [(Txt,Txt)]
-proofs = let Proofs Token { claims } = it :: Proofs_ c in claims
-
-proove :: forall c. Proofs c => Txt -> Maybe Txt
-proove claim = List.lookup claim (proofs @c)
-
-proove' :: forall c. (Pool c, Proofs c) => Txt -> Maybe Txt
-proove' claim
-  | Proofs Token { claims, proof } :: Proofs_ c <- it
-  , unsafePerformIO (doesFileExist (pool @c <> fromTxt proof)) 
-  = List.lookup claim claims
-
-  | otherwise 
-  = Nothing
 

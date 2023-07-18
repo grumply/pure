@@ -5,6 +5,7 @@ import Control.Exception as E
 import Control.Log
 import Control.Monad
 import qualified Data.Bloom.Limiter as Limiter
+import Data.Char
 import Data.Default
 import Data.Exists
 import Data.Foldable
@@ -354,7 +355,7 @@ instance (Secret c, Pool c) => Default (Config c) where
   def = Config
     { base = ""
     , duration = Month
-    , validate = \un -> pure True
+    , validate = simpleValidator
     , onRegister = \h ua un e pw activate -> activate
     , onActivate = \h ua un e -> Time.time >>= \t -> pure (sign un (t + Month) [])
     , onLogin = \h ua un -> Time.time >>= \t -> pure (sign un (t + Month) [])
@@ -368,6 +369,18 @@ instance (Secret c, Pool c) => Default (Config c) where
     , onUpdatePassword = \h ua un e -> pure ()
     , onListRecentAuthEvents = \h ua un -> pure ()
     }
+
+simpleValidator :: Username c -> IO Bool
+simpleValidator (toTxt -> un)
+  | Txt.length un > 1
+  , isAlpha (Txt.head un)
+  , Txt.all valid un 
+  = pure True
+
+  | otherwise 
+  = pure False
+  where
+    valid c = isAlphaNum c || c == '-' || c == '_'
 
 authentication :: forall c. (Typeable c, Secret c, Pool c, Limiter c) => Config c -> [Server.Handler]
 authentication Config {..} =

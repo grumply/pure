@@ -5,9 +5,12 @@ module Pure.Auth.Access
   , authentication
   , simple
   , guarded
+  , token
   , user
   , role
-  , token
+  , authenticated
+  , authorized
+  , authorized'
   , Token
   , auth
   ) where
@@ -64,10 +67,6 @@ clearToken = put (Access Nothing :: Access domain)
 authentication :: forall domain. (Typeable domain, Logging) => (Authentication domain => View) -> View
 authentication = stateIO (Access <$> readToken @domain)
 
-newtype User domain = User (Token domain)
-
-type Authenticated domain = (Authentication domain, Exists (User domain))
-
 -- | Wraps up a common approach to authentication.
 --
 -- `simple @domain v` is equivalent to:
@@ -77,17 +76,6 @@ type Authenticated domain = (Authentication domain, Exists (User domain))
 simple :: forall domain. (Logging, Typeable domain) => Txt -> (Authenticated domain => View) -> View
 simple api v = authentication @domain (guarded @domain (auth @domain api) v)
 
-token :: forall domain. Authenticated domain => Token domain
-token = let User t = it :: User domain in t
-
--- The Username of the currently authenticated user for a given domain. Can
--- only be used within the authenticated branch of `guarded @domain`.
-user :: forall domain. Authenticated domain => Username domain
-user = owner (token @domain)
-
-role :: forall domain. Authenticated domain => Maybe Txt
-role = List.lookup "role" (claims (token @domain))
-
 -- | A generic authorization primitive for a given authentication domain. 
 guarded :: forall domain a. Authentication domain => a -> (Authenticated domain => a) -> a
 guarded unauthenticated authenticated = 
@@ -95,7 +83,7 @@ guarded unauthenticated authenticated =
     (\t -> with (User @domain t) authenticated) 
     (fromAccess (it :: Access domain))
 
-logout :: forall domain. Authenticated domain => Txt -> IO ()
+logout :: forall domain. (Typeable domain, Authenticated domain, State (Access domain)) => Txt -> IO ()
 logout api = do
   post api Auth.logout (token @domain)
   deleteToken @domain
@@ -110,7 +98,7 @@ auth api =
     cont @(Producer (Token domain)) do
       loginForm @domain api
 
-logoutForm :: forall domain. (Typeable domain, Authenticated domain) => Txt -> View
+logoutForm :: forall domain. (Typeable domain, Authenticated domain, State (Access domain)) => Txt -> View
 logoutForm api = Div <||> [ Button <| clicks (logout @domain api) |> [ "Logout" ] ]
 
 loginForm :: forall domain. Typeable domain => Txt -> Dynamic (Producer (Token domain)) 

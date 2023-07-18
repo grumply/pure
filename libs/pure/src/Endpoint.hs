@@ -1,6 +1,7 @@
 {-# language DerivingVia #-}
 module Endpoint where
 
+import Control.Exception
 import Data.Proxy
 import Data.JSON
 import Data.String
@@ -35,3 +36,8 @@ newtype Host = Host Txt
 newtype Agent = Agent Txt
   deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
  
+data Unauthorized = Unauthorized deriving Show
+instance Exception Unauthorized
+
+unauthorized :: a
+unauthorized = throw Unauthorized

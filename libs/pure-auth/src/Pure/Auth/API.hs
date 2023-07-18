@@ -9,8 +9,6 @@ import Endpoint
 import GHC.Generics
 import Pure.Auth.Data
 
-type Authenticated c x = Endpoint (Token c -> x)
-
 register :: Endpoint (Username c -> Email -> Password -> IO Bool)
 register = "/auth/register"
 

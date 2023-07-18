@@ -3,7 +3,11 @@ module Pure.Auth
   ( module Export
   , Object
   , liveWith, live
-  , Proofs
+  , Authenticated
+  , token, user, role
+  , authenticated, authorized, authorized'
+  , Username()
+  , Token()
 #ifndef __GHCJS__
   , Secret, Pool
   , Pure.Auth.object
@@ -118,32 +122,32 @@ object :: forall c e a. (Typeable c, Typeable e, Typeable a, FromJSON (Stream e)
 object o dur f =
   [ Server.lambda (o <> "/read") do
       authenticated @c \s -> do
-        permissions <- f it s
+        permissions <- f (user @c) s
         let ps = ("id",toTxt (Sorcerer.stream s)) : maybe [] (bool [("read","")] [("read",""),("write","")]) permissions
         (i,a) <- Sorcerer.read' s
         now <- Data.Time.time
-        let t = sign (fromTxt (toTxt (it :: Username c))) (now + dur) ps 
+        let t = sign (fromTxt (toTxt (user :: Username c))) (now + dur) ps 
         pure (t,i,a)
 
   , Server.lambda (fromTxt (toTxt o) <> "/write") do
       authenticated @e \(s :: Stream e) (e :: e) -> do
         authorized @e "write" \_ -> do
-          case List.lookup "id" (proofs @e) of
-            Just x | Sorcerer.stream s == fromTxt x -> Sorcerer.write s e
-            _ -> unauthorized
+          authorized @e "id" \x -> 
+            if Sorcerer.stream s == fromTxt x 
+              then Sorcerer.write s e 
+              else unauthorized
 
   , Server.channel @(Token e -> Stream e -> Int -> IO [(Int,e)]) (fromTxt (toTxt o) <> "/events") do
       authenticated @e \(s :: Stream e) n -> do
         authorized @e "read" \_ -> do
-          case List.lookup "id" (proofs @e) of
-            Just x | Sorcerer.stream s == fromTxt x -> do
+          authorized @e "id" \x -> do
+            if Sorcerer.stream s == fromTxt x then do
               chan     <- newChan
               listener <- Producer.stream (writeChan chan) (subscribeStream s id)
               Exception.handle (\(se :: SomeException) -> unlisten listener >> Exception.throw se) do
                 List.zip [n+1..] <$> liftM2 (++) (Sorcerer.events n s) (getChanContents chan)
-
-            _ -> unauthorized
+            else
+              unauthorized
 
   ] 
 #endif
-

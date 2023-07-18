@@ -1,4 +1,4 @@
-{-# LANGUAGE DerivingVia, KindSignatures, DataKinds, RoleAnnotations, DeriveGeneric, DeriveAnyClass, FlexibleContexts, RankNTypes, AllowAmbiguousTypes, ScopedTypeVariables, ConstraintKinds #-}
+{-# LANGUAGE DerivingVia, KindSignatures, DataKinds, RoleAnnotations, DeriveGeneric, DeriveAnyClass, FlexibleContexts, RankNTypes, AllowAmbiguousTypes, ScopedTypeVariables, ConstraintKinds, TypeApplications, CPP, RecordWildCards, NamedFieldPuns, OverloadedStrings #-}
 module Pure.Auth.Data where
 
 import Data.JSON hiding (Key)
@@ -11,8 +11,15 @@ import Data.List as List
 import Data.String
 import Data.Time
 import Data.Txt as Txt
+import Endpoint
 import GHC.Generics
 import GHC.TypeLits
+import System.IO.Unsafe
+#ifndef __GHCJS__
+import System.Directory
+import Data.Aeson as JSON
+import Crypto.Hash
+#endif
 
 newtype Hash (rounds :: Nat) hashOf = Hash Txt
   deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
@@ -57,12 +64,62 @@ instance FromJSON (Secret_ c) where parseJSON v = Secret . read <$> parseJSON v
 type role Secret_ nominal
 type Secret c = Exists (Secret_ c)
 
+secret :: forall c. Secret c => BS.ByteString
+secret = let Secret s = it :: Secret_ c in s
+
 newtype Pool_ c = Pool FilePath
 type role Pool_ nominal
 type Pool c = Exists (Pool_ c)
 
-newtype Proofs_ c = Proofs (Token c)
-type role Proofs_ nominal
-type Proofs c = Exists (Proofs_ c)
+pool :: forall c. Pool c => FilePath
+pool = let Pool fp = it :: Pool_ c in fp
 
+newtype User c = User (Token c)
+type Authenticated c = Exists (User c)
 
+token :: forall c. Authenticated c => Token c
+token = let User t = it :: User c in t
+
+user :: forall c. Authenticated c => Username c
+user = owner (token @c)
+
+role :: forall c. Authenticated c => Maybe Txt
+role = List.lookup "role" (claims (token @c))
+
+#ifdef __GHCJS__
+authenticated :: (Authenticated c => r) -> (Token c -> r)
+authenticated r t = with (User t) r
+#else
+authenticated :: forall c r. (Pool c, Secret c) => (Authenticated c => r) -> (Token c -> r)
+authenticated r t@Token {..} 
+  | Secret s <- it :: Secret_ c
+  , h <- show (hashWith SHA256 (s <> BSL.toStrict (JSON.encode (owner,expires,claims))))
+  , h == fromTxt proof
+  , unsafePerformIO (doesFileExist (pool @c <> h))
+  , unsafePerformIO ((expires >) <$> time)
+  = with (User t) r
+
+  | otherwise 
+  = unauthorized
+#endif
+
+authorized :: forall c r. Authenticated c => Txt -> (Txt -> r) -> r
+authorized c r =
+  let User a = it :: User c
+  in case List.lookup c (claims a) of
+      Just x -> r x
+      _      -> unauthorized
+
+#ifdef __GHCJS__
+authorized' :: forall c r. Authenticated c => Txt -> (Txt -> r) -> r
+authorized' c r = authorized @c c r
+#else
+authorized' :: forall c r. (Pool c, Authenticated c) => Txt -> (Txt -> r) -> r
+authorized' c r
+  | User Token { proof } <- it :: User c
+  , unsafePerformIO (doesFileExist (pool @c <> fromTxt proof)) 
+  = authorized @c c r
+
+  | otherwise 
+  = unauthorized
+#endif
