@@ -7,7 +7,6 @@ module Pure.Auth
   , token, user, role
   , authenticated, authorized, authorized'
   , Username()
-  , Token()
 #ifndef __GHCJS__
   , Secret, Pool
   , Pure.Auth.object
@@ -15,7 +14,7 @@ module Pure.Auth
   ) where
 
 #ifdef __GHCJS__
-import Client
+import Client hiding (user)
 #else
 import Server
 #endif
@@ -41,7 +40,7 @@ import Data.Typeable
 import Data.URI
 import Data.View
 import Endpoint
-import Pure.Auth.Data as Export (Token(owner,claims))
+import Pure.Auth.Data as Export (Token)
 import Pure.Auth.API as Export
 import Pure.Auth.Data
 

@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, DeriveGeneric, DeriveAnyClass, OverloadedStrings #-}
-module Data.File (ByteTxt(),unsafeByteTxtToTxt,unsafeTxtToByteTxt,getFileAtIndex,getFile,writeByteTxt,readByteTxt,appendByteTxt) where
+module Data.File (ByteTxt(),unsafeByteTxtToTxt,unsafeTxtToByteTxt,writeByteTxt,readByteTxt,appendByteTxt) where
 
 import Data.Default
 import Data.Txt as Txt
@@ -22,39 +22,6 @@ unsafeByteTxtToTxt (ByteTxt t) = t
 
 unsafeTxtToByteTxt :: Txt -> ByteTxt
 unsafeTxtToByteTxt = ByteTxt
-
-#ifdef __GHCJS__
-foreign import javascript unsafe
-  "var file = $1.files[$2]; var reader = new FileReader(); reader.readAsBinaryString(file); $r = reader;" get_file_reader_js :: Node -> Int -> IO JSV
-
-foreign import javascript unsafe
-  "$r = $1.files[$2].name" get_file_name_js :: Node -> Int -> IO Txt
-
-foreign import javascript unsafe
-  "$r = $1.result" get_result_js :: JSV -> IO Txt
-#endif
-
-getFileAtIndex :: Node -> Int -> IO (Maybe (Txt,ByteTxt))
-getFileAtIndex node n =
-#ifdef __GHCJS__
-  do
-    rdr <- get_file_reader_js node n
-    path <- get_file_name_js node n
-    mv <- newEmptyMVar
-    onRaw rdr "load" def $ \stop _ -> do
-      result <- rdr ..# "result"
-      putMVar mv result
-      stop
-    mresult <- takeMVar mv
-    case mresult of
-      Nothing -> pure Nothing
-      Just x -> pure $ Just (path,ByteTxt x)
-#else
-  return Nothing
-#endif
-
-getFile :: Node -> IO (Maybe (Txt,ByteTxt))
-getFile node = getFileAtIndex node 0
 
 readByteTxt :: FilePath -> IO ByteTxt
 readByteTxt fp = 

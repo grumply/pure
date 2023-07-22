@@ -60,7 +60,7 @@ type role Token nominal
 
 newtype Secret_ c = Secret BS.ByteString deriving Show
 instance ToJSON (Secret_ c) where toJSON (Secret sec) = toJSON (show sec)
-instance FromJSON (Secret_ c) where parseJSON v = Secret . read <$> parseJSON v
+instance FromJSON (Secret_ c) where parseJSON v = Secret . Prelude.read <$> parseJSON v
 type role Secret_ nominal
 type Secret c = Exists (Secret_ c)
 

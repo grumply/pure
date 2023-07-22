@@ -2,9 +2,10 @@
 module Pure.Auth.Access
   ( Authentication
   , Authenticated
-  , authentication
+  , access
   , simple
   , guarded
+  , mtoken
   , token
   , user
   , role
@@ -17,8 +18,7 @@ module Pure.Auth.Access
 
 import qualified Pure.Auth.API as Auth
 import Pure.Auth.Data
-import Pure hiding (user)
-import Client
+import Client hiding (user)
 import Control.Cont
 import Control.Log
 import Control.Producer as Producer
@@ -64,8 +64,8 @@ setToken = put . Access . Just
 clearToken :: forall domain. Modify (Access domain) => IO ()
 clearToken = put (Access Nothing :: Access domain)
 
-authentication :: forall domain. (Typeable domain, Logging) => (Authentication domain => View) -> View
-authentication = stateIO (Access <$> readToken @domain)
+access :: forall domain. (Typeable domain, Logging) => (Authentication domain => View) -> View
+access = stateIO (Access <$> readToken @domain)
 
 -- | Wraps up a common approach to authentication.
 --
@@ -74,7 +74,10 @@ authentication = stateIO (Access <$> readToken @domain)
 -- > authentication @domain (guarded @domain Null (basic @domain) v)
 --
 simple :: forall domain. (Logging, Typeable domain) => Txt -> (Authenticated domain => View) -> View
-simple api v = authentication @domain (guarded @domain (auth @domain api) v)
+simple api v = access @domain (guarded @domain (auth @domain api) v)
+
+mtoken :: forall domain. Authentication domain => Maybe (Token domain)
+mtoken = fromAccess it
 
 -- | A generic authorization primitive for a given authentication domain. 
 guarded :: forall domain a. Authentication domain => a -> (Authenticated domain => a) -> a

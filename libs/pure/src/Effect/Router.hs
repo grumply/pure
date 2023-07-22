@@ -2,7 +2,8 @@
 module Effect.Router
   ( Router, Route
   , router, onRoute, subrouter, lref, current, url
-  , Routes, routes, routes_, Effect.Router.route, page
+  , Routes, routed, routes_, Effect.Router.route, page
+  , routed', router', subrouter'
   , module Export
   ) where
 
@@ -50,13 +51,49 @@ router rtng v = do
       runRouter
       pure (Nothing,const stop)
 
-  stateWith' (const pure) initialize $ do
+  stateWith (const pure) initialize $ do
     case it of
       Nothing -> Null
       Just (sub,rt) -> with (Route @rt sub rt) v
 
 subrouter :: forall rt' rt. (Typeable rt, Router rt') => (forall a. Routing rt a) -> (Router rt => View) -> View
 subrouter rtng v = do
+  let
+    initialize :: (Router rt', Modify (Maybe (Txt,rt))) => IO (Maybe (Txt,rt),Maybe (Txt,rt) -> IO ())
+    initialize = do
+      let Route path _ = it :: Route rt'
+      mrt <- Router.route (rtng >>= \x -> getPath >>= \p -> pure (p,x)) path
+      pure (mrt :: Maybe (Txt,rt),\_ -> pure ())
+
+  stateWith (const pure) initialize $ do
+    case it of
+      Nothing -> Null
+      Just (sub,rt) -> with (Route @rt sub rt) v
+
+router' :: forall rt. Typeable rt => (forall a. Routing rt a) -> (Router rt => View) -> View
+router' rtng v = do
+  let
+    runRouter :: Modify (Maybe (Txt,rt)) => IO ()
+    runRouter = do
+      pn  <- getPathname
+      qps <- getSearch
+      mrt <- Router.route (rtng >>= \x -> getPath >>= \p -> pure (p,x)) (pn <> qps)
+      put (mrt :: Maybe (Txt,rt))
+
+    initialize :: Modify (Maybe (Txt,rt)) => IO (Maybe (Txt,rt),Maybe (Txt,rt) -> IO ())
+    initialize = do
+      w <- getWindow
+      stop <- onRaw (toNode w) "popstate" def (\_ _ -> runRouter)
+      runRouter
+      pure (Nothing,const stop)
+
+  stateWith' (const pure) initialize $ do
+    case it of
+      Nothing -> Null
+      Just (sub,rt) -> with (Route @rt sub rt) v
+
+subrouter' :: forall rt' rt. (Typeable rt, Router rt') => (forall a. Routing rt a) -> (Router rt => View) -> View
+subrouter' rtng v = do
   let
     initialize :: (Router rt', Modify (Maybe (Txt,rt))) => IO (Maybe (Txt,rt),Maybe (Txt,rt) -> IO ())
     initialize = do
@@ -71,14 +108,17 @@ subrouter rtng v = do
 
 type Routes ctx = forall a. Routing (ctx :=> View) a
 
-routes :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx :=> View) => View) -> (ctx => View)
-routes rs v = router rs (let (d :: ctx :=> View) = current in with d v)
+routed :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx :=> View) => View) -> (ctx => View)
+routed rs v = router rs (let (d :: ctx :=> View) = current in with d v)
+
+routed' :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx :=> View) => View) -> (ctx => View)
+routed' rs v = router' rs (let (d :: ctx :=> View) = current in with d v)
 
 page :: forall ctx. Exists (ctx :=> View) => (ctx => View)
 page = eager (it :: ctx :=> View) (fromDynamic (it :: ctx :=> View))
 
 routes_ :: Routes () -> View
-routes_ rs = routes @() rs (page @())
+routes_ rs = routed @() rs (page @())
 
 route :: forall ctx. (ctx => View) -> (forall a. Routing (ctx :=> View) a)
 route v = dispatch (dynamic @ctx v)

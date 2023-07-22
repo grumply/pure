@@ -1,22 +1,30 @@
-{-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, InstanceSigs, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, TypeOperators, DefaultSignatures #-}
 module Client 
   ( Client.post
   , Client.get
   -- ,ws,wssend,wsmessage,wserror
   , Fetch.XHRError, Fetch.err, Fetch.response
   , sseWith, sse
+  , base, api
+  , Create, Client.Read, Update, Client.Index
+  , Client(..)
+  , module Export
   ) where
 
+import Pure as Export hiding (read,list,get,index,Read)
+
 #ifdef __GHCJS__
-import Data.JSON as JSON
+import Data.JSON as JSON hiding (Key)
 #else
-import Data.Aeson as JSON
+import Data.Aeson as JSON hiding (Key)
 #endif
 
 import Control.Concurrent
-import Control.Component
+import Control.Component hiding (Update)
+import Control.Dynamic
 import Control.Exception
 import Control.Monad
+import Control.Monad.IO.Class
 import Control.Producer
 import Control.Retry
 import Control.State
@@ -25,6 +33,7 @@ import Data.DOM
 import Data.Exists
 import Data.Function ((&))
 import Data.IORef
+import Data.Kind
 import Data.Maybe
 import Data.Time
 import Data.Typeable
@@ -34,13 +43,14 @@ import Data.View
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.Fetch as Fetch
 import qualified Effect.Fetch as Fetch (response,err)
+import Effect.Router
 import Endpoint
 
 class Post req where
   post :: Txt -> Endpoint req -> req
 
 instance (Typeable a, Typeable r, ToJSON a, FromJSON r) => Post (a -> IO r) where
-  post host ep a = Fetch.postWith @a @r [] (host <> toTxt ep) a >>= either throw pure
+  post host ep a = Fetch.postWith @a @r [] (host <> toTxt ep) a >>= either Control.Exception.throw pure
  
 instance (Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Post (a -> b -> IO r) where
   post host ep a b = post host (fromTxt (toTxt ep)) (a,b)
@@ -64,16 +74,16 @@ class Get req where
   get :: Txt -> Endpoint req -> req
 
 instance (Typeable r, FromJSON r) => Get (IO r) where
-  get host ep = Fetch.getWith @r [] (host <> toTxt ep) >>= either throw pure
+  get host ep = Fetch.getWith @r [] (host <> toTxt ep) >>= either Control.Exception.throw pure
 
 instance (Typeable a, Typeable r, ToJSON a, FromJSON r) => Get (a -> IO r) where
   get host ep a = 
 #ifdef __GHCJS__
     Fetch.getWith @r [] (host <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a)))
-      >>= either throw pure
+      >>= either Control.Exception.throw pure
 #else
-    Fetch.getWith @r [] (host <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (encode a))))
-      >>= either throw pure
+    Fetch.getWith @r [] (host <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (JSON.encode a))))
+      >>= either Control.Exception.throw pure
 #endif
 
 instance (Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Get (a -> b -> IO r) where
@@ -120,7 +130,7 @@ sseWith policy host ep =
             void do
               retrying policy do
                 mv <- newEmptyMVar
-                pl <- ask self
+                pl <- Data.View.ask self
                 es <- new_event_source_js (host <> ep <> "?payload=" <> encodeURIComponent (btoa_js (encode pl)))
 
                 msgs <- onRaw es "message" def \_ msg ->
@@ -196,3 +206,96 @@ newtype WebsocketError = WebsocketError JSV
 wserror :: Exists Websocket => View -> (Producer WebsocketError => View)
 wserror = OnMounted (\_ -> onRaw (it :: Websocket) "error" def (\_ -> Control.Producer.yield . WebsocketError))
 #endif
+
+type Create r = (Context r, Producer r) => View
+type Read r = (Context r, Exists (Name r), Exists (Product r)) => View
+type Update r = (Context r, Exists r, Producer (Event r)) => View
+type Index r = (Context r, Exists (Endpoint.Index r)) => View
+
+class Client r where 
+
+  type Context r :: Constraint 
+  type Context r = ()
+
+  routes :: forall x. Context r => Maybe (Auth r) -> Routing (x :=> View) ()
+  default routes 
+    :: forall x.
+       ( Context r
+       , Resource r
+       , API r
+       , Typeable r
+       , Typeable (Context r)
+       , Typeable (Endpoint.Index r)
+       , Typeable (Preview r)
+       , Typeable (Event r)
+       , Typeable (Product r)
+       , Typeable (Auth r), ToJSON (Auth r)
+       , Typeable (Name r), FromTxt (Name r), ToJSON (Name r)
+       , ToJSON r, FromJSON r
+       , ToJSON (Event r)
+       , FromJSON (Preview r)
+       , FromJSON (Product r)
+       , FromJSON (Endpoint.Index r)
+       ) => Maybe (Auth r) -> Routing (x :=> View) ()
+  routes (Just a) = void do
+
+    Effect.Router.match (fromTxt (toTxt (base @r))) do
+      rs <- liftIO (Client.get (api @r) (Endpoint.index @r))
+      route (with rs (Client.index @r))
+
+    path (fromTxt (toTxt (base @r))) do
+
+      path "/new" do
+        route do
+          cont @(Context r) do
+            stream (post (api @r) (Endpoint.create @r) a) do 
+              dynamic (Client.create @r)
+        
+      path "/:res" do
+        k <- "res" 
+        path "/edit" do
+          mr <- liftIO (post (api @r) (Endpoint.raw @r) a k)
+          case mr of
+            Nothing -> 
+              route do
+                cont @(Context r) do
+                  stream (post (api @r) (Endpoint.create @r) a) do 
+                    dynamic (Client.create @r)
+            Just r -> 
+              stream (post (api @r) (Endpoint.update @r) a k) do
+                route (with r (with k (Client.update @r)))
+        mr <- liftIO (Client.get (api @r) (Endpoint.read @r) k)
+        case mr of
+          Nothing -> do
+            rs <- liftIO (Client.get (api @r) (Endpoint.index @r))
+            route (with rs (Client.index @r))
+          Just r ->
+            route (with k (with r (Client.read @r)))
+
+  routes Nothing = void do
+
+    Effect.Router.match (fromTxt (toTxt (base @r))) do
+      rs <- liftIO (Client.get (api @r) (Endpoint.index @r))
+      route (with rs (Client.index @r))
+    
+    path (fromTxt (toTxt (base @r)) <> "/:res") do
+      k <- "res" 
+      mr <- liftIO (Client.get (api @r) (Endpoint.read @r) k)
+      case mr of
+        Nothing -> do
+          rs <- liftIO (Client.get (api @r) (Endpoint.index @r))
+          route (with rs (Client.index @r))
+        Just r ->
+          route (with k (with r (Client.read @r)))
+
+  create :: (Context r, Producer r) => View
+  create = Data.View.Null
+
+  read :: (Context r, Exists (Name r), Exists (Product r)) => View
+  read = Data.View.Null
+
+  update :: (Context r, Exists r, Producer (Event r)) => View
+  update = Data.View.Null
+
+  index :: (Context r, Exists (Endpoint.Index r)) => View
+  index = Data.View.Null

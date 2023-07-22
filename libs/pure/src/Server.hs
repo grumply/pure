@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, PatternSynonyms, ScopedTypeVariables, FlexibleContexts, BlockArguments, NamedFieldPuns, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, DerivingVia #-}
+{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, PatternSynonyms, ScopedTypeVariables, FlexibleContexts, BlockArguments, NamedFieldPuns, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, DerivingVia, TypeFamilies, ConstrainedClassMethods, DefaultSignatures #-}
 module Server 
   ( Handler
   , serve
@@ -8,7 +8,13 @@ module Server
   , Host(..), Agent(..)
   , Request(..)
   , WarpTLS.tlsSettings
+  , Server(..)
+  , Name,Auth
+  , Create,Server.Read,Update,Server.Index
+  , module Export
   ) where
+
+import qualified Pure as Export hiding (Handler,read,Read)
 
 import Control.Concurrent
 import Control.Exception (Exception,throw,handle,catch)
@@ -18,16 +24,19 @@ import Control.Retry
 import Control.State
 import qualified Control.Component as Component
 import qualified Control.Log as Log
+import Data.Aeson as JSON hiding (Name)
+import Data.Default
 import Data.DOM
+import Data.Exists
 import Data.Foldable
 import Data.Function ((&))
-import Data.Aeson as JSON hiding (Key)
-import Data.Default
-import Data.Exists
 import Data.IORef
+import Data.Map as Map
+import Data.Kind
 import qualified Data.List as List
 import Data.Maybe
 import Data.Time (pattern Seconds,pattern Second,Time)
+import Data.Traversable
 import Data.Typeable
 import Data.Txt as Txt
 import Data.View
@@ -36,7 +45,7 @@ import System.IO.Unsafe
 import System.Directory
 import System.Posix.Files
 
-import Crypto.Hash
+import Crypto.Hash hiding (Context)
 import qualified Crypto.Random.Types as CRT
 import Data.String
 import Data.ByteString.Lazy as BSL
@@ -244,4 +253,50 @@ withIdentity ep f = Handler (go :: Application) [methodPost,methodGet,methodOpti
       in
         Server.endpoint (lambda ep (f h ua)) request respond
 
+type Create r = Context r => Auth r -> r -> IO ()
+type Raw r = Context r => Auth r -> Name r -> IO (Maybe r)
+type Update r = Context r => Auth r -> Name r -> Event r -> IO ()
+type Read r = Context r => Name r -> IO (Maybe (Product r))
+type Index r = Context r => IO (Endpoint.Index r)
+
+class Server r where
+
+  type Context r :: Constraint
+  type Context r = ()
+
+  handlers :: Context r => [Server.Handler]
+  default handlers 
+    :: ( Context r
+       , Resource r
+       , Typeable r, ToJSON r, FromJSON r
+       , Typeable (Auth r), FromJSON (Auth r)
+       , Typeable (Name r), FromJSON (Name r)
+       , ToJSON (Product r), FromJSON (Product r)
+       , Typeable (Event r), ToJSON (Event r), FromJSON (Event r)
+       , ToJSON (Preview r)
+       , ToJSON (Endpoint.Index r)
+       , ToJSON (Name r)
+       ) => [Server.Handler]
+  handlers = 
+    [ lambda (Endpoint.create @r) (Server.create @r)
+    , lambda (Endpoint.read @r) (Server.read @r)
+    , lambda (Endpoint.raw @r) (Server.raw @r)
+    , lambda (Endpoint.update @r) (Server.update @r)
+    , lambda (Endpoint.index @r) (Server.index @r)
+    ]
+
+  create :: Server.Create r
+  create = unauthorized
+
+  raw :: Server.Raw r
+  raw = unauthorized
+
+  read :: Server.Read r
+  read = unauthorized
+
+  update :: Server.Update r
+  update = unauthorized
+
+  index :: Server.Index r
+  index = unauthorized
 

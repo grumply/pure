@@ -1,11 +1,14 @@
-{-# language DerivingVia #-}
+{-# language DerivingVia, TypeApplications, ScopedTypeVariables, TypeFamilies, GADTs, MultiParamTypeClasses, AllowAmbiguousTypes, OverloadedStrings #-}
 module Endpoint where
 
 import Control.Exception
+import Data.Char
 import Data.Proxy
-import Data.JSON
+import Data.JSON 
 import Data.String
-import Data.Txt
+import Data.Theme
+import Data.Txt as Txt
+import Data.Typeable
 
 newtype Endpoint a = Endpoint (Txt,Proxy a)
 
@@ -41,3 +44,47 @@ instance Exception Unauthorized
 
 unauthorized :: a
 unauthorized = throw Unauthorized
+
+class API r where
+  api :: Txt
+
+class Typeable r => Resource r where
+
+  type Auth r :: *
+  type Name r :: *
+
+  data Event r :: *
+
+  data Product r :: *
+  data Preview r :: *
+
+  type Index r :: *
+  type Index r = [Preview r]
+
+  base :: Endpoint x
+  base = "/" <> fromTxt (Txt.toLower rep)
+    where
+      rep = Txt.map limit $ go (typeRep (Proxy :: Proxy r))
+        where
+          limit c | isAscii c && isAlphaNum c = c | otherwise = '_'
+          go tr =
+            let tc = toTxt (show (typeRepTyCon tr))
+                trs = typeRepArgs tr
+            in Txt.intercalate "_" (tc : fmap go trs)
+
+  create :: Endpoint (Auth r -> r -> IO ())
+  create = base @r <> "/create"
+
+  raw :: Endpoint (Auth r -> Name r -> IO (Maybe r))
+  raw = base @r <> "/raw"
+
+  read :: Endpoint (Name r -> IO (Maybe (Product r)))
+  read = base @r <> "/read"
+
+  update :: Endpoint (Auth r -> Name r -> Event r -> IO ())
+  update = base @r <> "/update"
+
+  index :: Endpoint (IO (Index r))
+  index = base @r <> "/index"
+
+

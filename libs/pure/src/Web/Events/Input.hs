@@ -1,8 +1,11 @@
-{-# language PatternSynonyms, RankNTypes, FlexibleContexts, OverloadedStrings, ViewPatterns, CPP, DuplicateRecordFields, TypeApplications #-}
+{-# language PatternSynonyms, RankNTypes, FlexibleContexts, OverloadedStrings, ViewPatterns, CPP, DuplicateRecordFields, TypeApplications, TupleSections, BlockArguments #-}
 module Web.Events.Input where
 
+import Control.Concurrent hiding (yield)
 import Control.Producer
 import Control.Monad
+import Data.File
+import Data.Foldable
 import Data.Coerce
 import Data.Default
 import Data.DOM
@@ -12,6 +15,7 @@ import Data.Exists
 import Data.JSON
 import Data.Maybe
 import Data.Time
+import Data.Traversable
 import Data.Txt
 import Data.View
 import System.IO.Unsafe
@@ -24,28 +28,18 @@ import GHCJS.Marshal.Internal
 
 data InputEvent = InputEvent
   { eventObject :: JSV
-  , dat :: Txt
   , value :: Txt
-  , dataTransfer :: DataTransfer
   , inputType :: Txt
-  , isComposing :: Bool
-  , targetRanges :: [Range]
+  , files :: [(Txt,ByteTxt)]
   }
 
 toInputEvent :: Evt -> InputEvent
 toInputEvent (evtObj -> o) = let err = error "Invalid InputEvent" in
   InputEvent
     { eventObject = o 
-    , dat = fromMaybe err (o .# "data")
-    , value = fromMaybe "" (o .# "target" >>= (.# "value"))
-    , dataTransfer = maybe err toDataTransfer (o .# "dataTransfer")
+    , value = fromMaybe err (o .# "target" >>= (.# "value"))
     , inputType = fromMaybe err (o .# "inputType")
-    , isComposing = fromMaybe err (o .# "isComposing")
-#ifdef __GHCJS__
-    , targetRanges = fmap toRange (maybe err (unsafePerformIO . fromJSValUncheckedListOf) (o .# "targetRanges"))
-#else
-    , targetRanges = []
-#endif
+    , files = maybe err (unsafePerformIO . getFiles . (coerce :: JSV -> Node)) (o .# "target")
     }
 
 newtype BeforeInput = BeforeInput InputEvent
@@ -69,4 +63,40 @@ input = inputWith def yield
 
 inputs :: (Exists Input => IO ()) -> View -> View
 inputs f = events @Input f input
+
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "var file = $1.files[$2]; var reader = new FileReader(); reader.readAsBinaryString(file); $r = reader;" get_file_reader_js :: Node -> Int -> IO JSV
+
+foreign import javascript unsafe
+  "$r = $1.files[$2].name" get_file_name_js :: Node -> Int -> IO Txt
+
+foreign import javascript unsafe
+  "$r = $1.result" get_result_js :: JSV -> IO Txt
+
+foreign import javascript unsafe
+  "$r = $1.files.length" get_file_count_js :: Node -> IO Int
+#endif
+
+getFiles :: Node -> IO [(Txt,ByteTxt)]
+getFiles node = do
+#ifdef __GHCJS__
+  files <- get_file_count_js node
+  if files > 0 then 
+    unsafeInterleaveIO do
+      catMaybes <$> for [0..files - 1] \n -> do
+        rdr <- get_file_reader_js node n
+        path <- get_file_name_js node n
+        mv <- newEmptyMVar
+        onRaw rdr "load" def $ \stop _ -> do
+          result <- rdr ..# "result"
+          putMVar mv result
+          stop
+        fmap (\x -> (path,unsafeTxtToByteTxt x)) <$> takeMVar mv
+  else
+    pure []
+#else
+  pure []
+#endif
+
 

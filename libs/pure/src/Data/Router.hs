@@ -204,12 +204,12 @@ continue = throwError Nothing
 dispatch :: rt -> Routing rt a
 dispatch = throwError . Just
 
-match :: Txt -> rt -> Routing rt (Maybe a)
+match :: Txt -> Routing rt a -> Routing rt (Maybe a)
 match pth rt =
   path pth $ do
     p <- getPath
     if Txt.null p then 
-      dispatch rt 
+      rt 
     else 
       continue
 

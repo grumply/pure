@@ -14,7 +14,7 @@ import Data.Coerce as Export (coerce,Coercible)
 import Data.Foldable as Export (Foldable,for_,traverse_)
 import Data.Function as Export ((&),fix)
 import Data.Maybe as Export
-import Data.Monoid as Export hiding (Alt)
+import Data.Monoid as Export hiding (Alt,Product)
 import Data.Traversable as Export (Traversable,for,traverse)
 import Data.Typeable as Export (Typeable,typeOf)
 import Debug.Trace as Export (trace,traceShow)
@@ -49,7 +49,7 @@ import Data.Theme as Export
 import Data.Time as Export hiding (Time_)
 import Data.Try as Export hiding (try)
 import Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
-import Data.View as Export hiding (get,ask,look,modify,modify_,modifyM,modifyM_,setProps,queueComponentUpdate,getHost,initialize,content,Styles,On)
+import Data.View as Export hiding (get,ask,look,modify,modify_,modifyM,modifyM_,setProps,queueComponentUpdate,getHost,initialize,content,Styles,On,Raw)
 import Data.URI as Export
 import Effect.Async as Export
 import Effect.Fork as Export
@@ -76,7 +76,7 @@ import Web.Events.Selection as Export hiding (eventObject)
 import Web.Events.Touch as Export hiding (eventObject)
 import Web.Events.Transition as Export hiding (eventObject)
 import Web.Events.Wheel as Export  hiding (eventObject)
-import Endpoint as Export
+
 import Browser as Export
 import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,even,repeat,span,tan,reverse)
 
