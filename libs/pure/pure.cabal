@@ -164,7 +164,6 @@ library
     Effect.Intersection
     Effect.Lifecycles
     Effect.Meta
-    Effect.Mutation
     Effect.Poll
     Effect.Router
     Effect.Script
@@ -185,6 +184,7 @@ library
     Web.Events.Input
     Web.Events.Keyboard
     Web.Events.Mouse
+    Web.Events.Mutation
     Web.Events.Pointer
     Web.Events.Resize
     Web.Events.Scroll

@@ -49,7 +49,7 @@ import Data.Theme as Export
 import Data.Time as Export hiding (Time_)
 import Data.Try as Export hiding (try)
 import Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
-import Data.View as Export hiding (get,ask,look,modify,modify_,modifyM,modifyM_,setProps,queueComponentUpdate,getHost,initialize,content,Styles,On,Raw,lifecycles,Lifecycles)
+import Data.View as Export hiding (get,ask,look,modify,modify_,modifyM,modifyM_,setProps,queueComponentUpdate,getHost,initialize,content,Styles,On,Raw,lifecycles,Lifecycles,attributes)
 import Data.URI as Export
 import Effect.Async as Export
 import Effect.Fork as Export
@@ -70,6 +70,7 @@ import Web.Events.Focus as Export hiding (eventObject)
 import Web.Events.Input as Export hiding (eventObject)
 import Web.Events.Keyboard as Export hiding (eventObject,ContextMenu,Paste,Copy,Select,Cut)
 import Web.Events.Mouse as Export hiding (eventObject,Other)
+import Web.Events.Mutation as Export
 import Web.Events.Pointer as Export hiding (eventObject,Touch,width,height)
 import Web.Events.Resize as Export (Resize(Resize,borderBlockSize,borderInlineSize,contentBlockSize,contentInlineSize),resize,resizes)
 import Web.Events.Scroll as Export hiding (eventObject)

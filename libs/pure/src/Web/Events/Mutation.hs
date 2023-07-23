@@ -1,14 +1,12 @@
-{-# LANGUAGE CPP, PatternSynonyms, MultiParamTypeClasses, RecordWildCards,
-   TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, 
-   FlexibleContexts, ViewPatterns, TemplateHaskell, DerivingStrategies, 
-   DerivingVia, RankNTypes #-}
-module Effect.Mutation (Mutation(..),Options(..),observe,observeWith) where
+{-# LANGUAGE CPP, MultiParamTypeClasses, TypeFamilies, DeriveGeneric, DeriveAnyClass, OverloadedStrings, FlexibleContexts, DerivingVia, RankNTypes, MagicHash, TypeApplications, RecordWildCards, ViewPatterns #-}
+module Web.Events.Mutation (Mutation(..),Options(..),mutation,mutations) where
 
 import Control.Producer
 import Control.Reader
 import Control.State
 import Data.Default
 import Data.DOM hiding (Options)
+import Data.Exists
 import Data.HTML
 import Data.JSON
 import Data.Txt
@@ -21,12 +19,17 @@ import Data.Foldable (for_,traverse_)
 import Data.Function ((&))
 import Data.IORef
 import Data.Maybe
+import GHC.Exts
 import GHC.Generics as G
+import System.IO.Unsafe
 
 #ifdef __GHCJS__
 import GHCJS.Marshal.Internal
 import JavaScript.Object.Internal as JS (Object(..),create,setProp)
 #endif
+
+mutations :: Options -> (Exists Mutation => IO ()) -> View -> View
+mutations options f = events @Mutation f (mutation options)
 
 data Mutation 
   = AttributeMutation
@@ -57,13 +60,50 @@ data Options = Options
   , attributeOldValue :: Bool
   , characterData :: Bool
   , characterDataOldValue :: Bool
-  } deriving stock Generic
-    deriving anyclass Default
+  }
 
-observe :: Options -> View -> (Producer [Mutation] => View)
-observe options v =
-  stateWith (\_ -> pure) (pure (pure (),id)) 
-    (OnMounted (\node -> observeWith node options yield >>= put >> def) v)
+instance Default Options where
+  def = Options True False False [] False False False
+
+mutation :: Options -> View -> (Producer Mutation => View)
+mutation options v = 
+  unsafePerformIO (do
+    writeIORef ref yield
+    join $ atomicModifyIORef' opts $ \os -> 
+      (options,unless (isTrue# (reallyUnsafePtrEquality# options os)) $ do
+        n <- readIORef node
+        if isNull n then pure () else do 
+          writeIORef opts options
+          join (readIORef shutdown)
+          sd <- observeWith n options (\ms -> readIORef ref >>= \f -> traverse_ f ms)
+          writeIORef shutdown sd
+      )
+    ) `seq` OnMounted go v
+  where
+    {-# NOINLINE opts #-}
+    opts :: IORef Options
+    opts = unsafePerformIO (newIORef undefined)
+
+    {-# NOINLINE ref #-}
+    ref :: IORef (Mutation -> IO ())
+    ref = unsafePerformIO (newIORef undefined)
+
+    {-# NOINLINE node #-}
+    node :: IORef Node
+    node = unsafePerformIO (newIORef (coerce nullJSV :: Node))
+
+    {-# NOINLINE shutdown #-}
+    shutdown :: IORef (IO ())
+    shutdown = unsafePerformIO (newIORef def)
+
+    {-# NOINLINE go #-}
+    go n = do
+      writeIORef node n
+      writeIORef opts options
+      join (readIORef shutdown)
+      sd <- observeWith n options (\ms -> readIORef ref >>= \f -> traverse_ f ms)
+      writeIORef shutdown sd
+      pure (join (readIORef shutdown))
 
 observeWith :: Node -> Options -> ([Mutation] -> IO ()) -> IO (IO ())
 observeWith n o f = do
@@ -71,7 +111,7 @@ observeWith n o f = do
   obj <- JS.create
   when (subtree o) (JS.setProp "subtree" (pToJSVal True) obj)
   when (childList o) (JS.setProp "childList" (pToJSVal True) obj)
-  when (Effect.Mutation.attributes o) (JS.setProp "attributes" (pToJSVal True) obj)
+  when (Web.Events.Mutation.attributes o) (JS.setProp "attributes" (pToJSVal True) obj)
   mas <- if Prelude.null (attributeFilter o) then pure Nothing else Just <$> toJSValListOf (attributeFilter o)
   for_ mas $ \as -> JS.setProp "attributeFilter" as obj 
   when (attributeOldValue o) (JS.setProp "attributeOldValue" (pToJSVal True) obj)
@@ -98,7 +138,7 @@ mkMutation jsv =
         "attributes"    -> mkAttributeMutation t jsv
         "characterData" -> mkContentMutation t jsv
         "childList"     -> mkChildrenMutation t jsv
-        _               -> error ("Effect.Mutation.mkMutation: unknown mutation event type " ++ fromTxt s)
+        _               -> error ("Web.Events..Mutation.mkMutation: unknown mutation event type " ++ fromTxt s)
   where
     mkAttributeMutation :: JSV -> JSV -> IO Mutation
     mkAttributeMutation t jsv = do

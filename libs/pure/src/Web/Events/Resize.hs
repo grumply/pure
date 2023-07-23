@@ -78,7 +78,7 @@ resize v = unsafePerformIO (writeIORef ref yield) `seq` OnMounted go v
       cb <- asyncCallback1 (\re -> let es = fmap toResize (fromMaybe [] (unsafePerformIO (fromJSValListOf re))) in readIORef ref >>= \f -> for_ es f)
       ro <- create_js cb
       connect_js ro n
-      pure (unobserve_js ro n)
+      pure (unobserve_js ro n >> releaseCallback cb)
 #else
       pure (pure ())
 #endif

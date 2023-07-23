@@ -19,9 +19,27 @@ data Lifecycles = Lifecycles
   , onStop :: IO ()
   }
 
+instance Semigroup Lifecycles where
+  (<>) lc1 lc2 = Lifecycles 
+    { onStart = onStart lc1 >> onStart lc2
+    , onLoad = onLoad lc1 >> onLoad lc2
+    , onBefore = onBefore lc1 >> onBefore lc2
+    , onAfter = onAfter lc1 >> onAfter lc2
+    , onStop = onStop lc1 >> onStop lc2
+    }
+
+instance Monoid Lifecycles where
+  mempty = def
+
 instance Default Lifecycles where
   def = Lifecycles def def def def def
 
+{-# RULES 
+  "lifecyles lc1 (lifecycles lc2) => lifecycles (lc1 <> lc2)"
+    forall lc1 lc2 v. lifecycles lc1 (lifecycles lc2 v) = lifecycles (lc1 <> lc2) v
+ #-}
+
+{-# INLINE [1] lifecycles #-}
 lifecycles :: Lifecycles -> View -> View
 lifecycles ls v = Component go (ls,v)
   where
@@ -36,17 +54,3 @@ lifecycles ls v = Component go (ls,v)
       , render = \(_,v) _ -> v
       }
 
-{-
-
-
-{-# INLINE onStop #-}
-onStop :: IO a -> View -> View
-onStop f v = Component go (void f,v)
-  where
-    {-# INLINE go #-}
-    go self = def
-      { onConstruct = pure ()
-      , onUnmounted = ask self >>= fst
-      , render = \(_,v) _ -> v
-      }
--}
