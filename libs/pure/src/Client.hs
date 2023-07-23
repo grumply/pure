@@ -5,8 +5,8 @@ module Client
   -- ,ws,wssend,wsmessage,wserror
   , Fetch.XHRError, Fetch.err, Fetch.response
   , sseWith, sse
-  , base, api
-  , Create, Client.Read, Update, Client.Index
+  , base, API(..)
+  , Index, Auth, Name, Event, Product, Preview
   , Client(..)
   , module Export
   ) where
@@ -48,6 +48,9 @@ import Endpoint
 
 class Post req where
   post :: Txt -> Endpoint req -> req
+
+instance (Typeable r, FromJSON r) => Post (IO r) where
+  post host ep = Fetch.postWith @() @r [] (host <> toTxt ep) () >>= either Control.Exception.throw pure
 
 instance (Typeable a, Typeable r, ToJSON a, FromJSON r) => Post (a -> IO r) where
   post host ep a = Fetch.postWith @a @r [] (host <> toTxt ep) a >>= either Control.Exception.throw pure
@@ -207,11 +210,6 @@ wserror :: Exists Websocket => View -> (Producer WebsocketError => View)
 wserror = OnMounted (\_ -> onRaw (it :: Websocket) "error" def (\_ -> Control.Producer.yield . WebsocketError))
 #endif
 
-type Create r = (Context r, Producer r) => View
-type Read r = (Context r, Exists (Name r), Exists (Product r)) => View
-type Update r = (Context r, Exists r, Producer (Event r)) => View
-type Index r = (Context r, Exists (Endpoint.Index r)) => View
-
 class Client r where 
 
   type Context r :: Constraint 
@@ -225,7 +223,7 @@ class Client r where
        , API r
        , Typeable r
        , Typeable (Context r)
-       , Typeable (Endpoint.Index r)
+       , Typeable (Index r)
        , Typeable (Preview r)
        , Typeable (Event r)
        , Typeable (Product r)
@@ -235,7 +233,7 @@ class Client r where
        , ToJSON (Event r)
        , FromJSON (Preview r)
        , FromJSON (Product r)
-       , FromJSON (Endpoint.Index r)
+       , FromJSON (Index r)
        ) => Maybe (Auth r) -> Routing (x :=> View) ()
   routes (Just a) = void do
 
@@ -297,5 +295,5 @@ class Client r where
   update :: (Context r, Exists r, Producer (Event r)) => View
   update = Data.View.Null
 
-  index :: (Context r, Exists (Endpoint.Index r)) => View
+  index :: (Context r, Exists (Index r)) => View
   index = Data.View.Null

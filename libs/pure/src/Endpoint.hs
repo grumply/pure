@@ -61,8 +61,9 @@ class Typeable r => Resource r where
   type Index r :: *
   type Index r = [Preview r]
 
+  {-# INLINE base #-}
   base :: Endpoint x
-  base = "/" <> fromTxt (Txt.toLower rep)
+  base = ("/" <>) $ fromTxt $! Txt.toLower rep
     where
       rep = Txt.map limit $ go (typeRep (Proxy :: Proxy r))
         where

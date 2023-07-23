@@ -9,8 +9,7 @@ module Server
   , Request(..)
   , WarpTLS.tlsSettings
   , Server(..)
-  , Name,Auth
-  , Create,Server.Read,Update,Server.Index
+  , Name,Auth,Event,Product,Preview,Index
   , module Export
   ) where
 
@@ -253,12 +252,6 @@ withIdentity ep f = Handler (go :: Application) [methodPost,methodGet,methodOpti
       in
         Server.endpoint (lambda ep (f h ua)) request respond
 
-type Create r = Context r => Auth r -> r -> IO ()
-type Raw r = Context r => Auth r -> Name r -> IO (Maybe r)
-type Update r = Context r => Auth r -> Name r -> Event r -> IO ()
-type Read r = Context r => Name r -> IO (Maybe (Product r))
-type Index r = Context r => IO (Endpoint.Index r)
-
 class Server r where
 
   type Context r :: Constraint
@@ -274,7 +267,7 @@ class Server r where
        , ToJSON (Product r), FromJSON (Product r)
        , Typeable (Event r), ToJSON (Event r), FromJSON (Event r)
        , ToJSON (Preview r)
-       , ToJSON (Endpoint.Index r)
+       , ToJSON (Index r)
        , ToJSON (Name r)
        ) => [Server.Handler]
   handlers = 
@@ -285,18 +278,18 @@ class Server r where
     , lambda (Endpoint.index @r) (Server.index @r)
     ]
 
-  create :: Server.Create r
+  create :: Context r => Auth r -> r -> IO ()
   create = unauthorized
 
-  raw :: Server.Raw r
+  raw :: Context r => Auth r -> Name r -> IO (Maybe r)
   raw = unauthorized
 
-  read :: Server.Read r
+  read :: Context r => Name r -> IO (Maybe (Product r))
   read = unauthorized
 
-  update :: Server.Update r
+  update :: Context r => Auth r -> Name r -> Event r -> IO ()
   update = unauthorized
 
-  index :: Server.Index r
+  index :: Context r => IO (Index r)
   index = unauthorized
 

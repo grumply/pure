@@ -1,57 +1,43 @@
 {-# language RankNTypes, ScopedTypeVariables, ConstraintKinds, BlockArguments, FlexibleContexts, TypeFamilies, MagicHash, PatternSynonyms #-}
-module Effect.Lifecycles (onStart,onLoad,onChange,onChanged,onStop) where
+module Effect.Lifecycles (Lifecycles(..),lifecycles) where
 
-import Control.Monad (unless,void)
+import Control.Applicative
+import Control.Monad (join,unless,void)
 import Data.Default (Default(def))
 import Data.View (pattern Component,Comp(..),View,ask)
 import GHC.Exts
 
-{-# INLINE onStart #-}
-onStart :: IO a -> View -> View
-onStart f v = Component go (void f,v)
+-- A record of listeners to lifecycle events.
+--
+-- This approach reduces the component overhead.
+--
+data Lifecycles = Lifecycles
+  { onStart :: IO ()
+  , onLoad :: IO ()
+  , onBefore :: IO ()
+  , onAfter :: IO ()
+  , onStop :: IO ()
+  }
+
+instance Default Lifecycles where
+  def = Lifecycles def def def def def
+
+lifecycles :: Lifecycles -> View -> View
+lifecycles ls v = Component go (ls,v)
   where
-    {-# INLINE go #-}
     go self = def
-      { onConstruct = pure ()
-      , onMount = \m -> ask self >>= fst >> pure m
+      { onConstruct = ask self >>= onStart . fst
+      , onMounted = ask self >>= onLoad . fst
+      , onUpdate = \(ls',v') _ -> do
+          (_,v) <- ask self
+          unless (isTrue# (reallyUnsafePtrEquality# v v')) (onBefore ls')
+      , onUpdated = \(ls,v) _ -> onAfter ls
+      , onUnmounted = ask self >>= onStop . fst
       , render = \(_,v) _ -> v
       }
 
-{-# INLINE onLoad #-}
-onLoad :: IO a -> View -> View
-onLoad f v = Component go (void f,v)
-  where
-    {-# INLINE go #-}
-    go self = def
-      { onConstruct = pure ()
-      , onMounted = ask self >>= fst
-      , render = \(_,v) _ -> v
-      }
-  
-{-# INLINE onChange #-}
-onChange :: IO a -> View -> View
-onChange f v = Component go (void f,v)
-  where
-    {-# INLINE go #-}
-    go self = def
-      { onConstruct = pure ()
-      , onReceive = \(new_change,new_view) old -> do
-        (_,view) <- ask self
-        unless (isTrue# (reallyUnsafePtrEquality# view new_view)) new_change
-        pure old
-      , render = \(_,v) _ -> v
-      }
+{-
 
-{-# INLINE onChanged #-}
-onChanged :: IO a -> View -> View
-onChanged f v = Component go (void f,v)
-  where
-    {-# INLINE go #-}
-    go self = def
-      { onConstruct = pure ()
-      , onUpdated = \(changed,_) _ -> changed
-      , render = \(_,v) _ -> v
-      }
 
 {-# INLINE onStop #-}
 onStop :: IO a -> View -> View
@@ -63,3 +49,4 @@ onStop f v = Component go (void f,v)
       , onUnmounted = ask self >>= fst
       , render = \(_,v) _ -> v
       }
+-}

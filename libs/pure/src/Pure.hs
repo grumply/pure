@@ -44,12 +44,12 @@ import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list,exponential) 
 import Data.Scroll as Export
 import Data.Slug as Export
-import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat)
+import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize)
 import Data.Theme as Export
 import Data.Time as Export hiding (Time_)
 import Data.Try as Export hiding (try)
 import Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
-import Data.View as Export hiding (get,ask,look,modify,modify_,modifyM,modifyM_,setProps,queueComponentUpdate,getHost,initialize,content,Styles,On,Raw)
+import Data.View as Export hiding (get,ask,look,modify,modify_,modifyM,modifyM_,setProps,queueComponentUpdate,getHost,initialize,content,Styles,On,Raw,lifecycles,Lifecycles)
 import Data.URI as Export
 import Effect.Async as Export
 import Effect.Fork as Export
@@ -71,11 +71,12 @@ import Web.Events.Input as Export hiding (eventObject)
 import Web.Events.Keyboard as Export hiding (eventObject,ContextMenu,Paste,Copy,Select,Cut)
 import Web.Events.Mouse as Export hiding (eventObject,Other)
 import Web.Events.Pointer as Export hiding (eventObject,Touch,width,height)
+import Web.Events.Resize as Export (Resize(Resize,borderBlockSize,borderInlineSize,contentBlockSize,contentInlineSize),resize,resizes)
 import Web.Events.Scroll as Export hiding (eventObject)
 import Web.Events.Selection as Export hiding (eventObject)
 import Web.Events.Touch as Export hiding (eventObject)
 import Web.Events.Transition as Export hiding (eventObject)
-import Web.Events.Wheel as Export  hiding (eventObject)
+import Web.Events.Wheel as Export hiding (eventObject)
 
 import Browser as Export
 import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,even,repeat,span,tan,reverse)

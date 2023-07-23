@@ -5,10 +5,11 @@ import Control.Applicative
 import Control.Cont
 import Control.Producer
 import Control.State
+import Data.Default
 import Data.Exists
 import Data.HTML (pattern Span,pattern Div)
 import Data.Typeable
-import Data.View
+import Data.View hiding (lifecycles)
 import Effect.Lifecycles
 import GHC.Exts
 import Unsafe.Coerce
@@ -25,7 +26,7 @@ instance Functor (Form ctx) where
   fmap f (Form g) = Form (dynamic (stream (yield . f) (fromDynamic g)))
 
 instance Applicative (Form ctx) where
-  pure a = formlet (onStart (yield a) Null)
+  pure a = formlet (lifecycles def { onStart = yield a } Null)
   liftA2 = liftF2
 
 instance Monad (Form ctx) where
@@ -36,7 +37,7 @@ instance MonadFail (Form ctx) where
   fail str = Form (dynamic (txt str))
 
 liftIO :: (ctx => IO a) -> Form ctx a
-liftIO io = Form (dynamic (onStart (io >>= yield) Null))
+liftIO io = Form (dynamic (lifecycles def { onStart = io >>= yield } Null))
 
 data Any2 = Any2 Any Any
 liftF2 :: forall ctx a b c. (a -> b -> c) -> Form ctx a -> Form ctx b -> Form ctx c

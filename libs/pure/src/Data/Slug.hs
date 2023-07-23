@@ -12,12 +12,15 @@ newtype Slug = Slug Txt
   deriving (Eq,Ord,ToJSON,FromJSON,Hashable) via Txt
 
 instance ToTxt Slug where
+  {-# INLINE toTxt #-}
   toTxt (Slug x) = x
 
 instance FromTxt Slug where
+  {-# INLINE fromTxt #-}
   fromTxt = toSlug
 
 instance IsString Slug where
+  {-# INLINE fromString #-}
   fromString = toSlug . fromTxt . toTxt
 
 -- Idempotent.
@@ -44,3 +47,4 @@ toSlug = Slug . Txt.dropWhileEnd (Prelude.not . isAlphaNum) . Txt.dropWhile (Pre
                   l (go d rest)
 
               _ -> x
+{-# INLINE toSlug #-}

@@ -159,7 +159,6 @@ library
     Data.View.Transform
     Data.Websocket
     Effect.Async
-    Effect.Dimensions
     Effect.Fetch
     Effect.Fork
     Effect.Intersection
@@ -175,6 +174,7 @@ library
     Effect.Sync
     Effect.Title
     Effect.Websocket
+    Effect.Watch
     Endpoint
     Web.DataTransfer
     Web.Events.Animation
@@ -186,6 +186,7 @@ library
     Web.Events.Keyboard
     Web.Events.Mouse
     Web.Events.Pointer
+    Web.Events.Resize
     Web.Events.Scroll
     Web.Events.Selection
     Web.Events.Touch
