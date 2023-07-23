@@ -1,4 +1,4 @@
-{-# language RankNTypes, ScopedTypeVariables, ConstraintKinds, BlockArguments, FlexibleContexts, TypeFamilies, MagicHash, PatternSynonyms #-}
+{-# language RankNTypes, ScopedTypeVariables, ConstraintKinds, BlockArguments, FlexibleContexts, TypeFamilies, PatternSynonyms, TypeApplications #-}
 module Effect.Watch where
 
 import Control.Applicative
@@ -8,12 +8,18 @@ import Data.View (pattern Component,Comp(..),View,ask)
 import GHC.Exts
 
 watch :: IO () -> View
-watch = Component go
+watch = Component @(IO ()) @() go
+  where
+    go self = def
+      { onUpdate = const
+      }
+
+watch' :: IO () -> View
+watch' = Component go
   where
     go self = def
       { onConstruct = join (ask self)
       , onUpdate    = const
-      , onUnmounted = join (ask self)
       }
   
 
