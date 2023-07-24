@@ -2,6 +2,8 @@
 module Client 
   ( Client.post
   , Client.get
+  , Client.got
+  , Client.catch, Client.or
   -- ,ws,wssend,wsmessage,wserror
   , Fetch.XHRError, Fetch.err, Fetch.response
   , sseWith, sse
@@ -11,7 +13,7 @@ module Client
   , module Export
   ) where
 
-import Pure as Export hiding (read,list,get,index,Read)
+import Pure as Export hiding (read,list,get,index,Read,or,catch)
 
 #ifdef __GHCJS__
 import Data.JSON as JSON hiding (Key)
@@ -45,6 +47,8 @@ import qualified Data.Fetch as Fetch
 import qualified Effect.Fetch as Fetch (response,err)
 import Effect.Router
 import Endpoint
+import System.IO.Unsafe
+import Prelude hiding (or)
 
 class Post req where
   post :: Txt -> Endpoint req -> req
@@ -106,6 +110,48 @@ instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Get (a -> b -> c -> d -> e -> f -> g -> IO r) where
   get host ep a b c d e f g = Client.get host (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
+
+class Got req where
+  type Unsafe req :: *
+  got :: Txt -> Endpoint req -> Unsafe req
+
+catch :: Exception e => a -> (e -> a) -> a
+catch a f = unsafePerformIO (Control.Exception.catch (evaluate a) (pure . f))
+
+or :: a -> a -> a
+or l r = Client.catch @SomeException l (const r)
+
+instance (Typeable r, FromJSON r) => Got (IO r) where
+  type Unsafe (IO r) = r
+  got host ep = unsafePerformIO (Client.get host ep)
+
+instance (Typeable r, FromJSON r, Typeable a, ToJSON a) => Got (a -> IO r) where
+  type Unsafe (a -> IO r) = a -> r
+  got host ep a = unsafePerformIO (Client.get host ep a)
+
+instance (Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b) => Got (a -> b -> IO r) where
+  type Unsafe (a -> b -> IO r) = a -> b -> r
+  got host ep a b = unsafePerformIO (Client.get host ep a b)
+
+instance (Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c) => Got (a -> b -> c -> IO r) where
+  type Unsafe (a -> b -> c -> IO r) = a -> b -> c -> r
+  got host ep a b c = unsafePerformIO (Client.get host ep a b c)
+
+instance (Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d) => Got (a -> b -> c -> d -> IO r) where
+  type Unsafe (a -> b -> c -> d -> IO r) = a -> b -> c -> d -> r
+  got host ep a b c d = unsafePerformIO (Client.get host ep a b c d)
+
+instance (Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e) => Got (a -> b -> c -> d -> e -> IO r) where
+  type Unsafe (a -> b -> c -> d -> e -> IO r) = a -> b -> c -> d -> e -> r
+  got host ep a b c d e = unsafePerformIO (Client.get host ep a b c d e)
+
+instance (Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e, Typeable f, ToJSON f) => Got (a -> b -> c -> d -> e -> f -> IO r) where
+  type Unsafe (a -> b -> c -> d -> e -> f -> IO r) = a -> b -> c -> d -> e -> f -> r
+  got host ep a b c d e f = unsafePerformIO (Client.get host ep a b c d e f)
+
+instance (Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e, Typeable f, ToJSON f, Typeable g, ToJSON g) => Got (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  type Unsafe (a -> b -> c -> d -> e -> f -> g -> IO r) = a -> b -> c -> d -> e -> f -> g -> r
+  got host ep a b c d e f g = unsafePerformIO (Client.get host ep a b c d e f g)
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
