@@ -1,8 +1,8 @@
 {-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, TypeOperators, DefaultSignatures #-}
 module Client 
-  ( Client.post
-  , Client.get
-  , Client.got
+  ( Client.post, Post
+  , Client.get, Get
+  , Client.got, Got, Unsafe
   , Client.catch, Client.or, Client.within
   -- ,ws,wssend,wsmessage,wserror
   , Fetch.XHRError, Fetch.err, Fetch.response
