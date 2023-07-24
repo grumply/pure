@@ -3,7 +3,7 @@ module Client
   ( Client.post
   , Client.get
   , Client.got
-  , Client.catch, Client.or
+  , Client.catch, Client.or, Client.within
   -- ,ws,wssend,wsmessage,wserror
   , Fetch.XHRError, Fetch.err, Fetch.response
   , sseWith, sse
@@ -13,7 +13,7 @@ module Client
   , module Export
   ) where
 
-import Pure as Export hiding (read,list,get,index,Read,or,catch)
+import Pure as Export hiding (read,list,get,index,Read,or,catch,within)
 
 #ifdef __GHCJS__
 import Data.JSON as JSON hiding (Key)
@@ -114,6 +114,9 @@ instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f
 class Got req where
   type Unsafe req :: *
   got :: Txt -> Endpoint req -> Unsafe req
+
+within :: Time -> a -> a
+within t a = unsafePerformIO (fromJust <$> timeout t (evaluate a))
 
 catch :: Exception e => a -> (e -> a) -> a
 catch a f = unsafePerformIO (Control.Exception.catch (evaluate a) (pure . f))
