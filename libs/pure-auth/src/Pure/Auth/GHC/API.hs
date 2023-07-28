@@ -398,3 +398,22 @@ authentication Config {..} =
   , withIdentity (base <> API.recentAuthEvents) (recentAuthEvents onListRecentAuthEvents)
   ]
 
+simpleAuth :: forall c. (Limiter c, Secret c, Pool c) => Username c -> Time -> Config c
+simpleAuth admin t = def
+  { onRegister = \h a un e k activate -> activate
+  , onActivate = \h a un e -> newToken un
+  , onRecover = \h a un e -> newToken un
+  , onLogin = \h a un -> newToken un
+  }
+  where
+    newToken un 
+      | un == admin = do
+        now <- Time.time
+        pure (sign un (now + t) [("role","admin")])
+
+      | otherwise = do
+        now <- Time.time
+        pure (sign un (now + t) [("role","user")])
+        
+
+

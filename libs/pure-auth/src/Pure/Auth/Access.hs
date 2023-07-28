@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeApplications, RankNTypes, OverloadedStrings, DuplicateRecordFields, TypeFamilies, FlexibleContexts, ScopedTypeVariables, AllowAmbiguousTypes, UndecidableInstances, DataKinds, BlockArguments, ConstraintKinds, PatternSynonyms, DerivingStrategies, DerivingVia, PolyKinds #-}
+{-# LANGUAGE TypeApplications, RankNTypes, OverloadedStrings, DuplicateRecordFields, TypeFamilies, FlexibleContexts, ScopedTypeVariables, AllowAmbiguousTypes, UndecidableInstances, DataKinds, BlockArguments, ConstraintKinds, PatternSynonyms, DerivingVia, PolyKinds #-}
 module Pure.Auth.Access
   ( Authentication
   , Authenticated
@@ -12,6 +12,7 @@ module Pure.Auth.Access
   , authenticated
   , authorized
   , authorized'
+  , upgraded
   , Token
   , auth
   ) where
@@ -19,6 +20,7 @@ module Pure.Auth.Access
 import qualified Pure.Auth.API as Auth
 import Pure.Auth.Data
 import Client hiding (user)
+import Endpoint (API(..))
 import Control.Cont
 import Control.Log
 import Control.Producer as Producer
@@ -73,8 +75,8 @@ access = stateIO (Access <$> readToken @domain)
 --
 -- > authentication @domain (guarded @domain Null (basic @domain) v)
 --
-simple :: forall domain. (Logging, Typeable domain) => Txt -> (Authenticated domain => View) -> View
-simple api v = access @domain (guarded @domain (auth @domain api) v)
+simple :: forall domain. (Logging, Endpoint.API domain, Typeable domain) => Txt -> (Authenticated domain => View) -> View
+simple api v = access @domain (guarded @domain (auth @domain) v)
 
 mtoken :: forall domain. Authentication domain => Maybe (Token domain)
 mtoken = fromAccess it
@@ -92,14 +94,19 @@ logout api = do
   deleteToken @domain
   clearToken @domain
 
+upgraded :: Authentication c => Token c -> IO ()
+upgraded t = do
+  storeToken t
+  setToken t
+
 newtype API = API Txt
   deriving (ToTxt,FromTxt,IsString,Eq,Ord) via Txt
 
-auth :: forall domain. Typeable domain => Authentication domain => Txt -> View
-auth api = 
-  stream (\t -> storeToken @domain t >> setToken t) do
+auth :: forall domain. (Endpoint.API domain, Typeable domain) => Authentication domain => View
+auth = 
+  stream (upgraded @domain) do
     cont @(Producer (Token domain)) do
-      loginForm @domain api
+      loginForm @domain (api @domain)
 
 logoutForm :: forall domain. (Typeable domain, Authenticated domain, State (Access domain)) => Txt -> View
 logoutForm api = Div <||> [ Button <| clicks (logout @domain api) |> [ "Logout" ] ]

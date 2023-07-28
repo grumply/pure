@@ -5,9 +5,10 @@ module Pure.Auth
   , liveWith, live
   , Authenticated
   , token, user, role
-  , authenticated, authorized, authorized'
+  , authenticated, authorized, authorized', decrypted
   , Username()
 #ifndef __GHCJS__
+  , encrypt, decrypt
   , Secret, Pool
   , Pure.Auth.object
 #endif

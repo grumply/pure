@@ -22,7 +22,9 @@ library
       cryptonite,
       pwstore-fast,
       connection,
-      aeson
+      aeson,
+      memory,
+      base64-bytestring
 
     exposed-modules:
         Pure.Auth.GHC

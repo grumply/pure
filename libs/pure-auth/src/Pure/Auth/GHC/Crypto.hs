@@ -1,4 +1,4 @@
-{-# language BlockArguments, RankNTypes, TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables, RecordWildCards, NamedFieldPuns, FlexibleContexts, AllowAmbiguousTypes, BangPatterns, ConstraintKinds #-}
+{-# language BlockArguments, RankNTypes, TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables, RecordWildCards, NamedFieldPuns, FlexibleContexts, AllowAmbiguousTypes, BangPatterns, ConstraintKinds, ViewPatterns #-}
 module Pure.Auth.GHC.Crypto where
 
 import Control.Concurrent (MVar,newMVar,modifyMVar)
@@ -9,19 +9,20 @@ import Crypto.PasswordStore as PW (makePassword,verifyPassword)
 import Crypto.Random
 import qualified Crypto.Random.Types as CRT
 import Data.Aeson as JSON (encode,encodeFile,decode,decodeFileStrict)
+import Data.Either
 import Data.ByteString as BS (ByteString)
 import Data.ByteString.Char8 as BS (filter)
 import Data.ByteString.Lazy as BSL
 import Data.Char (isHexDigit)
 import Data.Exists
-import Data.JSON (encode)
+import Data.JSON (encode,ToJSON,FromJSON)
 import Data.List as List
 import Data.String
 import Data.Time
 import Data.Typeable
-import Data.Maybe (listToMaybe,mapMaybe)
+import Data.Maybe (listToMaybe,mapMaybe,fromJust)
 import Data.Proxy (Proxy(..))
-import Data.Txt as Txt (Txt,ToTxt(..),FromTxt(..),toLower,length,null)
+import Data.Txt as Txt (Txt,ToTxt(..),FromTxt(..),toLower,length,null,break,uncons)
 import Data.View
 import Effect.Async
 import GHC.TypeNats (Nat,KnownNat(..),natVal)
@@ -33,6 +34,16 @@ import System.IO.Unsafe (unsafePerformIO)
 import Server (unauthorized)
 
 import Debug.Trace
+
+import Crypto.Cipher.AES (AES256)
+import Crypto.Cipher.Types (BlockCipher(..), Cipher(..), nullIV, KeySizeSpecifier(..), IV, makeIV)
+import Crypto.MAC.HMAC
+import Crypto.Error (CryptoFailable(..), CryptoError(..))
+import Data.ByteString.Char8 as B
+import Data.ByteArray hiding (View)
+import Crypto.Cipher.ChaChaPoly1305 as C
+import qualified Data.ByteString.Base64 as B64
+
 
 {- NOTES
 
@@ -126,7 +137,7 @@ hashUsername = hashTxt . toTxt
 -- Token
 
 hashToken :: Token c -> Hash 1 (Token c)
-hashToken = fromTxt . proof
+hashToken = fromTxt . toTxt . proof
 
 --------------------------------------------------------------------------------
 
@@ -137,7 +148,7 @@ withSecret :: forall c. Typeable c => IO (Secret_ c) -> (Secret c => View) -> Vi
 withSecret = async 
 
 newSecret :: IO (Secret_ c)
-newSecret = Secret <$> CRT.getRandomBytes 16
+newSecret = Secret <$> CRT.getRandomBytes 32
 
 secretFile :: FilePath -> IO (Secret_ c)
 secretFile fp = do
@@ -156,19 +167,35 @@ secretFile fp = do
     encodeFile fp sec
     pure sec
 
+newTokenKey :: IO Txt
+newTokenKey = toTxt . B64.encode <$> getRandomBytes 16
+
 sign :: forall c. (Pool c, Secret c) => Username c -> Time -> [(Txt,Txt)] -> Token c
 sign owner expires@(Seconds i _) claims = 
   let 
     t = fromIntegral (round i :: Int)
-    f = pool @c <> fromTxt proof
+    f = pool @c <> h
   in
     unsafePerformIO (openFile f WriteMode >>= hClose) `seq` Token {..}
   where
     Secret s = it :: Secret_ c
-    proof = toTxt (show (hashWith SHA256 (s <> BSL.toStrict (JSON.encode (owner,expires,claims)))))
+    h = show (hmacGetDigest (hmac @B.ByteString @B.ByteString @SHA256 s (BSL.toStrict (JSON.encode (owner,expires,claims)))))
+    proof = toTxt h
+
+upgrade :: forall c. (Pool c, Secret c, Authenticated c) => Txt -> Txt -> Token c
+upgrade k v = sign (user @c) (expires (token @c)) (go (claims (token @c)))
+  where
+    go [] = [(k,v)]
+    go ((k',v'):kvs)
+      | k' == k = (k,v) : List.filter ((/= k) . fst) kvs
+      | otherwise = (k',v') : go kvs
+
+downgrade :: forall c. (Pool c, Secret c, Authenticated c) => Txt -> Token c
+downgrade k = sign (user @c) (expires (token @c)) (List.filter ((/= k) . fst) (claims (token @c))) 
+
+bump :: forall c. (Pool c, Secret c, Authenticated c) => Time -> Token c
+bump t = sign (user @c) t (claims (token @c))
 
 revoke :: forall c. Pool c => Txt -> IO ()
 revoke proof = handle (\(ioe :: IOError) -> if isDoesNotExistError ioe then pure () else throw ioe) (removeFile (pool @c <> fromTxt proof))
-
-
 

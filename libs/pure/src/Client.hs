@@ -2,7 +2,7 @@
 module Client 
   ( Client.post, Post
   , Client.get, Get
-  , Client.got, Got, Unsafe
+  , Got(..) 
   , Client.catch, Client.or, Client.within
   -- ,ws,wssend,wsmessage,wserror
   , Fetch.XHRError, Fetch.err, Fetch.response
