@@ -5,7 +5,7 @@ import Control.Concurrent
 import Control.Monad
 import Data.Exists
 import Data.Time
-import Data.View hiding (ask,eager,lazy)
+import Data.View hiding (ask)
 
 import Data.Kind
 

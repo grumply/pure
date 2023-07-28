@@ -13,7 +13,7 @@ import Data.View
 import Browser
 
 metas :: [View -> View] -> View -> View
-metas withMetas = eager withMetas . foldM (\() -> pure) initialize
+metas withMetas = weak withMetas . foldM (\() -> pure) initialize
   where
     initialize = do
       is <- for withMetas $ \withMeta -> do

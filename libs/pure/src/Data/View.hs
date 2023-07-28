@@ -184,14 +184,14 @@ data View where
     , keyedChildren :: [(Int,View)]
     } -> View
 
-  LazyView ::
-    { lazyVal :: a
-    , lazyView :: View
+  ReactiveView ::
+    { reactiveVal :: a
+    , reactiveView :: View
     } -> View
 
-  EagerView ::
-    { eagerVal :: a
-    , eagerView :: View
+  WeakView ::
+    { weakVal :: a
+    , weakView :: View
     } -> View
 
   PortalView ::
@@ -288,8 +288,8 @@ queueComponentUpdate crec cp = do
 getHost :: View -> Maybe Node
 getHost ComponentView {..} = join $! for record (getHost . unsafePerformIO . readIORef . crView)
 getHost TextView      {..} = fmap toNode textHost
-getHost LazyView      {}   = Nothing
-getHost EagerView     {}   = Nothing
+getHost ReactiveView  {}   = Nothing
+getHost WeakView      {}   = Nothing
 getHost PortalView    {..} = fmap toNode portalProxy
 getHost TaggedView    {..} = getHost taggedView
 getHost Prebuilt      {..} = getHost prebuilt
@@ -310,11 +310,16 @@ pattern EmptyList <- (List.null -> True) where
 
 {-# INLINE static #-}
 static :: View -> View
-static = LazyView ()
+static = ReactiveView ()
 
 {-# INLINE lazy #-}
+-- Semantically, `lazy a . lazy b /= lazy (a,b)`.
 lazy :: a -> View -> View
-lazy = LazyView
+lazy = ReactiveView
+
+{-# INLINE reactive #-}
+reactive :: a -> View -> View
+reactive = ReactiveView
 
 -- The strictness here can be useful for primitives, but keep in mind that
 -- optimization level can affect the behavior.
@@ -329,23 +334,24 @@ lazy = LazyView
 --
 {-# INLINE lazy' #-}
 lazy' :: a -> View -> View
-lazy' !a = LazyView a
+lazy' !a = ReactiveView a
 
 -- If the given value is not the exact same object (reallyUnsafePtrEquality),
 -- replace the View. You probably don't need this; you likely just need stronger
 -- typing!
-{-# INLINE eager #-}
-eager :: a -> View -> View
-eager = EagerView
+-- Semantically, `weak a . weak b == weak (a,b)`.
+{-# INLINE weak #-}
+weak :: a -> View -> View
+weak = WeakView
 
 -- If the given value is not the exact same object after forcing to WHNF 
 -- and comparing with reallyUnsafePtrEquality, replace the View. You probably
 -- don't need this; you likely just need stronger typing! The strictness here
 -- can be useful for primitives, but keep in mind that optimization level can 
 -- affect the behavior.
-{-# INLINE eager' #-}
-eager' :: a -> View -> View
-eager' !a = EagerView a
+{-# INLINE weak' #-}
+weak' :: a -> View -> View
+weak' !a = weak a
 
 {-# INLINE tagged #-}
 tagged :: forall t. Typeable t => View -> View

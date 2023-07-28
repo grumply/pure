@@ -75,8 +75,8 @@ access = stateIO (Access <$> readToken @domain)
 --
 -- > authentication @domain (guarded @domain Null (basic @domain) v)
 --
-simple :: forall domain. (Logging, Endpoint.API domain, Typeable domain) => Txt -> (Authenticated domain => View) -> View
-simple api v = access @domain (guarded @domain (auth @domain) v)
+simple :: forall domain. (Logging, API domain, Typeable domain) => (Authenticated domain => View) -> View
+simple v = access @domain (guarded @domain (auth @domain) v)
 
 mtoken :: forall domain. Authentication domain => Maybe (Token domain)
 mtoken = fromAccess it
@@ -88,9 +88,9 @@ guarded unauthenticated authenticated =
     (\t -> with (User @domain t) authenticated) 
     (fromAccess (it :: Access domain))
 
-logout :: forall domain. (Typeable domain, Authenticated domain, State (Access domain)) => Txt -> IO ()
-logout api = do
-  post api Auth.logout (token @domain)
+logout :: forall domain. (Typeable domain, API domain, Authenticated domain, State (Access domain)) => IO ()
+logout = do
+  post @domain Auth.logout (token @domain)
   deleteToken @domain
   clearToken @domain
 
@@ -99,20 +99,17 @@ upgraded t = do
   storeToken t
   setToken t
 
-newtype API = API Txt
-  deriving (ToTxt,FromTxt,IsString,Eq,Ord) via Txt
-
-auth :: forall domain. (Endpoint.API domain, Typeable domain) => Authentication domain => View
+auth :: forall domain. (API domain, Typeable domain) => Authentication domain => View
 auth = 
   stream (upgraded @domain) do
     cont @(Producer (Token domain)) do
-      loginForm @domain (api @domain)
+      loginForm @domain
 
-logoutForm :: forall domain. (Typeable domain, Authenticated domain, State (Access domain)) => Txt -> View
-logoutForm api = Div <||> [ Button <| clicks (logout @domain api) |> [ "Logout" ] ]
+logoutForm :: forall domain. (Typeable domain, API domain, Authenticated domain, State (Access domain)) => View
+logoutForm = Div <||> [ Button <| clicks (logout @domain) |> [ "Logout" ] ]
 
-loginForm :: forall domain. Typeable domain => Txt -> Dynamic (Producer (Token domain)) 
-loginForm api = dynamic do
+loginForm :: forall domain. (API domain, Typeable domain) => Dynamic (Producer (Token domain)) 
+loginForm = dynamic do
   state (def :: Txt,def:: Txt) do
     let 
       (un,pw) = it
@@ -121,20 +118,20 @@ loginForm api = dynamic do
       setUsername = let In InputEvent { value = un } = it in put (un,pw)
       setPassword = let In InputEvent { value = pw } = it in put (un,pw)
 
-      login = post api (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def Producer.yield
+      login = post @domain (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def Producer.yield
 
     Div <||>
       [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]
       , Label <| Display block |> [ "Password: ", Input <| inputs setPassword ]
       , Div <||> [ Button <| clicks login |> [ "Login" ] ]
       , Div <||>
-        [ Button <| clicks (unify (registerForm @domain api)) |> [ "Register" ]
-        , Button <| clicks (unify (recoverForm @domain api)) |> [ "Recover" ]
+        [ Button <| clicks (unify (registerForm @domain)) |> [ "Register" ]
+        , Button <| clicks (unify (recoverForm @domain)) |> [ "Recover" ]
         ]
       ]
 
-recoverForm :: forall domain. Typeable domain => Txt -> Dynamic (Producer (Token domain)) 
-recoverForm api = dynamic do
+recoverForm :: forall domain. (Endpoint.API domain, Typeable domain) => Dynamic (Producer (Token domain)) 
+recoverForm = dynamic do
   state (def :: Txt,def:: Txt) do
     let 
       (un,em) = it
@@ -143,20 +140,20 @@ recoverForm api = dynamic do
       setUsername = let In InputEvent { value = un } = it in put (un,em)
       setEmail = let In InputEvent { value = em } = it in put (un,em)
 
-      recover = post api (Auth.startRecover @domain) (fromTxt un) (fromTxt em)
+      recover = post @domain (Auth.startRecover @domain) (fromTxt un) (fromTxt em)
 
     Div <||>
       [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]
       , Label <| Display block |> [ "Email: ", Input <| inputs setEmail ]
       , Div <||> [ Button <| clicks recover |> [ "Recover" ] ]
       , Div <||>
-        [ Button <| clicks (unify (loginForm @domain api)) |> [ "Login" ]
-        , Button <| clicks (unify (registerForm @domain api)) |> [ "Register" ]
+        [ Button <| clicks (unify (loginForm @domain)) |> [ "Login" ]
+        , Button <| clicks (unify (registerForm @domain)) |> [ "Register" ]
         ]
       ]
 
-registerForm :: forall domain. Typeable domain => Txt -> Dynamic (Producer (Token domain))
-registerForm api = dynamic do
+registerForm :: forall domain. (API domain, Typeable domain) => Dynamic (Producer (Token domain))
+registerForm = dynamic do
   state (def :: Txt,def :: Txt,def :: Txt) do
     let
       (un,pw,em) = it
@@ -167,7 +164,7 @@ registerForm api = dynamic do
       setEmail    = let In InputEvent { value = em } = it in put (un,pw,em)
 
       register = do
-        post api (Auth.register @domain) (fromTxt un) (fromTxt em) (fromTxt pw) 
+        post @domain (Auth.register @domain) (fromTxt un) (fromTxt em) (fromTxt pw) 
         -- TODO
         -- post api (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def Producer.yield
 
@@ -176,7 +173,7 @@ registerForm api = dynamic do
       , Label <| Display block |> [ "Password: ", Input <| inputs setPassword ]
       , Label <| Display block |> [ "Email: ", Input <| inputs setEmail ]
       , Div <||> [ Button <| clicks (void register) |> [ "Register" ] ]
-      , Div <||> [ Button <| clicks (unify (loginForm @domain api)) |> [ "Login" ] ]
+      , Div <||> [ Button <| clicks (unify (loginForm @domain)) |> [ "Login" ] ]
       ]
 
 {-

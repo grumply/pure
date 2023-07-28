@@ -52,19 +52,19 @@ import Pure.Auth.GHC as Export hiding (AuthEvent,activate,register,recover,start
 
 type Object c e a = Endpoint (Token c -> Stream e -> IO (Token e,Int,Maybe a))
 
-live :: forall c e a. (Typeable c, Typeable e, FromJSON a, FromJSON e, Typeable a, ToJSON a, ToJSON e, ToJSON (Stream e), Aggregable e a, Exists (Token c)) => Txt -> Object c e a -> Stream e -> ((Producer e, Exists a) => View) -> View
-live api o s v = liveWith @c @e @a (jittered Second & limitDelay (Seconds 30 0)) api o s v
+live :: forall c e a. (API c, Typeable c, Typeable e, FromJSON a, FromJSON e, Typeable a, ToJSON a, ToJSON e, ToJSON (Stream e), Aggregable e a, Exists (Token c)) => Object c e a -> Stream e -> ((Producer e, Exists a) => View) -> View
+live = liveWith @c @e @a (jittered Second & limitDelay (Seconds 30 0))
 
-liveWith :: forall c e a. (Typeable c, Typeable e, FromJSON e, FromJSON a, Typeable a, ToJSON a, ToJSON e, ToJSON (Stream e), Exists (Token c), Aggregable e a) => Policy -> Txt -> Object c e a -> Stream e -> ((Producer e, Exists a) => View) -> View
-liveWith policy api o s v = 
+liveWith :: forall c e a. (API c, Typeable c, Typeable e, FromJSON e, FromJSON a, Typeable a, ToJSON a, ToJSON e, ToJSON (Stream e), Exists (Token c), Aggregable e a) => Policy -> Object c e a -> Stream e -> ((Producer e, Exists a) => View) -> View
+liveWith policy o s v = 
 #ifdef __GHCJS__
   flip Component (dynamic @(Exists a, Producer e) v) \self -> def
     { onConstruct = do
-        (t,i,ma) <- Client.get api (o <> "/read") (it :: Token c) s
+        (t,i,ma) <- Client.get @c (o <> "/read") (it :: Token c) s
         ir <- newIORef i
         let
 
-          publisher = post api (fromTxt (toTxt o) <> "/write" :: Endpoint (Token e -> Stream e -> e -> IO ())) t s
+          publisher = post @c (fromTxt (toTxt o) <> "/write" :: Endpoint (Token e -> Stream e -> e -> IO ())) t s
 
           integrate :: (Int,e) -> IO ()
           integrate (j,e) = modifyM_ self \p (tid,pub,i,a) -> do
@@ -82,7 +82,7 @@ liveWith policy api o s v =
                 retrying policy do
                   mv  <- newEmptyMVar
                   i <- readIORef ir
-                  es  <- new_event_source_js (api <> toTxt o <> "/events?payload=" <> encodeURIComponent (btoa_js (encode (t,s,i))))
+                  es  <- new_event_source_js (api @c <> toTxt o <> "/events?payload=" <> encodeURIComponent (btoa_js (encode (t,s,i))))
 
                   msgs <- onRaw es "message" def \_ msg ->
                     case msg .# "data" of

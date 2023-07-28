@@ -16,7 +16,7 @@ import Data.Typeable (Typeable)
 import Data.IORef (IORef,newIORef,readIORef,atomicModifyIORef')
 import qualified Data.Map as Map (Map,lookup,insert)
 import qualified Data.Set as Set (Set,fromList)
-import Data.View (View,eager)
+import Data.View (View,weak)
 import System.IO.Unsafe (unsafePerformIO)
 
 type Fetch a = Async (Either XHRError a)
@@ -52,7 +52,7 @@ fetch t = fetchWith @a t [("Content-Type","application/json"),("Accept","*/*")]
 {-# INLINE fetchWith #-}
 fetchWith :: forall a. (FromJSON a, Typeable a) => Maybe Time -> [(Txt,Txt)] -> Txt -> (Fetch a => View) -> View
 fetchWith mt hs url v = 
-  eager (mt,hs,url) do
+  weak (mt,hs,url) do
     async (maybe (Fetch.getWith @a hs url) (\t -> fmap (convert @a url) (fetchInternal t hs url)) mt) do
       v
 
@@ -67,7 +67,7 @@ post = postWith @b [("Content-Type","application/json"),("Accept","application/j
 {-# INLINE postWith #-}
 postWith :: forall b a. (ToJSON a, FromJSON b, Typeable a, Typeable b) => [(Txt,Txt)] -> Txt -> a -> (Fetch b => View) -> View
 postWith hs url a v =
-  eager (hs,url,a) do
+  weak (hs,url,a) do
     async (Fetch.postWith @a @b hs url a) do
       v
 
@@ -82,7 +82,7 @@ form = formWith @a [("Content-Type","application/x-www-form-urlencoded"),("Accep
 {-# INLINE formWith #-}
 formWith :: forall a. (FromJSON a, Typeable a) => [(Txt,Txt)] -> Txt -> [(Txt,Txt)] -> (Fetch a => View) -> View
 formWith hs url frm v = 
-  eager (hs,url,frm) do
+  weak (hs,url,frm) do
     async (Fetch.postFormWith @a hs url frm) do
       v
 

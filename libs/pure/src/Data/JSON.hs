@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ConstraintKinds #-}
+{-# LANGUAGE CPP, ConstraintKinds, TypeSynonymInstances, FlexibleInstances #-}
 module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,JSON,module Export) where
 
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
@@ -7,6 +7,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 
 #ifdef __GHCJS__
+import Data.String (IsString(..))
 import           Data.JSON.GHCJS as Export hiding (encode,decode,decodeEither,object,Null)
 import qualified Data.JSON.GHCJS as GHCJS
 #else
@@ -17,6 +18,11 @@ import qualified Data.JSON.GHC   as GHC
 import System.IO.Unsafe (unsafePerformIO)
 
 type JSON a = (ToJSON a, FromJSON a)
+
+#ifdef __GHCJS__
+instance IsString Value where
+  fromString = toJSON . toTxt
+#endif
 
 {-# INLINE parse #-}
 parse = flip parseMaybe

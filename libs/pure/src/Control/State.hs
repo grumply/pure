@@ -9,7 +9,7 @@ import Control.Monad (forever,void)
 import Data.Effect ((#))
 import Data.Exists (Exists,it,using)
 import Data.Time (delay,Time)
-import Data.View (View,pattern Null,eager)
+import Data.View (View,pattern Null,weak)
 import Data.Typeable (Typeable)
 import GHC.Exts (IsList(..))
 import System.IO.Unsafe (unsafePerformIO)
@@ -27,11 +27,11 @@ stateIO ioa = foldM ($) (ioa >>= \a -> pure (a,\_ -> pure ()))
 
 {-# INLINE state' #-}
 state' :: forall a. Typeable a => (Modify a => a) -> (State a => View) -> View
-state' a v = eager (dynamic @(Modify a) a) (state a v)
+state' a v = weak (dynamic @(Modify a) a) (state a v)
 
 {-# INLINE stateIO' #-}
 stateIO' :: forall a. Typeable a => (Modify a => IO a) -> (State a => View) -> View
-stateIO' ioa v = eager (dynamic @(Modify a) ioa) (stateIO ioa v)
+stateIO' ioa v = weak (dynamic @(Modify a) ioa) (stateIO ioa v)
 
 {-# INLINE stateWith #-}
 stateWith :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
@@ -39,7 +39,7 @@ stateWith f = foldM (\g a -> g a >>= f a)
 
 {-# INLINE stateWith' #-}
 stateWith' :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
-stateWith' f i v = eager (dynamic @(Modify a) f,dynamic @(Modify a) i) (stateWith f i v)
+stateWith' f i v = weak (dynamic @(Modify a) f,dynamic @(Modify a) i) (stateWith f i v)
 
 {-# INLINE modifyIO #-}
 modifyIO :: forall a. Modify a => (a -> IO a) -> IO ()

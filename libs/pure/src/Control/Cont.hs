@@ -9,7 +9,7 @@ import Data.Exists (Exists,it,using)
 import Data.Function (fix)
 import Data.Kind (Constraint)
 import Data.Typeable (Typeable)
-import Data.View (eager,View,txt,pattern Null)
+import Data.View (weak,View,txt,pattern Null)
 
 type family C (a :: k) :: Constraint
 type instance C (a :: Constraint) = a
@@ -42,7 +42,7 @@ call = fromDynamic (it :: c :=> a)
 -- | Codify the dynamic View from a matching `reify`d context. 
 -- Requires a type application for `c`.
 codify :: forall c. Exists (c :=> View) => (c => View)
-codify = eager (it :: c :=> View) (call @c)
+codify = weak (it :: c :=> View) (call @c)
 {-# INLINE codify #-}
 
 -- | Reify a View context and call the initial continuation.
@@ -89,7 +89,7 @@ surface t s = reify @c s t
 --
 -- > surface @c (call @c)
 --
--- to avoid the `eager` within `hole`/`codify`. The `call` approach can be
+-- to avoid the `weak` within `hole`/`codify`. The `call` approach can be
 -- convenient for mimicking state with continuations when it wouldn't make
 -- sense to re-render on every `fill`.
 --
@@ -113,7 +113,7 @@ flat t = surface @c (hole @c) (shape @c (using (empty @c) t))
 -- >     ]
 --
 -- `hole` force a local re-render rather than a reconciliation through the
--- `eager` in `codify`.
+-- `weak` in `codify`.
 {-# INLINE hole #-}
 hole :: forall c. Exists (c :=> View) => Surface c
 hole = codify @c

@@ -67,7 +67,7 @@ library
         binary
       , text
       , lens
-      , wreq
+      , wreq >= 0.5.4
       , unix-bytestring
       , websockets
       , connection

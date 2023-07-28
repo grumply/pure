@@ -12,7 +12,7 @@ import Data.View
 import Browser
 
 scripts :: [Txt] -> View -> View
-scripts srcs = eager srcs . foldM (\() -> pure) initialize
+scripts srcs = weak srcs . foldM (\() -> pure) initialize
   where
     initialize = do
       is <- for srcs $ \src -> do

@@ -1,5 +1,13 @@
 {-# language TypeApplications, OverloadedStrings #-}
-module Data.Fetch.GHC (XHRError(..),get,getWith,getRaw,post,postWith,postRaw,postForm,postFormWith,postFormRaw) where
+module Data.Fetch.GHC 
+  (XHRError(..)
+  ,get,getWith,getRaw
+  ,post,postWith,postRaw
+  ,postForm,postFormWith,postFormRaw
+  ,patch,patchWith,patchRaw
+  ,delete,deleteWith,deleteRaw
+  ,put,putWith,putRaw
+  ) where
 
 import Data.JSON
 
@@ -33,51 +41,19 @@ get :: FromJSON a => Txt -> IO (Either XHRError a)
 get = getWith [("Content-Type","application/json"),("Accept","*/*")] 
 
 getWith :: FromJSON a => [(Txt,Txt)] -> Txt -> IO (Either XHRError a)
-getWith headers url = do
-  ext <- getRaw headers url
-  pure $
-    case ext of
-      Left e  -> Left e
-      Right t -> either (Left . ParseError url) Right (decodeEither t)
+getWith hs url = liftWith (\hs url _ -> Wreq.getWith hs url) hs url ("" :: Txt)
 
 getRaw :: [(Txt,Txt)] -> Txt -> IO (Either XHRError Txt)
-getRaw hs0 url = do
-  let 
-    hs = fmap (\(h,v) -> (fromString (fromTxt h),fromString (fromTxt v))) hs0
-    opts = defaults & headers .~ hs
-  rsp <- handle @SomeException (pure . Left) (Right <$> Wreq.getWith opts (fromTxt url))
-  pure $
-    case rsp of
-      Left se -> Left (OtherError url se)
-      Right r -> let code = r ^. responseStatus . statusCode in
-        case code of
-          _ | code >= 200 && code < 300 -> Right (toTxt $ r ^. responseBody)
-            | otherwise                 -> Left (StatusError url code (toTxt $ r ^. responseBody))
+getRaw hs url = liftRaw (\hs url _ -> Wreq.getWith hs url) hs url ""
 
 post :: (ToJSON a,FromJSON b) => Txt -> a -> IO (Either XHRError b)
 post = postWith [("Content-Type","application/json"),("Accept","application/json")]
 
 postWith :: (ToJSON a, FromJSON b) => [(Txt,Txt)] -> Txt -> a -> IO (Either XHRError b)
-postWith hs0 url payload = do
-  ext <- postRaw hs0 url (encode payload)
-  pure $
-    case ext of
-      Left e  -> Left e
-      Right t -> either (Left . ParseError url) Right (decodeEither t)
+postWith = liftWith Wreq.postWith
 
 postRaw :: [(Txt,Txt)] -> Txt -> Txt -> IO (Either XHRError Txt)
-postRaw hs0 url payload = do
-  let
-    hs = fmap (\(h,v) -> (fromString (fromTxt h),fromString (fromTxt v))) hs0 
-    opts = defaults & headers .~ hs
-  rsp <- handle @SomeException (pure . Left) (Right <$> Wreq.postWith opts (fromTxt url) (fromTxt payload :: ByteString))
-  pure $
-    case rsp of
-      Left se -> Left (OtherError url se)
-      Right r -> let code = r ^. responseStatus . statusCode in
-        case code of
-          _ | code >= 200 && code < 300 -> Right (toTxt $ r ^. responseBody)
-            | otherwise                 -> Left (StatusError url code (toTxt $ r ^. responseBody))
+postRaw = liftRaw Wreq.postWith
 
 postForm :: FromJSON a => Txt -> [(Txt,Txt)] -> IO (Either XHRError a)
 postForm = postFormWith [("Content-Type","application/x-www-form-urlencoded"),("Accept","application/json")]
@@ -105,3 +81,53 @@ postFormRaw hs0 url payload = do
             | otherwise                 -> Left (StatusError url code (toTxt $ r ^. responseBody))
   where
     params = fmap (\(k,v) -> fromTxt k := v) payload
+
+
+patch :: (ToJSON a,FromJSON b) => Txt -> a -> IO (Either XHRError b)
+patch = patchWith [("Content-Type","application/json"),("Accept","application/json")]
+
+patchWith :: (ToJSON a, FromJSON b) => [(Txt,Txt)] -> Txt -> a -> IO (Either XHRError b)
+patchWith = liftWith Wreq.patchWith
+
+patchRaw :: [(Txt,Txt)] -> Txt -> Txt -> IO (Either XHRError Txt)
+patchRaw = liftRaw Wreq.patchWith
+
+delete :: FromJSON b => Txt -> IO (Either XHRError b)
+delete = deleteWith [("Content-Type","application/json"),("Accept","application/json")]
+
+deleteWith :: FromJSON b => [(Txt,Txt)] -> Txt -> IO (Either XHRError b)
+deleteWith hs0 url = liftWith (\hs url _ -> Wreq.deleteWith hs url) hs0 url ("" :: Txt)
+
+deleteRaw :: [(Txt,Txt)] -> Txt -> IO (Either XHRError Txt)
+deleteRaw hs0 url = liftRaw (\hs url _ -> Wreq.deleteWith hs url) hs0 url ("" :: Txt)
+
+put :: (ToJSON a,FromJSON b) => Txt -> a -> IO (Either XHRError b)
+put = putWith [("Content-Type","application/json"),("Accept","application/json")]
+
+putWith :: (ToJSON a, FromJSON b) => [(Txt,Txt)] -> Txt -> a -> IO (Either XHRError b)
+putWith = liftWith Wreq.putWith
+
+putRaw :: [(Txt,Txt)] -> Txt -> Txt -> IO (Either XHRError Txt)
+putRaw = liftRaw Wreq.putWith
+
+liftWith f hs0 url payload = do
+  ext <- liftRaw f hs0 url (encode payload)
+  pure $
+    case ext of
+      Left e  -> Left e
+      Right t -> either (Left . ParseError url) Right (decodeEither t)
+
+liftRaw f hs0 url payload = do
+  let
+    hs = fmap (\(h,v) -> (fromString (fromTxt h),fromString (fromTxt v))) hs0 
+    opts = defaults & headers .~ hs
+  rsp <- handle @SomeException (pure . Left) (Right <$> f opts (fromTxt url) (fromTxt payload :: ByteString))
+  pure $
+    case rsp of
+      Left se -> Left (OtherError url se)
+      Right r -> let code = r ^. responseStatus . statusCode in
+        case code of
+          _ | code >= 200 && code < 300 -> Right (toTxt $ r ^. responseBody)
+            | otherwise                 -> Left (StatusError url code (toTxt $ r ^. responseBody))
+
+ 

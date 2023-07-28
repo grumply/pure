@@ -10,7 +10,7 @@ import Data.Coerce (coerce)
 import Data.Exists (with)
 import Data.Time
 import Data.Typeable (Typeable)
-import Data.View (pattern Component,Comp(..),View,eager,ask,modifyM,get)
+import Data.View (pattern Component,Comp(..),View,ask,modifyM,get)
 import Effect.Fork
 import GHC.Exts
 import System.IO.Unsafe (unsafePerformIO)

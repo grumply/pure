@@ -14,7 +14,7 @@ import Data.View
 import Browser
 
 css :: CSS a -> View -> View
-css styles = eager styles . foldM (\() -> pure) initialize
+css styles = weak styles . foldM (\() -> pure) initialize
   where
     initialize = do
       m <- markIO
@@ -23,7 +23,7 @@ css styles = eager styles . foldM (\() -> pure) initialize
       pure ((),\_ -> findById i >>= traverse_ removeNode)
 
 stylesheets :: [Txt] -> View -> View
-stylesheets sheets = eager sheets . foldM (\() -> pure) initialize
+stylesheets sheets = weak sheets . foldM (\() -> pure) initialize
   where
     initialize = do
       is <- for sheets $ \sheet -> do

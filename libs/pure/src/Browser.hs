@@ -226,8 +226,8 @@ build' mtd = start
           forkIO $ newComponentThread mv cr c live new ps state2
           -- GHC doesn't allow for record update of a ComponentView here
           return (ComponentView witness (Just cr) comp props)
-        go' (LazyView _ f) = go f
-        go' (EagerView _ f) = go f
+        go' (ReactiveView _ f) = go f
+        go' (WeakView _ f) = go f
         go' TaggedView{..} = go taggedView
         go' o@TextView {..} = do
           tn <- createText content
@@ -603,11 +603,11 @@ diffDeferred' mounted plan plan' old !mid !new =
           (Prebuilt pb,_) ->
             diffDeferred mounted plan plan' old pb new
 
-          (LazyView a f,LazyView a' f')
+          (ReactiveView a f,ReactiveView a' f')
             | a === a'  -> return old
             | otherwise -> diffDeferred mounted plan plan' old f f'
 
-          (EagerView a f,EagerView a' f')
+          (WeakView a f,WeakView a' f')
             | a === a' -> diffDeferred mounted plan plan' old f f'
 
           (TaggedView t v,TaggedView t' v')

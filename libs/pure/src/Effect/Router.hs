@@ -115,7 +115,7 @@ routed' :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx :=> View) => V
 routed' rs v = router' rs (let (d :: ctx :=> View) = current in with d v)
 
 page :: forall ctx. Exists (ctx :=> View) => (ctx => View)
-page = eager (it :: ctx :=> View) (fromDynamic (it :: ctx :=> View))
+page = weak (it :: ctx :=> View) (fromDynamic (it :: ctx :=> View))
 
 routes_ :: Routes () -> View
 routes_ rs = routed @() rs (page @())

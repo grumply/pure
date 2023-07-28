@@ -27,7 +27,7 @@ import Text.Printf as Export (printf)
 import Control.Cont as Export hiding (empty)
 import Control.Error as Export
 import Control.Producer as Export hiding (events)
-import Control.Reader as Export hiding (lazy,eager)
+import Control.Reader as Export
 import Control.Retry as Export (retry,recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci)
 import Control.State as Export hiding (flat)
 import Control.Writer as Export hiding (translate)

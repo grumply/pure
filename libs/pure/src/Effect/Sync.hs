@@ -6,7 +6,7 @@ import qualified Control.Reader as Reader
 import Data.Default
 import Data.Exists
 import Data.Typeable
-import Data.View (pattern Component,Comp(..),View,eager,ask)
+import Data.View (pattern Component,Comp(..),View,ask)
 import GHC.Exts (isTrue#,reallyUnsafePtrEquality#)
 import System.IO.Unsafe
 

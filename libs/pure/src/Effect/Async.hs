@@ -8,7 +8,7 @@ import qualified Control.Reader as Reader (Reader,ask)
 import Data.Coerce (coerce)
 import Data.Exists (with,it)
 import Data.Typeable (Typeable)
-import Data.View (pattern Component,Comp(..),View,eager,ask,modifyM)
+import Data.View (pattern Component,Comp(..),View,ask,modifyM)
 import Effect.Fork
 import GHC.Exts
 import System.IO.Unsafe (unsafePerformIO)

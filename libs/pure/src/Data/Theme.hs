@@ -103,9 +103,9 @@ addTheme = do
   unless tw $
     case css (theme @t p) of
       Children cs _ 
-        | [] <- cs                             -> pure ()
-        | [ TextView _ "" ] <- cs              -> pure ()
-        | [ LazyView _ (TextView _ "") ] <- cs -> pure ()
+        | [] <- cs                                 -> pure ()
+        | [ TextView _ "" ] <- cs                  -> pure ()
+        | [ ReactiveView _ (TextView _ "") ] <- cs -> pure ()
       content -> inject Lifted.head (Attribute "data-pure-theme" pre content)
 
 hasTheme :: forall t b. (Theme t, HasFeatures b) => b -> Bool
