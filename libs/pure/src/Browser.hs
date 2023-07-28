@@ -446,8 +446,9 @@ newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state 
                 -- this point, as well. This should be the only yield in the
                 -- reconciler, with the intention that it be a hinted 
                 -- synchronization point.
-                -- yield
+                yield
 
+#ifdef __GHCJS__
                 sync $ \barrier -> do
                   -- In the worst case, updating within an animation frame costs
                   -- about 20%. But there are two major benefits: 
@@ -467,6 +468,9 @@ newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state 
                   addAnimation $ do
                     runPlan plan
                     putMVar barrier ()
+#else
+                runPlan plan
+#endif
 
               when hasIdleWork $ 
                 runPlan plan'
