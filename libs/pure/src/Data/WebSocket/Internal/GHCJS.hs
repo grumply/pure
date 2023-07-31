@@ -16,9 +16,9 @@
 module Data.Websocket.Internal.GHCJS where
 
 -- internal
-import Control.Log as Log
-import Control.Retry as Retry hiding (Status)
-import qualified Control.Retry as Retry
+import Data.Log as Log
+import Data.Retry as Retry hiding (Status)
+import qualified Data.Retry as Retry
 import Data.Function
 import Data.DOM
 import Data.JSON as JSON hiding (Error)

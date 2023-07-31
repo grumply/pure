@@ -133,10 +133,10 @@ workIdly as = do
             --
             -- Remaining actions are returned for the next idle period.
             --
-            -- Note that: as used in, e.g. Browser, this worker and the work queue 
-            -- should remain balanced in almost all situations. Work in the idle
-            -- queue should not outpace the production of idle work. This is not
-            -- necessarily true when used otherwise.
+            -- Note that: as used in, e.g. Data.View.Build, this worker and the 
+            -- work queue should remain balanced in almost all situations. Work 
+            -- in the idle queue should not outpace the production of idle work. 
+            -- This is not necessarily true when used otherwise.
             go :: [IO ()] -> IO (Maybe [IO ()])
             go [] = return Nothing
             go (a:as) = do

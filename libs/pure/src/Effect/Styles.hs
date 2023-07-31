@@ -1,7 +1,6 @@
 {-# language OverloadedStrings #-}
 module Effect.Styles (css,stylesheets,stylesheet) where
 
-import Control.Fold
 import Data.CSS as CSS hiding (css,stylesheet)
 import qualified Data.CSS as CSS (css)
 import Data.DOM as DOM
@@ -11,7 +10,7 @@ import Data.Marker
 import Data.Traversable
 import Data.Txt
 import Data.View
-import Browser
+import Data.View.Build
 
 css :: CSS a -> View -> View
 css styles = weak styles . foldM (\() -> pure) initialize

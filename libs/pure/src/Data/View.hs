@@ -1,22 +1,27 @@
-{-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts, ConstraintKinds #-}
-module Data.View (module Data.View,Typeable) where
+{-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts, ConstraintKinds, BlockArguments, MultiWayIf, LambdaCase, DuplicateRecordFields, TypeOperators, DerivingVia, DataKinds, NamedFieldPuns, TypeFamilies, DeriveFunctor #-}
+module Data.View (module Data.View, Typeable()) where
 
 import Control.Arrow ((&&&))
-import Control.Concurrent (MVar)
-import Control.Monad (void,join)
+import Control.Applicative (Applicative(..))
+import Control.Concurrent (ThreadId,forkIO,killThread,myThreadId,MVar,newMVar,newEmptyMVar,readMVar,putMVar,takeMVar)
+import Control.Exception (mask,onException,evaluate,Exception,catch,throw,SomeException)
+import Control.Monad (void,join,forever,unless,when)
 import Control.Monad.ST (ST)
 import Data.Coerce (Coercible(),coerce)
-import Data.Exists (Exists,it,using)
-import Data.IORef (IORef,readIORef)
+import Data.Foldable (for_)
+import Data.IORef (IORef,newIORef,atomicModifyIORef',readIORef)
 import Data.List as List (null)
+import Data.Maybe (listToMaybe,fromJust)
 import Data.Monoid (Monoid(..),(<>))
 import Data.Proxy (Proxy(..))
 import Data.STRef (STRef)
 import Data.String (IsString(..))
+import Data.Try as Try (Try,try)
+import Data.Time (Time,time,delay,timeout)
 import Data.Traversable (for)
 import Data.Typeable (Typeable,tyConName,typeRepTyCon,typeOf,typeRep,typeRepFingerprint,cast)
 import Data.Unique (Unique,newUnique)
-import GHC.Exts (reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#)
+import GHC.Exts as Exts (IsList(..),Any,Constraint,reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#)
 import GHC.Fingerprint.Type (Fingerprint())
 import GHC.Generics (Generic(..))
 import GHC.Stack
@@ -236,39 +241,33 @@ asProxyOf _ = Proxy
 tyCon :: Typeable t => t -> String
 tyCon = tyConName . typeRepTyCon . typeOf
 
-type Viewable a = Exists (a -> View)
+{-# INLINE getref #-}
+getref :: Ref props state -> IO state
+getref = readIORef . crState
 
-{-# INLINE toView #-}
-toView :: Viewable a => a -> View
-toView = it
+{-# INLINE askref #-}
+askref :: Ref props state -> IO props
+askref = readIORef . crProps
 
-{-# INLINE get #-}
-get :: Ref props state -> IO state
-get = readIORef . crState
+{-# INLINE lookref #-}
+lookref :: Ref props state -> IO View
+lookref = readIORef . crView
 
-{-# INLINE ask #-}
-ask :: Ref props state -> IO props
-ask = readIORef . crProps
+{-# INLINE modifyref #-}
+modifyref :: Ref props state -> (props -> state -> state) -> IO Bool
+modifyref r f = modifyrefM r (\p s -> return (f p s,return ()))
 
-{-# INLINE look #-}
-look :: Ref props state -> IO View
-look = readIORef . crView
+{-# INLINE modifyref_ #-}
+modifyref_ :: Ref props state -> (props -> state -> state) -> IO ()
+modifyref_ r f = void (modifyref r f)
 
-{-# INLINE modify #-}
-modify :: Ref props state -> (props -> state -> state) -> IO Bool
-modify r f = modifyM r (\p s -> return (f p s,return ()))
+{-# INLINE modifyrefM #-}
+modifyrefM :: Ref props state -> (props -> state -> IO (state,IO ())) -> IO Bool
+modifyrefM cr f = queueComponentUpdate cr (UpdateState f)
 
-{-# INLINE modify_ #-}
-modify_ :: Ref props state -> (props -> state -> state) -> IO ()
-modify_ r f = void (modify r f)
-
-{-# INLINE modifyM #-}
-modifyM :: Ref props state -> (props -> state -> IO (state,IO ())) -> IO Bool
-modifyM cr f = queueComponentUpdate cr (UpdateState f)
-
-{-# INLINE modifyM_ #-}
-modifyM_ :: Ref props state -> (props -> state -> IO (state,IO ())) -> IO ()
-modifyM_ r f = void (modifyM r f)
+{-# INLINE modifyrefM_ #-}
+modifyrefM_ :: Ref props state -> (props -> state -> IO (state,IO ())) -> IO ()
+modifyrefM_ r f = void (modifyrefM r f)
 
 {-# INLINE setProps #-}
 setProps :: Ref props state -> props -> IO Bool
@@ -312,11 +311,7 @@ pattern EmptyList <- (List.null -> True) where
 static :: View -> View
 static = ReactiveView ()
 
-{-# INLINE lazy #-}
--- Semantically, `lazy a . lazy b /= lazy (a,b)`.
-lazy :: a -> View -> View
-lazy = ReactiveView
-
+-- Semantically, `reactive a . reactive b /= reactive (a,b)`.
 {-# INLINE reactive #-}
 reactive :: a -> View -> View
 reactive = ReactiveView
@@ -324,17 +319,17 @@ reactive = ReactiveView
 -- The strictness here can be useful for primitives, but keep in mind that
 -- optimization level can affect the behavior.
 --
--- There are some neat tricks that can be had with `lazy'`, like:
+-- There are some neat tricks that can be had with `reactive'`, like:
 --
--- > lazy' (value > 1) do
+-- > reactive' (value > 1) do
 -- >   _
 --
 -- If `value` is strictly increasing from an initial value less than 1, this
 -- `lazy'` call will update exactly once, when the value first exceeds 1.
 --
-{-# INLINE lazy' #-}
-lazy' :: a -> View -> View
-lazy' !a = ReactiveView a
+{-# INLINE reactive' #-}
+reactive' :: a -> View -> View
+reactive' !a = ReactiveView a
 
 -- If the given value is not the exact same object (reallyUnsafePtrEquality),
 -- replace the View. You probably don't need this; you likely just need stronger
@@ -358,14 +353,14 @@ tagged :: forall t. Typeable t => View -> View
 tagged = TaggedView (proxyWitness (Proxy :: Proxy t))
 
 pattern Tag :: forall t. Typeable t => View -> View
-pattern Tag v <- TaggedView ((sameTypeWitness (proxyWitness (Proxy :: Proxy t))) -> True) v where
-  Tag t = (tagged @t t)
+pattern Tag v <- TaggedView (sameTypeWitness (proxyWitness (Proxy :: Proxy t)) -> True) v where
+  Tag t = tagged @t t
 
 -- Txt
 
 {-# INLINE txt #-}
 txt :: ToTxt a => a -> View
-txt a = lazy a (TextView Nothing (toTxt a))
+txt a = reactive a (TextView Nothing (toTxt a))
 
 pattern Txt :: Txt -> View
 pattern Txt t <- (TextView _ t) where
@@ -576,16 +571,16 @@ pattern Lifecycle l a <- ((const (error "The Lifecycle pattern does not support 
     let fs = getFeatures a
     in (setFeatures (fs { lifecycles = l : lifecycles fs }) a)
 
-pattern SetLifecycles :: HasFeatures a => [Lifecycle] -> a -> a
-pattern SetLifecycles lc v <- (((lifecycles . getFeatures) &&& id) -> (lc,v)) where
-  SetLifecycles lc v = (setFeatures ((getFeatures v) { lifecycles = lc }) v)
-
-pattern Lifecycles :: HasFeatures a => [Lifecycle] -> a -> a
-pattern Lifecycles lc v <- (((lifecycles . getFeatures) &&& id) -> (lc,v)) where
-  Lifecycles lc v =
-    let fs = getFeatures v
-    in (setFeatures (fs { lifecycles = lc ++ lifecycles fs }) v)
-
+-- pattern SetLifecycles :: HasFeatures a => [Lifecycle] -> a -> a
+-- pattern SetLifecycles lc v <- (((lifecycles . getFeatures) &&& id) -> (lc,v)) where
+--   SetLifecycles lc v = (setFeatures ((getFeatures v) { lifecycles = lc }) v)
+--
+-- pattern Lifecycles :: HasFeatures a => [Lifecycle] -> a -> a
+-- pattern Lifecycles lc v <- (((lifecycles . getFeatures) &&& id) -> (lc,v)) where
+--   Lifecycles lc v =
+--     let fs = getFeatures v
+--     in (setFeatures (fs { lifecycles = lc ++ lifecycles fs }) v)
+--
 pattern OnCreated :: HasFeatures a => (Node -> IO (IO ())) -> a -> a
 pattern OnCreated f a <- Lifecycle (Created f _) a where
   OnCreated f a = (Lifecycle (Created f (pure ())) a)
@@ -743,3 +738,963 @@ infixr 9 |#>
 (|#>) :: HasKeyedChildren a => (a -> a) -> [(Int,View)] -> a -> a
 (|#>) f cs = setKeyedChildren cs . f
 
+within :: Time -> a -> a
+within t a = unsafePerformIO (fromJust <$> timeout t (evaluate a))
+
+caught :: Exception e => a -> (e -> a) -> a
+caught a f = unsafePerformIO (Control.Exception.catch (evaluate a) (pure . f))
+
+or :: a -> a -> a
+or l r = Data.View.caught @SomeException l (const r)
+
+class Exists a where
+  it :: a
+
+{-
+data Witness a r = Witness (Exists a => Proxy a -> r)
+
+-- This configuration is not preferable, but it avoids a constraint satisfaction 
+-- propagation issue. Using the `unsafeCoerce` approach for `using` along with
+-- `GHC.Exts.inline` was able to completely remove dictionaries from the generated 
+-- core, but calls to `using` were (sometimes) allowed to satisfy non-local 
+-- `Exists` constraints! 
+--
+-- See: https://gitlab.haskell.org/ghc/ghc/-/issues/21575
+--
+{-# NOINLINE withWitness #-}
+withWitness :: forall a r. (Exists a => Proxy a -> r) -> a -> Proxy a -> r
+withWitness w a p = magicDict (Witness w) a p
+
+{-# INLINE using' #-}
+using' :: forall a r. a -> (Exists a => r) -> r
+using' a w = withWitness (\_ -> w) a Proxy
+-}
+
+newtype Witness a r = Witness (Exists a => r)
+
+-- This approach is likely to produce bugs, but the performance improvement over
+-- the magicDict version can be massive. Keep `using` in mind if anything
+-- inexplicable happens.
+{-# INLINABLE using #-}
+using :: forall a r. a -> (Exists a => r) -> r
+using a w = unsafeCoerce (Witness w :: Witness a r) a
+
+{-# INLINE with #-}
+with :: a -> (Exists a => r) -> r
+with = using
+
+{-# INLINE may #-}
+may :: forall a b. Exists (Maybe a) => b -> (Exists a => b) -> b
+may nothing just = maybe nothing (\a -> using a just) (it :: Maybe a)
+
+{-# INLINE try #-}
+try :: forall a b. Exists (Try.Try a) => b -> b -> (Exists a => b) -> b
+try trying failed done = Try.try trying failed (\a -> using a done) (it :: Try.Try a)
+
+{-# INLINE unite #-}
+unite :: forall a b c. Exists (Either a b) => (Exists a => c) -> (Exists b => c) -> c
+unite left right = either (\a -> using a left) (\b -> using b right) (it :: Either a b)
+
+newtype Handler eff = Handler { runHandler :: eff -> IO () -> IO Bool }
+
+type Effect eff = Exists (Handler eff)
+
+{-# INLINE effect' #-}
+effect' :: Effect eff => eff -> IO () -> IO Bool
+effect' = runHandler it
+
+{-# INLINE effect #-}
+effect :: Effect eff => eff -> IO ()
+effect eff = void (effect' eff (pure ()))
+
+{-# INLINE map #-}
+map :: forall msg msg' a. (msg -> msg') -> (Effect msg => a) -> (Effect msg' => a)
+map f = using (Handler (\m io -> effect' (f m) io)) 
+
+-- {-# INLINE also #-}
+-- also :: forall msg a. (msg -> IO ()) -> (Effect msg => a) -> (Effect msg => a)
+-- also f = using (Handler (\m io -> effect' m (io >> f m)))
+
+{-# INLINE (#) #-}
+infixr 9 #
+(#) :: forall a b x. (a -> b) -> (Effect a => x) -> (Effect b => x)
+(#) = Data.View.map
+
+{-# RULES
+  "Data.Effect.map id" forall x. Data.View.map id x = x
+  #-}
+
+type Viewable a = Exists (a -> View)
+
+{-# INLINE toView #-}
+toView :: Viewable a => a -> View
+toView = it
+
+type Producer a = Effect a
+
+{-# INLINE yield #-}
+yield :: Producer a => a -> IO ()
+yield = effect
+
+{-# INLINE stream #-}
+stream :: (a -> IO ()) -> (Producer a => b) -> b
+stream f = using (Handler (\a after -> f a >> after >> pure True))
+
+{-# INLINE events #-}
+events :: forall a b. (Exists a => IO ()) -> (Producer a => b) -> b
+events f = stream @a (`using` f)
+
+{-# INLINE discard #-}
+discard :: forall a b. (Producer a => b) -> b
+discard = stream @a (\_ -> pure ())
+
+data Fork
+
+-- Fork an asynchronous rendering context. 
+--
+-- Consider:
+-- 
+-- > lazy action do
+-- >   fork do
+-- >     { ... await ... }
+--
+-- Without fork, await is render-blocking. With fork, the await is performed
+-- within a new thread and, therefore, only blocks the fork.
+--
+{-# INLINE fork #-}
+fork :: View -> View
+fork = Component @View @Fork (const def { deferred = True, render = const })
+
+data Asynchronous a = Asynchronous (IO a) (Exists a :=> View)
+
+data Async a = Async 
+  { action :: IO a
+  , view   :: Exists a :=> View
+  , thread :: ThreadId 
+  , result :: MVar a
+  }
+
+await :: Exists a => a
+await = it
+
+parv :: Typeable a => a -> (Exists a => View) -> View
+parv a = lazy (evaluate a)
+
+{-# INLINE lazy #-}
+-- Note that only the asynchrony of the first action can be witnessed in View
+lazy :: forall a. Typeable a => IO a -> (Exists a => View) -> View
+lazy io v = go (Asynchronous io (dynamic v))
+  where
+    go = Component \self -> def
+      { deferred = True
+
+      , onConstruct = do
+          Asynchronous action view <- askref self
+          result <- newEmptyMVar
+          thread <- forkIO (action >>= putMVar result)
+          pure Async {..}
+
+      , onForce = \(Asynchronous new_action new_view) old@Async {..} -> do
+          let
+            sameAction = isTrue# (reallyUnsafePtrEquality# new_action action) 
+            sameView   = isTrue# (reallyUnsafePtrEquality# new_view view)
+          pure (not sameAction || not sameView)
+
+      , onReceive = \(Asynchronous new_action new_view) old@Async {..} -> do
+          let
+            sameAction = isTrue# (reallyUnsafePtrEquality# new_action action) 
+            sameView   = isTrue# (reallyUnsafePtrEquality# new_view view)
+          case (sameAction,sameView) of
+            (False,_) -> do
+              let action = new_action
+              let view = new_view
+              thread <- forkIO do
+                Control.Exception.mask $ \unmask -> do
+                  a <- action 
+                  unmask do
+                    tid <- myThreadId
+                    modifyrefM self $ \_ Async {..} ->
+                      if tid == thread then do
+                        result <- newMVar a
+                        pure (Async {..},def)
+                      else
+                        pure (Async {..},def)
+                    pure ()
+              pure Async {..}
+
+            (_,False) -> do
+              pure (old :: Async a) { view = new_view }
+
+            _ -> do
+              pure old
+
+      , render = \_ Async { view, result } -> 
+          with (unsafePerformIO (readMVar result)) (fromDynamic view)
+
+      }
+
+data Synchronous a = Synchronous (IO a) (Exists a :=> View)
+data Sync a = Sync 
+  { action :: IO a
+  , result :: a
+  , view   :: Exists a :=> View
+  }
+
+seqv :: Typeable a => a -> (Exists a => View) -> View
+seqv a = eager (evaluate a)
+
+{-# INLINE eager #-}
+eager :: forall a. Typeable a => IO a -> (Exists a => View) -> View
+eager io v = go (Synchronous io (dynamic v))
+  where
+    go = Component $ \self -> def
+      { onConstruct = do
+        Synchronous action view <- askref self
+        result <- action
+        pure Sync {..}
+
+      , onForce = \(Synchronous new_action new_view) Sync {..} -> do
+          let
+            sameAction = isTrue# (reallyUnsafePtrEquality# new_action action) 
+            sameView   = isTrue# (reallyUnsafePtrEquality# new_view view)
+          pure (not sameAction || not sameView)
+
+      , onReceive = \(Synchronous new_action new_view) old@Sync {..} -> do
+          let
+            sameAction = isTrue# (reallyUnsafePtrEquality# new_action action) 
+            sameView   = isTrue# (reallyUnsafePtrEquality# new_view view)
+          case (sameAction,sameView) of
+            (False,_) -> do
+              let action = new_action
+              let view = new_view
+              result <- action
+              pure Sync {..}
+            (_,False) -> do
+              pure (old :: Sync a) { view = new_view }
+            _ -> do
+              pure old
+
+      , render = \_ Sync { view, result } -> with result (fromDynamic view)
+      }
+
+{-# INLINE conc #-}
+conc :: View -> View -> View
+conc a b = race [a,b] it
+
+{-# INLINE race #-}
+race :: [View] -> (Exists View => View) -> View
+race vs v = lazy run v
+  where
+    run = do
+      mv <- newEmptyMVar
+      tids <- for vs \v -> forkIO (evaluate v >>= putMVar mv)
+      v <- takeMVar mv
+      for_ tids killThread
+      pure v
+
+-- A record of listeners to lifecycle events.
+--
+-- This approach reduces the component overhead.
+--
+data Lifecycles = Lifecycles
+  { onStart :: IO ()
+  , onLoad :: IO ()
+  , onBefore :: IO ()
+  , onAfter :: IO ()
+  , onStop :: IO ()
+  }
+
+instance Semigroup Lifecycles where
+  (<>) lc1 lc2 = Lifecycles 
+    { onStart = onStart lc1 >> onStart lc2
+    , onLoad = onLoad lc1 >> onLoad lc2
+    , onBefore = onBefore lc1 >> onBefore lc2
+    , onAfter = onAfter lc1 >> onAfter lc2
+    , onStop = onStop lc1 >> onStop lc2
+    }
+
+instance Monoid Lifecycles where
+  mempty = def
+
+instance Default Lifecycles where
+  def = Lifecycles def def def def def
+
+{-# RULES 
+  "lifecyle lc1 (lifecycle lc2) => lifecycle (lc1 <> lc2)"
+    forall lc1 lc2 v. lifecycle lc1 (lifecycle lc2 v) = lifecycle (lc1 <> lc2) v
+ #-}
+
+{-# INLINE [1] lifecycle #-}
+lifecycle :: Lifecycles -> View -> View
+lifecycle ls v = Component go (ls,v)
+  where
+    go self = def
+      { onConstruct = askref self >>= onStart . fst
+      , onMounted = askref self >>= onLoad . fst
+      , onUpdate = \(ls',v') _ -> do
+          (_,v) <- askref self
+          unless (isTrue# (reallyUnsafePtrEquality# v v')) (onBefore ls')
+      , onUpdated = \(ls,v) _ -> onAfter ls
+      , onUnmounted = askref self >>= onStop . fst
+      , render = \(_,v) _ -> v
+      }
+
+watch :: IO () -> View
+watch = Component @(IO ()) @() go
+  where
+    go self = def
+      { onUpdate = const
+      }
+
+watch' :: IO () -> View
+watch' = Component go
+  where
+    go self = def
+      { onConstruct = join (askref self)
+      , onUpdate    = const
+      }
+
+data Polling a = Polling Time (IO a) (Exists a :=> View)
+
+data Poll a = Poll
+  { interval :: Time
+  , begin :: Time
+  , action :: IO a 
+  , view :: Exists a :=> View
+  , thread :: ThreadId
+  , result :: MVar a
+  }
+
+{-# INLINE every #-}
+every :: forall a. Typeable a => Time -> IO a -> (Exists a => View) -> View
+every = poll
+
+{-# INLINE poll #-}
+-- Note that only the asynchrony of the first action can be witnessed in View
+poll :: forall a. Typeable a => Time -> IO a -> (Exists a => View) -> View
+poll t f v = go (Polling t f (dynamic v))
+  where
+    go = Component \self -> def
+      { deferred = True
+
+      , onConstruct = do
+          begin <- time
+          Polling interval action view <- askref self
+          result <- newEmptyMVar
+          thread <- forkIO do
+
+            Control.Exception.mask $ \unmask -> do
+              a <- action 
+              unmask (putMVar result a)
+
+            forever do
+              delay interval
+              Control.Exception.mask $ \unmask -> do
+                a <- action
+                unmask do
+                  tid <- myThreadId
+                  modifyrefM self $ \_ Poll {..} ->
+                    if tid == thread then do
+                      begin <- time
+                      result <- newMVar a
+                      pure (Poll {..},def)
+                    else
+                      pure (Poll {..},killThread tid)
+
+          pure Poll {..}
+
+      , onForce = \(Polling new_interval new_action new_view) old@Poll {..} -> do
+          let
+            sameInterval = new_interval == interval
+            sameAction   = isTrue# (reallyUnsafePtrEquality# new_action action)
+            sameView     = isTrue# (reallyUnsafePtrEquality# new_view view)
+          pure (not sameInterval || not sameAction || not sameView)
+
+      , onReceive = \(Polling new_interval new_action new_view) old@Poll {..} -> do
+          let
+            sameInterval = new_interval == interval
+            sameAction   = isTrue# (reallyUnsafePtrEquality# new_action action) 
+            sameView     = isTrue# (reallyUnsafePtrEquality# new_view view)
+          now <- time
+          if 
+            | not sameInterval || not sameAction -> do
+              let interval = new_interval
+              let begin = now
+              let action = new_action
+              let view = new_view
+              thread <-
+                forkIO do
+                  when (not sameInterval && sameAction) do
+                    delay ((begin + new_interval) - now)
+                  forever do
+                    Control.Exception.mask $ \unmask -> do
+                      a <- action
+                      unmask do
+                        tid <- myThreadId
+                        modifyrefM self $ \_ Poll {..} ->
+                          if tid == thread then do
+                            begin <- time
+                            result <- newMVar a
+                            pure (Poll {..},def)
+                          else
+                            pure (Poll {..},killThread tid)
+                        delay interval
+              pure Poll {..}
+
+            | not sameView -> do
+              pure (old :: Poll a) { view = new_view }
+              
+            | otherwise ->
+              pure old
+
+      , onUnmounted = getref self >>= \Poll { thread } -> killThread thread
+
+      , render = \_ Poll { view, result } -> 
+          with (unsafePerformIO (readMVar result)) (fromDynamic view)
+      }
+
+-- | Delay the materialization of a value. This can be useful for creating 
+-- suspense where it might not always exist. Some UIs need to be slowed 
+-- down to improve the user experience or to introduce consistency across
+-- devices, and careful use of `delayed` is a simple primitive that can
+-- serve that purpose. Note that `delayed` is synchronous! The delays 
+-- introduced from multiple `delayed` calls within a view will be
+-- additive.
+-- 
+-- The following is guaranteed to show `spinner` for at least 500ms:
+--
+-- > post slug =
+-- >   suspense 500 spinner do
+-- >     delayed 1000 do
+-- >       let
+-- >         Post { author } = get slug
+-- >         Author { realName, bio } = get author
+-- >       {...}
+--
+{-# INLINE delayed #-}
+delayed :: Time -> a -> a
+delayed t a = unsafePerformIO do
+  mv <- newEmptyMVar
+  forkIO (evaluate a >>= putMVar mv)
+  delay t
+  takeMVar mv
+
+type Reader a = Exists a
+
+type family Readers (xs :: [*]) :: Constraint where
+  Readers (x ': xs) = (Reader x,Readers xs)
+  Readers '[] = ()
+
+{-# INLINE ask #-}
+ask :: Reader a => a
+ask = it
+
+{-# INLINE asks #-}
+asks :: (a -> b) -> (Reader a => b)
+asks f = f ask
+
+{-# INLINE reader #-}
+reader :: a -> (Reader a => x) -> x
+reader = using
+
+{-# INLINE local #-}
+local :: (a -> b) -> (Reader b => x) -> (Reader a => x)
+local f = reader (f ask)
+
+type Modify a = Producer (a -> IO a)
+type State a = (Modify a, Exists a)
+
+{-# INLINE state #-}
+state :: Typeable a => (Modify a => a) -> (State a => View) -> View
+state a = foldM ($) (pure (a,\_ -> pure ()))
+
+{-# INLINE stateIO #-}
+stateIO :: Typeable a => (Modify a => IO a) -> (State a => View) -> View
+stateIO ioa = foldM ($) (ioa >>= \a -> pure (a,\_ -> pure ()))
+
+{-# INLINE state' #-}
+state' :: forall a. Typeable a => (Modify a => a) -> (State a => View) -> View
+state' a v = weak (dynamic @(Modify a) a) (state a v)
+
+{-# INLINE stateIO' #-}
+stateIO' :: forall a. Typeable a => (Modify a => IO a) -> (State a => View) -> View
+stateIO' ioa v = weak (dynamic @(Modify a) ioa) (stateIO ioa v)
+
+{-# INLINE stateWith #-}
+stateWith :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
+stateWith f = foldM (\g a -> g a >>= f a) 
+
+{-# INLINE stateWith' #-}
+stateWith' :: forall a. Typeable a => (Modify a => a -> a -> IO a) -> (Modify a => IO (a,a -> IO ())) -> (State a => View) -> View
+stateWith' f i v = weak (dynamic @(Modify a) f,dynamic @(Modify a) i) (stateWith f i v)
+
+{-# INLINE modifyIO #-}
+modifyIO :: forall a. Modify a => (a -> IO a) -> IO ()
+modifyIO = yield 
+
+{-# INLINE modify #-}
+modify :: forall a. Modify a => (a -> a) -> IO ()
+modify f = yield (\a -> pure @IO (f a))
+
+{-# INLINE modifyIt #-}
+modifyIt :: forall a. Modify a => (Exists a => a) -> IO ()
+modifyIt a = modifyItIO (pure a) 
+
+{-# INLINE modifyItIO #-}
+modifyItIO :: forall a. Modify a => (Exists a => IO a) -> IO ()
+modifyItIO ioa = yield (\a -> using (a :: a) ioa)
+
+{-# INLINE put #-}
+put :: Modify a => a -> IO ()
+put = modify . const
+
+{-# INLINE get #-}
+get :: Exists a => a
+get = it
+
+{-# INLINE zoom #-}
+zoom :: forall a b x. (a -> b) -> (b -> a -> a) -> (State b => x) -> (State a => x)
+zoom f g v = using (f get) ((\h a -> h (f a) >>= \b -> pure @IO (g b a)) # v)
+
+{-# INLINE zoomIO #-}
+zoomIO :: forall a b x. (a -> b) -> (b -> a -> IO a) -> (State b => x) -> (State a => x)
+zoomIO f g v = using (f get) ((\h a -> h (f a) >>= \b -> g b a) # v)
+
+{-# INLINE ignore #-}
+ignore :: forall b x. (Modify b => x) -> x
+ignore = discard @(b -> IO b)
+
+{-# INLINE toState #-}
+toState :: forall a. (Producer a => View) -> (State a => View)
+toState = stream @a put
+
+{-# INLINE toStateWith #-}
+toStateWith :: forall a b. (a -> b) -> (Producer a => View) -> (State b => View)
+toStateWith f = stream @a (put . f)
+
+{-# INLINE flat #-}
+flat :: forall l a x. (IsList l, Item l ~ a, State l) => (State a => x) -> [x]
+flat v = flatBy @l @a (const True) v
+
+{-# INLINE flatBy #-}
+flatBy :: forall l a x. (IsList l, Item l ~ a, State l) => (a -> Bool) -> (State a => x) -> [x]
+flatBy pred v =
+  [ zoom (const a) (replace n) v
+  | (n,a) <- zip [0..] (Exts.toList (get :: l))
+  , pred a
+  ]
+  where
+    replace :: Int -> a -> l -> l
+    replace n a l = Exts.fromList (go n (Exts.toList l))
+      where
+        go _ []     = []
+        go 0 (_:as) = a : as
+        go n (a:as) = a : go (n - 1) as
+--
+-- {-# INLINE some #-}
+-- some :: (Typeable a, State a) => a -> (State a => View) -> View
+-- some = state
+--
+-- {-# INLINE one #-}
+-- one :: Exists a => a
+-- one = it
+--
+-- {-# INLINE many #-}
+-- many :: forall a. (Typeable a, State (Maybe a)) => (State (Maybe a) => View) -> View
+-- many = state @(Maybe a) Nothing
+--
+-- {-# INLINE any #-}
+-- any :: Exists (Maybe a) => Maybe a
+-- any = it
+--
+
+
+newtype Log a = Log a deriving stock Functor deriving (Semigroup,Monoid) via a
+
+type Writer a = State (Log a)
+
+{-# INLINE tell #-}
+tell :: (Semigroup a, Modify (Log a)) => a -> IO ()
+tell a = modify (<> Log a)
+
+-- Unlike monadic writers, where discretization of computation is achieved
+-- through wrapping and composition, discretization of projected computational
+-- views is achieved through nesting. It is therefore necessary to expose a
+-- method of inspecting the log to achieve a dependence between the results of
+-- a writer and its nested contexts. 
+--
+-- Without listen, writer x == silence x.
+{-# INLINE listen #-}
+listen :: Exists (Log a) => a
+listen = let Log a = it in a
+
+{-# INLINE silence #-}
+silence :: forall a. (Modify (Log a) => View) -> View
+silence = ignore @(Log a)
+
+{-# INLINE writer #-}
+writer :: forall a. Typeable a => Monoid a => (Writer a => View) -> View
+writer = state (mempty :: Log a)
+
+{-# INLINE translate #-}
+translate :: forall a b x. (a -> b) -> (b -> a -> a) -> (Writer b => x) -> (Writer a => x)
+translate f g = zoom f' g'
+  where
+    f' :: Log a -> Log b
+    f' = coerce f
+
+    g' :: Log b -> Log a -> Log a
+    g' = coerce g
+
+{-# INLINE toWriter #-}
+toWriter :: forall a. Semigroup a => (Producer a => View) -> (Modify (Log a) => View)
+toWriter = toWriterWith @a id
+
+{-# INLINE toWriterWith #-}
+toWriterWith :: Semigroup b => (a -> b) -> (Producer a => View) -> (Modify (Log b) => View)
+toWriterWith f = stream (tell . f)
+
+newtype Failure e = Failure e deriving Functor
+type Throws e = Producer (Failure e)
+
+{-# INLINE throw #-}
+throw :: Throws e => e -> IO ()
+throw = yield . Failure
+
+{-# INLINE catch #-}
+catch :: (e -> IO ()) -> (Throws e => View) -> View
+catch f = stream (\(Failure e) -> f e) 
+
+{-# INLINE mask #-}
+mask :: forall e. (Throws e => View) -> View
+mask = discard @(Failure e)
+
+{-# INLINE pass #-}
+pass :: (a -> b) -> (Throws a => x) -> (Throws b => x)
+pass f = (fmap @Failure f #)
+
+{-# INLINE toError #-}
+toError :: forall e. (Producer e => View) -> (Throws e => View)
+toError = toErrorWith @e id
+
+{-# INLINE toErrorWith #-}
+toErrorWith :: (e -> e') -> (Producer e => View) -> (Throws e' => View)
+toErrorWith f = stream (yield . Failure . f) 
+
+{-# INLINE fromError #-}
+fromError :: forall e. (Throws e => View) -> (Producer e => View)
+fromError = fromErrorWith @e id
+
+{-# INLINE fromErrorWith #-}
+fromErrorWith :: (e -> e') -> (Throws e => View) -> (Producer e' => View)
+fromErrorWith f = stream (\(Failure e) -> yield (f e))
+
+type Event a = Exists a
+type Behavior a b = Event a => b
+
+{-# INLINE behavior #-}
+behavior :: forall a b. Event a => Behavior a b -> b
+behavior = id
+
+{-# INLINE event #-}
+event :: a -> (Event a => b) -> b
+event = with
+
+{-# INLINE read #-}
+read :: Event a => a
+read = it
+
+{-# INLINE one #-}
+one :: a -> a
+one a = unsafePerformIO (readIORef ref)
+  where
+    {-# NOINLINE ref #-}
+    ref = unsafePerformIO (newIORef a)
+
+{-# INLINE occs #-}
+occs :: a -> [a]
+occs a = unsafePerformIO (atomicModifyIORef' ref (dup . (a:)))
+  where
+    {-# NOINLINE ref #-}
+    ref = unsafePerformIO (newIORef [])
+
+    dup x = (x,x)
+
+{-# INLINE ambs #-}
+ambs :: a -> b -> [Either a b]
+ambs a b = changes (occs (a,b))
+  where
+    changes ((a1,b1):(a2,b2):xys)
+      | isTrue# (reallyUnsafePtrEquality# a1 a2) = Right b1 : changes ((a2,b2):xys)
+      | otherwise = Left a1 : changes ((a2,b2):xys)
+    changes xs = []
+
+{-# INLINE improving #-}
+improving :: a -> b -> Maybe (Either a b)
+improving a b = listToMaybe (ambs a b)
+
+{-# INLINE amb #-}
+amb :: a -> a -> Maybe a
+amb l r = fmap (either id id) (improving l r)
+
+{-# INLINE fold #-}
+fold :: (Typeable eff, Typeable a) => (Effect eff => eff -> a -> a) -> (Effect eff => a) -> ((Effect eff, Exists a) => View) -> View
+fold step initial = foldM (\eff a -> pure (step eff a)) (pure (initial,\_ -> pure ()))
+
+{-# INLINE foldM #-}
+foldM :: forall eff a. (Typeable eff, Typeable a) => (Effect eff => eff -> a -> IO a) -> (Effect eff => IO (a,a -> IO ())) -> ((Effect eff,Exists a) => View) -> View
+foldM step initial v = ComponentView witness Nothing folder (\self -> using (upd self) (Fold step initial (`using` v)))
+  where
+    {-# INLINE upd #-}
+    upd :: Ref (Fold eff a) (a,a -> IO ()) -> Handler eff
+    upd self = handler
+      where
+        handler = Handler $ \msg after ->
+          modifyrefM self $ \(Fold step _ _) (st,shutdown) -> do
+            st' <- step msg st
+            pure ((st',shutdown),after)
+
+    {-# INLINE folder #-}
+    folder :: Ref (Fold eff a) (a,a -> IO ()) -> Comp (Fold eff a) (a,a -> IO ())
+    folder self =
+      def
+        { onConstruct = askref self >>= \(Fold _ initial _) -> initial >>= \(st,shutdown) -> pure (st,shutdown)
+        , onUnmounted = getref self >>= \(st,shutdown) -> shutdown st
+        , render = \(Fold _ _ v) (st,_) -> v st
+        }
+
+data Fold eff a = Fold (eff -> a -> IO a) (IO (a,a -> IO ())) (a -> View)
+
+newtype c :=> a = Dynamic { fromDynamic :: c => a }
+
+dynamic :: (c => a) -> (c :=> a)
+dynamic = Dynamic
+{-# INLINE dynamic #-}
+
+type family C (a :: k) :: Constraint
+type instance C (a :: Constraint) = a
+
+type Cont' c a = Modify (c :=> a)
+type Cont c = Cont' c View
+
+type Dynamic' c a = Cont' c a => c :=> a
+type Dynamic c = Dynamic' c View
+
+-- | Reify a View context.
+reify :: forall c a. (Typeable c, Typeable a) => Dynamic' c a -> (State (c :=> a) => (c => View)) -> (c => View)
+reify = state
+{-# INLINE reify #-}
+
+-- | Unify the supplied dynamic View with a matching `reify`d context.
+--
+-- Note that the need to wrap dynamic Views arises from the fact that unify is
+-- often used in a context where those constraints are locally satisfied.
+unify :: forall c a. Modify (c :=> a) => Dynamic' c a -> IO ()
+unify = put
+{-# INLINE unify #-}
+
+-- | Call the dynamic value from a matching `reify`d context. 
+-- Requires a type application for `c`.
+call :: forall c a. Exists (c :=> a) => (c => a)
+call = fromDynamic (it :: c :=> a)
+{-# INLINE call #-}
+
+-- | Codify the dynamic View from a matching `reify`d context. 
+-- Requires a type application for `c`.
+codify :: forall c. Exists (c :=> View) => (c => View)
+codify = weak (it :: c :=> View) (call @c)
+{-# INLINE codify #-}
+
+-- | Reify a View context and call the initial continuation.
+cont :: forall c. Typeable c => Dynamic' c View -> (c => View)
+cont d = reify d (codify @c)
+{-# INLINE cont #-}
+
+
+type Surface c = c => View
+
+type Shape c = Modify (c :=> View) => c :=> View
+
+type Template c = State (c :=> View) => Surface c
+
+-- Reduce a given template to a surface with a given default shape to fill the
+-- possible holes in the template. The holes can be re-filled with `fill` from
+-- within the shape or the template.
+--
+-- Requires type application.
+--
+{-# INLINE surface #-}
+surface :: forall c. Typeable c => Template c -> Shape c -> Surface c
+surface t s = reify @c s t
+
+-- A self-modifying surface with no holes.
+--
+-- Requires type application.
+--
+-- Equivalent to `surface @c (hole @c)`.
+--
+-- Any use of `fill` inside a full surface will force a full re-render rather
+-- than a reconciliation. To allow reconciliation, use: 
+--
+-- > surface @c (call @c)
+--
+-- to avoid the `weak` within `hole`/`codify`. The `call` approach can be
+-- convenient for mimicking state with continuations when it wouldn't make
+-- sense to re-render on every `fill`.
+--
+-- Holes inside the template will be, by necessity, filled with the empty shape.
+--
+{-# INLINE full #-}
+full :: forall c. Typeable c => Template c -> Surface c
+full t = surface @c (hole @c) (shape @c (using (Data.View.empty @c) t))
+
+-- Declare a hole in a surface. A hole is never empty, and will always be 
+-- filled with, at least, the `empty` shape. A hole can be re-filled with 
+-- `fill`.
+--
+-- Requires type application.
+--
+-- > type Graph = (Exists Dimensions,State Data)
+-- > graph :: Shape Graph -> Surface Graph
+-- > graph = surface @Graph do
+-- >   Div <||>
+-- >     [ hole @Graph 
+-- >     ]
+--
+-- `hole` force a local re-render rather than a reconciliation through the
+-- `weak` in `codify`.
+{-# INLINE hole #-}
+hole :: forall c. Exists (c :=> View) => Surface c
+hole = codify @c
+
+-- Fill a hole in a known surface. The current shape in the hole can be
+-- accessed with `full` from within the containing surface.
+--
+{-# INLINE fill #-}
+fill :: Modify (c :=> View) => Shape c -> IO ()
+fill = unify
+
+-- Construct a shape from a surface.
+{-# INLINE shape #-}
+shape :: Surface c -> Shape c
+shape = dynamic
+
+-- The empty shape. Fits any `c`-shaped hole.
+{-# INLINE empty #-}
+empty :: Shape c
+empty = shape Null
+
+--------------------------------------------------------------------------------
+-- An implementation of ltr and rtl composition using view continuations. 
+
+-- | Compose a producer and a reader within a dynamic context. Requires type application.
+compose :: forall a c. (Typeable a, Typeable c) => ((c,Effect a) => View) -> ((Exists a,c) => View) -> (c => View)
+compose v f = cont (dynamic @c (stream (\(a :: a) -> unify (dynamic @c (using a f))) v))
+{-# INLINE compose #-}
+
+infixr 0 <<-
+(<<-) :: forall a c. (Typeable a, Typeable c) => (c => a -> View) -> (c => Effect a => View) -> (c => View)
+(<<-) r p = compose @a @c p (r it)
+{-# INLINE (<<-) #-}
+
+infixl 1 ->>
+(->>) :: forall a c. (Typeable a, Typeable c) => (c => Effect a => View) -> (c => a -> View) -> (c => View)
+(->>) p r = compose @a @c p (r it)
+{-# INLINE (->>) #-}
+
+{-  
+
+fmap :: (a -> b) -> (Effect a => View) -> (Effect b => View)
+
+fail = txt
+
+join :: (Effect View => View) -> View
+pure a = exec (yield a) Null
+
+(>>=) :: forall a. Typeable a => (Effect a => View) -> (a -> View) -> View
+return = pure
+
+(>>) :: forall a. Typeable a => (Effect a => View) -> View -> View
+liftA2 f va vb = compose @a @() va (compose @b @() vb (pure (f ask ask)))
+
+----------------------------------------
+
+I wanted this to work, but I couldn't get constraint satisfaction to happen
+during/before `do` desugaring.  That is:
+
+pure a = exec (yield a) Null
+
+works. But this:
+
+> do { () <- pure (); "Done" } 
+
+does not work. It complains (at runtime!) about an IsString instance, meaning
+the rhs of the bind has had its constraints ignored?
+
+-}
+
+type Write a = Modify a
+
+channel :: Typeable a => a -> (Event a => View)-> View
+channel = state
+
+write :: Write a => a -> IO ()
+write = put
+
+-- read :: Event a => a
+-- read = it
+
+newtype Form ctx a = Form (Producer a => Dynamic ctx)
+
+formlet :: forall a ctx. ((ctx, Producer a) => View) -> Form ctx a
+formlet v = Form (dynamic v)
+
+form :: forall ctx a. (Typeable ctx, Producer a, ctx) => Form ctx a -> View
+form (Form f) = cont f
+
+instance Functor (Form ctx) where
+  fmap f (Form g) = Form (dynamic (stream (yield . f) (fromDynamic g)))
+
+instance Applicative (Form ctx) where
+  pure a = formlet (lifecycle def { onStart = yield a } Null)
+  liftA2 = liftF2
+
+instance Monad (Form ctx) where
+  return = pure
+  (Form f) >>= g = Form (dynamic (stream (\a -> let Form f = g a in unify f) (fromDynamic f)))
+
+instance MonadFail (Form ctx) where
+  fail str = Form (dynamic (txt str))
+
+liftIO :: (ctx => IO a) -> Form ctx a
+liftIO io = Form (dynamic (lifecycle def { onStart = io >>= yield } Null))
+
+data Any2 = Any2 Any Any
+liftF2 :: forall ctx a b c. (a -> b -> c) -> Form ctx a -> Form ctx b -> Form ctx c
+liftF2 f (Form fa) (Form fb) =
+  Form do
+    let 
+      commitA :: State Any2 => a -> IO ()
+      commitA a =
+        case it of
+          Any2 _ (unsafeCoerce -> Just b) -> do
+            yield (f a b)
+            put (Any2 (unsafeCoerce (Just a)) (unsafeCoerce (Just b)))
+          Any2 _ b -> 
+            put (Any2 (unsafeCoerce (Just a)) b)
+            
+      commitB :: State Any2 => b -> IO ()
+      commitB b =
+        case it of
+          Any2 (unsafeCoerce -> Just a) _ -> do
+            yield (f a b)
+            put (Any2 (unsafeCoerce (Just a)) (unsafeCoerce (Just b)))
+          Any2 a _ -> 
+            put (Any2 a (unsafeCoerce (Just b)))
+
+    dynamic do
+      state (Any2 (unsafeCoerce Nothing) (unsafeCoerce Nothing)) do
+        SimpleHTML "span" <||>
+          [ stream commitA (fromDynamic fa)
+          , stream commitB (fromDynamic fb)                
+          ]

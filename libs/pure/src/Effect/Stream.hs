@@ -8,15 +8,12 @@ module Effect.Stream
   ) where
 
 import Control.Monad (when)
-import Control.Producer as Producer
-import Control.State
 import Data.Default
-import Data.Exists
 import Data.Stream
 import Data.Styles (px)
 import Data.Typeable
 import Data.Txt
-import Data.View (View)
+import Data.View
 import Effect.Intersection
 
 type Step a = State (Stream IO a)
@@ -32,5 +29,5 @@ loaded = toList (it :: Stream IO a)
 
 stepper :: forall a. Txt -> View -> (Step a => View)
 stepper m v = 
-  Producer.stream (\i@Intersection {..} -> when isIntersecting (Effect.Stream.step @a 1)) do
+  Data.View.stream (\i@Intersection {..} -> when isIntersecting (Effect.Stream.step @a 1)) do
     viewportIntersecting def { margin = m, thresholds = [1] } v

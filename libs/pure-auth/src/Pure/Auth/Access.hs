@@ -21,25 +21,20 @@ import qualified Pure.Auth.API as Auth
 import Pure.Auth.Data
 import Client hiding (user)
 import Endpoint (API(..))
-import Control.Cont
-import Control.Log
-import Control.Producer as Producer
+import Data.Log
 import Data.Kind
-import Data.Exists
 import Data.List as List
 import qualified Data.Localstorage as LS
 import Data.String
-import Data.View (View,pattern Null,(<|),(<||>),(|>))
+import Data.View
 import Data.HTML (pattern Button,pattern Div,pattern H2,pattern Input,pattern P,pattern Placeholder,pattern TabIndex, pattern Type,pattern Value)
 import Data.Events (pattern OnClick,pattern OnInput,value)
-import Control.State (stateWith,modifyIO,put,state,zoom,Modify,State,modify)
 import Data.Default (Default(..))
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import Data.Theme (Theme,pattern Themed,rep)
 import Data.Foldable (for_,traverse_)
-import Effect.Fork (fork)
 
-import Control.Concurrent
+import Control.Concurrent hiding (yield)
 import Control.Monad
 import Data.Maybe
 import Data.Try
@@ -118,7 +113,7 @@ loginForm = dynamic do
       setUsername = let In InputEvent { value = un } = it in put (un,pw)
       setPassword = let In InputEvent { value = pw } = it in put (un,pw)
 
-      login = post @domain (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def Producer.yield
+      login = post @domain (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def yield
 
     Div <||>
       [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]

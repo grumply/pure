@@ -1,7 +1,7 @@
 {-# language RankNTypes, FlexibleContexts, ScopedTypeVariables, AllowAmbiguousTypes, ConstraintKinds #-}
 module Data.AB (AB,A,B,ab,a,b) where
 
-import Data.Exists
+import Data.View
 
 type AB x = (Exists (A x),Exists (B x))
 

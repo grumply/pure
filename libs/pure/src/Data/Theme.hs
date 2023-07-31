@@ -11,7 +11,7 @@ module Data.Theme
   , and, and'
   , at, at'
   , nest, nest'
-  , within, within'
+  , Data.Theme.within, within'
   , embed
   , addTheme
   , addThemeClass
@@ -35,8 +35,8 @@ module Data.Theme
   , (^#)
   ) where
 
-import Browser (inject)
 import Data.View
+import Data.View.Build (inject)
 import Data.CSS hiding (Namespace,empty,select,wrap,checked)
 import Data.DOM as Lifted (JSV,Node,head)
 import Data.Styles
@@ -148,7 +148,7 @@ subtheme = let Namespace t = namespace @t in "." <> t
 (^*) = nexts (subtheme @t)
 
 (^^) :: forall t a. Theme t => CSS a -> CSS ()
-(^^) = within @t
+(^^) = Data.Theme.within @t
 
 (^$) :: Txt -> CSS a -> CSS ()
 (^$) = atMedia

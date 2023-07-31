@@ -1,5 +1,5 @@
 {-# language AllowAmbiguousTypes, TypeApplications, LambdaCase, ScopedTypeVariables, RecordWildCards, FlexibleContexts #-}
-module Control.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci,logRetry,logFailure,onRetry,onFailure) where
+module Data.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci,logRetry,logFailure,onRetry,onFailure) where
 
 import Control.Exception
 import Data.Foldable
@@ -9,7 +9,7 @@ import Data.Time
 
 import GHC.Stack
 
-import Control.Log as Log hiding (Policy)
+import Data.Log as Log hiding (Policy)
 
 {-
 

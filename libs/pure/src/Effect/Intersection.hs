@@ -11,16 +11,12 @@ module Effect.Intersection
   ,viewportIntersecting
   ) where
 
-import Control.Reader
-import Control.State
-import Control.Producer
 import Data.Default
-import Data.Effect
 import Data.DOM hiding (Options)
 import Data.HTML
 import Data.JSON hiding (Null)
 import Data.Txt
-import Data.View hiding (modify,ask)
+import Data.View
 
 import Control.Arrow ((&&&))
 import Control.Monad

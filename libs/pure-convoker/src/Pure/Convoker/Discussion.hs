@@ -19,7 +19,7 @@ import Data.JSON (ToJSON,FromJSON)
 import Data.Time
 import Data.Theme
 import Data.View hiding (modify,get,onUpdate)
-import Effect.Async
+import Effect.Lazy
 import Effect.Websocket
 
 import Control.Concurrent

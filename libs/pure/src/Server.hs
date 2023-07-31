@@ -18,15 +18,10 @@ import qualified Pure as Export hiding (Handler,read,Read)
 import Control.Concurrent
 import Control.Exception (Exception,throw,handle,catch)
 import Control.Monad
-import Control.Producer (Producer,yield)
-import Control.Retry
-import Control.State
-import qualified Control.Component as Component
-import qualified Control.Log as Log
+import qualified Data.Log as Log
 import Data.Aeson as JSON hiding (Name)
 import Data.Default
 import Data.DOM
-import Data.Exists
 import Data.Foldable
 import Data.Function ((&))
 import Data.IORef
@@ -38,7 +33,7 @@ import Data.Time (pattern Seconds,pattern Second,Time)
 import Data.Traversable
 import Data.Typeable
 import Data.Txt as Txt
-import Data.View
+import Data.View hiding (Event,Handler,channel)
 import GHC.Generics
 import System.IO.Unsafe
 import System.Directory
@@ -56,14 +51,13 @@ import Network.HTTP.Types.Header
 import Network.HTTP.Types.Method
 import Network.HTTP.Types.Status
 import Network.Wai
-import Effect.Async
 import Endpoint
 
 serve :: Warp.Port -> Maybe WarpTLS.TLSSettings -> [Handler] -> View
 serve port mtlss = Component $ \self -> 
   def
     { onConstruct = do
-        ref <- ask self >>= newIORef 
+        ref <- askref self >>= newIORef 
         tid <- forkIO do
           maybe Warp.runSettings WarpTLS.runTLS mtlss (Warp.setServerName "pure" (Warp.setPort port Warp.defaultSettings)) $ \request respond -> do
             eps <- readIORef ref
@@ -73,7 +67,7 @@ serve port mtlss = Component $ \self ->
               Just (Handler f _ _) -> f request respond
         pure (ref,tid)
     , onReceive = \eps (ref,tid) -> writeIORef ref eps >> pure (ref,tid)
-    , onUnmounted = Data.View.get self >>= \(_,tid) -> killThread tid
+    , onUnmounted = getref self >>= \(_,tid) -> killThread tid
     , render = \_ _ -> Data.View.Null
     }
 

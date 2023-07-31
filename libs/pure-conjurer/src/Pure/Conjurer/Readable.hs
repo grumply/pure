@@ -18,7 +18,6 @@ import Data.Theme
 import qualified Data.Websocket as WS
 import Data.View hiding (get)
 import Data.HTML
-import Effect.Async
 import Effect.Websocket
 
 import Control.Concurrent
@@ -57,7 +56,7 @@ toReadWith
     , Logging
     ) 
   => Policy -> (Context resource -> Name resource -> Maybe (Product resource) -> View) -> Context resource -> Name resource -> View
-toReadWith policy f ctx nm = request @_role policy (readingAPI @resource) (readProduct @resource) (ctx,nm) (f ctx nm await)
+toReadWith policy f ctx nm = request @_role policy (readingAPI @resource) (readProduct @resource) (ctx,nm) (f ctx nm it)
 
 instance {-# OVERLAPPABLE #-}
   ( Typeable resource, Typeable _role

@@ -19,7 +19,6 @@ import Data.View
 import Control.Component hiding (root,Update)
 import Data.Router as Router
 import qualified Data.Websocket as WS
-import Effect.Async
 import Effect.Websocket hiding (sync)
 import Effect.Router as Router (goto)
 
@@ -54,7 +53,7 @@ class Updatable _role resource where
   toUpdate ctx nm =
     guarded @_role Null (basic @_role) do
       request @_role Uncached (publishingAPI @resource) (readResource @resource) (ctx,nm) do
-        case await of
+        case it of
           Just x -> Div <| Themed @Updating . Themed @(Updating resource) |> [ form onSubmit onPreview x ]
           _ -> "Not Found"
     where
@@ -93,7 +92,7 @@ cachingToUpdate
 cachingToUpdate ctx nm =
   guarded @_role Null (basic @_role) do
     async (req @_role Uncached (publishingAPI @resource) (readResource @resource) (ctx,nm)) do
-      case await of
+      case it of
         Just x -> Div <| Themed @Updating . Themed @(Updating resource) |> [ form onSubmit onPreview x ]
         _ -> "Not Found"
   where

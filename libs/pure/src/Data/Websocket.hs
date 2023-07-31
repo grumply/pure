@@ -24,7 +24,7 @@ module Data.Websocket
     module Export
   ) where
 
-import Control.Log hiding (error)
+import Data.Log hiding (error)
 import Data.JSON (ToJSON,FromJSON,fromJSON,logJSON)
 import qualified Data.JSON as JSON
 

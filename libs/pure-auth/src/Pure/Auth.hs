@@ -19,16 +19,13 @@ import Client hiding (user)
 #else
 import Server
 #endif
-import Control.Concurrent
-import Control.Dynamic
+import Control.Concurrent hiding (yield)
 import Control.Exception as Exception 
 import Control.Monad
-import Control.Producer as Producer
-import Control.Retry
+import Data.Retry
 import Data.Bool
 import Data.Default
 import Data.DOM
-import Data.Exists
 import Data.Function
 import Data.IORef
 import Data.JSON
@@ -67,7 +64,7 @@ liveWith policy o s v =
           publisher = post @c (fromTxt (toTxt o) <> "/write" :: Endpoint (Token e -> Stream e -> e -> IO ())) t s
 
           integrate :: (Int,e) -> IO ()
-          integrate (j,e) = modifyM_ self \p (tid,pub,i,a) -> do
+          integrate (j,e) = modifyrefM_ self \p (tid,pub,i,a) -> do
             case Sorcerer.update e a of
               Just a  -> pure ((tid,pub,j,a),writeIORef ir j)
               Nothing -> pure ((tid,pub,j,a),writeIORef ir j)
@@ -76,7 +73,7 @@ liveWith policy o s v =
         let stop = join (readIORef rs)
 
         tid <- forkIO do
-          Producer.stream integrate do
+          Data.View.stream integrate do
             handle (\ThreadKilled -> stop) do
               void do
                 retrying policy do
@@ -86,7 +83,7 @@ liveWith policy o s v =
 
                   msgs <- onRaw es "message" def \_ msg ->
                     case msg .# "data" of
-                      Just d | Just (i,e) <- decode d -> Producer.yield @(Int,e) (i,e)
+                      Just d | Just (i,e) <- decode d -> yield @(Int,e) (i,e)
                       _ -> putMVar mv stop
 
                   errs <- onRaw es "error" def \_ _ -> putMVar mv (stop >> retry)
@@ -96,9 +93,9 @@ liveWith policy o s v =
                   join (takeMVar mv)
         pure (tid,publisher,i,ma)
 
-    , onUnmounted = Data.View.get self >>= \(tid,_,_,_) -> killThread tid
+    , onUnmounted = getref self >>= \(tid,_,_,_) -> killThread tid
 
-    , render = \v (tid,pub,i,ma) -> maybe Null (\a -> Producer.stream pub (with a (fromDynamic v))) ma
+    , render = \v (tid,pub,i,ma) -> maybe Null (\a -> Data.View.stream pub (with a (fromDynamic v))) ma
     }
 #else
   Data.View.Null
@@ -143,7 +140,7 @@ object o dur f =
           authorized @e "id" \x -> do
             if Sorcerer.stream s == fromTxt x then do
               chan     <- newChan
-              listener <- Producer.stream (writeChan chan) (subscribeStream s id)
+              listener <- Data.View.stream (writeChan chan) (subscribeStream s id)
               Exception.handle (\(se :: SomeException) -> unlisten listener >> Exception.throw se) do
                 List.zip [n+1..] <$> liftM2 (++) (Sorcerer.events n s) (getChanContents chan)
             else

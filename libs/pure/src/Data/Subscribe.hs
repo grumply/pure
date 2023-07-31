@@ -4,8 +4,7 @@
    FlexibleInstances, PatternSynonyms #-}
 module Data.Subscribe where
 
-import Data.Effect
-import Data.Exists
+import Data.View
 
 import Control.Concurrent.STM
 import Control.Monad

@@ -1,16 +1,11 @@
-{-# language OverloadedStrings #-}
-module Data.Fetch.GHCJS 
-  (XHRError(..)
-  ,get,getWith,getRaw
-  ,post,postWith,postRaw
-  ,postForm,postFormWith,postFormRaw
-  ,patch,patchWith,patchRaw
-  ,delete,deleteWith,deleteRaw
-  ,put,putWith,putRaw
-  ) where
+{-# language OverloadedStrings, PatternSynonyms #-}
+module Data.Fetch.GHCJS (Response(..), Data.Fetch.GHCJS.json, get, post, postForm, patch, delete, put, pattern Good, pattern Bad, pattern Ok, pattern JSON) where
+
+import Data.Fetch.Response
 
 import Data.DOM
 import Data.JSON
+import qualified Data.List as List
 import Data.Txt hiding (foldl')
 import Data.URI
 
@@ -18,23 +13,49 @@ import Control.Concurrent
 import Control.Exception
 import Data.Foldable
 
--- XHRErrors contain the target URL
-data XHRError 
-  = StatusError Txt Int Txt
-  | ParseError Txt String
-  | InvalidURLError Txt Txt
-  | OtherError Txt SomeException
-  deriving (Show)
+json :: [(Txt,Txt)]
+json = [("Content-Type","application/json"),("Accept","application/json")]
 
-instance Exception XHRError
-instance ToTxt XHRError where
-  toTxt = toTxt . show
+get :: [(Txt,Txt)] -> Txt -> IO Response
+get hs url = raw "GET" hs url ""
 
-xhrErrorURL :: XHRError -> Txt
-xhrErrorURL (StatusError     u _ _) = u
-xhrErrorURL (ParseError      u _) = u
-xhrErrorURL (InvalidURLError u _) = u
-xhrErrorURL (OtherError      u _) = u
+post :: [(Txt,Txt)] -> Txt -> Txt -> IO Response
+post = raw "POST"
+
+patch :: [(Txt,Txt)] -> Txt -> Txt -> IO Response
+patch = raw "PATCH"
+
+delete :: [(Txt,Txt)] -> Txt -> IO Response
+delete hs url = raw "DELETE" hs url ""
+
+put :: [(Txt,Txt)] -> Txt -> Txt -> IO Response
+put = raw "PUT"
+
+postForm :: [(Txt,Txt)] -> Txt -> [(Txt,Txt)] -> IO Response
+postForm headers url payload = post (("Content-Type","application/x-www-form-urlencoded"): List.filter ((/= "Content-Type") . fst) headers) url params
+  where
+    params = foldl' (\ps (k,v) -> ps <> "&" <> encodeURIComponent k <> "=" <> encodeURIComponent v) mempty payload
+
+raw :: Txt -> [(Txt,Txt)] -> Txt -> Txt -> IO Response
+raw method headers url payload = do
+  xhr <- new_xhr_js
+  mv  <- newEmptyMVar
+  cb  <- syncCallback1 ContinueAsync $ \_ -> do
+    r <- ready_js xhr
+    case r of
+      4 -> do
+        s <- status_js xhr
+        t <- response_text_js xhr
+        putMVar mv (Response s t)
+      _ -> 
+        pure ()
+  on_ready_js xhr cb
+  open_js xhr method url
+  for_ headers $ \(h,v) -> set_request_header_js xhr h v
+  send_with_js xhr payload
+  ma <- takeMVar mv
+  ma `seq` releaseCallback cb
+  pure ma
 
 newtype XHR = XHR JSV
 
@@ -73,225 +94,6 @@ foreign import javascript unsafe
 foreign import javascript unsafe
   "$r = $1.responseText" 
     response_text_js :: XHR -> IO Txt
-
-get :: FromJSON a => Txt -> IO (Either XHRError a)
-get = getWith [("Content-Type","application/json"),("Accept","*/*")] 
-
-getWith :: FromJSON a => [(Txt,Txt)] -> Txt -> IO (Either XHRError a)
-getWith headers url = do
-  ext <- getRaw headers url
-  pure $
-    case ext of
-      Left e  -> Left e
-      Right t -> either (Left . ParseError url) Right (decodeEither t)
-
-getRaw :: [(Txt,Txt)] -> Txt -> IO (Either XHRError Txt)
-getRaw headers url = do
-  xhr <- new_xhr_js
-  mv  <- newEmptyMVar
-  cb  <- syncCallback1 ContinueAsync $ \_ -> do
-    r <- ready_js xhr
-    case r of
-      4 -> do
-        s <- status_js xhr
-        case s of
-          _ | s >= 200 && s < 300 -> do
-              t <- response_text_js xhr
-              putMVar mv (Right t)
-            | otherwise -> do
-              t <- response_text_js xhr
-              putMVar mv $ Left (StatusError url s t)
-      _ -> pure ()
-  on_ready_js xhr cb
-  open_js xhr "GET" url
-  for_ headers $ \(h,v) -> set_request_header_js xhr h v
-  send_js xhr
-  ma <- takeMVar mv
-  ma `seq` releaseCallback cb
-  pure ma
-
-post :: (ToJSON a, FromJSON b) => Txt -> a -> IO (Either XHRError b)
-post = postWith [("Content-Type","application/json"),("Accept","application/json")]
-
-postWith :: (ToJSON a, FromJSON b) => [(Txt,Txt)] -> Txt -> a -> IO (Either XHRError b)
-postWith headers url payload = do
-  ext <- postRaw headers url (encode payload)
-  pure $
-    case ext of
-      Left e  -> Left e
-      Right t -> either (Left . ParseError url) Right (decodeEither t)
-
-postRaw :: [(Txt,Txt)] -> Txt -> Txt -> IO (Either XHRError Txt)
-postRaw headers url payload = do
-  xhr <- new_xhr_js
-  mv  <- newEmptyMVar
-  cb  <- syncCallback1 ContinueAsync $ \_ -> do
-    r <- ready_js xhr
-    case r of
-      4 -> do
-        s <- status_js xhr
-        case s of
-          _ | s >= 200 && s < 300 -> do
-              t <- response_text_js xhr
-              putMVar mv (Right t)
-            | otherwise -> do
-              t <- response_text_js xhr
-              putMVar mv $ Left (StatusError url s t)
-      _ -> pure ()
-  on_ready_js xhr cb
-  open_js xhr "POST" url
-  for_ headers $ \(h,v) -> set_request_header_js xhr h v
-  send_with_js xhr payload
-  ma <- takeMVar mv
-  ma `seq` releaseCallback cb
-  pure ma
-
-postForm :: FromJSON a => Txt -> [(Txt,Txt)] -> IO (Either XHRError a)
-postForm = postFormWith [("Content-Type","application/x-www-form-urlencoded"),("Accept","application/json")]
-
-postFormWith :: FromJSON a => [(Txt,Txt)] -> Txt -> [(Txt,Txt)] -> IO (Either XHRError a)
-postFormWith headers url payload = do
-  ext <- postFormRaw headers url payload
-  pure $
-    case ext of
-      Left e  -> Left e
-      Right t -> either (Left . ParseError url) Right (decodeEither t)
-
-postFormRaw :: [(Txt,Txt)] -> Txt -> [(Txt,Txt)] -> IO (Either XHRError Txt)
-postFormRaw headers url payload = do
-  xhr <- new_xhr_js
-  mv  <- newEmptyMVar
-  cb  <- syncCallback1 ContinueAsync $ \_ -> do
-    r <- ready_js xhr
-    case r of
-      4 -> do
-        s <- status_js xhr
-        case s of
-          _ | s >= 200 && s < 300 -> do
-              t <- response_text_js xhr
-              putMVar mv (Right t)
-            | otherwise -> do
-              t <- response_text_js xhr
-              putMVar mv $ Left (StatusError url s t)
-      _ -> pure ()
-  on_ready_js xhr cb
-  open_js xhr "POST" url
-  for_ headers $ \(h,v) -> set_request_header_js xhr h v
-  send_with_js xhr params
-  ma <- takeMVar mv
-  ma `seq` releaseCallback cb
-  pure ma
-  where
-    params = foldl' (\ps (k,v) -> ps <> "&" <> encodeURIComponent k <> "=" <> encodeURIComponent v) mempty payload
-
-patch :: (ToJSON a, FromJSON b) => Txt -> a -> IO (Either XHRError b)
-patch = patchWith [("Content-Type","application/json"),("Accept","application/json")]
-
-patchWith :: (ToJSON a, FromJSON b) => [(Txt,Txt)] -> Txt -> a -> IO (Either XHRError b)
-patchWith headers url payload = do
-  ext <- patchRaw headers url (encode payload)
-  pure $
-    case ext of
-      Left e  -> Left e
-      Right t -> either (Left . ParseError url) Right (decodeEither t)
-
-patchRaw :: [(Txt,Txt)] -> Txt -> Txt -> IO (Either XHRError Txt)
-patchRaw headers url payload = do
-  xhr <- new_xhr_js
-  mv  <- newEmptyMVar
-  cb  <- syncCallback1 ContinueAsync $ \_ -> do
-    r <- ready_js xhr
-    case r of
-      4 -> do
-        s <- status_js xhr
-        case s of
-          _ | s >= 200 && s < 300 -> do
-              t <- response_text_js xhr
-              putMVar mv (Right t)
-            | otherwise -> do
-              t <- response_text_js xhr
-              putMVar mv $ Left (StatusError url s t)
-      _ -> pure ()
-  on_ready_js xhr cb
-  open_js xhr "PATCH" url
-  for_ headers $ \(h,v) -> set_request_header_js xhr h v
-  send_with_js xhr payload
-  ma <- takeMVar mv
-  ma `seq` releaseCallback cb
-  pure ma
-
-delete :: FromJSON b => Txt -> IO (Either XHRError b)
-delete = deleteWith [("Content-Type","application/json"),("Accept","application/json")]
-
-deleteWith :: FromJSON b => [(Txt,Txt)] -> Txt -> IO (Either XHRError b)
-deleteWith headers url = do
-  ext <- deleteRaw headers url
-  pure $
-    case ext of
-      Left e  -> Left e
-      Right t -> either (Left . ParseError url) Right (decodeEither t)
-
-deleteRaw :: [(Txt,Txt)] -> Txt -> IO (Either XHRError Txt)
-deleteRaw headers url = do
-  xhr <- new_xhr_js
-  mv  <- newEmptyMVar
-  cb  <- syncCallback1 ContinueAsync $ \_ -> do
-    r <- ready_js xhr
-    case r of
-      4 -> do
-        s <- status_js xhr
-        case s of
-          _ | s >= 200 && s < 300 -> do
-              t <- response_text_js xhr
-              putMVar mv (Right t)
-            | otherwise -> do
-              t <- response_text_js xhr
-              putMVar mv $ Left (StatusError url s t)
-      _ -> pure ()
-  on_ready_js xhr cb
-  open_js xhr "DELETE" url
-  for_ headers $ \(h,v) -> set_request_header_js xhr h v
-  send_js xhr 
-  ma <- takeMVar mv
-  ma `seq` releaseCallback cb
-  pure ma
-
-put :: (ToJSON a, FromJSON b) => Txt -> a -> IO (Either XHRError b)
-put = putWith [("Content-Type","application/json"),("Accept","application/json")]
-
-putWith :: (ToJSON a, FromJSON b) => [(Txt,Txt)] -> Txt -> a -> IO (Either XHRError b)
-putWith headers url payload = do
-  ext <- putRaw headers url (encode payload)
-  pure $
-    case ext of
-      Left e  -> Left e
-      Right t -> either (Left . ParseError url) Right (decodeEither t)
-
-putRaw :: [(Txt,Txt)] -> Txt -> Txt -> IO (Either XHRError Txt)
-putRaw headers url payload = do
-  xhr <- new_xhr_js
-  mv  <- newEmptyMVar
-  cb  <- syncCallback1 ContinueAsync $ \_ -> do
-    r <- ready_js xhr
-    case r of
-      4 -> do
-        s <- status_js xhr
-        case s of
-          _ | s >= 200 && s < 300 -> do
-              t <- response_text_js xhr
-              putMVar mv (Right t)
-            | otherwise -> do
-              t <- response_text_js xhr
-              putMVar mv $ Left (StatusError url s t)
-      _ -> pure ()
-  on_ready_js xhr cb
-  open_js xhr "PUT" url
-  for_ headers $ \(h,v) -> set_request_header_js xhr h v
-  send_with_js xhr payload
-  ma <- takeMVar mv
-  ma `seq` releaseCallback cb
-  pure ma
-
 
 
 

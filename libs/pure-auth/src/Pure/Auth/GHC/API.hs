@@ -2,15 +2,14 @@
 module Pure.Auth.GHC.API where
 
 import Control.Exception as E
-import Control.Log
 import Control.Monad
 import qualified Data.Bloom.Limiter as Limiter
 import Data.Char
 import Data.Default
-import Data.Exists
 import Data.Foldable
 import Data.IORef
 import qualified Data.List as List
+import Data.Log
 import Data.Maybe
 import Data.Sorcerer as Sorcerer hiding (event,Deleted)
 import Data.Time as Time
@@ -22,7 +21,7 @@ import qualified Pure.Auth.API as API
 import Pure.Auth.Data
 import Pure.Auth.GHC.Auth
 import Pure.Auth.GHC.Crypto
-import Server hiding (Auth,recover,read)
+import Server hiding (Auth,recover,read,write)
 
 newtype Limiter_ (c :: *) = Limiter { allowed :: Host -> Username c -> IO Bool }
 type Limiter c = Exists (Limiter_ c)

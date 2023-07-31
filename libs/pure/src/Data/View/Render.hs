@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, MultiWayIf, FlexibleInstances, ViewPatterns, TemplateHaskell #-}
 module Data.View.Render where
 
-import Browser
+import Data.View.Build
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
@@ -93,13 +93,13 @@ instance FromJSON Features where
 renderer :: (View,MVar View) -> View
 renderer = Component $ \self -> def
   { onConstruct = do
-      (v,_) <- ask self
+      (v,_) <- askref self
       return v
   , onMounted = do
-      v <- look self
-      (_,mv) <- ask self
+      v <- lookref self
+      (_,mv) <- askref self
       putMVar mv v
-      modify_ self $ \_ _ -> NullView Nothing
+      modifyref_ self $ \_ _ -> NullView Nothing
   , render = \_ -> id
   }
 
@@ -310,7 +310,7 @@ instance ToTxt View where
         if selfClosing tag then
           "/>"
         else
-          ">" <> mconcat (map toTxt children) <> "</" <> tag <> ">"
+          ">" <> mconcat (List.map toTxt children) <> "</" <> tag <> ">"
 
   toTxt SVGView {..} =
     let fs = features { attributes = Map.union (attributes features) xlinks }

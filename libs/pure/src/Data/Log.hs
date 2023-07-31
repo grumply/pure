@@ -1,9 +1,9 @@
 {-# language ScopedTypeVariables, LambdaCase, ConstraintKinds, FlexibleContexts, RankNTypes, OverloadedStrings, CPP, NamedFieldPuns, TypeApplications, RecordWildCards #-}
-module Control.Log where
+module Data.Log where
 
 import Control.Concurrent (newMVar,withMVar,readMVar,modifyMVar_,takeMVar)
 import Control.Monad (void,mzero)
-import Data.Exists (Exists,using,it)
+import Data.View (Exists,using,it)
 import Data.JSON (Value,ToJSON(..),FromJSON(..),pretty,encode,decode,logJSON)
 import Data.Marker
 import Data.Maybe (mapMaybe)

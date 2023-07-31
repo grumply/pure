@@ -3,7 +3,6 @@ module Pure.Auth.GHC.Crypto where
 
 import Control.Concurrent (MVar,newMVar,modifyMVar)
 import Control.Exception
-import Control.State
 import Crypto.Hash
 import Crypto.PasswordStore as PW (makePassword,verifyPassword)
 import Crypto.Random
@@ -14,7 +13,6 @@ import Data.ByteString as BS (ByteString)
 import Data.ByteString.Char8 as BS (filter)
 import Data.ByteString.Lazy as BSL
 import Data.Char (isHexDigit)
-import Data.Exists
 import Data.JSON (encode,ToJSON,FromJSON)
 import Data.List as List
 import Data.String
@@ -23,8 +21,7 @@ import Data.Typeable
 import Data.Maybe (listToMaybe,mapMaybe,fromJust)
 import Data.Proxy (Proxy(..))
 import Data.Txt as Txt (Txt,ToTxt(..),FromTxt(..),toLower,length,null,break,uncons)
-import Data.View
-import Effect.Async
+import Data.View hiding (throw)
 import GHC.TypeNats (Nat,KnownNat(..),natVal)
 import Pure.Auth.Data
 import System.Directory
@@ -145,7 +142,7 @@ withPool :: forall c. Typeable c => FilePath -> (Pool c => View) -> View
 withPool fp = stateIO (createDirectoryIfMissing True fp >> pure (Pool fp :: Pool_ c))
 
 withSecret :: forall c. Typeable c => IO (Secret_ c) -> (Secret c => View) -> View
-withSecret = async 
+withSecret = lazy 
 
 newSecret :: IO (Secret_ c)
 newSecret = Secret <$> CRT.getRandomBytes 32

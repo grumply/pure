@@ -6,13 +6,13 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import Data.Char
 import Data.Either
-import Data.Exists
 import Data.Hashable
 import Data.List as List
 import Data.Maybe
 import Data.String
 import Data.Time
 import Data.Txt as Txt
+import Data.View
 import Endpoint
 import GHC.Generics
 import GHC.TypeLits

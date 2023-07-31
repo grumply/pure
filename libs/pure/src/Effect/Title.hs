@@ -1,9 +1,8 @@
 module Effect.Title (title) where
 
 import Data.DOM (setTitle)
-import Effect.Sync (sync)
 import Data.Txt (Txt)
-import Data.View (View)
+import Data.View (View,eager)
 
 title :: Txt -> View -> View
-title t v = sync (setTitle t) v
+title t = eager (setTitle t)

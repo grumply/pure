@@ -46,7 +46,7 @@ server :: Logging => Server -> View
 server =
   Component $ \self ->
       let
-          updConnections f = modify_ self $ \_ ss -> ss { ssConnections = f (ssConnections ss) }
+          updConnections f = modifyref_ self $ \_ ss -> ss { ssConnections = f (ssConnections ss) }
 
           handleConnections sock = forever $ handle (\(_ :: SomeException) -> return ()) $ do
               (conn,sockAddr) <- S.accept sock
@@ -70,7 +70,7 @@ server =
       in
           def
               { onConstruct = do
-                  s <- ask self
+                  s <- askref self
                   case s of
                     Server {..} -> do
                       sock <- makeListenSocket ip port

@@ -2,12 +2,10 @@
 module Web.File where
 
 import Control.Concurrent
-import Control.Producer
 import Control.Monad
 import Data.Coerce
 import Data.Default
 import Data.DOM
-import Data.Effect ((#))
 import Data.Events (pattern OnWith)
 import Data.JSON hiding (String)
 import Data.Maybe

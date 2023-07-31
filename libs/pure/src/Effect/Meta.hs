@@ -1,7 +1,6 @@
 {-# language OverloadedStrings #-}
 module Effect.Meta (metas,meta) where
 
-import Control.Fold
 import Data.CSS as CSS
 import Data.DOM as DOM
 import Data.Foldable
@@ -10,7 +9,7 @@ import Data.Marker
 import Data.Traversable
 import Data.Txt
 import Data.View
-import Browser
+import Data.View.Build
 
 metas :: [View -> View] -> View -> View
 metas withMetas = weak withMetas . foldM (\() -> pure) initialize

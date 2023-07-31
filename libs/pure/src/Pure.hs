@@ -24,63 +24,34 @@ import System.IO as Export (stdout,hSetBuffering,BufferMode(..))
 import Text.Read as Export (readMaybe,readEither)
 import Text.Printf as Export (printf)
 
-import Control.Cont as Export hiding (empty)
-import Control.Error as Export
-import Control.Producer as Export hiding (events)
-import Control.Reader as Export
-import Control.Retry as Export (retry,recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci)
-import Control.State as Export hiding (flat)
-import Control.Writer as Export hiding (translate)
-import Control.Fold as Export
+import Data.Retry as Export (retry,recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci)
 import Data.DOM as Export (body,Evt)
-import Data.CSS as Export hiding (root,target,active,checked,wrap,select,empty,stylesheet,CSS_(..),focus)
+import Data.CSS as Export hiding (root,target,active,checked,wrap,select,empty,stylesheet,CSS_(..),focus,or)
 import Data.Default as Export
-import Data.Effect as Export hiding (map)
 import Data.Hashable as Export
-import Data.HTML as Export hiding (Style,DateTime,Select,Accept,Alt,ContextMenu,Meta)
-import Data.Exists as Export hiding (constant)
+import Data.HTML as Export hiding (Style,DateTime,Select,Accept,Alt,ContextMenu,Meta,Selected,Async,Form)
 import Data.JSON as Export hiding (Null,Key,lookup,match,Number)
 import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list,exponential) 
 import Data.Scroll as Export
 import Data.Slug as Export
-import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize)
-import Data.Theme as Export
-import Data.Time as Export hiding (Time_)
+import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize,translate,events,empty)
+import Data.Theme as Export hiding (within)
+import Data.Time as Export hiding (Time_,every)
 import Data.Try as Export hiding (try)
 import Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
-import Data.View as Export hiding (get,ask,look,modify,modify_,modifyM,modifyM_,setProps,queueComponentUpdate,getHost,initialize,content,Styles,On,Raw,lifecycles,Lifecycles,attributes)
+import Data.View as Export hiding (queueComponentUpdate,getHost,initialize,content,Styles,On,Raw,lifecycles,Lifecycles,attributes)
 import Data.URI as Export
-import Effect.Async as Export
-import Effect.Fork as Export
-import Effect.Lifecycles as Export
 import Effect.Meta as Export
 import Effect.Router as Export hiding (map)
 import Effect.Script as Export
 import Effect.Styles as Export hiding (css)
-import Effect.Suspense as Export
-import Effect.Sync as Export
 import Effect.Title as Export
-import Effect.Poll as Export
-import Web.Events.Animation as Export hiding (eventObject) 
-import Web.Events.Clipboard as Export hiding (eventObject) 
-import Web.Events.Composition as Export hiding (eventObject)
-import Web.Events.Drag as Export hiding (eventObject)
-import Web.Events.Focus as Export hiding (eventObject)
-import Web.Events.Input as Export hiding (eventObject)
-import Web.Events.Keyboard as Export hiding (eventObject,ContextMenu,Paste,Copy,Select,Cut)
-import Web.Events.Mouse as Export hiding (eventObject,Other)
-import Web.Events.Mutation as Export
-import Web.Events.Pointer as Export hiding (eventObject,Touch,width,height)
-import Web.Events.Resize as Export (Resize(Resize,borderBlockSize,borderInlineSize,contentBlockSize,contentInlineSize),resize,resizes)
-import Web.Events.Scroll as Export hiding (eventObject)
-import Web.Events.Selection as Export hiding (eventObject)
-import Web.Events.Touch as Export hiding (eventObject)
-import Web.Events.Transition as Export hiding (eventObject)
-import Web.Events.Wheel as Export hiding (eventObject)
+import Web.Events as Export
+-- import Web.Events.Resize as Export (Resize(Resize,borderBlockSize,borderInlineSize,contentBlockSize,contentInlineSize),resize,resizes)
 
-import Browser as Export
-import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,even,repeat,span,tan,reverse)
+import Data.View.Build as Export
+import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,even,repeat,span,tan,reverse,read,map)
 
 -- | A variant of `fix` 'fixed' to a function (`->`) type with a convenient
 -- ordering for inline usage: `flip fix`. For introducing local anonymous

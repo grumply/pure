@@ -2,10 +2,7 @@
 module Effect.Websocket (Effect.Websocket.Policy(..),Websocket,Effect.Websocket.websocket,Effect.Websocket.onStatus,Cache(socket),req,msg,Effect.Websocket.request,flush,flushMany,flushAll) where
 
 import Control.Concurrent
-import Control.Reader
-import Control.State
-import Control.Fold
-import Control.Log
+import Data.Log
 import Data.Foldable
 import Data.IORef
 import Data.JSON
@@ -15,11 +12,9 @@ import Data.Proxy
 import Data.Subscribe
 import Data.Txt
 import Data.Typeable
-import Data.View hiding (modify,ask)
+import Data.View
 import Data.Websocket as WS hiding (Websocket)
 import qualified Data.Websocket as WS
-import Effect.Async
-import Effect.Fork
 #ifndef __GHCJS__
 import Network.Connection as C
 import Network.WebSockets as C
@@ -243,8 +238,8 @@ request
   , Typeable domain
   , Logging
   ) 
-  => Effect.Websocket.Policy -> WS.API msgs reqs -> Proxy request -> payload -> (Async response => View) -> View
-request policy api rq pl v = async (req @domain policy api rq pl) v
+  => Effect.Websocket.Policy -> WS.API msgs reqs -> Proxy request -> payload -> (Exists response => View) -> View
+request policy api rq pl v = lazy (req @domain policy api rq pl) v
 
 flush 
   :: forall domain request msgs reqs payload.

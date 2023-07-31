@@ -1,6 +1,6 @@
 {-# language TypeApplications, KindSignatures, ScopedTypeVariables, TypeFamilies, RankNTypes, ConstrainedClassMethods, FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
-module Control.Component 
-  ( module Control.Controller
+module Data.Component 
+  ( module Data.Controller
   , Update
   , Render
   , Handler

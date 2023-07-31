@@ -1,7 +1,6 @@
 {-# language RankNTypes, FlexibleContexts, OverloadedStrings, CPP, DuplicateRecordFields, JavaScriptFFI, NamedFieldPuns #-}
 module Web.DataTransfer where
 
-import Control.Producer
 import Data.Coerce
 import Data.Default
 import Data.DOM

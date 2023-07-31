@@ -22,7 +22,7 @@ import Control.Component hiding (root)
 import Data.Router as Router
 import Data.View
 import qualified Data.Websocket as WS
-import Effect.Async
+import Effect.View
 import Effect.Websocket hiding (sync)
 
 import Control.Concurrent
@@ -70,7 +70,7 @@ toListWith
   => Policy -> ShouldPreloadPreviews -> Context resource -> View
 toListWith policy shouldPreloadPreviews ctx =
   request @_role policy (readingAPI @resource) (readListing @resource) ctx do
-    with @[(Context resource, Name resource, Preview resource)] (maybe [] (fmap (\(n,p) -> (ctx,n,p))) await) do
+    with @[(Context resource, Name resource, Preview resource)] (maybe [] (fmap (\(n,p) -> (ctx,n,p))) it) do
       listing @_role @resource policy shouldPreloadPreviews <| Themed @Listing . Themed @(Listing resource) 
 
 listing 

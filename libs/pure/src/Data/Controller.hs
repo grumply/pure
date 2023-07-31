@@ -2,7 +2,7 @@
    ScopedTypeVariables, TypeApplications, BangPatterns, MagicHash, 
    AllowAmbiguousTypes, PatternSynonyms, ViewPatterns,
    FlexibleContexts #-}
-module Control.Controller (Controller(..),run,command,commandWith) where
+module Data.Controller (Controller(..),run,command,commandWith) where
 
 import Control.Concurrent (myThreadId,ThreadId)
 import Control.Monad
@@ -12,8 +12,6 @@ import Data.Typeable
 import Prelude hiding (map)
 
 import Data.Default
-import Data.Effect
-import Data.Exists
 import Data.Subscribe
 import Data.View
 

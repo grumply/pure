@@ -2,7 +2,7 @@
 module Data.Styles where
 
 import Data.Txt as Txt
-import Data.View
+import Data.View hiding (zoom)
 import Data.Int
 
 import Data.List as List

@@ -7,12 +7,9 @@ module Effect.Router
   , module Export
   ) where
 
-import Control.Dynamic
-import Control.State
 import Data.Default
 import Data.DOM
 import Data.Events
-import Data.Exists
 import Data.HTML
 import Data.Router
 import qualified Data.Router as Export hiding (route)
@@ -20,7 +17,6 @@ import qualified Data.Router as Router
 import Data.Txt
 import qualified Data.Txt as Txt
 import Data.View hiding (On)
-import Effect.Async
 
 data Route rt = Route Txt rt
 type Router rt = Exists (Route rt)
@@ -32,7 +28,7 @@ current :: Router rt => rt
 current = let Route _ rt = it in rt
 
 onRoute :: Router rt => (rt -> IO ()) -> View -> View
-onRoute f = async (f current)
+onRoute f = lazy (f current)
 
 router :: forall rt. Typeable rt => (forall a. Routing rt a) -> (Router rt => View) -> View
 router rtng v = do

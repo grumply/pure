@@ -91,23 +91,7 @@ library
 
   exposed-modules:
     Pure
-    Browser
     Client
-    Control.Channel
-    Control.Component
-    Control.Controller
-    Control.Cont
-    Control.Dynamic
-    Control.Error
-    Control.Fold
-    Control.Form
-    Control.Log
-    Control.Producer
-    Control.React
-    Control.Reader
-    Control.Retry
-    Control.State
-    Control.Writer
     Data.AB
     Data.Animation
     Data.Bloom
@@ -118,21 +102,22 @@ library
     Data.DOM
     Data.Default
     Data.Ease
-    Data.Effect
     Data.Events
-    Data.Exists
     Data.Fetch
+    Data.Fetch.Response
     Data.File
     Data.HTML
     Data.Idle
     Data.JSON
     Data.Limiter
     Data.Localstorage
+    Data.Log
     Data.Marker
     Data.Queue
     Data.Random
     Data.Random.Generator
     Data.Random.Internal
+    Data.Retry
     Data.Router
     Data.Scroll
     Data.Shadows
@@ -152,46 +137,24 @@ library
     Data.URI
     Data.Variance
     Data.View
+    Data.View.Build
     Data.View.Parse
     Data.View.Reflect
     Data.View.Render
     Data.View.Sanitize
     Data.View.Transform
     Data.Websocket
-    Effect.Async
-    Effect.Fetch
-    Effect.Fork
     Effect.Intersection
-    Effect.Lifecycles
     Effect.Meta
-    Effect.Poll
     Effect.Router
     Effect.Script
     Effect.Stream
     Effect.Styles
-    Effect.Suspense
-    Effect.Sync
     Effect.Title
     Effect.Websocket
-    Effect.Watch
     Endpoint
     Web.DataTransfer
-    Web.Events.Animation
-    Web.Events.Clipboard
-    Web.Events.Composition
-    Web.Events.Drag
-    Web.Events.Focus
-    Web.Events.Input
-    Web.Events.Keyboard
-    Web.Events.Mouse
-    Web.Events.Mutation
-    Web.Events.Pointer
-    Web.Events.Resize
-    Web.Events.Scroll
-    Web.Events.Selection
-    Web.Events.Touch
-    Web.Events.Transition
-    Web.Events.Wheel
+    Web.Events
     Web.File
     Web.Iterable
     Web.Range

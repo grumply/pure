@@ -12,9 +12,9 @@ import Data.Sorcerer.Streamable
 import Control.Concurrent
 import Control.Monad
 import Data.Foldable
-import Data.Effect
 import Data.Typeable
 import Data.Unique
+import Data.View hiding (Listener)
 import Unsafe.Coerce
 
 listenStream :: (Typeable ev, Ord (Stream ev)) => Stream ev -> (ev -> IO ()) -> IO (StreamListener ev)

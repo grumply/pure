@@ -1,12 +1,10 @@
-{-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, TypeOperators, DefaultSignatures #-}
+{-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, TypeOperators, DefaultSignatures, ViewPatterns #-}
 module Client 
   ( Client.post
   , Client.get
   , Client.got
   , Get(), Got(Unsafe), Post()
-  , Client.catch, Client.or, Client.within
   -- ,ws,wssend,wsmessage,wserror
-  , Fetch.XHRError, Fetch.err, Fetch.response
   , sseWith, sse
   , base, API(..)
   , Index, Auth, Name, Event, Product, Preview
@@ -14,51 +12,68 @@ module Client
   , module Export
   ) where
 
-import Pure as Export hiding (read,list,get,index,Read,or,catch,within)
+import Pure as Export hiding (Event,liftIO,throw,index,read,get)
+import qualified Pure as Export (throw)
 
-#ifdef __GHCJS__
 import Data.JSON as JSON hiding (Key)
-#else
-import Data.Aeson as JSON hiding (Key)
+#ifndef __GHCJS__
+import Data.Aeson as Aeson hiding (Key)
 #endif
 
-import Control.Concurrent
-import Control.Component hiding (Update)
-import Control.Dynamic
+import Control.Concurrent hiding (yield)
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Producer
-import Control.Retry
-import Control.State
 import Data.Default
 import Data.DOM
-import Data.Exists
 import Data.Function ((&))
 import Data.IORef
 import Data.Kind
 import Data.Maybe
+import Data.Retry
 import Data.Time
 import Data.Typeable
 import Data.Txt
 import Data.URI
-import Data.View
+import Data.View hiding (Event,liftIO,throw)
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.Fetch as Fetch
-import qualified Effect.Fetch as Fetch (response,err)
 import Effect.Router
 import Endpoint
 import System.IO.Unsafe
 import Prelude hiding (or)
 
+data ParseError = ParseError 
+  { url      :: Txt 
+  , failure  :: Txt 
+  , response :: Fetch.Response 
+  } deriving Show
+instance Exception ParseError
+
 class Post api req where
   post :: Endpoint req -> req
 
 instance (API api, Typeable r, FromJSON r) => Post api (IO r) where
-  post ep = Fetch.postWith @() @r [] (api @api <> toTxt ep) () >>= either Control.Exception.throw pure
+  post ep = do
+    let url = api @api <> toTxt ep
+    r <- Fetch.post Fetch.json url def
+    case r of
+      Fetch.Response n (decodeEither -> e) ->
+        case e of
+          Left pe -> throw (ParseError url (toTxt pe) r)
+          Right r -> pure r
+      Fetch.Failure se -> throw se
 
 instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Post api (a -> IO r) where
-  post ep a = Fetch.postWith @a @r [] (api @api <> toTxt ep) a >>= either Control.Exception.throw pure
+  post ep a = do
+    let url = api @api <> toTxt ep
+    r <- Fetch.post Fetch.json url (JSON.encode a) 
+    case r of
+      Fetch.Response n (decodeEither -> e) ->
+        case e of
+          Left pe -> throw (ParseError url (toTxt pe) r)
+          Right r -> pure r
+      Fetch.Failure se -> throw se
  
 instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Post api (a -> b -> IO r) where
   post ep a b = post @api (fromTxt (toTxt ep)) (a,b)
@@ -82,16 +97,36 @@ class Get api req where
   get :: Endpoint req -> req
 
 instance (API api, Typeable r, FromJSON r) => Get api (IO r) where
-  get ep = Fetch.getWith @r [] (api @api <> toTxt ep) >>= either Control.Exception.throw pure
+  get ep = do
+    let url = api @api <> toTxt ep
+    r <- Fetch.get Fetch.json url 
+    case r of
+      Fetch.Response n (decodeEither -> e) ->
+        case e of
+          Left pe -> throw (ParseError url (toTxt pe) r)
+          Right r -> pure r
+      Fetch.Failure se -> throw se
 
 instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Get api (a -> IO r) where
-  get ep a = 
+  get ep a = do
 #ifdef __GHCJS__
-    Fetch.getWith @r [] (api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a)))
-      >>= either Control.Exception.throw pure
+    let url = api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a))
+    r <- Fetch.get Fetch.json url
+    case r of
+      Fetch.Response n (decodeEither -> e) ->
+        case e of
+          Left pe -> throw (ParseError url (toTxt pe) r)
+          Right a -> pure a
+      Fetch.Failure f -> throw f
 #else
-    Fetch.getWith @r [] (api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (JSON.encode a))))
-      >>= either Control.Exception.throw pure
+    let url = api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (Aeson.encode a)))
+    r <- Fetch.get Fetch.json url
+    case r of
+      Fetch.Response n (decodeEither -> e) ->
+        case e of
+          Left pe -> throw (ParseError url (toTxt pe) r)
+          Right a -> pure a
+      Fetch.Failure f -> throw f
 #endif
 
 instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Get api (a -> b -> IO r) where
@@ -115,15 +150,6 @@ instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, T
 class Got api req where
   type Unsafe req :: *
   got :: Endpoint req -> Unsafe req
-
-within :: Time -> a -> a
-within t a = unsafePerformIO (fromJust <$> timeout t (evaluate a))
-
-catch :: Exception e => a -> (e -> a) -> a
-catch a f = unsafePerformIO (Control.Exception.catch (evaluate a) (pure . f))
-
-or :: a -> a -> a
-or l r = Client.catch @SomeException l (const r)
 
 instance (API api, Typeable r, FromJSON r) => Got api (IO r) where
   type Unsafe (IO r) = r
@@ -183,12 +209,12 @@ sseWith policy host ep =
             void do
               retrying policy do
                 mv <- newEmptyMVar
-                pl <- Data.View.ask self
+                pl <- askref self
                 es <- new_event_source_js (host <> ep <> "?payload=" <> encodeURIComponent (btoa_js (encode pl)))
 
                 msgs <- onRaw es "message" def \_ msg ->
                   case msg .# "data" of
-                    Just d | Just e <- decode d -> Control.Producer.yield @e e
+                    Just d | Just e <- decode d -> yield @e e
                     _ -> putMVar mv stop
 
                 errs <- onRaw es "error" def \_ _ -> putMVar mv (stop >> retry)
@@ -197,7 +223,7 @@ sseWith policy host ep =
 
                 join (takeMVar mv)
                 
-    , onUnmounted = Data.View.get self >>= killThread
+    , onUnmounted = getref self >>= killThread
     }
 
 newtype EventSource = EventSource JSV
@@ -249,7 +275,7 @@ wsmessage = OnMounted (\_ -> onRaw (it :: Websocket) "message" def go)
     go _ msg
       | Just m <- msg .# "data"
       , Just a <- decode m
-      = Control.Producer.yield @a a
+      = yield @a a
         
       | otherwise 
       = pure ()
@@ -257,7 +283,7 @@ wsmessage = OnMounted (\_ -> onRaw (it :: Websocket) "message" def go)
 newtype WebsocketError = WebsocketError JSV
 
 wserror :: Exists Websocket => View -> (Producer WebsocketError => View)
-wserror = OnMounted (\_ -> onRaw (it :: Websocket) "error" def (\_ -> Control.Producer.yield . WebsocketError))
+wserror = OnMounted (\_ -> onRaw (it :: Websocket) "error" def (\_ -> yield . WebsocketError))
 #endif
 
 class Client r where 

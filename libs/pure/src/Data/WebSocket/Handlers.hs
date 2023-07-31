@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, TypeOperators, GADTs, FlexibleContexts, DataKinds, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, TypeFamilies, ScopedTypeVariables #-}
 module Data.Websocket.Handlers where
 
-import Control.Log
+import Data.Log
 import Data.JSON
 import Data.Proxy
 import Data.Txt (Txt)

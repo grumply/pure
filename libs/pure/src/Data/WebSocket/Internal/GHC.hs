@@ -18,9 +18,9 @@
 module Data.Websocket.Internal.GHC where
 
 -- internal
-import Control.Retry as Retry hiding (Status)
-import qualified Control.Retry as Retry
-import Control.Log as Log
+import Data.Retry as Retry hiding (Status)
+import qualified Data.Retry as Retry
+import Data.Log as Log
 import Data.JSON as AE hiding (Error)
 import Data.Time as Time
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
