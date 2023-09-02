@@ -89,7 +89,7 @@ publish' msg = do
               pure True
 
 publishing :: forall msg a. Typeable msg => (Effect msg => a) -> a
-publishing = using (Handler (\(m :: msg) (after :: IO ()) -> publish' m >> after >> pure True))
+publishing = with (Handler (\(m :: msg) (after :: IO ()) -> publish' m >> after >> pure True))
 
 cleanBroker :: forall msg. Typeable msg => [Unique] -> IO ()
 cleanBroker us = do

@@ -75,6 +75,7 @@ important (Do msg) =
   case msg of
     Raw_ r k -> Do (Raw_ r k)
     Scope_ g -> Do (Scope_ (fmap important g))
+    Rescope_ sel scoped ak -> Do (fmap important (Rescope_ sel (important scoped) ak))
     Selection_ sel scoped ak -> Do (fmap important (Selection_ sel (important scoped) ak))
     Wrap_ rule scoped ak -> Do (fmap important (Wrap_ rule (important scoped) ak))
     Style_ k v a -> Do (fmap important (Style_ k (v <> " !important") a))

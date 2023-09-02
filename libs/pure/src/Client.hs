@@ -43,13 +43,6 @@ import Endpoint
 import System.IO.Unsafe
 import Prelude hiding (or)
 
-data ParseError = ParseError 
-  { url      :: Txt 
-  , failure  :: Txt 
-  , response :: Fetch.Response 
-  } deriving Show
-instance Exception ParseError
-
 class Post api req where
   post :: Endpoint req -> req
 
@@ -58,22 +51,16 @@ instance (API api, Typeable r, FromJSON r) => Post api (IO r) where
     let url = api @api <> toTxt ep
     r <- Fetch.post Fetch.json url def
     case r of
-      Fetch.Response n (decodeEither -> e) ->
-        case e of
-          Left pe -> throw (ParseError url (toTxt pe) r)
-          Right r -> pure r
-      Fetch.Failure se -> throw se
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
 
 instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Post api (a -> IO r) where
   post ep a = do
     let url = api @api <> toTxt ep
     r <- Fetch.post Fetch.json url (JSON.encode a) 
     case r of
-      Fetch.Response n (decodeEither -> e) ->
-        case e of
-          Left pe -> throw (ParseError url (toTxt pe) r)
-          Right r -> pure r
-      Fetch.Failure se -> throw se
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
  
 instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Post api (a -> b -> IO r) where
   post ep a b = post @api (fromTxt (toTxt ep)) (a,b)
@@ -101,11 +88,8 @@ instance (API api, Typeable r, FromJSON r) => Get api (IO r) where
     let url = api @api <> toTxt ep
     r <- Fetch.get Fetch.json url 
     case r of
-      Fetch.Response n (decodeEither -> e) ->
-        case e of
-          Left pe -> throw (ParseError url (toTxt pe) r)
-          Right r -> pure r
-      Fetch.Failure se -> throw se
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
 
 instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Get api (a -> IO r) where
   get ep a = do
@@ -113,20 +97,14 @@ instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Get api (a -
     let url = api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a))
     r <- Fetch.get Fetch.json url
     case r of
-      Fetch.Response n (decodeEither -> e) ->
-        case e of
-          Left pe -> throw (ParseError url (toTxt pe) r)
-          Right a -> pure a
-      Fetch.Failure f -> throw f
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
 #else
     let url = api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (Aeson.encode a)))
     r <- Fetch.get Fetch.json url
     case r of
-      Fetch.Response n (decodeEither -> e) ->
-        case e of
-          Left pe -> throw (ParseError url (toTxt pe) r)
-          Right a -> pure a
-      Fetch.Failure f -> throw f
+      Fetch.Response n (decodeEither -> Right r) -> pure r
+      _ -> throw r
 #endif
 
 instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Get api (a -> b -> IO r) where
@@ -291,7 +269,7 @@ class Client r where
   type Context r :: Constraint 
   type Context r = ()
 
-  routes :: forall x. Context r => Maybe (Auth r) -> Routing (x :=> View) ()
+  routes :: forall x. Context r => Maybe (Auth r) -> Routing (x |- View) ()
   default routes 
     :: forall x.
        ( Context r
@@ -304,63 +282,67 @@ class Client r where
        , Typeable (Event r)
        , Typeable (Product r)
        , Typeable (Auth r), ToJSON (Auth r)
-       , Typeable (Name r), FromTxt (Name r), ToJSON (Name r)
+       , Typeable (Name r), FromTxt (Name r), ToTxt (Name r), ToJSON (Name r), FromJSON (Name r)
        , ToJSON r, FromJSON r
        , ToJSON (Event r)
        , FromJSON (Preview r)
        , FromJSON (Product r)
        , FromJSON (Index r)
-       ) => Maybe (Auth r) -> Routing (x :=> View) ()
+       ) => Maybe (Auth r) -> Routing (x |- View) ()
   routes (Just a) = void do
 
     Effect.Router.match (fromTxt (toTxt (base @r))) do
-      rs <- liftIO (Client.get @r (Endpoint.index @r))
-      route (with rs (Client.index @r))
+      rs <- liftIO (Client.get @r (Endpoint.index @r) (Just a))
+      route (with rs (proof (Client.index @r)))
 
     path (fromTxt (toTxt (base @r))) do
 
       path "/new" do
         route do
-          cont @(Context r) do
-            stream (post @r (Endpoint.create @r) a) do 
-              dynamic (Client.create @r)
+          proof do
+            cont @(Context r) do
+              stream (post @r (Endpoint.create @r) a >=> maybe def (\nm -> goto (toTxt (base @r) <> "/" <> toTxt nm))) do 
+                proof (Client.create @r)
         
       path "/:res" do
         k <- "res" 
         path "/edit" do
+
           mr <- liftIO (post @r (Endpoint.raw @r) a k)
           case mr of
             Nothing -> 
               route do
-                cont @(Context r) do
-                  stream (post @r (Endpoint.create @r) a) do 
-                    dynamic (Client.create @r)
+                proof do
+                  cont @(Context r) do
+                    stream (post @r (Endpoint.create @r) a >=> maybe def (\nm -> goto (toTxt (base @r) <> "/" <> toTxt nm))) do 
+                      proof (Client.create @r)
             Just r -> 
               stream (post @r (Endpoint.update @r) a k) do
-                route (with r (with k (Client.update @r)))
-        mr <- liftIO (Client.get @r (Endpoint.read @r) k)
+                route (with r (with k (proof (Client.update @r))))
+
+        mr <- liftIO (Client.get @r (Endpoint.read @r) (Just a) k)
         case mr of
           Nothing -> do
-            rs <- liftIO (Client.get @r (Endpoint.index @r))
-            route (with rs (Client.index @r))
+            rs <- liftIO (Client.get @r (Endpoint.index @r) (Just a))
+            route (with rs (proof (Client.index @r)))
           Just r ->
-            route (with k (with r (Client.read @r)))
+            route (with k (with r (proof (Client.read @r))))
 
   routes Nothing = void do
 
     Effect.Router.match (fromTxt (toTxt (base @r))) do
-      rs <- liftIO (Client.get @r (Endpoint.index @r))
-      route (with rs (Client.index @r))
+      rs <- liftIO (Client.get @r (Endpoint.index @r) Nothing)
+      route (with rs (proof (Client.index @r)))
     
     path (fromTxt (toTxt (base @r)) <> "/:res") do
       k <- "res" 
-      mr <- liftIO (Client.get @r (Endpoint.read @r) k)
+      mr <- liftIO (Client.get @r (Endpoint.read @r) Nothing k)
       case mr of
         Nothing -> do
-          rs <- liftIO (Client.get @r (Endpoint.index @r))
-          route (with rs (Client.index @r))
+          rs <- liftIO (Client.get @r (Endpoint.index @r) Nothing)
+          route (with rs (proof (Client.index @r)))
         Just r ->
-          route (with k (with r (Client.read @r)))
+          route (with k (with r (proof (Client.read @r))))
 
   create :: (Context r, Producer r) => View
   create = Data.View.Null
@@ -368,7 +350,7 @@ class Client r where
   read :: (Context r, Exists (Name r), Exists (Product r)) => View
   read = Data.View.Null
 
-  update :: (Context r, Exists r, Producer (Event r)) => View
+  update :: (Context r, Exists r, Exists (Name r), Producer (Event r)) => View
   update = Data.View.Null
 
   index :: (Context r, Exists (Index r)) => View

@@ -104,7 +104,7 @@ logoutForm :: forall domain. (Typeable domain, API domain, Authenticated domain,
 logoutForm = Div <||> [ Button <| clicks (logout @domain) |> [ "Logout" ] ]
 
 loginForm :: forall domain. (API domain, Typeable domain) => Dynamic (Producer (Token domain)) 
-loginForm = dynamic do
+loginForm = Data.View.proof do
   state (def :: Txt,def:: Txt) do
     let 
       (un,pw) = it
@@ -126,7 +126,7 @@ loginForm = dynamic do
       ]
 
 recoverForm :: forall domain. (Endpoint.API domain, Typeable domain) => Dynamic (Producer (Token domain)) 
-recoverForm = dynamic do
+recoverForm = Data.View.proof do
   state (def :: Txt,def:: Txt) do
     let 
       (un,em) = it
@@ -148,7 +148,7 @@ recoverForm = dynamic do
       ]
 
 registerForm :: forall domain. (API domain, Typeable domain) => Dynamic (Producer (Token domain))
-registerForm = dynamic do
+registerForm = Data.View.proof do
   state (def :: Txt,def :: Txt,def :: Txt) do
     let
       (un,pw,em) = it

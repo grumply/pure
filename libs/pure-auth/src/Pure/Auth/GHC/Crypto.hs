@@ -134,7 +134,7 @@ hashUsername = hashTxt . toTxt
 -- Token
 
 hashToken :: Token c -> Hash 1 (Token c)
-hashToken = fromTxt . toTxt . proof
+hashToken = fromTxt . toTxt . Pure.Auth.Data.proof
 
 --------------------------------------------------------------------------------
 

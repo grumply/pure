@@ -8,6 +8,8 @@ import Data.Txt as Txt
 import Text.HTML.TagSoup.Tree as TS
 import Text.HTML.TagSoup as TS
 import Text.StringLike
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 #ifdef __GHCJS__
 instance StringLike Txt where
@@ -73,13 +75,13 @@ parseView = fmap convertTree . parseTree
                    Just (pre,Txt.tail suf)
             kvs = mapMaybe brk ss
         in
-          Styles kvs
+          \fs -> fs { styles = Map.fromList kvs }
       else if k' == "classname" || k' == "class" then
-          Classes (List.filter (Prelude.not . Txt.null) (Txt.splitOn " " v))
+          \fs -> fs { classes = Set.fromList (List.filter (Prelude.not . Txt.null) (Txt.splitOn " " v)) }
       else if Txt.isPrefixOf "xlink:" k' then
           id
       else
-          Attribute k' v
+          \fs -> fs { attributes = Map.insert k' v (attributes fs) }
 
     xlinks (k,v) = let k' = Txt.toLower k in
       if Txt.isPrefixOf "xlink:" k' then

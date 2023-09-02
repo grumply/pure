@@ -328,6 +328,29 @@ focusOut = focusOutWith def yield
 focusOuts :: (Exists FocusOut => IO ()) -> View -> View
 focusOuts f = events @FocusOut f focusOut
 
+data ChangeEvent = ChangeEvent
+  { eventObject :: JSV
+  , value :: Txt
+  }
+
+toChangeEvent :: Evt -> ChangeEvent
+toChangeEvent (evtObj -> o) = let err = error "Invalid ChangeEvent" in
+  ChangeEvent
+    { eventObject = o
+    , value = fromMaybe err (o .# "target" >>= (.# "value"))
+    }
+
+newtype Change = Change ChangeEvent
+
+changeWith :: Options -> (Change -> IO ()) -> View -> View
+changeWith opts f = OnWith opts "change" (f . Change . toChangeEvent)
+
+change :: View -> (Producer Change => View)
+change = changeWith def yield
+
+changes :: (Exists Change => IO ()) -> View -> View
+changes f = events @Change f change
+
 data InputEvent = InputEvent
   { eventObject :: JSV
   , value :: Txt

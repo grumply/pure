@@ -9,6 +9,7 @@ module Data.Queue
 import Data.IORef
 import Control.Concurrent.MVar
 import Control.Concurrent (yield)
+import Control.Monad
 
 data Queue a = Queue
   { queueBarrier  :: {-# UNPACK #-}!(MVar ())
@@ -21,9 +22,7 @@ newQueue = Queue <$> newEmptyMVar <*> newIORef []
 
 {-# INLINE arrive #-}
 arrive :: Queue a -> a -> IO Bool
-arrive Queue {..} a = do
-  q <- atomicModifyIORef' internalQueue $ \q -> (a:q,q)
-  tryPutMVar queueBarrier ()
+arrive Queue {..} a = join (atomicModifyIORef' internalQueue $ \q -> (a:q,tryPutMVar queueBarrier ()))
 
 {-# INLINE collect #-}
 collect :: Queue a -> IO [a]

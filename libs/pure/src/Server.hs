@@ -10,13 +10,14 @@ module Server
   , WarpTLS.tlsSettings
   , Server(..)
   , Name,Auth,Event,Product,Preview,Index
+  , respond, respondWith
   , module Export
   ) where
 
 import qualified Pure as Export hiding (Handler,read,Read)
 
 import Control.Concurrent
-import Control.Exception (Exception,throw,handle,catch)
+import Control.Exception (SomeException,Exception(..),throw,handle,catch)
 import Control.Monad
 import qualified Data.Log as Log
 import Data.Aeson as JSON hiding (Name)
@@ -47,9 +48,9 @@ import Data.Binary.Builder (fromLazyByteString)
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
-import Network.HTTP.Types.Header
-import Network.HTTP.Types.Method
-import Network.HTTP.Types.Status
+import Network.HTTP.Types.Header as Export
+import Network.HTTP.Types.Method 
+import Network.HTTP.Types.Status as Export
 import Network.Wai
 import Endpoint
 
@@ -59,7 +60,7 @@ serve port mtlss = Component $ \self ->
     { onConstruct = do
         ref <- askref self >>= newIORef 
         tid <- forkIO do
-          maybe Warp.runSettings WarpTLS.runTLS mtlss (Warp.setServerName "pure" (Warp.setPort port Warp.defaultSettings)) $ \request respond -> do
+          maybe Warp.runSettings WarpTLS.runTLS mtlss (Warp.setOnException exception (Warp.setServerName "pure" (Warp.setOnExceptionResponse onExceptionResponse (Warp.setPort port Warp.defaultSettings)))) $ \request respond -> do
             eps <- readIORef ref
             let p = toTxt (rawPathInfo request)
             case List.find (\Handler { methods, path } -> p == path && requestMethod request `Prelude.elem` methods) eps of
@@ -70,6 +71,22 @@ serve port mtlss = Component $ \self ->
     , onUnmounted = getref self >>= \(_,tid) -> killThread tid
     , render = \_ _ -> Data.View.Null
     }
+  where
+    exception :: Maybe Request -> SomeException -> IO ()
+    exception r se
+      | Just Respond {} <- fromException se
+      = pure ()
+
+      | otherwise
+      = Warp.defaultOnException r se
+      
+    onExceptionResponse :: SomeException -> Response
+    onExceptionResponse e
+      | Just (Respond s hs t) <- fromException e 
+      = responseLBS s hs (fromTxt t)
+
+      | otherwise 
+      = Warp.defaultOnExceptionResponse e
 
 data Handler = Handler { endpoint :: Application, methods :: [Method], path :: Txt }
 
@@ -246,6 +263,15 @@ withIdentity ep f = Handler (go :: Application) [methodPost,methodGet,methodOpti
       in
         Server.endpoint (lambda ep (f h ua)) request respond
 
+-- Note here that the middlewares are context-dependent, but do not have access to
+-- authentication, etc.... 
+--
+-- Some thoughts:
+--  1. This doesn't seem to render the middleware safe. That is, third-party middlewares
+--     can still see the content of the request.
+--  2. This doesn't allow for authentication-dependent middlewares, like caching based
+--     on user role, etc....
+--
 class Server r where
 
   type Context r :: Constraint
@@ -265,25 +291,48 @@ class Server r where
        , ToJSON (Name r)
        ) => [Server.Handler]
   handlers = 
-    [ lambda (Endpoint.create @r) (Server.create @r)
-    , lambda (Endpoint.read @r) (Server.read @r)
-    , lambda (Endpoint.raw @r) (Server.raw @r)
-    , lambda (Endpoint.update @r) (Server.update @r)
-    , lambda (Endpoint.index @r) (Server.index @r)
+    [ middleware (createMiddleware @r) (lambda (Endpoint.create @r) (Server.create @r))
+    , middleware (readMiddleware @r) (lambda (Endpoint.read @r) (Server.read @r))
+    , middleware (rawMiddleware @r) (lambda (Endpoint.raw @r) (Server.raw @r))
+    , middleware (updateMiddleware @r) (lambda (Endpoint.update @r) (Server.update @r))
+    , middleware (indexMiddleware @r) (lambda (Endpoint.index @r) (Server.index @r))
     ]
 
-  create :: Context r => Auth r -> r -> IO ()
+  create :: Context r => Auth r -> r -> IO (Maybe (Name r))
   create = unauthorized
+
+  createMiddleware :: Context r => Middleware
+  createMiddleware = id
 
   raw :: Context r => Auth r -> Name r -> IO (Maybe r)
   raw = unauthorized
 
-  read :: Context r => Name r -> IO (Maybe (Product r))
+  rawMiddleware :: Context r => Middleware
+  rawMiddleware = id
+
+  read :: Context r => Maybe (Auth r) -> Name r -> IO (Maybe (Product r))
   read = unauthorized
+  
+  readMiddleware :: Context r => Middleware
+  readMiddleware = id
 
   update :: Context r => Auth r -> Name r -> Event r -> IO ()
   update = unauthorized
+  
+  updateMiddleware :: Context r => Middleware
+  updateMiddleware = id
 
-  index :: Context r => IO (Index r)
+  index :: Context r => Maybe (Auth r) -> IO (Index r)
   index = unauthorized
+  
+  indexMiddleware :: Context r => Middleware
+  indexMiddleware = id
 
+data Respond = Respond Status [Header] Txt deriving Show
+instance Exception Respond
+
+respond :: Int -> Txt -> a
+respond c = respondWith (toEnum c) []
+
+respondWith :: Status -> [Header] -> Txt -> a
+respondWith s hs = Control.Exception.throw . Respond s hs

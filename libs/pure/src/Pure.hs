@@ -6,6 +6,7 @@ module Pure
 
 import Control.Applicative as Export hiding (empty,optional)
 import Control.Concurrent as Export hiding (yield)
+import Control.Comonad as Export
 import Control.Monad as Export (void,join,when,unless,(>=>),(<=<),forever)
 import Data.Bifunctor as Export (Bifunctor(..))
 import Data.Bool as Export (bool)
@@ -35,7 +36,7 @@ import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list,exponential) 
 import Data.Scroll as Export
 import Data.Slug as Export
-import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize,translate,events,empty)
+import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize,translate,events,empty,change,lower)
 import Data.Theme as Export hiding (within)
 import Data.Time as Export hiding (Time_,every)
 import Data.Try as Export hiding (try)

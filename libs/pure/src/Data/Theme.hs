@@ -1,4 +1,4 @@
-{-# language PatternSynonyms, RankNTypes, TypeApplications, AllowAmbiguousTypes, CPP, DefaultSignatures, ScopedTypeVariables, ViewPatterns, RoleAnnotations, ExistentialQuantification, FlexibleContexts, OverloadedStrings, PolyKinds #-}
+{-# language PatternSynonyms, RankNTypes, TypeApplications, AllowAmbiguousTypes, CPP, DefaultSignatures, ScopedTypeVariables, ViewPatterns, RoleAnnotations, ExistentialQuantification, FlexibleContexts, OverloadedStrings, PolyKinds, FlexibleInstances, BangPatterns #-}
 module Data.Theme
   ( Theme(..)
   , pattern Themed
@@ -64,24 +64,28 @@ import Prelude hiding (and,or,(^^))
 activeThemes :: IORef (Map Txt ())
 activeThemes = unsafePerformIO $ newIORef Map.empty
 
-{-# INLINE rep #-}
-rep :: forall p. (Typeable p) => Txt
-rep = Txt.filter nonQuote (Txt.intercalate "_" [go (typeRep (Proxy :: Proxy p)), toTxt th])
-  where
-    nonQuote x = x /= '\'' && x /= '\"'
-    th = abs (hash (typeRep (Proxy :: Proxy p)))
-    go tr =
-      let tc = toTxt (show (typeRepTyCon tr))
-          trs = typeRepArgs tr
-      in Txt.intercalate "_" (tc : fmap go trs)
+class Typeable a => ThemeName a where
+  {-# NOINLINE rep #-}
+  rep :: Txt
+  rep = Txt.filter nonQuote (Txt.intercalate "_" [go (typeRep (Proxy :: Proxy a)), toTxt th])
+    where
+      nonQuote x = x /= '\'' && x /= '\"'
+      th = abs (hash (typeRep (Proxy :: Proxy a)))
+      go tr =
+        let tc = toTxt (show (typeRepTyCon tr))
+            trs = typeRepArgs tr
+        in Txt.intercalate "_" (tc : fmap go trs)
+
+instance Typeable a => ThemeName a
 
 newtype Namespace t = Namespace Txt
 type role Namespace nominal
 
 class Theme t where
+  {-# NOINLINE namespace #-}
   namespace :: Namespace t
   default namespace :: Typeable t => Namespace t
-  namespace = Namespace (rep @t)
+  namespace = Namespace $! rep @t
 
   theme :: forall t. Txt -> CSS ()
   default theme :: Txt -> CSS ()
@@ -108,16 +112,16 @@ addTheme = do
         | [ ReactiveView _ (TextView _ "") ] <- cs -> pure ()
       content -> inject Lifted.head (Attribute "data-pure-theme" pre content)
 
-hasTheme :: forall t b. (Theme t, HasFeatures b) => b -> Bool
+hasTheme :: forall t b. (Theme t) => View -> Bool
 hasTheme (Classes cs b) = let Namespace t = namespace @t in t `elem` cs
 
-themedWith :: forall t b. (Theme t, HasFeatures b) => Namespace t -> b -> b
+themedWith :: forall t. (Theme t) => Namespace t -> View -> View
 themedWith _ = Themed @t
 
-themed :: forall t b. (Theme t, HasFeatures b) => t -> b -> b
+themed :: forall t. (Theme t) => t -> View -> View
 themed _ = Themed @t
 
-pattern Themed :: forall t b. (HasFeatures b, Theme t) => b -> b
+pattern Themed :: forall t. (Theme t) => View -> View
 pattern Themed b <- (hasTheme @t &&& id -> (True,b)) where
   Themed b =
     let Namespace pre = namespace @t
@@ -193,12 +197,12 @@ data SomeTheme = forall t. Theme t => SomeTheme (Namespace t)
 mkSomeTheme :: forall t. Theme t => SomeTheme
 mkSomeTheme = SomeTheme (namespace @t)
 
-someThemed :: (HasFeatures b) => SomeTheme -> b -> b
+someThemed :: SomeTheme -> View -> View
 someThemed (SomeTheme ns) = themedWith ns
 
 data Custom a
 
-pattern Customized :: forall t b. (HasFeatures b, Theme t, Theme (Custom t)) => b -> b
+pattern Customized :: forall t. (Theme t, Theme (Custom t)) => View -> View
 pattern Customized b <- (((&&) <$> hasTheme @(Custom t) <*> hasTheme @t) &&& id -> (True,b)) where
   Customized b =
     let Namespace t = namespace @t
@@ -218,7 +222,7 @@ addSomeThemeClass st n =
   case st of
     SomeTheme ns@(Namespace c) -> do
       addThemeFromNamespace ns
-      addClass n c
+      Data.Theme.addClass n c
   where
     addThemeFromNamespace :: forall t. Theme t => Namespace t -> IO ()
     addThemeFromNamespace _ = addTheme @t
@@ -227,7 +231,7 @@ removeSomeThemeClass :: SomeTheme -> Node -> IO ()
 removeSomeThemeClass (SomeTheme (Namespace c)) n = removeClass n c
 
 addThemeClass :: forall t. Theme t => Node -> IO ()
-addThemeClass n = addTheme @t >> addClass n (Txt.tail (subtheme @t))
+addThemeClass n = addTheme @t >> Data.Theme.addClass n (Txt.tail (subtheme @t))
 
 removeThemeClass :: forall t. Theme t => Node -> IO ()
 removeThemeClass n = removeClass n (Txt.tail (subtheme @t))

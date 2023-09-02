@@ -3,7 +3,7 @@ module Data.Log where
 
 import Control.Concurrent (newMVar,withMVar,readMVar,modifyMVar_,takeMVar)
 import Control.Monad (void,mzero)
-import Data.View (Exists,using,it)
+import Data.View (Exists,with,it)
 import Data.JSON (Value,ToJSON(..),FromJSON(..),pretty,encode,decode,logJSON)
 import Data.Marker
 import Data.Maybe (mapMaybe)
@@ -53,7 +53,7 @@ instance FromJSON Level where
 newtype Logger = Logger { onLog :: Level -> Value -> IO () }
 
 logger :: (Level -> Value -> IO ()) -> (Logging => a) -> a
-logger onLog = using (Logger onLog)
+logger onLog = with (Logger onLog)
 
 -- Modify a logger to ignore levels via predicate.
 --

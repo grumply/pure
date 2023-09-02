@@ -100,7 +100,7 @@ activate onSuccess dur host agent key un email = do
       Just (Auth { key = Just a, email = e } :: Auth c)
         | checkHash key a, checkHash email e -> do
           t <- onSuccess host agent un email
-          let token = proof t
+          let token = Pure.Auth.Data.proof t
           time <- Time.time
           write (AuthEventStream un :: Stream (AuthEvent c)) (Activated {..} :: AuthEvent c)
           write (AuthEventStream un :: Stream (AuthEvent c)) (LoggedIn {..} :: AuthEvent c)
@@ -146,9 +146,9 @@ logout onSuccess host agent t@(owner -> un) = do
     read (AuthEventStream un :: Stream (AuthEvent c)) >>= \case
 
       Just (Auth { key = Nothing, tokens } :: Auth c)
-        | proof t `elem` tokens -> do
+        | Pure.Auth.Data.proof t `elem` tokens -> do
           time <- Time.time
-          let token = proof t
+          let token = Pure.Auth.Data.proof t
           write (AuthEventStream un :: Stream (AuthEvent c)) (LoggedOut {..} :: AuthEvent c)
           revoke @c token
           onSuccess host agent un
@@ -195,7 +195,7 @@ login onSuccess dur host agent un password = do
 
       Just (Auth { key = Nothing, pass = p, tokens } :: Auth c) | checkHash password p -> do
         t <- onSuccess host agent un
-        let token = proof t
+        let token = Pure.Auth.Data.proof t
             (_,expired) = List.splitAt 9 tokens
         for_ expired (revoke @c)
         write (AuthEventStream un :: Stream (AuthEvent c)) (LoggedIn {..} :: AuthEvent c)
@@ -225,7 +225,7 @@ updatePassword onSuccess dur host agent un old email new = do
           pass <- hashPassword new
           write (AuthEventStream un :: Stream (AuthEvent c)) (ChangedPassword {..} :: AuthEvent c)
 
-          let token = proof t
+          let token = Pure.Auth.Data.proof t
           write (AuthEventStream un :: Stream (AuthEvent c)) (LoggedIn {..} :: AuthEvent c)
 
           onSuccess host agent un email
@@ -256,7 +256,7 @@ recover onSuccess dur host agent un email password key = do
           pass <- hashPassword password
           write (AuthEventStream un :: Stream (AuthEvent c)) (ChangedPassword {..} :: AuthEvent c)
 
-          let token = proof t
+          let token = Pure.Auth.Data.proof t
           write (AuthEventStream un :: Stream (AuthEvent c)) (LoggedIn {..} :: AuthEvent c)
 
           pure (Just t)

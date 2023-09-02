@@ -55,7 +55,7 @@ live = liveWith @c @e @a (jittered Second & limitDelay (Seconds 30 0))
 liveWith :: forall c e a. (API c, Typeable c, Typeable e, FromJSON e, FromJSON a, Typeable a, ToJSON a, ToJSON e, ToJSON (Stream e), Exists (Token c), Aggregable e a) => Policy -> Object c e a -> Stream e -> ((Producer e, Exists a) => View) -> View
 liveWith policy o s v = 
 #ifdef __GHCJS__
-  flip Component (dynamic @(Exists a, Producer e) v) \self -> def
+  flip Component (Data.View.proof @(Exists a, Producer e) v) \self -> def
     { onConstruct = do
         (t,i,ma) <- Client.get @c (o <> "/read") (it :: Token c) s
         ir <- newIORef i
@@ -95,7 +95,7 @@ liveWith policy o s v =
 
     , onUnmounted = getref self >>= \(tid,_,_,_) -> killThread tid
 
-    , render = \v (tid,pub,i,ma) -> maybe Null (\a -> Data.View.stream pub (with a (fromDynamic v))) ma
+    , render = \v (tid,pub,i,ma) -> maybe Null (\a -> Data.View.stream pub (with a (prove v))) ma
     }
 #else
   Data.View.Null

@@ -18,238 +18,238 @@ import Text.Read (readMaybe)
 --------------------------------------------------------------------------------
 -- Core Listener Patterns
 
-pattern On :: HasFeatures a => Txt -> (Evt -> IO ()) -> a -> a
+pattern On :: Txt -> (Evt -> IO ()) -> View -> View
 pattern On ev f a <- Listener (V.On ev ElementTarget _ (ListenerAction f) _ _) a where
   On ev f a = Listener (V.On ev ElementTarget def (ListenerAction f) (const (return ())) (return ())) a
 
-pattern OnWith :: HasFeatures a => Options -> Txt -> (Evt -> IO ()) -> a -> a
+pattern OnWith :: Options -> Txt -> (Evt -> IO ()) -> View -> View
 pattern OnWith opts ev f a <- Listener (V.On ev ElementTarget opts (ListenerAction f) _ _) a where
   OnWith opts ev f a = Listener (V.On ev ElementTarget opts (ListenerAction f) (const (return ())) (return ())) a
 
-pattern OnDoc :: HasFeatures a => Txt -> (Evt -> IO ()) -> a -> a
+pattern OnDoc :: Txt -> (Evt -> IO ()) -> View -> View
 pattern OnDoc ev f a <- Listener (V.On ev DocumentTarget _ (ListenerAction f) _ _) a where
   OnDoc ev f a = Listener (V.On ev DocumentTarget def (ListenerAction f) (const (return ())) (return ())) a
 
-pattern OnDocWith :: HasFeatures a => Options -> Txt -> (Evt -> IO ()) -> a -> a
+pattern OnDocWith :: Options -> Txt -> (Evt -> IO ()) -> View -> View
 pattern OnDocWith opts ev f a <- Listener (V.On ev DocumentTarget opts (ListenerAction f) _ _) a where
   OnDocWith opts ev f a = Listener (V.On ev DocumentTarget opts (ListenerAction f) (const (return ())) (return ())) a
 
-pattern OnWin :: HasFeatures a => Txt -> (Evt -> IO ()) -> a -> a
+pattern OnWin :: Txt -> (Evt -> IO ()) -> View -> View
 pattern OnWin ev f a <- Listener (V.On ev WindowTarget _ (ListenerAction f) _ _) a where
   OnWin ev f a = Listener (V.On ev WindowTarget def (ListenerAction f) (const (return ())) (return ())) a
 
-pattern OnWinWith :: HasFeatures a => Options -> Txt -> (Evt -> IO ()) -> a -> a
+pattern OnWinWith :: Options -> Txt -> (Evt -> IO ()) -> View -> View
 pattern OnWinWith opts ev f a <- Listener (V.On ev WindowTarget opts (ListenerAction f) _ _) a where
   OnWinWith opts ev f a = Listener (V.On ev WindowTarget opts (ListenerAction f) (const (return ())) (return ())) a
 
 ----------------------------------------
 -- Window events
 
-pattern OnResize :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnResize :: (Evt -> IO ()) -> View -> View
 pattern OnResize f a = OnWin "resize" f a
 
-pattern OnResizeWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnResizeWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnResizeWith opts f a = OnWinWith opts "resize" f a
 
-pattern OnScroll :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnScroll :: (Evt -> IO ()) -> View -> View
 pattern OnScroll f a = OnWin "scroll" f a
 
-pattern OnScrollWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnScrollWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnScrollWith opts f a = OnWinWith opts "scroll" f a
 
-pattern OnClose :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnClose :: (Evt -> IO ()) -> View -> View
 pattern OnClose f a = OnWin "close" f a
 
-pattern OnCloseWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnCloseWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnCloseWith opts f a = OnWinWith opts "close" f a
 
-pattern OnBeforeUnload :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnBeforeUnload :: (Evt -> IO ()) -> View -> View
 pattern OnBeforeUnload f a = OnWin "beforeunload" f a
 
-pattern OnBeforeUnloadWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnBeforeUnloadWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnBeforeUnloadWith opts f a = OnWinWith opts "beforeunload" f a
 
 ----------------------------------------
 -- Mouse/Touch
 
-pattern OnClick :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnClick :: (Evt -> IO ()) -> View -> View
 pattern OnClick f a = On "click" f a
 
-pattern OnClickWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnClickWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnClickWith opts f a = OnWith opts "click" f a
 
-pattern OnDoubleClick :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnDoubleClick :: (Evt -> IO ()) -> View -> View
 pattern OnDoubleClick f a = On "dblclick" f a
 
-pattern OnDoubleClickWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnDoubleClickWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnDoubleClickWith opts f a = OnWith opts "dblclick" f a
 
-pattern OnWheel :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnWheel :: (Evt -> IO ()) -> View -> View
 pattern OnWheel f a = On "wheel" f a
 
-pattern OnWheelWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnWheelWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnWheelWith opts f a = OnWith opts "wheel" f a
 
-pattern OnMouseDown :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnMouseDown :: (Evt -> IO ()) -> View -> View
 pattern OnMouseDown f a = On "mousedown" f a
 
-pattern OnMouseDownWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnMouseDownWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnMouseDownWith opts f a = OnWith opts "mousedown" f a
 
-pattern OnMouseUp :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnMouseUp :: (Evt -> IO ()) -> View -> View
 pattern OnMouseUp f a = On "mouseup" f a
 
-pattern OnMouseUpWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnMouseUpWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnMouseUpWith opts f a = OnWith opts "mouseup" f a
 
-pattern OnTouchStart :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnTouchStart :: (Evt -> IO ()) -> View -> View
 pattern OnTouchStart f a = On "touchstart" f a
 
-pattern OnTouchStartWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnTouchStartWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnTouchStartWith opts f a = OnWith opts "touchstart" f a
 
-pattern OnTouchEnd :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnTouchEnd :: (Evt -> IO ()) -> View -> View
 pattern OnTouchEnd f a = On "touchend" f a
 
-pattern OnTouchEndWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnTouchEndWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnTouchEndWith opts f a = OnWith opts "touchend" f a
 
-pattern OnMouseEnter :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnMouseEnter :: (Evt -> IO ()) -> View -> View
 pattern OnMouseEnter f a = On "mouseenter" f a
 
-pattern OnMouseEnterWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnMouseEnterWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnMouseEnterWith opts f a = OnWith opts "mouseenter" f a
 
-pattern OnMouseLeave :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnMouseLeave :: (Evt -> IO ()) -> View -> View
 pattern OnMouseLeave f a = On "mouseleave" f a
 
-pattern OnMouseLeaveWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnMouseLeaveWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnMouseLeaveWith opts f a = OnWith opts "mouseleave" f a
 
-pattern OnMouseOver :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnMouseOver :: (Evt -> IO ()) -> View -> View
 pattern OnMouseOver f a = On "mouseover" f a
 
-pattern OnMouseOverWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnMouseOverWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnMouseOverWith opts f a = OnWith opts "mouseover" f a
 
-pattern OnMouseOut :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnMouseOut :: (Evt -> IO ()) -> View -> View
 pattern OnMouseOut f a = On "mouseout" f a
 
-pattern OnMouseOutWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnMouseOutWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnMouseOutWith opts f a = OnWith opts "mouseout" f a
 
-pattern OnMouseMove :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnMouseMove :: (Evt -> IO ()) -> View -> View
 pattern OnMouseMove f a = On "mousemove" f a
 
-pattern OnMouseMoveWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnMouseMoveWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnMouseMoveWith opts f a = OnWith opts "mousemove" f a
 
-pattern OnTouchMove :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnTouchMove :: (Evt -> IO ()) -> View -> View
 pattern OnTouchMove f a = On "touchmove" f a 
 
-pattern OnTouchMoveWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnTouchMoveWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnTouchMoveWith opts f a = OnWith opts "touchmove" f a 
 
-pattern OnTouchCancel :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnTouchCancel :: (Evt -> IO ()) -> View -> View
 pattern OnTouchCancel f a = On "touchcancel" f a
 
-pattern OnTouchCancelWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnTouchCancelWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnTouchCancelWith opts f a = OnWith opts "touchcancel" f a
 
 --------------------------------------------------------------------------------
 -- Gestures
 
-pattern OnGestureStart :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnGestureStart :: (Evt -> IO ()) -> View -> View
 pattern OnGestureStart f a = On "gesturestart" f a
 
-pattern OnGestureStartWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnGestureStartWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnGestureStartWith opts f a = OnWith opts "gesturestart" f a
 
-pattern OnGestureChange :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnGestureChange :: (Evt -> IO ()) -> View -> View
 pattern OnGestureChange f a = On "gesturechange" f a
 
-pattern OnGestureChangeWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnGestureChangeWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnGestureChangeWith opts f a = OnWith opts "gesturechange" f a
 
-pattern OnGestureEnd :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnGestureEnd :: (Evt -> IO ()) -> View -> View
 pattern OnGestureEnd f a = On "gestureend" f a
 
-pattern OnGestureEndWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnGestureEndWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnGestureEndWith opts f a = OnWith opts "gestureend" f a
 
 --------------------------------------------------------------------------------
 -- Focus/Blur
 
-pattern OnBlur :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnBlur :: (Evt -> IO ()) -> View -> View
 pattern OnBlur f a = On "blur" f a
 
-pattern OnBlurWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnBlurWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnBlurWith opts f a = OnWith opts "blur" f a
 
-pattern OnFocus :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnFocus :: (Evt -> IO ()) -> View -> View
 pattern OnFocus f a = On "focus" f a
 
-pattern OnFocusWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnFocusWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnFocusWith opts f a = OnWith opts "focus" f a
 
-pattern OnFocusIn :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnFocusIn :: (Evt -> IO ()) -> View -> View
 pattern OnFocusIn f a = On "focusin" f a
 
-pattern OnFocusInWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnFocusInWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnFocusInWith opts f a = OnWith opts "focusin" f a
 
-pattern OnFocusOut :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnFocusOut :: (Evt -> IO ()) -> View -> View
 pattern OnFocusOut f a = On "focusout" f a
 
-pattern OnFocusOutWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnFocusOutWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnFocusOutWith opts f a = OnWith opts "focusout" f a
 
 --------------------------------------------------------------------------------
 -- Inputs
 
-pattern OnInput :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnInput :: (Evt -> IO ()) -> View -> View
 pattern OnInput f a = On "input" f a
 
-pattern OnInputWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnInputWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnInputWith opts f a = OnWith opts "input" f a
 
-pattern OnChange :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnChange :: (Evt -> IO ()) -> View -> View
 pattern OnChange f a = On "change" f a
 
-pattern OnChangeWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnChangeWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnChangeWith opts f a = OnWith opts "change" f a
 
-pattern OnCheck :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnCheck :: (Evt -> IO ()) -> View -> View
 pattern OnCheck f a = On "change" f a
 
-pattern OnCheckWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnCheckWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnCheckWith opts f a = OnWith opts "change" f a
 
-pattern OnSubmit :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnSubmit :: (Evt -> IO ()) -> View -> View
 pattern OnSubmit f a = On "submit" f a
 
-pattern OnSubmitWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnSubmitWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnSubmitWith opts f a = OnWith opts "submit" f a
 
 --------------------------------------------------------------------------------
 -- Keys
 
-pattern OnKeyUp :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnKeyUp :: (Evt -> IO ()) -> View -> View
 pattern OnKeyUp f a = On "keyup" f a
 
-pattern OnKeyUpWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnKeyUpWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnKeyUpWith opts f a = OnWith opts "keyup" f a
 
-pattern OnKeyDown :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnKeyDown :: (Evt -> IO ()) -> View -> View
 pattern OnKeyDown f a = On "keydown" f a
 
-pattern OnKeyDownWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnKeyDownWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnKeyDownWith opts f a = OnWith opts "keydown" f a
 
-pattern OnKeyPress :: HasFeatures a => (Evt -> IO ()) -> a -> a
+pattern OnKeyPress :: (Evt -> IO ()) -> View -> View
 pattern OnKeyPress f a = On "keypress" f a
 
-pattern OnKeyPressWith :: HasFeatures a => Options -> (Evt -> IO ()) -> a -> a
+pattern OnKeyPressWith :: Options -> (Evt -> IO ()) -> View -> View
 pattern OnKeyPressWith opts f a = OnWith opts "keypress" f a
 
 --------------------------------------------------------------------------------

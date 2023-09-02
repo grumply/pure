@@ -109,7 +109,7 @@ sanitize opts@Options { allowSVG, allowCustomViews, processTag } = go
       WeakView f a | allowCustomViews -> WeakView f a
       TaggedView __w v | allowCustomViews -> TaggedView __w v
       PortalView pp pd pv | allowCustomViews -> PortalView pp pd pv
-      ComponentView __w r c p | allowCustomViews -> ComponentView __w r c p
+      ComponentView t r c p | allowCustomViews -> ComponentView t r c p
       
       -- RawView and any unsafe tags are discarded
       _ -> Null

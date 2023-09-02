@@ -1,9 +1,10 @@
 {-# LANGUAGE CPP, MultiParamTypeClasses, ScopedTypeVariables, OverloadedStrings, RankNTypes, FlexibleContexts, TypeApplications, ConstraintKinds, AllowAmbiguousTypes, TypeOperators #-}
 module Effect.Router
-  ( Router, Route
-  , router, onRoute, subrouter, lref, current, url
-  , Routes, routed, routes_, Effect.Router.route, page
-  , routed', router', subrouter'
+  ( Router, Route, Routes
+  , routes_, Effect.Router.route, page
+  , onRoute, lref, current, url
+  , routed, subrouted, subrouter, router
+  , routed', subrouted', subrouter', router'
   , module Export
   ) where
 
@@ -102,22 +103,28 @@ subrouter' rtng v = do
       Nothing -> Null
       Just (sub,rt) -> with (Route @rt sub rt) v
 
-type Routes ctx = forall a. Routing (ctx :=> View) a
+type Routes ctx = forall a. Routing (ctx |- View) a
 
-routed :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx :=> View) => View) -> (ctx => View)
-routed rs v = router rs (let (d :: ctx :=> View) = current in with d v)
+routed :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx |- View) => View) -> (ctx => View)
+routed rs v = router rs (let (d :: ctx |- View) = current in with d v)
 
-routed' :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx :=> View) => View) -> (ctx => View)
-routed' rs v = router' rs (let (d :: ctx :=> View) = current in with d v)
+subrouted :: forall rt ctx. (Router rt, Typeable ctx) => Routes ctx -> (Exists (ctx |- View) => View) -> (ctx => View)
+subrouted rs v = subrouter @rt rs (let (d :: ctx |- View) = current in with d v)
 
-page :: forall ctx. Exists (ctx :=> View) => (ctx => View)
-page = weak (it :: ctx :=> View) (fromDynamic (it :: ctx :=> View))
+routed' :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx |- View) => View) -> (ctx => View)
+routed' rs v = router' rs (let (d :: ctx |- View) = current in with d v)
+
+subrouted' :: forall rt ctx. (Router rt, Typeable ctx) => Routes ctx -> (Exists (ctx |- View) => View) -> (ctx => View)
+subrouted' rs v = subrouter' @rt rs (let (d :: ctx |- View) = current in with d v)
+
+page :: forall ctx. Exists (ctx |- View) => (ctx => View)
+page = weak (it :: ctx |- View) (prove (it :: ctx |- View))
 
 routes_ :: Routes () -> View
 routes_ rs = routed @() rs (page @())
 
-route :: forall ctx. (ctx => View) -> (forall a. Routing (ctx :=> View) a)
-route v = dispatch (dynamic @ctx v)
+route :: forall ctx. (ctx |- View) -> (forall a. Routing (ctx |- View) a)
+route = dispatch 
 
-lref :: HasFeatures a => Txt -> a -> a
+lref :: Txt -> View -> View
 lref t a = OnClickWith intercept (\_ -> goto t) (Href t a)

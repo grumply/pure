@@ -91,18 +91,19 @@ instance FromJSON Features where
       return Features_ {..}
 
 renderer :: (View,MVar View) -> View
-renderer = Component $ \self -> def
-  { onConstruct = do
-      (v,_) <- askref self
-      return v
-  , onMounted = do
-      v <- lookref self
-      (_,mv) <- askref self
-      putMVar mv v
-      modifyref_ self $ \_ _ -> NullView Nothing
-  , render = \_ -> id
-  }
-
+renderer = Component go
+  where
+    go self = def
+      { onConstruct = do
+          (v,_) <- askref self
+          return v
+      , onMounted = do
+          v <- lookref self
+          (_,mv) <- askref self
+          putMVar mv v
+          modifyref_ self $ \_ _ -> NullView Nothing
+      , render = const id
+      }
 
 -- ToJSON for View currently doesn't handle Portals.
 -- To do so, we would need the option to encode the

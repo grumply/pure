@@ -73,19 +73,19 @@ class Typeable r => Resource r where
                 trs = typeRepArgs tr
             in Txt.intercalate "_" (tc : fmap go trs)
 
-  create :: Endpoint (Auth r -> r -> IO ())
+  create :: Endpoint (Auth r -> r -> IO (Maybe (Name r)))
   create = base @r <> "/create"
 
   raw :: Endpoint (Auth r -> Name r -> IO (Maybe r))
   raw = base @r <> "/raw"
 
-  read :: Endpoint (Name r -> IO (Maybe (Product r)))
+  read :: Endpoint (Maybe (Auth r) -> Name r -> IO (Maybe (Product r)))
   read = base @r <> "/read"
 
   update :: Endpoint (Auth r -> Name r -> Event r -> IO ())
   update = base @r <> "/update"
 
-  index :: Endpoint (IO (Index r))
+  index :: Endpoint (Maybe (Auth r) -> IO (Index r))
   index = base @r <> "/index"
 
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, OverloadedStrings, RankNTypes, ScopedTypeVariables, PatternSynonyms, ViewPatterns, MagicHash, RecordWildCards, BangPatterns, LambdaCase, FlexibleContexts #-}
+{-# LANGUAGE CPP, OverloadedStrings, RankNTypes, ScopedTypeVariables, PatternSynonyms, ViewPatterns, MagicHash, RecordWildCards, BangPatterns, LambdaCase, FlexibleContexts, TypeFamilies #-}
 module Data.View.Build (inject,prebuild,cleanup,race',suspense,suspenses,anticipation) where
 
 import Control.Concurrent (MVar,newEmptyMVar,putMVar,takeMVar,readMVar,yield,forkIO,killThread)
@@ -14,7 +14,7 @@ import Data.List as List (null,reverse,filter,length)
 import Data.Maybe (fromJust,isJust)
 import Data.STRef (STRef,newSTRef,readSTRef,modifySTRef',writeSTRef)
 import Data.Traversable (for,traverse)
-import Data.Typeable (Typeable,typeOf)
+import Data.Typeable (Typeable,(:~:)(..),eqT,typeRep)
 import GHC.Exts (reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#,Any,inline)
 import System.IO.Unsafe (unsafePerformIO)
 import Unsafe.Coerce (unsafeCoerce)
@@ -24,7 +24,7 @@ import Data.Set (Set)
 import qualified Data.Map.Strict as Map (fromList,toList,insert,difference,keys,differenceWith,null,elems,mergeWithKey,mapWithKey)
 import qualified Data.Set as Set (fromList,toList,insert,delete,null)
 
-import Data.View (pattern Null,Exists,it,lazy,stateWith',Modify,put,View(..),Features(..),Listener(..),Lifecycle(..),Comp(..),Target(..),getHost,setProps,queueComponentUpdate,Ref(..),ComponentPatch(..),sameTypeWitness,asProxyOf,ListenerAction(..),toView)
+import Data.View (pattern Null,Exists,it,lazy,stateWith',Modify,put,View(..),Features(..),Listener(..),Lifecycle(..),Comp(..),Target(..),getHost,setProps,queueComponentUpdate,Ref(..),ComponentPatch(..),asProxyOf,ListenerAction(..))
 import Data.Time (Time,timeout)
 
 import Data.Animation
@@ -114,7 +114,6 @@ type Removals s = STRef s [View]
 newPlan :: ST s (Plan s)
 newPlan = newSTRef []
 
-{-# INLINE buildPlan #-}
 buildPlan :: (forall s. Plan s -> Plan s -> ST s a) -> ([IO ()],[IO ()],a)
 buildPlan f = runST $ do
   p  <- newPlan
@@ -124,31 +123,25 @@ buildPlan f = runST $ do
   p' <- readSTRef p'
   return (p,p',a)
 
-{-# INLINE amendPlan #-}
 amendPlan :: Plan s -> IO () -> ST s ()
 amendPlan plan f = f `seq` modifySTRef' plan (f:)
 
-{-# INLINE runPlan #-}
 runPlan :: [IO ()] -> IO ()
 runPlan plan = let !p = sequence_ (List.reverse plan) in p
 
-{-# INLINE sync #-}
 sync :: (MVar () -> IO a) -> IO ()
 sync f = do
   barrier <- newEmptyMVar
   f barrier
   takeMVar barrier
 
-{-# INLINE (===) #-}
 (===) :: a -> b -> Bool
 x === y = isTrue# (unsafeCoerce# reallyUnsafePtrEquality# x y)
 
-{-# INLINE (/==) #-}
 (/==) :: a -> b -> Bool
 x /== y = Prelude.not (x === y)
 
 -- | Given a host node and a View, build and embed the View.
-{-# INLINE inject #-}
 inject :: IsNode e => e -> View -> IO ()
 inject host v = do
   mtd <- newIORef []
@@ -156,7 +149,6 @@ inject host v = do
   runPlan =<< readIORef mtd
 
 -- | Pre-build a view for later use.
-{-# INLINE prebuild #-}
 prebuild :: View -> IO View
 prebuild v = do
   mtd <- newIORef []
@@ -164,7 +156,6 @@ prebuild v = do
   runPlan =<< readIORef mtd
   pure (Prebuilt v')
 
-{-# INLINE race' #-}
 race' :: [View] -> (Exists View => View) -> View
 race' vs v = lazy run v 
   where
@@ -175,7 +166,6 @@ race' vs v = lazy run v
       for_ tids killThread
       pure v
 
-{-# INLINE suspense #-}
 -- | Deep suspense. Crosses component boundaries via use of `prebuild`.
 -- Works across, for example, nested `request`s.
 --
@@ -208,7 +198,6 @@ race' vs v = lazy run v
 suspense :: Time -> View -> View -> View
 suspense t sus = suspenses True [(t,sus)]
 
-{-# INLINE anticipation #-}
 -- | Shallow suspense. Does not cross component boundaries. 
 -- Useful for fine-grained suspense of lazily-produced existentials, like
 -- those of `lazy` and `parv`.
@@ -231,7 +220,6 @@ suspense t sus = suspenses True [(t,sus)]
 anticipation :: Time -> View -> View -> View
 anticipation t sus = suspenses False [(t,sus)]
 
-{-# INLINE suspenses #-}
 -- | suspenses allows for a sequence of replacing transclusions at timed
 -- intervals while a target `View` is being built. This approach is likely to
 -- cause bugs, especially in the presence of rich/dynamic views. If `deep`, the
@@ -278,25 +266,12 @@ suspenses deep tvs v = stateWith' (\_ -> pure) initialize it
 
       pure (Null,const (killThread t1 >> killThread t2))
 
-{-# NOINLINE build #-}
 build :: IORef [IO ()] -> Maybe Node -> View -> IO View
-build = build'
-
-{-# INLINE build' #-}
-build' :: IORef [IO ()] -> Maybe Node -> View -> IO View
-build' mtd = start
+build mtd = start
   where
-    {-# NOINLINE start #-}
-    start = start'
-
-    {-# INLINE start' #-}
-    start' mparent = go
+    start mparent = go
       where
-        {-# NOINLINE go #-}
-        go = go'
-
-        {-# INLINE go' #-}
-        go' o@(Prebuilt v) =
+        go o@(Prebuilt v) =
           case mparent of
             Nothing -> pure (Prebuilt v)
             Just p  -> do
@@ -305,8 +280,8 @@ build' mtd = start
                   append p h
                   pure o
                 Nothing ->
-                  error "Data.View.Build.build': Invalid Prebuilt View. No host node found."
-        go' o@HTMLView {..} = do
+                  error "Data.View.Build.build: Invalid Prebuilt View. No host node found."
+        go o@HTMLView {..} = do
           e <- create tag
           let n = Just (toNode e)
           fs <- setFeatures mtd e features
@@ -317,7 +292,7 @@ build' mtd = start
             , features = fs
             , children = cs
             }
-        go' o@(ComponentView witness _ comp props) = do
+        go o@(ComponentView rep _ comp props) = do
           stq_   <- newIORef . Just =<< newQueue
           props_ <- newIORef undefined
           state_ <- newIORef undefined
@@ -339,19 +314,19 @@ build' mtd = start
           modifyIORef' mtd (\xs -> putMVar mv ():onMounted c:xs)
           forkIO $ newComponentThread mv cr c live new ps state2
           -- GHC doesn't allow for record update of a ComponentView here
-          return (ComponentView witness (Just cr) comp props)
-        go' (ReactiveView _ f) = go f
-        go' (WeakView _ f) = go f
-        go' TaggedView{..} = go taggedView
-        go' o@TextView {..} = do
+          return (ComponentView rep (Just cr) comp props)
+        go (ReactiveView _ f) = go f
+        go (WeakView _ f) = go f
+        go TaggedView{..} = go taggedView
+        go o@TextView {..} = do
           tn <- createText content
           for_ mparent (`append` tn)
           pure o { textHost = Just tn }
-        go' o@NullView{} = do
+        go o@NullView{} = do
           e <- create "template"
           for_ mparent (`append` e)
           pure o { elementHost = Just e }
-        go' o@RawView {..} = do
+        go o@RawView {..} = do
           e <- create tag
           setInnerHTML e content
           fs <- setFeatures mtd e features
@@ -360,7 +335,7 @@ build' mtd = start
             { elementHost = Just e
             , features = fs
             }
-        go' o@KHTMLView {..} = do
+        go o@KHTMLView {..} = do
           e <- create tag
           let n = Just (toNode e)
           fs <- setFeatures mtd e features
@@ -371,7 +346,7 @@ build' mtd = start
             , features = fs
             , keyedChildren = cs
             }
-        go' o@SVGView {..} = do
+        go o@SVGView {..} = do
           e <- createNS "http://www.w3.org/2000/svg" tag
           let n = Just (toNode e)
           setXLinks e xlinks
@@ -383,7 +358,7 @@ build' mtd = start
             , features = fs
             , children = cs
             }
-        go' o@KSVGView {..} = do
+        go o@KSVGView {..} = do
           e <- createNS "http://www.w3.org/2000/svg" tag
           let n = Just (toNode e)
           setXLinks e xlinks
@@ -395,7 +370,7 @@ build' mtd = start
             , features = fs
             , keyedChildren = cs
             }
-        go' o@PortalView{..} = do
+        go o@PortalView{..} = do
           e <- create "template"
           v <- start (Just $ toNode portalDestination) portalView
           for_ mparent (`append` e)
@@ -500,28 +475,20 @@ awaitComponentPatches pq = do
   mpq <- readIORef pq
   for mpq collect `catch` \(_ :: SomeException) -> return Nothing
 
-{-# NOINLINE newComponentThread #-}
 newComponentThread :: forall props state. MVar () -> Ref props state -> Comp props state -> View -> View -> props -> state -> IO ()
 newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state ->
   onExecuting state >>= \st -> takeMVar barrier >> loop (deferred || state /== st) live view props st
   where
-    {-# NOINLINE loop #-}
     loop :: Bool -> View -> View -> props -> state -> IO ()
     loop = loop'
 
-    {-# INLINE loop' #-}
     loop' :: Bool -> View -> View -> props -> state -> IO ()
     loop' !first !old !mid props state = do
       mps <- if first then pure (Just []) else awaitComponentPatches crPatchQueue
       forM_ mps (go props state [])
       where
-        {-# NOINLINE go #-}
         go :: props -> state -> [(IO (),IO (),IO ())] -> [ComponentPatch props state] -> IO ()
-        go = go'
-
-        {-# INLINE go' #-}
-        go' :: props -> state -> [(IO (),IO (),IO ())] -> [ComponentPatch props state] -> IO ()
-        go' newProps newState = go1
+        go newProps newState = go1
           where
             go1 :: [(IO (),IO (),IO ())] -> [ComponentPatch props state] -> IO ()
             go1 acc [] = do
@@ -659,11 +626,9 @@ cleanupLifecycle (Mounted _ clean) = clean
 cleanupListener :: Listener -> IO ()
 cleanupListener (On _ _ _ _ _ stp) = stp
 
-{-# NOINLINE cleanup' #-}
 cleanup' :: View -> IO ()
 cleanup' = cleanup
 
-{-# INLINE cleanup #-}
 cleanup :: View -> IO ()
 cleanup RawView {..} = do
   for_ (listeners features) cleanupListener
@@ -693,16 +658,13 @@ cleanup Prebuilt {..} = do
   cleanup' prebuilt
 cleanup _ = return ()
 
-{-# NOINLINE diffDeferred #-}
 diffDeferred :: forall s. IORef [IO ()] -> Plan s -> Plan s -> View -> View -> View -> ST s View
 diffDeferred = diffDeferred'
 
-{-# INLINE diffDeferred' #-}
 diffDeferred' :: forall s. IORef [IO ()] -> Plan s -> Plan s -> View -> View -> View -> ST s View
 diffDeferred' mounted plan plan' old !mid !new =
   if mid === new then return old else
       let
-          {-# NOINLINE replace #-}
           replace = do
             !new' <- unsafeIOToST (build mounted Nothing new)
             replaceDeferred plan plan' old new'
@@ -725,16 +687,16 @@ diffDeferred' mounted plan plan' old !mid !new =
             | a === a' -> diffDeferred mounted plan plan' old f f'
 
           (TaggedView t v,TaggedView t' v')
-            | sameTypeWitness t t' ->
+            | t === t' || t == t' ->
               diffDeferred mounted plan plan' old v v'
 
-          (ComponentView t _ v p,ComponentView t' _ v' p')
-            | sameTypeWitness t t' 
+          (ComponentView rep r v p,ComponentView rep' r' v' p')
+            | rep === rep' || rep == rep'
             , ComponentView _ (Just r0) _ _ <- old ->
               if p === p' then return old else do
                 let r = unsafeCoerce# r0
                 unsafeIOToST $ setProps r (p' r)
-                return (ComponentView t' (Just r) v' p')
+                return (ComponentView rep' (Just r) v' p')
 
           (ComponentView {},_)
             | ComponentView _ (Just r0) _ _ <- old -> do
@@ -820,13 +782,11 @@ diffSVGElementDeferred mounted plan plan' old@(elementHost -> ~(Just e)) mid new
     , children = cs
     }
 
-{-# INLINE diffFeaturesDeferred #-}
 diffFeaturesDeferred :: Element -> Plan s -> DiffST s Features
 diffFeaturesDeferred e plan old !mid !new = do
   if mid === new then return old else
     diffFeaturesDeferred' e plan old mid new
 
-{-# NOINLINE diffFeaturesDeferred' #-}
 diffFeaturesDeferred' :: Element -> Plan s -> DiffST s Features
 diffFeaturesDeferred' e plan old mid new = do
   diffClassesDeferred    e plan (classes mid) (classes new)
@@ -836,7 +796,6 @@ diffFeaturesDeferred' e plan old mid new = do
   !ls <- diffListenersDeferred e plan (listeners old) (listeners mid) (listeners new)
   return old { listeners = ls }
 
-{-# INLINE diffXLinksDeferred #-}
 diffXLinksDeferred :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
 diffXLinksDeferred e p !mid !new =
   if mid === new then return () else
@@ -857,7 +816,6 @@ diffXLinkMaps = Map.mergeWithKey diff remove add
       remove = Map.mapWithKey (\k _ e -> removeAttributeNS e "http://www.w3.org/1999/xlink" k)
       add = Map.mapWithKey (\k v e -> setAttributeNS e "http://www.w3.org/1999/xlink" k v)
 
-{-# INLINE diffClassesDeferred #-}
 diffClassesDeferred :: Element -> Plan s -> Set Txt -> Set Txt -> ST s ()
 diffClassesDeferred e p !mid !new =
   if mid === new then return () else
@@ -871,7 +829,6 @@ diffClassesDeferred' e p mid new
     let cs = Txt.intercalate " " $ Set.toList $ Set.delete "" new
     in amendPlan p (setAttribute e "class" cs)
 
-{-# INLINE diffStylesDeferred #-}
 diffStylesDeferred :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
 diffStylesDeferred e p mid new =
   if mid === new then return () else
@@ -892,7 +849,6 @@ diffStyleMaps = Map.mergeWithKey diff remove add
       remove = Map.mapWithKey (\k _ e -> removeStyle e k)
       add = Map.mapWithKey (\k v e -> setStyle e k v)
 
-{-# INLINE diffAttributesDeferred #-}
 diffAttributesDeferred :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
 diffAttributesDeferred e p mid new =
   if mid === new then return () else
@@ -913,7 +869,6 @@ diffAttributeMaps = Map.mergeWithKey diff remove add
       remove = Map.mapWithKey (\k _ e -> removeAttribute e k)
       add = Map.mapWithKey (\k v e -> setAttribute e k v)
 
-{-# INLINE diffPropertiesDeferred #-}
 diffPropertiesDeferred :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
 diffPropertiesDeferred e p mid new =
   if mid === new then return () else
@@ -975,7 +930,6 @@ addListenerDeferred e plan l@(On n t o a _ _) = do
 removeListenerDeferred :: Plan s -> Listener -> ST s ()
 removeListenerDeferred p (On _ _ _ _ _ stp) = amendPlan p stp
 
-{-# INLINE diffListenersDeferred #-}
 diffListenersDeferred :: Element -> Plan s -> [Listener] -> [Listener] -> [Listener] -> ST s [Listener]
 diffListenersDeferred e p old !mid !new =
   if mid === new then return old else
@@ -998,11 +952,7 @@ diffListenersDeferred' e p olds mids news =
     -- 1+ 1+
     _ -> go olds mids news
   where
-    {-# NOINLINE go #-}
-    go = go'
-
-    {-# INLINE go' #-}
-    go' os !ms !ns =
+    go os !ms !ns =
       if ms === ns then return os else
         diff os ms ns
       where
@@ -1051,13 +1001,11 @@ diffListenerDeferred' e p old mid new
 --       | otherwise              = Just $ setStyle e nm val2
 --     remove = Map.mapWithKey (\nm  _  -> removeStyle e nm)
 --     add    = Map.mapWithKey (\nm val -> setStyle e nm val)
-{-# INLINE diffChildrenDeferred #-}
 diffChildrenDeferred :: forall s. Element -> IORef [IO ()] -> Plan s -> Plan s -> DiffST s [View]
 diffChildrenDeferred e mounted plan plan' olds !mids !news =
   if mids === news then return olds else
     diffChildrenDeferred' e mounted plan plan' olds mids news
 
-{-# NOINLINE diffChildrenDeferred' #-}
 diffChildrenDeferred' :: forall s. Element -> IORef [IO ()] -> Plan s -> Plan s -> DiffST s [View]
 diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
   case (mids,news) of
@@ -1080,11 +1028,7 @@ diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
     -- 1+ 1+
     _ -> go olds mids news
   where
-    {-# NOINLINE go #-}
-    go = go'
-
-    {-# INLINE go' #-}
-    go' os !ms !ns =
+    go os !ms !ns =
       if ms === ns then return os else
         diff os ms ns
       where
@@ -1159,13 +1103,11 @@ diffKeyedElementDeferred mounted plan plan' old@(elementHost -> ~(Just e)) mid n
 --       Remaining cases are:
 --          swap where three actions are added to the plan rather than one
 --          2+ 2+/insert nk0 where insert is immediately followed by diff
-{-# INLINE diffKeyedChildrenDeferred #-}
 diffKeyedChildrenDeferred :: forall s. Element -> IORef [IO ()] -> Plan s -> Plan s -> [(Int,View)] -> [(Int,View)] -> [(Int,View)] -> ST s [(Int,View)]
 diffKeyedChildrenDeferred e mounted plan plan' olds !mids !news = do
   if mids === news then return olds else
     diffKeyedChildrenDeferred' e mounted plan plan' olds mids news
 
-{-# NOINLINE diffKeyedChildrenDeferred' #-}
 diffKeyedChildrenDeferred' :: forall s. Element -> IORef [IO ()] -> Plan s -> Plan s -> [(Int,View)] -> [(Int,View)] -> [(Int,View)] -> ST s [(Int,View)]
 diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
   case (mids,news) of
@@ -1200,20 +1142,15 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
       return news'
 
   where
-        {-# NOINLINE go #-}
         go :: Removals s -> Int -> DiffST s [(Int,View)]
-        go = go'
-
-        {-# INLINE go' #-}
-        go' :: Removals s -> Int -> DiffST s [(Int,View)]
-        go' _ !_ olds !mids !news
+        go _ !_ olds !mids !news
           | mids === news = pure olds
 
         -- Invariant: we can always infer the shape of `mids` from the shape of `olds`;
         --            mids should always be an irrefutable pattern
 
         -- 2+ 2+
-        go' dc i (o0@(ok0,old0):os1@(o1@(ok1,old1):os2)) ~(m0@(mk0,mid0):ms1@(m1@(mk1,mid1):ms2)) ns@(n0@(nk0,new0):ns1@(n1@(nk1,new1):ns2))
+        go dc i (o0@(ok0,old0):os1@(o1@(ok1,old1):os2)) ~(m0@(mk0,mid0):ms1@(m1@(mk1,mid1):ms2)) ns@(n0@(nk0,new0):ns1@(n1@(nk1,new1):ns2))
           | mk0 == nk0 = do
               -- diff mk0 and nk0
               n  <- dKCD_helper o0 m0 n0
@@ -1242,7 +1179,7 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
               go dc (i + 1) os1 ms1 ns
 
         -- 1 2+
-        go' dc i (os@[o@(ok,old)]) ~(ms@[m@(mk,mid)]) new@(n0@(nk0,new0):ns@((nk1,new1):_))
+        go dc i (os@[o@(ok,old)]) ~(ms@[m@(mk,mid)]) new@(n0@(nk0,new0):ns@((nk1,new1):_))
           | mk == nk0 = do
               -- diff mk and nk0
               n'  <- dKCD_helper o m n0
@@ -1259,7 +1196,7 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
               go dc (i + 1) [] [] new
 
         -- 1+ 1
-        go' dc i (o@(ok,old):os) ~(m@(mk,mid):ms) (ns@[n@(nk,new)])
+        go dc i (o@(ok,old):os) ~(m@(mk,mid):ms) (ns@[n@(nk,new)])
           | mk == nk = do
               -- diff mk and nk
               n' <- dKCD_helper o m n
@@ -1271,12 +1208,12 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
               go dc (i + 1) os ms ns
 
         -- 0+ 0
-        go' dc _ olds mids [] = do
+        go dc _ olds mids [] = do
           for_ olds (modifySTRef' dc . (:) . snd)
           return []
 
         -- 0 0+
-        go' dc _ [] _ news = do
+        go dc _ [] _ news = do
           !frag <- unsafeIOToST createFrag
           let n = Just (toNode frag)
           !news' <- unsafeIOToST (traverse (traverse (build mounted n)) news)

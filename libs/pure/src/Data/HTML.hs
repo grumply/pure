@@ -2,7 +2,7 @@
 module Data.HTML where
 
 import Data.Txt
-import Data.View (View,pattern SimpleHTML,HasFeatures(..),pattern Attribute,pattern Property)
+import Data.View (View,pattern SimpleHTML,pattern Attribute,pattern Property)
 
 pattern Abbr :: View
 pattern Abbr = SimpleHTML "abbr"
@@ -356,476 +356,472 @@ pattern Wbr = SimpleHTML "wbr"
 -- HTML Attributes
 
 -- Safari does not like this as a property
-pattern AutoCapitalize :: HasFeatures a => Txt -> a -> a
+pattern AutoCapitalize :: Txt -> View -> View
 pattern AutoCapitalize v a = Attribute "autocapitalize" v a
 
-pattern AutoComplete :: HasFeatures a => Txt -> a -> a
+pattern AutoComplete :: Txt -> View -> View
 pattern AutoComplete v a = Attribute "autocomplete" v a
 
 -- Safari does not like this as a property
-pattern AutoCorrect :: HasFeatures a => Txt -> a -> a
+pattern AutoCorrect :: Txt -> View -> View
 pattern AutoCorrect v a = Attribute "autocorrect" v a
 
 -- Safari does not like this as a property
-pattern AutoFocus :: HasFeatures a => Txt -> a -> a
+pattern AutoFocus :: Txt -> View -> View
 pattern AutoFocus v a = Attribute "autofocus" v a
 
-pattern Algin :: HasFeatures a => Txt -> a -> a
+pattern Algin :: Txt -> View -> View
 pattern Algin v a = Attribute "algin" v a
 
-pattern Bgcolor_ :: HasFeatures a => Txt -> a -> a
+pattern Bgcolor_ :: Txt -> View -> View
 pattern Bgcolor_ v a = Attribute "bgcolor" v a
 
-pattern Border_ :: HasFeatures a => Txt -> a -> a
+pattern Border_ :: Txt -> View -> View
 pattern Border_ v a = Attribute "border" v a
 
-pattern Buffered :: HasFeatures a => Txt -> a -> a
+pattern Buffered :: Txt -> View -> View
 pattern Buffered v a = Attribute "buffered" v a
 
-pattern Class_ :: HasFeatures a => Txt -> a -> a
+pattern Class_ :: Txt -> View -> View
 pattern Class_ v a = Attribute "class" v a
 
-pattern Code_ :: HasFeatures a => Txt -> a -> a
+pattern Code_ :: Txt -> View -> View
 pattern Code_ v a = Attribute "code" v a
 
-pattern Codebase :: HasFeatures a => Txt -> a -> a
+pattern Codebase :: Txt -> View -> View
 pattern Codebase v a = Attribute "codebase" v a
 
-pattern Color_ :: HasFeatures a => Txt -> a -> a
+pattern Color_ :: Txt -> View -> View
 pattern Color_ v a = Attribute "color" v a
 
-pattern Dirname :: HasFeatures a => Txt -> a -> a
+pattern Dirname :: Txt -> View -> View
 pattern Dirname v a = Attribute "dirname" v a
 
-pattern Dropzone :: HasFeatures a => Txt -> a -> a
+pattern Dropzone :: Txt -> View -> View
 pattern Dropzone v a = Attribute "dropzone" v a
 
-pattern For :: HasFeatures a => Txt -> a -> a
+pattern For :: Txt -> View -> View
 pattern For v a = Attribute "for" v a
 
-pattern Formaction :: HasFeatures a => Txt -> a -> a
+pattern Formaction :: Txt -> View -> View
 pattern Formaction v a = Attribute "formaction" v a
 
-pattern Ismap :: HasFeatures a => Txt -> a -> a
+pattern Ismap :: Txt -> View -> View
 pattern Ismap v a = Attribute "ismap" v a
 
-pattern Ping :: HasFeatures a => Txt -> a -> a
+pattern Ping :: Txt -> View -> View
 pattern Ping v a = Attribute "ping" v a
 
-pattern Slot :: HasFeatures a => Txt -> a -> a
+pattern Slot :: Txt -> View -> View
 pattern Slot v a = Attribute "slot" v a
 
 -- Using this as a property introduced some bugs where
 -- SpellCheck "false" caused <input spellcheck="true">
-pattern SpellCheck :: HasFeatures a => Txt -> a -> a
+pattern SpellCheck :: Txt -> View -> View
 pattern SpellCheck v a = Attribute "spellcheck" v a
 
-pattern Translate :: HasFeatures a => Txt -> a -> a
+pattern Translate :: Txt -> View -> View
 pattern Translate v a = Attribute "translate" v a
 
 --------------------------------------------------------------------------------
 -- HTML Properties
 
-pattern Accept :: HasFeatures a => Txt -> a -> a
+pattern Accept :: Txt -> View -> View
 pattern Accept v a = Property "accept" v a
 
-pattern AcceptCharset :: HasFeatures a => Txt -> a -> a
+pattern AcceptCharset :: Txt -> View -> View
 pattern AcceptCharset v a = Property "acceptCharset" v a
 
-pattern AccessKey :: HasFeatures a => Txt -> a -> a
+pattern AccessKey :: Txt -> View -> View
 pattern AccessKey v a = Property "accessKey" v a
 
-pattern Action :: HasFeatures a => Txt -> a -> a
+pattern Action :: Txt -> View -> View
 pattern Action v a = Property "action" v a
 
-pattern AllowFullScreen :: HasFeatures a => Txt -> a -> a
+pattern AllowFullScreen :: Txt -> View -> View
 pattern AllowFullScreen v a = Property "allowfullScreen" v a
 
-pattern Alt :: HasFeatures a => Txt -> a -> a
+pattern Alt :: Txt -> View -> View
 pattern Alt v a = Property "alt" v a
 
-pattern As :: HasFeatures a => Txt -> a -> a
+pattern As :: Txt -> View -> View
 pattern As v a = Property "as" v a
 
-pattern Async :: HasFeatures a => Txt -> a -> a
+pattern Async :: Txt -> View -> View
 pattern Async v a = Property "async" v a
 
-pattern Autoplay :: HasFeatures a => a -> a
+pattern Autoplay :: View -> View
 pattern Autoplay a = Property "autoplay" "true" a
 
-pattern Autosave :: HasFeatures a => Txt -> a -> a
+pattern Autosave :: Txt -> View -> View
 pattern Autosave v a = Property "autosave" v a
 
-pattern Capture :: HasFeatures a => Txt -> a -> a
+pattern Capture :: Txt -> View -> View
 pattern Capture v a = Property "capture" v a
 
-pattern CellPadding :: HasFeatures a => Txt -> a -> a
+pattern CellPadding :: Txt -> View -> View
 pattern CellPadding v a = Property "cellPadding" v a
 
-pattern CellSpacing :: HasFeatures a => Txt -> a -> a
+pattern CellSpacing :: Txt -> View -> View
 pattern CellSpacing v a = Property "cellSpacing" v a
 
-pattern Challenge :: HasFeatures a => Txt -> a -> a
+pattern Challenge :: Txt -> View -> View
 pattern Challenge v a = Property "challenge" v a
 
-pattern CharSet :: HasFeatures a => Txt -> a -> a
+pattern CharSet :: Txt -> View -> View
 pattern CharSet v a = Property "charSet" v a
 
-pattern Checked :: HasFeatures a => Txt -> a -> a
+pattern Checked :: Txt -> View -> View
 pattern Checked v a = Property "checked" v a
 
-pattern Children_ :: HasFeatures a => Txt -> a -> a
+pattern Children_ :: Txt -> View -> View
 pattern Children_ v a = Property "children" v a
 
-pattern Cite_ :: HasFeatures a => Txt -> a -> a
+pattern Cite_ :: Txt -> View -> View
 pattern Cite_ v a = Property "cite" v a
 
-pattern ClassID :: HasFeatures a => Txt -> a -> a
+pattern ClassID :: Txt -> View -> View
 pattern ClassID v a = Property "classId" v a
 
-pattern ClassName :: HasFeatures a => Txt -> a -> a
+pattern ClassName :: Txt -> View -> View
 pattern ClassName v a = Property "className" v a
 
-pattern Cols :: HasFeatures a => Txt -> a -> a
+pattern Cols :: Txt -> View -> View
 pattern Cols v a = Property "cols" v a
 
-pattern ColSpan :: HasFeatures a => Txt -> a -> a
+pattern ColSpan :: Txt -> View -> View
 pattern ColSpan v a = Property "colSpan" v a
 
-pattern Content_ :: HasFeatures a => Txt -> a -> a
+pattern Content_ :: Txt -> View -> View
 pattern Content_ v a = Property "content" v a
 
-pattern ContentEditable :: HasFeatures a => Txt -> a -> a
+pattern ContentEditable :: Txt -> View -> View
 pattern ContentEditable v a = Property "contentEditable" v a
 
-pattern ContextMenu :: HasFeatures a => Txt -> a -> a
+pattern ContextMenu :: Txt -> View -> View
 pattern ContextMenu v a = Property "contextMenu" v a
 
-pattern Controls :: HasFeatures a => Txt -> a -> a
+pattern Controls :: Txt -> View -> View
 pattern Controls v a = Property "controls" v a
 
-pattern ControlsList :: HasFeatures a => Txt -> a -> a
+pattern ControlsList :: Txt -> View -> View
 pattern ControlsList v a = Property "controlsList" v a
 
-pattern Coords :: HasFeatures a => Txt -> a -> a
+pattern Coords :: Txt -> View -> View
 pattern Coords v a = Property "coords" v a
 
-pattern CrossOrigin :: HasFeatures a => Txt -> a -> a
+pattern CrossOrigin :: Txt -> View -> View
 pattern CrossOrigin v a = Property "crossOrigin" v a
 
-pattern Data_ :: HasFeatures a => Txt -> a -> a
+pattern Data_ :: Txt -> View -> View
 pattern Data_ v a = Property "data" v a
 
-pattern DateTime :: HasFeatures a => Txt -> a -> a
+pattern DateTime :: Txt -> View -> View
 pattern DateTime v a = Property "dateTime" v a
 
-pattern Default :: HasFeatures a => Txt -> a -> a
+pattern Default :: Txt -> View -> View
 pattern Default v a = Property "default" v a
 
-pattern DefaultChecked :: HasFeatures a => Txt -> a -> a
+pattern DefaultChecked :: Txt -> View -> View
 pattern DefaultChecked v a = Property "defaultChecked" v a
 
-pattern DefaultValue :: HasFeatures a => Txt -> a -> a
+pattern DefaultValue :: Txt -> View -> View
 pattern DefaultValue v a = Property "defaultValue" v a
 
-pattern Defer :: HasFeatures a => Txt -> a -> a
+pattern Defer :: Txt -> View -> View
 pattern Defer v a = Property "defer" v a
 
-pattern Dir :: HasFeatures a => Txt -> a -> a
+pattern Dir :: Txt -> View -> View
 pattern Dir v a = Property "dir" v a
 
-pattern Disabled :: HasFeatures a => Txt -> a -> a
+pattern Disabled :: Txt -> View -> View
 pattern Disabled v a = Property "disabled" v a
 
-pattern Download :: HasFeatures a => Txt -> a -> a
+pattern Download :: Txt -> View -> View
 pattern Download v a = Property "download" v a
 
-pattern Draggable :: HasFeatures a => Txt -> a -> a
+pattern Draggable :: Txt -> View -> View
 pattern Draggable v a = Property "draggable" v a
 
-pattern EncType :: HasFeatures a => Txt -> a -> a
+pattern EncType :: Txt -> View -> View
 pattern EncType v a = Property "encType" v a
 
-pattern HtmlFor :: HasFeatures a => Txt -> a -> a
+pattern HtmlFor :: Txt -> View -> View
 pattern HtmlFor v a = Property "htmlFor" v a
 
-pattern Form_ :: HasFeatures a => Txt -> a -> a
+pattern Form_ :: Txt -> View -> View
 pattern Form_ v a = Property "form" v a
 
-pattern FormMethod :: HasFeatures a => Txt -> a -> a
+pattern FormMethod :: Txt -> View -> View
 pattern FormMethod v a = Property "formMethod" v a
 
-pattern FormAction :: HasFeatures a => Txt -> a -> a
+pattern FormAction :: Txt -> View -> View
 pattern FormAction v a = Property "formAction" v a
 
-pattern FormEncType :: HasFeatures a => Txt -> a -> a
+pattern FormEncType :: Txt -> View -> View
 pattern FormEncType v a = Property "formEncType" v a
 
-pattern FormNoValidate :: HasFeatures a => Txt -> a -> a
+pattern FormNoValidate :: Txt -> View -> View
 pattern FormNoValidate v a = Property "formNoValidate" v a
 
-pattern FormTarget :: HasFeatures a => Txt -> a -> a
+pattern FormTarget :: Txt -> View -> View
 pattern FormTarget v a = Property "formTarget" v a
 
-pattern FrameBorder :: HasFeatures a => Txt -> a -> a
+pattern FrameBorder :: Txt -> View -> View
 pattern FrameBorder v a = Property "frameBorder" v a
 
-pattern Headers :: HasFeatures a => Txt -> a -> a
+pattern Headers :: Txt -> View -> View
 pattern Headers v a = Property "headers" v a
 
-pattern Height_:: HasFeatures a => Txt -> a -> a
+pattern Height_:: Txt -> View -> View
 pattern Height_ v a = Property "height" v a
 
-pattern Hidden :: HasFeatures a => Txt -> a -> a
+pattern Hidden :: Txt -> View -> View
 pattern Hidden v a = Property "hidden" v a
 
-pattern High :: HasFeatures a => Txt -> a -> a
+pattern High :: Txt -> View -> View
 pattern High v a = Property "high" v a
 
-pattern Href :: HasFeatures a => Txt -> a -> a
+pattern Href :: Txt -> View -> View
 pattern Href v a = Property "href" v a
 
-pattern HrefLang :: HasFeatures a => Txt -> a -> a
+pattern HrefLang :: Txt -> View -> View
 pattern HrefLang v a = Property "hrefLang" v a
 
-pattern HttpEquiv :: HasFeatures a => Txt -> a -> a
+pattern HttpEquiv :: Txt -> View -> View
 pattern HttpEquiv v a = Property "httpEquiv" v a
 
-pattern Icon :: HasFeatures a => Txt -> a -> a
+pattern Icon :: Txt -> View -> View
 pattern Icon v a = Property "icon" v a
 
-pattern Id :: HasFeatures a => Txt -> a -> a
+pattern Id :: Txt -> View -> View
 pattern Id v a = Property "id" v a
 
-pattern InnerHTML :: HasFeatures a => Txt -> a -> a
+pattern InnerHTML :: Txt -> View -> View
 pattern InnerHTML v a = Property "innerHTML" v a
 
-pattern InputMode :: HasFeatures a => Txt -> a -> a
+pattern InputMode :: Txt -> View -> View
 pattern InputMode v a = Property "inputMode" v a
 
-pattern Integrity :: HasFeatures a => Txt -> a -> a
+pattern Integrity :: Txt -> View -> View
 pattern Integrity v a = Property "integrity" v a
 
-pattern Is :: HasFeatures a => Txt -> a -> a
+pattern Is :: Txt -> View -> View
 pattern Is v a = Property "is" v a
 
-pattern ItemID :: HasFeatures a => Txt -> a -> a
+pattern ItemID :: Txt -> View -> View
 pattern ItemID v a = Property "itemID" v a
 
-pattern ItemProp :: HasFeatures a => Txt -> a -> a
+pattern ItemProp :: Txt -> View -> View
 pattern ItemProp v a = Property "itemProp" v a
 
-pattern ItemRef :: HasFeatures a => Txt -> a -> a
+pattern ItemRef :: Txt -> View -> View
 pattern ItemRef v a = Property "itemRef" v a
 
-pattern ItemScope :: HasFeatures a => Txt -> a -> a
+pattern ItemScope :: Txt -> View -> View
 pattern ItemScope v a = Property "itemScope" v a
 
-pattern ItemType :: HasFeatures a => Txt -> a -> a
+pattern ItemType :: Txt -> View -> View
 pattern ItemType v a = Property "itemType" v a
 
-pattern KeyParams :: HasFeatures a => Txt -> a -> a
+pattern KeyParams :: Txt -> View -> View
 pattern KeyParams v a = Property "keyParams" v a
 
-pattern KeyType :: HasFeatures a => Txt -> a -> a
+pattern KeyType :: Txt -> View -> View
 pattern KeyType v a = Property "keyType" v a
 
-pattern Kind :: HasFeatures a => Txt -> a -> a
+pattern Kind :: Txt -> View -> View
 pattern Kind v a = Property "kind" v a
 
-pattern Label_ :: HasFeatures a => Txt -> a -> a
+pattern Label_ :: Txt -> View -> View
 pattern Label_ v a = Property "label" v a
 
-pattern Lang :: HasFeatures a => Txt -> a -> a
+pattern Lang :: Txt -> View -> View
 pattern Lang v a = Property "lang" v a
 
-pattern List :: HasFeatures a => Txt -> a -> a
+pattern List :: Txt -> View -> View
 pattern List v a = Property "list" v a
 
-pattern Loop :: HasFeatures a => a -> a
+pattern Loop :: View -> View
 pattern Loop a = Property "loop" "true" a
 
-pattern Low :: HasFeatures a => Txt -> a -> a
+pattern Low :: Txt -> View -> View
 pattern Low v a = Property "low" v a
 
-pattern Manifest :: HasFeatures a => Txt -> a -> a
+pattern Manifest :: Txt -> View -> View
 pattern Manifest v a = Property "manifest" v a
 
-pattern MarginWidth :: HasFeatures a => Txt -> a -> a
+pattern MarginWidth :: Txt -> View -> View
 pattern MarginWidth v a = Property "marginWidth" v a
 
-pattern MarginHeight :: HasFeatures a => Txt -> a -> a
+pattern MarginHeight :: Txt -> View -> View
 pattern MarginHeight v a = Property "marginHeight" v a
 
-pattern Max :: HasFeatures a => Txt -> a -> a
+pattern Max :: Txt -> View -> View
 pattern Max v a = Property "max" v a
 
-pattern MaxLength :: HasFeatures a => Txt -> a -> a
+pattern MaxLength :: Txt -> View -> View
 pattern MaxLength v a = Property "maxLength" v a
 
-pattern Media :: HasFeatures a => Txt -> a -> a
+pattern Media :: Txt -> View -> View
 pattern Media v a = Property "media" v a
 
-pattern MediaGroup :: HasFeatures a => Txt -> a -> a
+pattern MediaGroup :: Txt -> View -> View
 pattern MediaGroup v a = Property "mediaGroup" v a
 
-pattern Method :: HasFeatures a => Txt -> a -> a
+pattern Method :: Txt -> View -> View
 pattern Method v a = Property "method" v a
 
-pattern Min :: HasFeatures a => Txt -> a -> a
+pattern Min :: Txt -> View -> View
 pattern Min v a = Property "min" v a
 
-pattern MinLength :: HasFeatures a => Txt -> a -> a
+pattern MinLength :: Txt -> View -> View
 pattern MinLength v a = Property "minLength" v a
 
-pattern Multiple :: HasFeatures a => Txt -> a -> a
+pattern Multiple :: Txt -> View -> View
 pattern Multiple v a = Property "multiple" v a
 
-pattern Muted :: HasFeatures a => a -> a
+pattern Muted :: View -> View
 pattern Muted a = Property "muted" "true" a
 
-pattern Name :: HasFeatures a => Txt -> a -> a
+pattern Name :: Txt -> View -> View
 pattern Name v a = Property "name" v a
 
-pattern Nonce :: HasFeatures a => Txt -> a -> a
+pattern Nonce :: Txt -> View -> View
 pattern Nonce v a = Property "nonce" v a
 
-pattern NoValidate :: HasFeatures a => Txt -> a -> a
+pattern NoValidate :: Txt -> View -> View
 pattern NoValidate v a = Property "noValidate" v a
 
-pattern Open :: HasFeatures a => Txt -> a -> a
+pattern Open :: Txt -> View -> View
 pattern Open v a = Property "open" v a
 
-pattern Optimum :: HasFeatures a => Txt -> a -> a
+pattern Optimum :: Txt -> View -> View
 pattern Optimum v a = Property "optimum" v a
 
-pattern Pattern :: HasFeatures a => Txt -> a -> a
+pattern Pattern :: Txt -> View -> View
 pattern Pattern v a = Property "pattern" v a
 
-pattern Placeholder :: HasFeatures a => Txt -> a -> a
+pattern Placeholder :: Txt -> View -> View
 pattern Placeholder v a = Property "placeholder" v a
 
-pattern PlaysInline :: HasFeatures a => a -> a
+pattern PlaysInline :: View -> View
 pattern PlaysInline a = Property "playsinline" "true" a
 
-pattern Poster :: HasFeatures a => Txt -> a -> a
+pattern Poster :: Txt -> View -> View
 pattern Poster v a = Property "poster" v a
 
-pattern Preload :: HasFeatures a => Txt -> a -> a
+pattern Preload :: Txt -> View -> View
 pattern Preload v a = Property "preload" v a
 
-pattern Profile :: HasFeatures a => Txt -> a -> a
+pattern Profile :: Txt -> View -> View
 pattern Profile v a = Property "profile" v a
 
-pattern RadioGroup :: HasFeatures a => Txt -> a -> a
+pattern RadioGroup :: Txt -> View -> View
 pattern RadioGroup v a = Property "radiogroup" v a
 
-pattern ReadOnly :: HasFeatures a => Txt -> a -> a
+pattern ReadOnly :: Txt -> View -> View
 pattern ReadOnly v a = Property "readOnly" v a
 
-pattern ReferrerPolicy :: HasFeatures a => Txt -> a -> a
+pattern ReferrerPolicy :: Txt -> View -> View
 pattern ReferrerPolicy v a = Property "referrerPolicy" v a
 
-pattern Rel :: HasFeatures a => Txt -> a -> a
+pattern Rel :: Txt -> View -> View
 pattern Rel v a = Property "rel" v a
 
-pattern Required :: HasFeatures a => Txt -> a -> a
+pattern Required :: Txt -> View -> View
 pattern Required v a = Property "required" v a
 
-pattern Reversed :: HasFeatures a => Txt -> a -> a
+pattern Reversed :: Txt -> View -> View
 pattern Reversed v a = Property "reversed" v a
 
-pattern Role :: HasFeatures a => Txt -> a -> a
+pattern Role :: Txt -> View -> View
 pattern Role v a = Property "role" v a
 
-pattern Rows :: HasFeatures a => Txt -> a -> a
+pattern Rows :: Txt -> View -> View
 pattern Rows v a = Property "rows" v a
 
-pattern RowSpan :: HasFeatures a => Txt -> a -> a
+pattern RowSpan :: Txt -> View -> View
 pattern RowSpan v a = Property "rowSpan" v a
 
-pattern Sandbox :: HasFeatures a => Txt -> a -> a
+pattern Sandbox :: Txt -> View -> View
 pattern Sandbox v a = Property "sandbox" v a
 
-pattern Scope :: HasFeatures a => Txt -> a -> a
+pattern Scope :: Txt -> View -> View
 pattern Scope v a = Property "scope" v a
 
-pattern Scoped :: HasFeatures a => Txt -> a -> a
+pattern Scoped :: Txt -> View -> View
 pattern Scoped v a = Property "scoped" v a
 
-pattern Scrolling :: HasFeatures a => Txt -> a -> a
+pattern Scrolling :: Txt -> View -> View
 pattern Scrolling v a = Property "scrolling" v a
 
-pattern Seamless :: HasFeatures a => Txt -> a -> a
+pattern Seamless :: Txt -> View -> View
 pattern Seamless v a = Property "seamless" v a
 
-pattern Selected :: HasFeatures a => Txt -> a -> a
+pattern Selected :: Txt -> View -> View
 pattern Selected v a = Property "selected" v a
 
-pattern Shape :: HasFeatures a => Txt -> a -> a
+pattern Shape :: Txt -> View -> View
 pattern Shape v a = Property "shape" v a
 
-pattern Size :: HasFeatures a => Txt -> a -> a
+pattern Size :: Txt -> View -> View
 pattern Size v a = Property "size" v a
 
--- pattern Sizes :: HasFeatures a => Txt -> a -> a
+-- pattern Sizes :: Txt -> View -> View
 -- pattern Sizes v a = Property "sizes" v a
 
-pattern Span_ :: HasFeatures a => Txt -> a -> a
+pattern Span_ :: Txt -> View -> View
 pattern Span_ v a = Property "span" v a
 
-pattern Src :: HasFeatures a => Txt -> a -> a
+pattern Src :: Txt -> View -> View
 pattern Src v a = Property "src" v a
 
-pattern SrcDoc :: HasFeatures a => Txt -> a -> a
+pattern SrcDoc :: Txt -> View -> View
 pattern SrcDoc v a = Property "srcdoc" v a
 
-pattern SrcLang :: HasFeatures a => Txt -> a -> a
+pattern SrcLang :: Txt -> View -> View
 pattern SrcLang v a = Property "srclang" v a
 
-pattern SrcSet :: HasFeatures a => Txt -> a -> a
+pattern SrcSet :: Txt -> View -> View
 pattern SrcSet v a = Property "srcset" v a
 
-pattern Start :: HasFeatures a => Txt -> a -> a
+pattern Start :: Txt -> View -> View
 pattern Start v a = Property "start" v a
 
-pattern Step :: HasFeatures a => Txt -> a -> a
+pattern Step :: Txt -> View -> View
 pattern Step v a = Property "step" v a
 
-pattern Style :: HasFeatures a => Txt -> a -> a
+pattern Style :: Txt -> View -> View
 pattern Style v a = Property "style" v a
 
-pattern Summary_ :: HasFeatures a => Txt -> a -> a
+pattern Summary_ :: Txt -> View -> View
 pattern Summary_ v a = Property "summary" v a
 
-pattern TabIndex :: HasFeatures a => Txt -> a -> a
+pattern TabIndex :: Txt -> View -> View
 pattern TabIndex v a = Property "tabIndex" v a
 
-pattern Target :: HasFeatures a => Txt -> a -> a
+pattern Target :: Txt -> View -> View
 pattern Target v a = Property "target" v a
 
-pattern Title :: HasFeatures a => Txt -> a -> a
+pattern Title :: Txt -> View -> View
 pattern Title v a = Property "title" v a
 
-pattern Type :: HasFeatures a => Txt -> a -> a
+pattern Type :: Txt -> View -> View
 pattern Type v a = Property "type" v a
 
-pattern UseMap :: HasFeatures a => Txt -> a -> a
+pattern UseMap :: Txt -> View -> View
 pattern UseMap v a = Property "useMap" v a
 
-pattern Value :: HasFeatures a => Txt -> a -> a
+pattern Value :: Txt -> View -> View
 pattern Value v a = Property "value" v a
 
-pattern Value' :: (ToTxt v, FromTxt v, HasFeatures a) => v -> a -> a
-pattern Value' v a <- Property "value" (fromTxt -> v) a where
-  Value' v a = Property "value" (toTxt v) a
-
--- pattern Width :: HasFeatures a => Txt -> a -> a
+-- pattern Width :: Txt -> View -> View
 -- pattern Width v a = Property "width" v a
 
-pattern Wmode :: HasFeatures a => Txt -> a -> a
+pattern Wmode :: Txt -> View -> View
 pattern Wmode v a = Property "wmode" v a
 
-pattern Wrap :: HasFeatures a => Txt -> a -> a
+pattern Wrap :: Txt -> View -> View
 pattern Wrap v a = Property "wrap" v a
 

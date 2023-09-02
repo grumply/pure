@@ -36,7 +36,8 @@ library
     unordered-containers,
     xss-sanitize,
     unix,
-    base64-bytestring
+    base64-bytestring,
+    comonad
 
   hs-source-dirs: src
 
@@ -67,7 +68,7 @@ library
         binary
       , text
       , lens
-      , wreq >= 0.5.4
+      , wreq  >= 0.5.4
       , unix-bytestring
       , websockets
       , connection
