@@ -4,11 +4,12 @@ module Pure.Auth
   , Object
   , liveWith, live
   , Authenticated
-  , token, user, role
+  , token, user, role, asRole
   , authenticated, authorized, authorized', decrypted
   , Username()
 #ifndef __GHCJS__
   , encrypt, decrypt
+  , encryptFile, decryptFile
   , Secret, Pool
   , Pure.Auth.object
 #endif

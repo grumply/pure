@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP, ConstraintKinds, TypeSynonymInstances, FlexibleInstances #-}
-module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,JSON,module Export) where
+{-# LANGUAGE CPP, ConstraintKinds, TypeSynonymInstances, FlexibleInstances, DerivingVia #-}
+module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,JSONParseError(..),decodeThrow,JSON,module Export) where
 
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
@@ -15,6 +15,7 @@ import           Data.JSON.GHC   as Export hiding (encode,decode,object,Null)
 import qualified Data.JSON.GHC   as GHC
 #endif
 
+import Control.Exception
 import System.IO.Unsafe (unsafePerformIO)
 
 type JSON a = (ToJSON a, FromJSON a)
@@ -89,3 +90,12 @@ traceJSON a b =
     x = unsafePerformIO (logJSON a)
   in 
     x `seq` b
+
+newtype JSONParseError = JSONParseError String deriving (Show,ToJSON,FromJSON) via String
+instance Exception JSONParseError
+
+decodeThrow :: FromJSON a => Txt -> a
+decodeThrow t =
+  case decodeEither t of
+    Left err -> throw (JSONParseError err)
+    Right a  -> a

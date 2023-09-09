@@ -1,4 +1,4 @@
-{-# LANGUAGE DerivingVia, KindSignatures, DataKinds, RoleAnnotations, DeriveGeneric, DeriveAnyClass, FlexibleContexts, RankNTypes, AllowAmbiguousTypes, ScopedTypeVariables, ConstraintKinds, TypeApplications, CPP, RecordWildCards, NamedFieldPuns, OverloadedStrings, BlockArguments, ViewPatterns #-}
+{-# LANGUAGE DerivingVia, KindSignatures, DataKinds, RoleAnnotations, DeriveGeneric, DeriveAnyClass, FlexibleContexts, RankNTypes, AllowAmbiguousTypes, ScopedTypeVariables, ConstraintKinds, TypeApplications, CPP, RecordWildCards, NamedFieldPuns, OverloadedStrings, BlockArguments, ViewPatterns, LambdaCase #-}
 module Pure.Auth.Data where
 
 import Data.JSON hiding (Key)
@@ -83,6 +83,11 @@ user = owner (token @c)
 
 role :: forall c. Authenticated c => Maybe Txt
 role = List.lookup "role" (claims (token @c))
+
+asRole :: forall c a. Authenticated c => Txt -> a -> a
+asRole r f 
+  | Just r == role @c = f 
+  | otherwise         = unauthorized
 
 newtype Pool_ c = Pool FilePath
 type role Pool_ nominal
@@ -173,4 +178,14 @@ decrypt msg = do
           Just (toTxt (ctrCombine c iv m))
     _ -> 
       Nothing
+
+decryptFile :: forall c. Secret c => FilePath -> IO (Maybe Txt)
+decryptFile fp = decrypt @c <$> Txt.readFile fp
+
+encryptFile :: forall c. Secret c => FilePath -> Txt -> IO ()
+encryptFile fp cnt = do
+  encrypt @c cnt >>= \case
+    Just e -> Txt.writeFile fp e
+    _      -> error "Cipher initialization failed." -- this isn't recoverable? Shouldn't encrypt throw this, then?
 #endif
+
