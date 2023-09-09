@@ -199,14 +199,14 @@ data View where
     } -> View
 
   ComponentView ::
-    { __rep  :: !Fingerprint
+    { __rep  :: Fingerprint
     , record :: Maybe (Ref props state)
     , comp   :: Ref props state -> Comp props state
     , props  :: Ref props state -> props
     } -> View
 
   TaggedView ::
-    { __tag :: !Fingerprint
+    { __tag :: Fingerprint
     , taggedView :: View 
     } -> View
 
@@ -399,7 +399,7 @@ viewHTMLTag _ = Nothing
 
 {-# INLINE [1] html #-}
 html :: Txt -> View
-html tag = HTMLView Nothing tag (Features_ mempty mempty mempty mempty mempty mempty) mempty
+html tag = HTMLView Nothing tag mempty mempty
 
 pattern SimpleHTML :: Txt -> View
 pattern SimpleHTML tag <- (viewHTMLTag -> Just tag) where
@@ -1264,11 +1264,11 @@ type State a = (Modify a, Exists a)
 
 {-# INLINE state #-}
 state :: Typeable a => (Modify a => a) -> (State a => View) -> View
-state a = foldM ($!) (pure (a,\_ -> pure ()))
+state a = foldM ($) (pure (a,\_ -> pure ()))
 
 {-# INLINE stateIO #-}
 stateIO :: Typeable a => (Modify a => IO a) -> (State a => View) -> View
-stateIO ioa = foldM ($!) (ioa >>= \a -> pure (a,\_ -> pure ()))
+stateIO ioa = foldM ($) (ioa >>= \a -> pure (a,\_ -> pure ()))
 
 {-# INLINE state' #-}
 state' :: forall a. Typeable a => (Modify a => a) -> (State a => View) -> View

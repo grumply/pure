@@ -1,4 +1,4 @@
-{-# language AllowAmbiguousTypes, TypeApplications, LambdaCase, ScopedTypeVariables, RecordWildCards, FlexibleContexts #-}
+{-# language AllowAmbiguousTypes, TypeApplications, LambdaCase, ScopedTypeVariables, RecordWildCards, FlexibleContexts, RankNTypes #-}
 module Data.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci,logRetry,logFailure,onRetry,onFailure) where
 
 import Control.Exception
@@ -6,6 +6,7 @@ import Data.Foldable
 import Data.JSON
 import Data.Random (newSeed,uniformR,generate)
 import Data.Time
+import Data.View (Exists,with)
 
 import GHC.Stack
 
@@ -91,11 +92,11 @@ recovering :: IO a -> IO a
 recovering = recover @SomeException
 
 -- | With a given policy, try the given action. If the policy fails, Nothing is returned.
-retrying :: Policy -> IO a -> IO (Maybe a)
+retrying :: Policy -> (Exists Status => IO a) -> IO (Maybe a)
 retrying (Policy policy) io = newInitialStatus >>= go
   where
     go status@Status {..} =
-      handle (\Retry -> pure Nothing) (Just <$> io) >>= \case
+      handle (\Retry -> pure Nothing) (Just <$> with status io) >>= \case
         Just a -> pure (Just a)
         _ -> do
           current <- time

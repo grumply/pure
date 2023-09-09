@@ -9,11 +9,10 @@ module Data.Component
   , timed
   ) where
 
-import Control.Controller hiding (run,receive,initialize)
-import qualified Control.Controller
-import Data.Effect hiding (Handler)
+import Data.Controller hiding (run,receive,initialize)
+import qualified Data.Controller
 import Data.DOM
-import Data.View hiding (receive,initialize,view)
+import Data.View hiding (receive,initialize,view,Handler)
 
 import Data.Typeable ( Typeable, typeOf )
 
@@ -56,5 +55,5 @@ class Typeable (a :: *) => Component a where
 
   {-# INLINE run #-}
   run :: a -> View
-  run a = Control.Controller.run (app a) a
+  run a = Data.Controller.run (app a) a
 

@@ -5,7 +5,7 @@ module Data.Time (module Data.Time, module Export) where
 
 import Control.Applicative
 import Control.Concurrent (yield,threadDelay)
-import Control.Monad (forever)
+import Control.Monad (forever,when)
 import Data.Coerce
 import Data.Default
 import Data.JSON
@@ -32,7 +32,8 @@ import Data.Time.Clock as Export (UTCTime(),NominalDiffTime(),DiffTime())
 import Data.Time.LocalTime as Export (LocalTime(),TimeZone())
 
 import Prelude
-import System.Timeout
+import qualified Control.Concurrent.Timeout as Unbounded
+import qualified Control.Concurrent.Thread.Delay as Unbounded
 
 {-
 A simple time type; not meant as a replacement for Data.Time from 'time'.
@@ -52,10 +53,10 @@ delay t
   | t == 1 = yield
   | otherwise =
     let (Microseconds us _) = t
-    in threadDelay (round us)
+    in Unbounded.delay (round us)
 
 timeout :: Time -> IO a -> IO (Maybe a)
-timeout (Microseconds us _) = System.Timeout.timeout (round us)
+timeout (Microseconds us _) = Unbounded.timeout (round us)
 
 every :: Time -> IO () -> IO ()
 every t io = forever (io >> delay t)

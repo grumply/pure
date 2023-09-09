@@ -39,7 +39,12 @@ newtype Password = Password Txt
   deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
 
 newtype Username c = Username Txt
-  deriving (ToJSON,ToTxt,Show,Eq,Ord,Hashable) via Txt
+  deriving 
+    (ToJSON,ToTxt,Show,Eq,Ord,Hashable
+#ifndef __GHCJS__
+    ,ToJSONKey, FromJSONKey
+#endif
+    ) via Txt
 
 type role Username nominal
 
@@ -140,7 +145,7 @@ decrypted c r = authorized @c c r
 decrypted :: forall c r. (Secret c, Authenticated c) => Txt -> (Txt -> r) -> r
 decrypted c r = authorized @c c (maybe unauthorized r . decrypt @c)
 
-encrypt :: forall c. (Authenticated c, Secret c) => Txt -> IO (Maybe Txt)
+encrypt :: forall c. Secret c => Txt -> IO (Maybe Txt)
 encrypt msg = do
   let Secret s = it :: Secret_ c 
   k :: B.ByteString <- getRandomBytes 16

@@ -673,14 +673,17 @@ toMouseEvent (evtObj -> o) = let err = error "Invalid MouseEvent." in
               ]
     }
 
-newtype Click = Click MouseEvent
+data Click = Click MouseEvent
 
+{-# INLINE clickWith #-}
 clickWith :: Options -> (Click -> IO ()) -> View -> View
 clickWith opts f = OnWith opts "click" (f . Click . toMouseEvent)
 
+{-# INLINE click #-}
 click :: View -> (Producer Click => View)
 click = clickWith def yield
 
+{-# INLINE clicks #-}
 clicks :: (Exists Click => IO ()) -> View -> View
 clicks f = events @Click f click
 

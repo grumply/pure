@@ -37,7 +37,8 @@ library
     xss-sanitize,
     unix,
     base64-bytestring,
-    comonad
+    comonad,
+    unbounded-delays
 
   hs-source-dirs: src
 
@@ -68,7 +69,7 @@ library
         binary
       , text
       , lens
-      , wreq  >= 0.5.4
+      , wreq
       , unix-bytestring
       , websockets
       , connection
@@ -99,6 +100,8 @@ library
     Data.Bloom.Limiter
     Data.Bloom.Scalable
     Data.Covariance
+    Data.Controller
+    Data.Component
     Data.CSS
     Data.DOM
     Data.Default

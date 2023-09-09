@@ -52,11 +52,11 @@ run Controller {..} = Component app . (Env @msg)
       let
         {-# INLINE upd #-}
         upd :: msg -> IO () -> IO Bool
-        upd msg after = modifyM self $ \env mdl -> do
-          mdl' <- using (Handler upd) (_update msg (coerce env) mdl)
+        upd msg after = modifyrefM self $ \env mdl -> do
+          mdl' <- with (Handler upd) (_update msg (coerce env) mdl)
           pure (mdl',after)
       in
-        using (Handler upd) $
+        with (Handler upd) $
           let
             {-# INLINE update #-}
             update :: env -> st -> [msg] -> IO st
@@ -71,13 +71,13 @@ run Controller {..} = Component app . (Env @msg)
             def 
               { onConstruct = _model
               , onExecuting = \mdl -> do
-                env <- ask self
+                env <- askref self
                 update (coerce env) mdl _startup
               , onReceive = \env mdl ->
                 update (coerce env) mdl _receive
               , onUnmounted = void $ do
-                env <- ask self
-                mdl <- get self
+                env <- askref self
+                mdl <- getref self
                 update (coerce env) mdl _shutdown
               , render = _view . coerce
               }
