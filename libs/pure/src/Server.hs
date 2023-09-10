@@ -88,6 +88,22 @@ serve port mtlss = Component $ \self ->
       | otherwise 
       = Warp.defaultOnExceptionResponse e
 
+-- I think it would be beneficial to parameterize Handler with a reified constraint context;
+-- if `Handler App` => { endpoint :: Props App |- Application, methods :: [Method], path :: Txt }
+-- then we can store the entailment-based endpoint statically in a hashmap and do O(1) dispatch.
+-- Then the server would be responsible for satisfying the entailment proof at execution.
+-- This would maintain the dynamics of each endpoint, while reducing the update cost - the
+-- server could avoid being parameterized on the `[Handler App]`. This would prevent dynamism in
+-- the set of handlers, but not dynamism in the handlers themselves. This might be a worthy
+-- trade-off. It does, however, introduce the possibility of accidental constraint satisfaction;
+-- if the `endpoint :: Props App |- Application` captures an existential, it would be annoying to
+-- debug/catch. It would be nice to be able to have a constraint that can /only/ be satisfied in
+-- the entailment monad, but I don't yet see how to approach that. Another issue is the cost of
+-- constraint satisfaction; I know GHC is exceptional at eliminating unused variables, but the
+-- server will still have to satisfy all of the constraints in `Props App` manually, regardless
+-- of which ones the endpoint will actually use - the endpoint itself can drop whatever it 
+-- doesn't need, but I think the server will still have to pass them, which could be costly, 
+-- though I'm not sure how costly the current approach is and how the two might compare.
 data Handler = Handler { endpoint :: Application, methods :: [Method], path :: Txt }
 
 class Channel a where
