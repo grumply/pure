@@ -9,7 +9,7 @@ module Data.Stream
   , step, steps
   , force, forceAll
   , suspends, suspendsEvery
-  , stepSize, chunksOf
+  , stepsOf, chunksOf
   , toList, toListM
   , fromList, fromListM
   , append, concat
@@ -32,7 +32,7 @@ import Data.Function (fix)
 import GHC.Exts (build,IsList(),inline)
 import qualified GHC.Exts as List (IsList(..))
 import qualified Data.List as List hiding (length)
-import Prelude hiding (concat,repeat,take,drop,null,tail,reverse,filter,cycle)
+import Prelude hiding (concat,repeat,take,drop,null,tail,reverse,filter,cycle,zip)
 
 data Stream f a = Nil | Suspended (f (Stream f a)) | Cons a (Stream f a)
 
@@ -109,7 +109,7 @@ augments f s = f s Suspended Cons
 builds :: (forall b. b -> (f b -> b) -> (a -> b -> b) -> b) -> Stream f a
 builds f = f Nil Suspended Cons
 
-{-# INLINE [1] folds #-}
+{-# INLINE [0] folds #-}
 folds :: Functor f => b -> (f b -> b) -> (element -> b -> b) -> Stream f element -> b
 folds e c s = go
   where
@@ -122,11 +122,7 @@ unfolds :: Functor f => state -> (state -> f (Maybe (element, state))) -> Stream
 unfolds initial f = 
   builds $ \e c s ->
     flip fix initial $ \loop st -> 
-      let 
-        unwrap (Just (a,st)) = s a (loop st)
-        unwrap Nothing = e
-      in 
-        c (fmap unwrap (f st))
+      c (fmap (maybe e (\(a,st) -> s a (loop st))) (f st))
 
 {-# INLINE more #-}
 more :: Applicative f => element -> state -> f (Maybe (element,state))
@@ -151,16 +147,31 @@ suspendsEvery n = chunksOf n . suspends
 "folds/augments" forall e c s xs (f :: forall b. b -> (f b -> b) -> (a -> b -> b) -> b).
                  folds e c s (augments f xs) = f (folds e c s xs) c s 
 
+"folds/id" folds Nil Suspended Cons = \x -> x
+
+"folds/app" [1] forall ys. folds ys Suspended Cons = \xs -> append xs ys
+
+"folds/cons" forall e c s a as. folds e c s (Cons a as) = s a (folds e c s as)
+
+"folds/cons"       forall e c s a.  folds e c s (Cons a Nil) = s a e
+"folds/suspended"  forall e c s fa. folds e c s (Suspended fa) = c (fmap (folds e c s) fa)
+"folds/nil"        forall e c s.    folds e c s Nil = e
+
+"folds/cons/builds" forall e c s x (f :: forall b. b -> (f b -> b) -> (a -> b -> b) -> b).
+                    folds e c s (Cons x (builds f)) = s x (f e c s)
+
 "augments/builds" forall (f :: forall b. b -> (f b -> b) -> (a -> b -> b) -> b) 
                          (g :: forall b. b -> (f b -> b) -> (a -> b -> b) -> b).
                   augments g (builds f) = builds (\e c s -> g (f e c s) c s)
 
-"folds/cons/builds" forall e c s x (f :: forall b. b -> (f b -> b) -> (a -> b -> b) -> b).
-                    folds e c s (cons x (builds f)) = s x (f e c s)
+"augments/nil" forall (f :: forall b. b -> (f b -> b) -> (a -> b -> b) -> b).
+               augments f Nil = builds f
 
-"folds/singleton"  forall e c s a.  folds e c s (singleton a) = s a e
-"folds/suspended"  forall e c s fa. folds e c s (suspended fa) = c (fmap (folds e c s) fa)
-"folds/nil"        forall e c s.    folds e c s nil = e
+"augments/augments" forall (f :: forall b. b -> (f b -> b) -> (a -> b -> b) -> b) 
+                           (g :: forall b. b -> (f b -> b) -> (a -> b -> b) -> b)
+                           t. 
+                    augments f (augments g t) = augments (\e c s -> f (g e c s) c s) t
+
 
   #-}
 
@@ -196,7 +207,7 @@ force n stream
       folds
         (\_ -> pure e)
         (\fns m ->
-          let r !n = join $ fmap ($ n) fns
+          let r n = join $ fmap ($ n) fns
           in if m == 0
             then pure (c (r 0))
             else r (m - 1)
@@ -216,75 +227,68 @@ forceAll stream =
   builds $ \e c s -> 
     c $ folds (pure e) join (fmap . s) stream
 
-{-# INLINE stepSize #-}
+{-# INLINE stepsOf #-}
 -- make `step` always force `n` suspended frames; subtly different than chunksOf
-stepSize :: Monad f => Int -> Stream f a -> Stream f a
-stepSize n stream
-  | n <= 1    = stream
-  | otherwise =
-    builds $ \e c s -> c $
-      folds 
-        (\_ -> pure e) 
-        (\fns m ->
-          let r !n = join $ fmap ($ n) fns
-          in if m == 0
-            then pure $ c (r (n - 1))
-            else r (m - 1)
-        ) 
-        (\a stream n -> fmap (s a) $ stream n)
-        stream 
-        n
+stepsOf :: Monad f => Int -> Stream f a -> Stream f a
+stepsOf n stream =
+  builds $ \e c s -> c $
+    folds 
+      (\_ -> pure e) 
+      (\fns m ->
+        let r n = join $ fmap ($ n) fns
+        in if m == 0 then pure (c (r n)) else r (m - 1)
+      ) 
+      (\a stream n -> fmap (s a) $ stream n)
+      stream 
+      n
 
 {-# INLINE chunksOf #-}
 -- make `step` always yield `n` elements; subtly different than stepSize
 chunksOf :: Monad f => Int -> Stream f a -> Stream f a
-chunksOf n stream
-  | n <= 1    = stream
-  | otherwise =  
-    builds $ \e c s -> c $
-      folds 
-        (\_ -> pure e) 
-        (\fns m ->
-          let r !n = join $ fmap ($ n) fns 
-          in if m == 0
-            then pure $ c (r n)
-            else r m 
-        ) 
-        (\a stream m -> 
-          let !m' | m == 0 = n | otherwise = m - 1
-          in s a <$> stream m'
-        )
-        stream 
-        n
+chunksOf n stream =
+  builds $ \e c s -> c $
+    folds 
+      (\_ -> pure e) 
+      (\fns m -> join $ fmap ($ m) fns
+      )
+      (\a stream m -> 
+        let r n = s a <$> stream n
+        in if m == 0 then pure (c (r n)) else r (m - 1)
+      )
+      stream 
+      n
 
 {-# RULES
 "append" [~1] forall xs ys. append xs ys = augments (\e c s -> folds e c s xs) ys
   #-}
 
-{-# NOINLINE [1] append #-}
+{-# NOINLINE [2] append #-}
 append :: Functor f => Stream f a -> Stream f a -> Stream f a
 append l r = builds $ \e c s -> folds (folds e c s r) c s l
 
-{-
-challenging (impossible?) without using constructors:
+{-# INLINE interleave #-}
+interleave :: Monad f => Stream f a -> Stream f a -> Stream f a
+interleave as as' = builds $ \e c s -> folds e c (\(a,a') rest -> s a (s a' rest)) (zip as as')
 
-interleave :: Functor f => Stream f a -> Stream f a -> Stream f a
-interleave as as' = 
-  -- naive version that drops leftovers, if we had zip
-  -- builds $ \e c s -> folds e c (\(a,a') rest -> s a (s a' rest)) (zip as as')
--}
+{-# INLINE zip #-}
+zip :: Monad f => Stream f a -> Stream f b -> Stream f (a,b)
+zip la ra = unfolds (la,ra) $ \(la,ra) -> do
+  lr <- (,) <$> uncons la <*> uncons ra
+  case lr of
+    (Just (l,lrest),Just (r,rrest)) -> pure (Just ((l,r),(lrest,rrest)))
+    _                               -> pure Nothing
 
 {-# INLINE fromList #-}
 fromList :: [a] -> Stream f a
 fromList xs = 
   builds $ \e _ s ->
-    foldr (\a c as -> s a $! c as) id xs e
+    foldr (\a c -> s a . c) id xs e
 
 {-# INLINE fromListM #-}
 fromListM :: Functor f => [f a] -> Stream f a
 fromListM xs = 
   builds $ \e c s ->
-    foldr (\fa cont as -> c $! fmap (\a -> s a $! cont as) fa) id xs e
+    foldr (\fa cont as -> c $ fmap (\a -> s a $ cont as) fa) id xs e
 
 {-# INLINE toList #-}
 toList :: Functor f => Stream f a -> [a]
@@ -292,7 +296,7 @@ toList xs = build $ \cons nil ->
   folds 
     id 
     (\_ rest -> rest) 
-    (\a c rest -> cons a (c rest)) 
+    (\a c rest -> cons a (c rest))
     xs 
     nil
 
@@ -350,7 +354,6 @@ repeatM fa =
 
 {-# INLINE take #-}
 take :: Functor f => Int -> Stream f a -> Stream f a
-take n as | n <= 0 = nil
 take n as =
   builds $ \e c s ->
     folds 
@@ -362,7 +365,6 @@ take n as =
 
 {-# INLINE drop #-}
 drop :: Functor f => Int -> Stream f a -> Stream f a
-drop n as | n <= 0 = as
 drop n as =
   builds $ \e c s ->
     folds
@@ -402,3 +404,36 @@ reverse as =
 filter :: Functor f => (a -> Bool) -> Stream f a -> Stream f a
 filter p as = builds $ \e c s -> 
   folds e c (\a as -> if p a then s a as else as) as
+
+{- 
+
+GHC does an exceptional job with the stream rewrite rules in the general case. 
+Note in the following Core how GHC fully merged the toListM/take/drop/unfolds. 
+The stream is never even materialized. GHC even eliminated the Maybe!
+
+print =<< toListM (take 1 (drop 10000000 (unfolds (0 :: Int) $ \(!n) -> more n (n + 1))))
+
+Rec {
+test_$s$wx
+  = \ sc sc1 sc2 sc3 sc4 ->
+      case <=# sc2 0# of {
+        __DEFAULT ->
+          case <=# sc3 0# of {
+            __DEFAULT -> test_$s$wx sc sc1 sc2 (-# sc3 1#) (+# sc4 1#);
+            1# ->
+              case test_$s$wx sc sc1 (-# sc2 1#) sc3 (+# sc4 1#) of
+              { (# ipv, ipv1 #) ->
+              (# ipv, : (I# sc4) ipv1 #)
+              }
+          };
+        1# -> (# sc, sc1 #)
+      }
+end Rec }
+
+test1
+  = \ s ->
+      case test_$s$wx s [] 1# 10000000# 0# of { (# ipv, ipv1 #) ->
+      ((hPutStr' stdout ($fShow[]_$s$cshow ipv1) True) `cast` <Co:2>) ipv
+      }
+
+-}
