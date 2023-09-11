@@ -288,7 +288,7 @@ withIdentity ep f = Handler (go :: Application) [methodPost,methodGet,methodOpti
 --  2. This doesn't allow for authentication-dependent middlewares, like caching based
 --     on user role, etc....
 --
-class Server r where
+class Resource r => Server r where
 
   type Context r :: Constraint
   type Context r = ()
@@ -296,8 +296,7 @@ class Server r where
   handlers :: Context r => [Server.Handler]
   default handlers 
     :: ( Context r
-       , Resource r
-       , Typeable r, ToJSON r, FromJSON r
+       , ToJSON r, FromJSON r
        , Typeable (Auth r), FromJSON (Auth r)
        , Typeable (Name r), FromJSON (Name r)
        , ToJSON (Product r), FromJSON (Product r)

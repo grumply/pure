@@ -264,7 +264,7 @@ wserror :: Exists Websocket => View -> (Producer WebsocketError => View)
 wserror = OnMounted (\_ -> onRaw (it :: Websocket) "error" def (\_ -> yield . WebsocketError))
 #endif
 
-class Client r where 
+class Resource r => Client r where 
 
   type Context r :: Constraint 
   type Context r = ()
@@ -273,9 +273,7 @@ class Client r where
   default routes 
     :: forall x.
        ( Context r
-       , Resource r
        , API r
-       , Typeable r
        , Typeable (Context r)
        , Typeable (Index r)
        , Typeable (Preview r)

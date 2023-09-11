@@ -2,7 +2,8 @@
 module Endpoint where
 
 import Control.Exception
-import Data.Char
+import Data.Char as Char
+import Data.List as List
 import Data.Proxy
 import Data.JSON 
 import Data.String
@@ -61,17 +62,19 @@ class Typeable r => Resource r where
   type Index r :: *
   type Index r = [Preview r]
 
-  {-# INLINE base #-}
+  {-# NOINLINE base #-}
+  -- This should be done at compile-time, but haskell.nix GHCJS doesn't include ghcjs-th support.
+  -- So, the best we can do is noinline it and hope that it only ever gets evaluated once.
   base :: Endpoint x
-  base = ("/" <>) $ fromTxt $! Txt.toLower rep
+  base = fromString ('/' : fmap Char.toLower rep)
     where
-      rep = Txt.map limit $ go (typeRep (Proxy :: Proxy r))
+      rep = fmap limit $ go (typeRep (Proxy :: Proxy r))
         where
           limit c | isAscii c && isAlphaNum c = c | otherwise = '_'
           go tr =
-            let tc = toTxt (show (typeRepTyCon tr))
+            let tc = show (typeRepTyCon tr)
                 trs = typeRepArgs tr
-            in Txt.intercalate "_" (tc : fmap go trs)
+            in List.intercalate "_" (tc : fmap go trs)
 
   create :: Endpoint (Auth r -> r -> IO (Maybe (Name r)))
   create = base @r <> "/create"
