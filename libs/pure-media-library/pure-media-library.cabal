@@ -16,17 +16,7 @@ library
 
   exposed-modules:
       Pure.Media.Library
-    , Pure.Media.Library.API
-    , Pure.Media.Library.Browser
-    , Pure.Media.Library.Data.Library
-    , Pure.Media.Library.Data.Media
     
-
-  if !(impl(ghcjs))
-
-    exposed-modules:
-      Pure.Media.Library.GHC.Library
-
   default-language: Haskell2010
 
   default-extensions:

@@ -1,14 +1,16 @@
-{-# language ScopedTypeVariables, LambdaCase, ConstraintKinds, FlexibleContexts, RankNTypes, OverloadedStrings, CPP, NamedFieldPuns, TypeApplications, RecordWildCards #-}
+{-# language ScopedTypeVariables, LambdaCase, ConstraintKinds, FlexibleContexts, RankNTypes, OverloadedStrings, CPP, NamedFieldPuns, TypeApplications, RecordWildCards, StandaloneDeriving, DeriveGeneric, DeriveAnyClass, DerivingStrategies, DeriveFunctor, AllowAmbiguousTypes #-}
 module Data.Log where
 
+import Control.Applicative ((<|>))
 import Control.Concurrent (newMVar,withMVar,readMVar,modifyMVar_,takeMVar)
 import Control.Monad (void,mzero)
-import Data.View (Exists,with,it)
+import Data.View (Exists,with,it,Producer,stream,(#),yield)
 import Data.JSON (Value,ToJSON(..),FromJSON(..),pretty,encode,decode,logJSON)
 import Data.Marker
 import Data.Maybe (mapMaybe)
 import Data.Time
 import Data.Txt (Txt,FromTxt(..),ToTxt(..),intercalate,lines)
+import GHC.Generics
 import Prelude hiding (log,lines)
 
 import GHC.Stack
@@ -24,45 +26,94 @@ import           System.Posix.Types              as P (Fd, FileOffset, ByteCount
 
 import System.FilePath
 
-type Logging = Exists Logger
+type Logging a = Producer (Event a)
 
-data Level = Trace | Debug | Info | Warn | Error | Fatal
+data Critical = Warn | Error | Fatal
   deriving (Enum,Bounded,Eq,Ord)
 
-instance ToJSON Level where
+instance ToJSON Critical where
   toJSON = toJSON @Txt . \case
-    Trace -> "TRACE"
-    Debug -> "DEBUG"
-    Info  -> "INFO"
     Warn  -> "WARN"
     Error -> "ERROR"
     Fatal -> "FATAL"
 
-instance FromJSON Level where
+instance FromJSON Critical where
+  parseJSON val = do
+    t :: Txt <- parseJSON val
+    case t of
+      "WARN"  -> pure Warn
+      "ERROR" -> pure Error
+      "FATAL" -> pure Fatal
+      _       -> mzero
+
+data Informational = Trace | Debug | Info 
+  deriving (Enum,Bounded,Eq,Ord)
+
+instance ToJSON Informational where
+  toJSON = toJSON @Txt . \case
+    Trace -> "TRACE"
+    Debug -> "DEBUG"
+    Info  -> "INFO"
+
+instance FromJSON Informational where
   parseJSON val = do
     t :: Txt <- parseJSON val
     case t of
       "TRACE" -> pure Trace
       "DEBUG" -> pure Debug
       "INFO"  -> pure Info
-      "WARN"  -> pure Warn
-      "ERROR" -> pure Error
-      "FATAL" -> pure Fatal
       _       -> mzero
 
-newtype Logger = Logger { onLog :: Level -> Value -> IO () }
+data Level = Informational Informational | Critical Critical
+  deriving (Eq,Ord)
 
-logger :: (Level -> Value -> IO ()) -> (Logging => a) -> a
-logger onLog = with (Logger onLog)
+noncritical :: Level -> Bool
+noncritical (Critical _) = False
+noncritical _ = True
+
+noninformational :: Level -> Bool
+noninformational (Informational _) = False
+noninformational _ = True
+
+instance ToJSON Level where
+  toJSON = \case
+    Informational i -> toJSON i
+    Critical c -> toJSON c
+
+instance FromJSON Level where
+  parseJSON val = i <|> c
+    where
+      i = Informational <$> parseJSON val 
+      c = Critical <$> parseJSON val
+
+data Event a = Event Level a
+  deriving stock (Generic,Eq,Ord,Functor)
+  deriving anyclass (ToJSON,FromJSON)
+
+logger :: (Level -> a -> IO ()) -> (Logging a => x) -> x
+logger onLog = stream (\(Event lvl e) -> onLog lvl e)
+
+sublogger :: (a -> b) -> (Logging a => x) -> (Logging b => x)
+sublogger f = ((fmap @Event f) #)
+
+logging :: forall a x. Level -> (Producer a => x) -> (Logging a => x)
+logging level = (f #) -- loggingWith level (id @a)
+  where
+    f :: a -> Event a
+    f = Event level
+
+-- A convenience for the combination of `sublogger` and `logging`
+loggingWith :: Level -> (a -> b) -> (Producer a => x) -> (Logging b => x)
+loggingWith level f = ((Event level . f) #)
 
 -- Modify a logger to ignore levels via predicate.
 --
--- > logger (printer & ignoring (< Warn))
+-- > logger (printer & ignoring noncritical)
 --
 ignoring 
   :: (Level -> Bool) 
-  -> (Level -> Value -> IO ()) 
-  -> (Level -> Value -> IO ())
+  -> (Level -> a -> IO ()) 
+  -> (Level -> a -> IO ())
 ignoring predicate onLog lvl val 
   | predicate lvl = pure ()
   | otherwise     = onLog lvl val
@@ -70,12 +121,12 @@ ignoring predicate onLog lvl val
 -- Amend an in-flight logging event by effectuflly analyzing and modifying the
 -- level and value.
 --
--- > logger (printer & amending (\level value -> ...) & ignoring (< Warn))
+-- > logger (printer & amending (\level value -> ...) & ignoring noncritical)
 --
 amending
-  :: (Level -> Value -> IO (Level,Value)) 
-  -> (Level -> Value -> IO ()) 
-  -> (Level -> Value -> IO ())
+  :: (Level -> a -> IO (Level,a)) 
+  -> (Level -> a -> IO ()) 
+  -> (Level -> a -> IO ())
 amending f onLog lvl val = do
   evt <- f lvl val
   uncurry onLog evt
@@ -90,47 +141,53 @@ location = fromCallStack callStack
     fromCallSite (f,SrcLoc { srcLocModule, srcLocStartLine }) = 
       toTxt f <> "@" <> toTxt srcLocModule <> ":" <> toTxt srcLocStartLine 
 
-log :: (Logging, ToJSON a) => Level -> a -> IO ()
-log level value = onLog it level (toJSON value)
+log :: Logging a => Level -> a -> IO ()
+log lvl a = yield (Event lvl a)
 
-trace :: (Logging, ToJSON a) => a -> IO ()
-trace = log Trace
+informational :: Logging a => Informational -> a -> IO ()
+informational = log . Informational
 
-debug :: (Logging, ToJSON a) => a -> IO ()
-debug = log Debug
+critical :: Logging a => Critical -> a -> IO ()
+critical = log . Critical
 
-info :: (Logging, ToJSON a) => a -> IO ()
-info = log Info
+trace :: Logging a => a -> IO ()
+trace = informational Trace
 
-warn :: (Logging, ToJSON a) => a -> IO ()
-warn = log Warn
+debug :: Logging a => a -> IO ()
+debug = informational Debug
 
-error :: (Logging, ToJSON a) => a -> IO ()
-error = log Error
+info :: Logging a => a -> IO ()
+info = informational Info
 
-fatal :: (Logging, ToJSON a) => a -> IO ()
-fatal = log Fatal
+warn :: Logging a => a -> IO ()
+warn = critical Warn
+
+error :: Logging a => a -> IO ()
+error = critical Error
+
+fatal :: Logging a => a -> IO ()
+fatal = critical Fatal
 
 -- Simple printing logger.
-printer :: Level -> Value -> IO ()
+printer :: ToJSON a => Level -> a -> IO ()
 printer level value = do
   now <- time 
   putStrLn (fromTxt (encode (level,RFC3339 now,value)))
 
 -- Thread-safe version of `printer`.
-printer' :: IO (Level -> Value -> IO ())
+printer' :: ToJSON a => IO (Level -> a -> IO ())
 printer' = do
   mv <- newMVar ()
   pure (\lvl val -> withMVar mv (\_ -> printer lvl val))
 
 -- Pretty-printing logger.
-pPrinter :: Level -> Value -> IO ()
+pPrinter :: ToJSON a => Level -> a -> IO ()
 pPrinter level value = do
   now <- time
-  logJSON (level,RFC3339 now,value)
+  logJSON (toJSON (level,RFC3339 now,value))
 
 -- | Thread-safe version of `pPrinter`.
-pPrinter' :: IO (Level -> Value -> IO ())
+pPrinter' :: ToJSON a => IO (Level -> a -> IO ())
 pPrinter' = do
   mv <- newMVar ()
   pure (\lvl val -> withMVar mv (\_ -> pPrinter lvl val))
@@ -204,7 +261,7 @@ rotatingAfter bytes (Policy p) = Policy p'
       | otherwise = p record
 
 -- | Thread-safe file logging. To read the log lines, use `recorded`.
-recording :: FilePath -> Policy -> IO (Level -> Value -> IO (),IO ()) 
+recording :: ToJSON a => FilePath -> Policy -> IO (Level -> a -> IO (),IO ()) 
 recording dir (Policy p) = do
   m <- markIO
   let file = fromTxt (toTxt m) <> ".log"
@@ -232,7 +289,7 @@ recording dir (Policy p) = do
 recorded :: forall a. FromJSON a => FilePath -> IO [(Level,Time,a)]
 recorded = fmap (mapMaybe decode . lines . toTxt) . readFile
 
-memory :: IO (Level -> Value -> IO (),IO [(Level,Time,Value)])
+memory :: IO (Level -> a -> IO (),IO [(Level,Time,a)])
 memory = do
   mv <- newMVar []
   pure (logger mv,reverse <$> readMVar mv)

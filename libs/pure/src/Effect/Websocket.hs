@@ -31,10 +31,10 @@ data Cache domain = Cache
   , cache  :: Map TypeRep RequestMap
   }
 
-type Websocket domain = (Typeable domain, Modify (Cache domain), Logging)
+type Websocket domain = (Typeable domain, Modify (Cache domain), Logging Value)
 
 {-# INLINE websocket #-}
-websocket :: forall domain. (Logging, Typeable domain) => String -> Int -> Bool -> (Websocket domain => View) -> View
+websocket :: forall domain. (Logging Value, Typeable domain) => String -> Int -> Bool -> (Websocket domain => View) -> View
 websocket h p secure = stateWith (\_ -> pure) initial
   where
     initial :: Websocket domain => IO (Cache domain,Cache domain -> IO ())
@@ -68,7 +68,7 @@ onStatus f = do
 
 request' 
   :: forall domain rq rqs msgs pl. 
-  ( WS.Request rq, WS.Req rq ~ (Int,pl), Ord pl, ToJSON pl, FromJSON (Rsp rq), rq ∈ rqs ~ True, Typeable domain, Logging )
+  ( WS.Request rq, WS.Req rq ~ (Int,pl), Ord pl, ToJSON pl, FromJSON (Rsp rq), rq ∈ rqs ~ True, Typeable domain, Logging Value)
   => Bool -> Bool -> WS.API msgs rqs -> Proxy rq -> pl -> (WS.Rsp rq -> IO (WS.Rsp rq)) -> (WS.Rsp rq -> IO ()) 
   -> IO ()
 request' force bypass api p pl process cb
@@ -196,7 +196,7 @@ req
   , Req request ~ (Int, payload)
   , Rsp request ~ response
   , Typeable domain
-  , Logging
+  , Logging Value
   )
   => Effect.Websocket.Policy -> WS.API msgs reqs -> Proxy request -> payload -> IO response
 req Uncached api rq pl = do
@@ -218,7 +218,7 @@ msg
   , (message ∈ msgs) ~ 'True
   , M message ~ payload
   , Typeable domain
-  , Logging
+  , Logging Value
   )
   => WS.API msgs reqs -> Proxy message -> payload -> IO ()
 msg api endpoint pl = publish go
@@ -236,7 +236,7 @@ request
   , Rsp request ~ response
   , Typeable response
   , Typeable domain
-  , Logging
+  , Logging Value
   ) 
   => Effect.Websocket.Policy -> WS.API msgs reqs -> Proxy request -> payload -> (Exists response => View) -> View
 request policy api rq pl v = lazy (req @domain policy api rq pl) v

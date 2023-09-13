@@ -49,7 +49,7 @@ newtype Username c = Username Txt
 type role Username nominal
 
 instance FromTxt (Username c) where
-  fromTxt = Username . Txt.toLower . Txt.filter isPrint
+  fromTxt = Username . Txt.filter (\c -> isAsciiLower c || isDigit c) . Txt.take 255 . Txt.toLower
 
 instance FromJSON (Username c) where
   parseJSON = fmap fromTxt . parseJSON 

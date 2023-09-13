@@ -5,7 +5,7 @@ import Control.Exception
 import Data.Char as Char
 import Data.List as List
 import Data.Proxy
-import Data.JSON 
+import Data.JSON hiding (Result)
 import Data.String
 import Data.Theme
 import Data.Txt as Txt
@@ -59,8 +59,11 @@ class Typeable r => Resource r where
   data Product r :: *
   data Preview r :: *
 
-  type Index r :: *
-  type Index r = [Preview r]
+  type Query r :: *
+  type Query r = ()
+
+  type Result r :: *
+  type Result r = [Preview r]
 
   {-# NOINLINE base #-}
   -- This should be done at compile-time, but haskell.nix GHCJS doesn't include ghcjs-th support.
@@ -88,7 +91,7 @@ class Typeable r => Resource r where
   update :: Endpoint (Auth r -> Name r -> Event r -> IO ())
   update = base @r <> "/update"
 
-  index :: Endpoint (Maybe (Auth r) -> IO (Index r))
-  index = base @r <> "/index"
+  query :: Endpoint (Maybe (Auth r) -> Maybe (Query r) -> IO (Result r))
+  query = base @r <> "/query"
 
 

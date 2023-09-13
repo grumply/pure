@@ -170,7 +170,7 @@ writer _ Nothing = pure ()
 writer c (Just bytes) = C.connectionPut c (Lazy.toStrict bytes)
 
 -- Construct a server websocket from an open socket with reader, writer, and websocket options.
-server :: Logging => WS.ConnectionOptions -> S.Socket -> IO Websocket
+server :: Logging Value => WS.ConnectionOptions -> S.Socket -> IO Websocket
 server options sock = do
   ctx <- C.initConnectionContext
   sa <- S.getPeerName sock
@@ -189,7 +189,7 @@ server options sock = do
   onStatus ws_ $ \case
     status -> do
       now <- Time.time
-      log Info ConnectionEvent
+      informational Info $ toJSON $ ConnectionEvent
         { host = h
         , port = fromIntegral p
         , secure = False
@@ -228,7 +228,7 @@ secureServer options sock ssl = SSL.withOpenSSL $ do
     }
   return ws_
 
-activate :: Logging => Websocket -> IO ()
+activate :: Logging Value => Websocket -> IO ()
 activate ws_ = do
   ws <- readIORef ws_
   case wsReceiver ws of
@@ -241,7 +241,7 @@ activate ws_ = do
           rt <- forkIO $ receiveLoop host (fromIntegral port) ws_ c
           modifyIORef' ws_ $ \ws -> ws { wsReceiver = Just rt }
 
-receiveLoop :: Logging => String -> Int -> Websocket -> WS.Connection -> IO ()
+receiveLoop :: Logging Value => String -> Int -> Websocket -> WS.Connection -> IO ()
 receiveLoop host port ws_ c = go
   where
     go = do
@@ -255,7 +255,7 @@ receiveLoop host port ws_ c = go
               Nothing -> do
                 -- Unknown endpoint; close the connection.
                 now <- Time.time
-                log Error UnknownMessage
+                critical Error $ toJSON $ UnknownMessage
                   { content = toTxt t
                   , ..
                   }
@@ -263,7 +263,7 @@ receiveLoop host port ws_ c = go
               Just cbs -> do
                 for_ cbs (readIORef >=> ($ m))
                 now <- Time.time
-                log Debug DispatchedMessage
+                informational Debug $ toJSON $ DispatchedMessage
                   { endpoint = ep m
                   , payload = pl m
                   , .. 
@@ -274,7 +274,7 @@ receiveLoop host port ws_ c = go
             -- understand the messaging protocol; close the
             -- connection.
             now <- Time.time
-            log Error UnknownMessage
+            critical Error $ toJSON $ UnknownMessage
               { content = toTxt t
               , .. 
               }
@@ -293,14 +293,14 @@ close ws_ cr = do
 -- Connect via the given ConnectionParams. The default retry policy is jittered
 -- with a minimum delay of 1 second and a maximum delay of 30 seconds. Retries
 -- and failures are logged.
-client :: Logging => C.ConnectionParams -> WS.ConnectionOptions -> IO Websocket
+client :: Logging Value => C.ConnectionParams -> WS.ConnectionOptions -> IO Websocket
 client ps = clientWith "/" policy ps
   where
     policy = 
       jittered Second 
         & limitDelay (Seconds 30 0) 
-        & logRetry Warn retrying
-        & logFailure Error failed
+        & logRetry (Critical Warn) retrying
+        & logFailure (Critical Error) failed
 
     retrying Retry.Status { retries, current, start } _ = do
       let 
@@ -309,7 +309,7 @@ client ps = clientWith "/" policy ps
         secure = isJust (C.connectionUseSecure ps)
         status = Connecting
 
-      ConnectionEvent {..} 
+      toJSON ConnectionEvent {..} 
 
     failed Retry.Status { retries, current, start  } = do
       let
@@ -318,9 +318,9 @@ client ps = clientWith "/" policy ps
         secure = isJust (C.connectionUseSecure ps)
         status = Closed Disconnect 
 
-      ConnectionEvent {..}
+      toJSON ConnectionEvent {..}
 
-clientWith :: Logging => String -> Retry.Policy -> C.ConnectionParams -> WS.ConnectionOptions -> IO Websocket
+clientWith :: Logging Value => String -> Retry.Policy -> C.ConnectionParams -> WS.ConnectionOptions -> IO Websocket
 clientWith root policy params options = do
   ws_ <- websocket
   let
@@ -331,10 +331,10 @@ clientWith root policy params options = do
       , ..
       }
   now <- Time.time
-  log Info (cce now Initialized)
+  informational Info (toJSON $ cce now Initialized)
   onStatus ws_ $ \ev -> do
     now <- Time.time
-    log Info (cce now ev)
+    informational Info (toJSON $ cce now ev)
   forkIO $ do 
     fix $ \restart -> do
       ctx <- C.initConnectionContext
@@ -376,7 +376,7 @@ hGetContentsN chk h = streamRead
 --------------------------------------------------------------------------------
 -- Raw byte-level websocket access
 
-sendRaw :: Logging => Websocket -> Lazy.ByteString -> IO (Either Status SendStatus)
+sendRaw :: Logging Value => Websocket -> Lazy.ByteString -> IO (Either Status SendStatus)
 sendRaw ws_ b = do
   Websocket {..} <- readIORef ws_
   case wsSocket of
@@ -385,7 +385,7 @@ sendRaw ws_ b = do
                  (Right <$> WS.sendTextData c (TL.decodeUtf8 b))
       let (h,p) = C.connectionID conn
       now <- Time.time
-      log Trace SentMessage
+      informational Trace $ toJSON $ SentMessage
         { host = h
         , port = fromIntegral p
         , payload = toJSON (toTxt b)
@@ -419,7 +419,7 @@ request :: ( Request rqTy
            , I request ~ rqI
            , Rsp rqTy ~ rsp
            , FromJSON rsp
-           , Logging
+           , Logging Value
            )
          => Websocket
          -> Proxy rqTy
@@ -444,7 +444,7 @@ apiRequest :: ( Request rqTy
               , Rsp rqTy ~ response
               , FromJSON response
               , (rqTy ∈ rqs) ~ 'True
-              , Logging
+              , Logging Value
               )
            => API msgs rqs
            -> Websocket
@@ -461,7 +461,7 @@ respond :: ( Request rqTy
            , FromJSON request
            , Rsp rqTy ~ response
            , ToJSON response
-           , Logging
+           , Logging Value
            )
         => Websocket
         -> Proxy rqTy
@@ -480,7 +480,7 @@ respond ws_ rqty_proxy f = do
   writeIORef s_ dcb
   return dcb
 
-message :: ( Message mTy , M mTy ~ msg , ToJSON msg, Logging )
+message :: ( Message mTy , M mTy ~ msg , ToJSON msg, Logging Value )
         => Websocket
         -> Proxy mTy
         -> msg
@@ -488,7 +488,7 @@ message :: ( Message mTy , M mTy ~ msg , ToJSON msg, Logging )
 message ws_ mty_proxy m =
   sendRaw ws_ $ encodeBS $ encodeDispatch (messageHeader mty_proxy) m
 
-apiMessage :: ( Message mTy , M mTy ~ msg , ToJSON msg , (mTy ∈ msgs) ~ 'True, Logging )
+apiMessage :: ( Message mTy , M mTy ~ msg , ToJSON msg , (mTy ∈ msgs) ~ 'True, Logging Value )
            => API msgs rqs
            -> Websocket
            -> Proxy mTy

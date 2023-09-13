@@ -7,17 +7,17 @@ module Client
   -- ,ws,wssend,wsmessage,wserror
   , sseWith, sse
   , base, API(..)
-  , Index, Auth, Name, Event, Product, Preview
+  , Query, Result, Auth, Name, Event, Product, Preview
   , Client(..)
   , module Export
   ) where
 
-import Pure as Export hiding (Event,liftIO,throw,index,read,get)
+import Pure as Export hiding (Event,liftIO,throw,index,read,get,Result)
 import qualified Pure as Export (throw)
 
-import Data.JSON as JSON hiding (Key)
+import Data.JSON as JSON hiding (Key,Result)
 #ifndef __GHCJS__
-import Data.Aeson as Aeson hiding (Key)
+import Data.Aeson as Aeson hiding (Key,Result)
 #endif
 
 import Control.Concurrent hiding (yield)
@@ -275,7 +275,8 @@ class Resource r => Client r where
        ( Context r
        , API r
        , Typeable (Context r)
-       , Typeable (Index r)
+       , Typeable (Query r)
+       , Typeable (Result r)
        , Typeable (Preview r)
        , Typeable (Event r)
        , Typeable (Product r)
@@ -283,15 +284,17 @@ class Resource r => Client r where
        , Typeable (Name r), FromTxt (Name r), ToTxt (Name r), ToJSON (Name r), FromJSON (Name r)
        , ToJSON r, FromJSON r
        , ToJSON (Event r)
+       , ToJSON (Query r)
        , FromJSON (Preview r)
        , FromJSON (Product r)
-       , FromJSON (Index r)
+       , FromJSON (Query r)
+       , FromJSON (Result r)
        ) => Maybe (Auth r) -> Routing (x |- View) ()
   routes (Just a) = void do
 
     Effect.Router.match (fromTxt (toTxt (base @r))) do
-      rs <- liftIO (Client.get @r (Endpoint.index @r) (Just a))
-      route (with rs (proof (Client.index @r)))
+      rs <- liftIO (Client.get @r (Endpoint.query @r) (Just a) Nothing)
+      route (with rs (proof (Client.query @r)))
 
     path (fromTxt (toTxt (base @r))) do
 
@@ -321,24 +324,24 @@ class Resource r => Client r where
         mr <- liftIO (Client.get @r (Endpoint.read @r) (Just a) k)
         case mr of
           Nothing -> do
-            rs <- liftIO (Client.get @r (Endpoint.index @r) (Just a))
-            route (with rs (proof (Client.index @r)))
+            rs <- liftIO (Client.get @r (Endpoint.query @r) (Just a) Nothing)
+            route (with rs (proof (Client.query @r)))
           Just r ->
             route (with k (with r (proof (Client.read @r))))
 
   routes Nothing = void do
 
     Effect.Router.match (fromTxt (toTxt (base @r))) do
-      rs <- liftIO (Client.get @r (Endpoint.index @r) Nothing)
-      route (with rs (proof (Client.index @r)))
+      rs <- liftIO (Client.get @r (Endpoint.query @r) Nothing Nothing)
+      route (with rs (proof (Client.query @r)))
     
     path (fromTxt (toTxt (base @r)) <> "/:res") do
       k <- "res" 
       mr <- liftIO (Client.get @r (Endpoint.read @r) Nothing k)
       case mr of
         Nothing -> do
-          rs <- liftIO (Client.get @r (Endpoint.index @r) Nothing)
-          route (with rs (proof (Client.index @r)))
+          rs <- liftIO (Client.get @r (Endpoint.query @r) Nothing Nothing)
+          route (with rs (proof (Client.query @r)))
         Just r ->
           route (with k (with r (proof (Client.read @r))))
 
@@ -351,5 +354,5 @@ class Resource r => Client r where
   update :: (Context r, Exists r, Exists (Name r), Producer (Event r)) => View
   update = Data.View.Null
 
-  index :: (Context r, Exists (Index r)) => View
-  index = Data.View.Null
+  query :: (Context r, Exists (Result r)) => View
+  query = Data.View.Null

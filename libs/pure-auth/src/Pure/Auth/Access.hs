@@ -53,7 +53,7 @@ deleteToken = void (Localstorage.delete ("token/" <> rep @domain))
 
 newtype Access domain = Access { fromAccess :: Maybe (Token domain) }
 
-type Authentication domain = (Typeable domain, State (Access domain), Logging)
+type Authentication domain = (Typeable domain, State (Access domain), Logging Value)
 
 setToken :: forall domain. Modify (Access domain) => Token domain -> IO ()
 setToken = put . Access . Just
@@ -61,7 +61,7 @@ setToken = put . Access . Just
 clearToken :: forall domain. Modify (Access domain) => IO ()
 clearToken = put (Access Nothing :: Access domain)
 
-access :: forall domain. (Typeable domain, Logging) => (Authentication domain => View) -> View
+access :: forall domain. (Typeable domain, Logging Value) => (Authentication domain => View) -> View
 access = stateIO (Access <$> readToken @domain)
 
 -- | Wraps up a common approach to authentication.
@@ -70,7 +70,7 @@ access = stateIO (Access <$> readToken @domain)
 --
 -- > authentication @domain (guarded @domain Null (basic @domain) v)
 --
-simple :: forall domain. (Logging, API domain, Typeable domain) => (Authenticated domain => View) -> View
+simple :: forall domain. (Logging Value, API domain, Typeable domain) => (Authenticated domain => View) -> View
 simple v = access @domain (guarded @domain (auth @domain) v)
 
 mtoken :: forall domain. Authentication domain => Maybe (Token domain)

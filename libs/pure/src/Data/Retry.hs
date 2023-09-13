@@ -152,10 +152,10 @@ onFailure f (Policy p) = Policy p'
       maybe (f status) (const (pure ())) mt
       pure mt
 
-logRetry :: (Logging, ToJSON a) => Level -> (Status -> Time -> a) -> Policy -> Policy
+logRetry :: Logging a => Level -> (Status -> Time -> a) -> Policy -> Policy
 logRetry lvl f = onRetry (\status time -> Log.log lvl (f status time))
 
-logFailure :: (Logging, ToJSON a) => Level -> (Status -> a) -> Policy -> Policy
+logFailure :: Logging a => Level -> (Status -> a) -> Policy -> Policy
 logFailure lvl f = onFailure (Log.log lvl . f)
 
 -- | Constant delay policy.

@@ -1,4 +1,4 @@
-{-# language DeriveAnyClass, BlockArguments, DerivingStrategies, DeriveGeneric, PatternSynonyms, ViewPatterns, MagicHash, UnboxedTuples, BangPatterns, TypeApplications, PartialTypeSignatures, CPP, TupleSections, GADTs, OverloadedStrings #-}
+{-# language DeriveAnyClass, BlockArguments, DerivingStrategies, DeriveGeneric, PatternSynonyms, ViewPatterns, MagicHash, UnboxedTuples, BangPatterns, TypeApplications, PartialTypeSignatures, CPP, TupleSections, GADTs, OverloadedStrings, RoleAnnotations #-}
 module Data.Marker 
   ( Marker
   , markIO
@@ -16,6 +16,9 @@ module Data.Marker
   ) where
 
 import Data.JSON (ToJSON(..),FromJSON(..))
+#ifndef __GHCJS__
+import Data.JSON (ToJSONKey,FromJSONKey)
+#endif
 import Data.Txt as Txt (ToTxt(..),FromTxt(..),Txt,length,unfoldrN,reverse,drop,dropEnd,foldl',filter,uncons)
 import Data.Time (Time,pattern Milliseconds,time)
 import Data.Random (Variate(..), Generator, Seed, generate, newSeed) 
@@ -37,23 +40,29 @@ import System.IO.Unsafe (unsafePerformIO)
 -- Combines a 48-bit time in milliseconds with an 80 bit random. Not 
 -- cryptographically secure.
 --
-data Marker = Marker {-# UNPACK #-}!Word64 {-# UNPACK #-}!Word64
+data Marker a = Marker {-# UNPACK #-}!Word64 {-# UNPACK #-}!Word64
   deriving (Generic,Eq,Ord,Show)
+type role Marker nominal
 
-instance ToJSON Marker where
+instance ToJSON (Marker a) where
   toJSON = toJSON . encodeBase62
 
-instance FromJSON Marker where
+instance FromJSON (Marker a) where
   parseJSON = fmap decodeBase62 . parseJSON
 
-instance Hashable Marker where
+#ifndef __GHCJS__
+instance ToJSONKey (Marker a)
+instance FromJSONKey (Marker a)
+#endif
+
+instance Hashable (Marker a) where
   hashWithSalt salt (Marker w1 w2) = 
     hashWithSalt salt (w1,w2)
 
-instance ToTxt Marker where 
+instance ToTxt (Marker a) where 
   toTxt = encodeBase62
 
-instance FromTxt Marker where 
+instance FromTxt (Marker a) where 
   fromTxt t = 
     case Txt.length t of
       22 -> decodeBase62 t
@@ -61,10 +70,11 @@ instance FromTxt Marker where
       36 -> decodeUUID t
       _  -> error "Data.Marker (fromTxt :: Txt -> Marker): invalid encoded Marker length"
 
+
 -- | Generate an action to create a `Marker` in IO.
 --
 {-# INLINE mark #-}
-mark :: Generator (IO Marker)
+mark :: Generator (IO (Marker a))
 mark = do
   r1 <- uniformR 0 (2 ^ 16 - 1) 
   r2 <- uniform
@@ -73,7 +83,7 @@ mark = do
     pure (Marker (shift (fromIntegral (round ms)) 16 .|. r1) r2)
 
 {-# INLINE timestamp #-}
-timestamp :: Marker -> Time
+timestamp :: Marker a -> Time
 timestamp (Marker w1 _) = Milliseconds (fromIntegral (shift w1 (-16))) 0
 
 {-# NOINLINE globalMarkerSeed #-}
@@ -83,15 +93,15 @@ globalMarkerSeed = unsafePerformIO do
   newIORef s
 
 {-# INLINABLE markIO #-}
-markIO :: IO Marker
+markIO :: IO (Marker a)
 markIO = join (atomicModifyIORef' globalMarkerSeed (generate mark))
 
 {-# INLINE base62 #-}
-base62 :: Marker -> Txt
+base62 :: Marker a -> Txt
 base62 = encodeBase62
 
 {-# INLINABLE encodeBase62 #-}
-encodeBase62 :: Marker -> Txt
+encodeBase62 :: Marker a -> Txt
 encodeBase62 (Marker w1 w2) = Txt.reverse (t1 <> t2)
   where 
     t1 = encodeWord64 w2
@@ -110,7 +120,7 @@ encodeBase62 (Marker w1 w2) = Txt.reverse (t1 <> t2)
       | otherwise = '0'
 
 {-# INLINABLE decodeBase62 #-}
-decodeBase62 :: Txt -> Marker
+decodeBase62 :: Txt -> Marker a
 decodeBase62 t = Marker w1 w2
   where 
     w1 = decodeWord64 (Txt.dropEnd 11 t)
@@ -129,11 +139,11 @@ decodeBase62 t = Marker w1 w2
       | otherwise          = 0
 
 {-# INLINE hex #-}
-hex :: Marker -> Txt
+hex :: Marker a -> Txt
 hex = encodeBase16
 
 {-# INLINABLE encodeBase16 #-}
-encodeBase16 :: Marker -> Txt
+encodeBase16 :: Marker a -> Txt
 encodeBase16 (Marker w1 w2) = Txt.reverse (t1 <> t2)
   where 
     t1 = encodeWord64 w2
@@ -151,7 +161,7 @@ encodeBase16 (Marker w1 w2) = Txt.reverse (t1 <> t2)
       | otherwise = '0'
 
 {-# INLINABLE decodeBase16 #-}
-decodeBase16 :: Txt -> Marker
+decodeBase16 :: Txt -> Marker a
 decodeBase16 t = Marker w1 w2
   where 
     w1 = decodeWord64 (Txt.dropEnd 16 t)
@@ -169,11 +179,11 @@ decodeBase16 t = Marker w1 w2
       | otherwise          = 0
 
 {-# INLINE uuid #-}
-uuid :: Marker -> Txt
+uuid :: Marker a -> Txt
 uuid = encodeUUID
 
 {-# INLINABLE encodeUUID #-}
-encodeUUID :: Marker -> Txt
+encodeUUID :: Marker a -> Txt
 encodeUUID = Txt.unfoldrN 36 go . (36,) . encodeBase16
   where
     go :: (Int,Txt) -> Maybe (Char,(Int,Txt))
@@ -182,5 +192,5 @@ encodeUUID = Txt.unfoldrN 36 go . (36,) . encodeBase16
       | otherwise = fmap (\(x,y) -> (x,(n - 1,y))) (Txt.uncons x)
 
 {-# INLINABLE decodeUUID #-}
-decodeUUID :: Txt -> Marker
+decodeUUID :: Txt -> Marker a
 decodeUUID = decodeBase16 . Txt.filter (/= '-')

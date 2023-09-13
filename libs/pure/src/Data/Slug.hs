@@ -1,4 +1,4 @@
-{-# language DerivingVia #-}
+{-# language DerivingVia, CPP #-}
 module Data.Slug (Slug()) where
 
 import Data.Char
@@ -9,7 +9,12 @@ import Data.String
 import Data.Txt as Txt
 
 newtype Slug = Slug Txt
-  deriving (Eq,Ord,ToJSON,FromJSON,Hashable) via Txt
+  deriving 
+    (Eq,Ord,ToJSON,FromJSON,Hashable
+#ifndef __GHCJS__
+    , ToJSONKey, FromJSONKey
+#endif
+    ) via Txt
 
 instance ToTxt Slug where
   {-# INLINE toTxt #-}

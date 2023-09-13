@@ -126,17 +126,17 @@ websocket = do
     , wsStatusCallbacks   = []
     }
 
-newWS :: Logging => String -> Int -> Bool -> IO Websocket
+newWS :: Logging Value => String -> Int -> Bool -> IO Websocket
 newWS host port secure = do
   -- TODO: make the delay method configurable.
   ws <- websocket
   activate ws host port secure
   pure ws
 
-activateGHCJS :: Logging => Websocket -> String -> Int -> Bool -> IO ()
+activateGHCJS :: Logging Value => Websocket -> String -> Int -> Bool -> IO ()
 activateGHCJS = activate
 
-activate :: Logging => Websocket -> String -> Int -> Bool -> IO ()
+activate :: Logging Value => Websocket -> String -> Int -> Bool -> IO ()
 activate ws host port secure = activateWith policy ws host port secure
   where
     context = location 
@@ -144,22 +144,22 @@ activate ws host port secure = activateWith policy ws host port secure
     policy = 
       jittered Second 
         & limitDelay (Seconds 30 0) 
-        & logRetry Warn retrying
-        & logFailure Error failed
+        & logRetry (Critical Warn) retrying
+        & logFailure (Critical Error) failed
 
     retrying Retry.Status { retries, current, start } _ = do
       let 
         status = Connecting
 
-      ConnectionEvent {..} 
+      toJSON ConnectionEvent {..} 
 
     failed Retry.Status { retries, current, start  } = do
       let
         status = Closed Disconnect 
 
-      ConnectionEvent {..}
+      toJSON ConnectionEvent {..}
 
-activateWith :: Logging => Retry.Policy -> Websocket -> String -> Int -> Bool -> IO ()
+activateWith :: Logging Value => Retry.Policy -> Websocket -> String -> Int -> Bool -> IO ()
 activateWith policy ws_ host port secure = do
   s <- newSeed
   void $ do
@@ -177,7 +177,7 @@ activateWith policy ws_ host port secure = do
               case fromJSON (js_JSON_parse sd) of
                 JSON.Error e -> do
                   now <- Time.time
-                  log Log.Error UnknownMessage
+                  log (Critical Log.Error) $ toJSON $ UnknownMessage
                     { content = sd
                     , ..
                     }
@@ -186,13 +186,13 @@ activateWith policy ws_ host port secure = do
                   case Map.lookup (ep m) (wsDispatchCallbacks ws) of
                     Nothing -> do
                       now <- Time.time
-                      log Log.Error UnknownMessage
+                      log (Critical Log.Error) $ toJSON $ UnknownMessage
                         { content = sd
                         , ..
                         }
                     Just dcbs -> do
                       now <- Time.time
-                      log Trace DispatchedMessage
+                      log (Informational Trace) $ toJSON $ DispatchedMessage
                         { endpoint = ep m
                         , payload = pl m
                         , .. 
@@ -223,10 +223,10 @@ activateWith policy ws_ host port secure = do
         modifyIORef' ws_ $ \ws -> ws
           { wsSocket = Just (sock,openCallback,closeCallback,errorCallback,messageCallback,scb) }
 
-clientWS :: Logging => String -> Int -> IO Websocket
+clientWS :: Logging Value => String -> Int -> IO Websocket
 clientWS h p = newWS h p False
 
-clientWSS :: Logging => String -> Int -> IO Websocket
+clientWSS :: Logging Value => String -> Int -> IO Websocket
 clientWSS h p = newWS h p True
 
 foreign import javascript unsafe

@@ -9,7 +9,7 @@ module Server
   , Request(..)
   , WarpTLS.tlsSettings
   , Server(..)
-  , Name,Auth,Event,Product,Preview,Index
+  , Name,Auth,Event,Product,Preview,Query,Result
   , respond, respondWith
   , module Export
   ) where
@@ -20,7 +20,7 @@ import Control.Concurrent
 import Control.Exception (SomeException,Exception(..),throw,handle,catch)
 import Control.Monad
 import qualified Data.Log as Log
-import Data.Aeson as JSON hiding (Name)
+import Data.Aeson as JSON hiding (Name,Result)
 import Data.Default
 import Data.DOM
 import Data.Foldable
@@ -263,9 +263,9 @@ middleware mw Handler {..} =
     , ..
     }
 
-logging :: Log.Logging => Log.Level -> Middleware
+logging :: Log.Logging Request => Log.Level -> Middleware
 logging level app request respond = do
-  Log.log level (show request)
+  Log.log level request
   app request respond
  
 withIdentity :: Lambda r => Endpoint r -> (Host -> Agent -> r) -> Handler
@@ -302,7 +302,8 @@ class Resource r => Server r where
        , ToJSON (Product r), FromJSON (Product r)
        , Typeable (Event r), ToJSON (Event r), FromJSON (Event r)
        , ToJSON (Preview r)
-       , ToJSON (Index r)
+       , ToJSON (Result r)
+       , Typeable (Query r), FromJSON (Query r)
        , ToJSON (Name r)
        ) => [Server.Handler]
   handlers = 
@@ -310,7 +311,7 @@ class Resource r => Server r where
     , middleware (readMiddleware @r) (lambda (Endpoint.read @r) (Server.read @r))
     , middleware (rawMiddleware @r) (lambda (Endpoint.raw @r) (Server.raw @r))
     , middleware (updateMiddleware @r) (lambda (Endpoint.update @r) (Server.update @r))
-    , middleware (indexMiddleware @r) (lambda (Endpoint.index @r) (Server.index @r))
+    , middleware (queryMiddleware @r) (lambda (Endpoint.query @r) (Server.query @r))
     ]
 
   create :: Context r => Auth r -> r -> IO (Maybe (Name r))
@@ -337,11 +338,11 @@ class Resource r => Server r where
   updateMiddleware :: Context r => Middleware
   updateMiddleware = id
 
-  index :: Context r => Maybe (Auth r) -> IO (Index r)
-  index = unauthorized
+  query :: Context r => Maybe (Auth r) -> Maybe (Query r) -> IO (Result r)
+  query = unauthorized
   
-  indexMiddleware :: Context r => Middleware
-  indexMiddleware = id
+  queryMiddleware :: Context r => Middleware
+  queryMiddleware = id
 
 data Respond = Respond Status [Header] Txt deriving Show
 instance Exception Respond

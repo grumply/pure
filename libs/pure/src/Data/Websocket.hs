@@ -25,7 +25,7 @@ module Data.Websocket
   ) where
 
 import Data.Log hiding (error)
-import Data.JSON (ToJSON,FromJSON,fromJSON,logJSON)
+import Data.JSON (ToJSON,FromJSON,fromJSON,logJSON,Value)
 import qualified Data.JSON as JSON
 
 import Data.Txt (Txt)
@@ -104,7 +104,7 @@ request :: ( Request rqTy
           , Rsp rqTy ~ response
           , FromJSON response
           , (rqTy Export.∈ rqs) ~ 'True
-          , Logging
+          , Logging Value
           )
        => API msgs rqs
        -> Websocket
@@ -131,7 +131,7 @@ requestDebug :: forall msgs rqTy request response rqs.
                , Rsp rqTy ~ response
                , FromJSON response
                , (rqTy Export.∈ rqs) ~ 'True
-               , Logging
+               , Logging Value
                )
             => API msgs rqs
             -> Export.Websocket
@@ -158,7 +158,7 @@ message :: ( Message msgTy
           , M msgTy ~ message
           , ToJSON message
           , (msgTy Export.∈ msgs) ~ 'True
-          , Logging
+          , Logging Value
           )
        => API msgs rqs
        -> Websocket

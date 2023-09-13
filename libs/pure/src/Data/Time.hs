@@ -1,4 +1,4 @@
-{-# language CPP, PatternSynonyms, ViewPatterns, DeriveGeneric, DerivingVia, TypeApplications #-}
+{-# language CPP, PatternSynonyms, ViewPatterns, DeriveGeneric, DerivingVia, TypeApplications, OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
 module Data.Time (module Data.Time, module Export) where
@@ -347,3 +347,70 @@ toPrettyDateTime = formatTime "%b %d, %Y %l:%M%p"
 
 fromPrettyDateTime :: (ToTxt txt, Format.ParseTime t) => txt -> Maybe t
 fromPrettyDateTime = parseTime "%b %d, %Y %l:%M%p"
+
+-- | Given a time, create a pretty `<time> ago` string.
+--
+-- This method should likely be replaced by something like printf that
+-- can take a specification string/DSL and both print and parse durations
+-- of various formats. Note that it is also inaccurate w.r.t. leaps, and
+-- often fails at boundaries (Weeks 3 (Days 2 0) /= Weeks 3 (Days 2 Second)) 
+--
+ago :: Time -> Time -> Txt
+ago now t
+  | Seconds s _ <- now - t, s < 60 = "just now"
+  | Minutes m _ <- now - t, m < 5  = "recently"
+  | otherwise                      = go
+  where
+    go
+      | ds >= 730  = years 
+      | ds >= 60   = months
+      | ds >= 14   = weeks
+      | hs >= 48   = days  
+      | ms >= 120  = hours
+      | otherwise  = minutes
+      where
+        ds = ms / 1440
+        hs = ms / 60
+        Minutes ms _ = now - t
+
+    ns x nm 
+      | x == 0 = ""
+      | x == 1 = "1 " <> nm
+      | otherwise = toTxt (round x :: Int) <> " " <> nm <> "s"
+
+    years = 
+      let Years ys (Months ms _) = now - t
+      in ns ys "year" <> " " <> ns ms "month" <> " ago"
+    
+    months =
+      let Months ms (Weeks ws _) = now - t
+      in ns ms "month" <> " " <> ns ws "week" <> " ago"
+
+    weeks =
+      let Weeks ws (Days ds _) = now - t
+      in ns ws "week" <> " " <> ns ds "day" <> " ago"
+
+    days =
+      let Days ds (Hours hs _) = now - t
+      in ns ds "day" <> " " <> ns hs "hour" <> " ago"
+
+    hours =
+      let Hours hs (Minutes ms _) = now - t
+      in ns hs "hour" <> " " <> ns ms "minute" <> " ago"
+
+    minutes =
+      let Minutes ms _ = now - t
+      in toTxt (round ms :: Int) <> " minutes ago"
+
+duration :: Time -> Txt
+duration d
+  | Microseconds us _ <- d, us < 1000 = r us "us"
+  | Milliseconds ms _ <- d, ms < 1000 = r ms "ms"
+  | Seconds ss _      <- d, ss < 60   = r ss "s"
+  | Minutes ms _      <- d, ms < 60   = r ms "m"
+  | Hours hs _        <- d, hs < 24   = r hs "h"
+  | Days ds _         <- d            = r ds "d"
+  where
+    r :: Double -> Txt -> Txt
+    r = (<>) . toTxt @Int . round
+

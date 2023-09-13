@@ -139,7 +139,7 @@ instance ( GetHandler RequestHandler request rqs'
          , Rsp request ~ response
          , ToJSON req
          , FromJSON response
-         , Logging
+         , Logging Value
          )
   => EnactImplementation (Interface Request) RequestHandler (request ': rqs) rqs' where
   enactImplementation ws_ (InterfaceCons pm ms) mhs =

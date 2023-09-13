@@ -38,7 +38,7 @@ import Data.Scroll as Export
 import Data.Slug as Export
 import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize,translate,events,empty,change,lower)
 import Data.Theme as Export hiding (within)
-import Data.Time as Export hiding (Time_,every)
+import Data.Time as Export hiding (Time_,every,duration)
 import Data.Try as Export hiding (try)
 import Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
 import Data.View as Export hiding (queueComponentUpdate,getHost,initialize,content,Styles,On,Raw,lifecycles,Lifecycles,attributes)
