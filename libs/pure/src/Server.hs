@@ -1,15 +1,16 @@
-{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, PatternSynonyms, ScopedTypeVariables, FlexibleContexts, BlockArguments, NamedFieldPuns, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, DerivingVia, TypeFamilies, ConstrainedClassMethods, DefaultSignatures #-}
+{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, PatternSynonyms, ScopedTypeVariables, FlexibleContexts, BlockArguments, NamedFieldPuns, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, DerivingVia, TypeFamilies, ConstrainedClassMethods, DefaultSignatures, MultiWayIf, DataKinds, MultiParamTypeClasses #-}
 module Server 
-  ( Handler
+  ( Handler(..)
   , serve
-  , lambda, channel
-  , middleware, cache, logging, withIdentity
+  , Lambda(..), Channel(..), ToMethod(..)
+  , middleware, cache, logging
+  , path, method, agent, host, match
   , unauthorized
   , Host(..), Agent(..)
   , Request(..)
   , WarpTLS.tlsSettings
   , Server(..)
-  , Name,Auth,Event,Product,Preview,Query,Result
+  , Resource,Create,Update,Query
   , respond, respondWith
   , module Export
   ) where
@@ -17,15 +18,17 @@ module Server
 import qualified Pure as Export hiding (Handler,read,Read)
 
 import Control.Concurrent
-import Control.Exception (SomeException,Exception(..),throw,handle,catch)
+import Control.Exception as E (SomeException,Exception(..),throw,handle,catch,evaluate)
+import Control.DeepSeq (force)
 import Control.Monad
-import qualified Data.Log as Log
 import Data.Aeson as JSON hiding (Name,Result)
+import Data.Coerce
 import Data.Default
 import Data.DOM
 import Data.Foldable
 import Data.Function ((&))
 import Data.IORef
+import qualified Data.Log as Log
 import Data.Map as Map
 import Data.Kind
 import qualified Data.List as List
@@ -35,21 +38,16 @@ import Data.Traversable
 import Data.Typeable
 import Data.Txt as Txt
 import Data.View hiding (Event,Handler,channel)
+import Data.Void
 import GHC.Generics
-import System.IO.Unsafe
-import System.Directory
-import System.Posix.Files
 
-import Crypto.Hash hiding (Context)
-import qualified Crypto.Random.Types as CRT
-import Data.String
 import Data.ByteString.Lazy as BSL
 import Data.Binary.Builder (fromLazyByteString)
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 import Network.HTTP.Types.Header as Export
-import Network.HTTP.Types.Method 
+import Network.HTTP.Types.Method as Method
 import Network.HTTP.Types.Status as Export
 import Network.Wai
 import Endpoint
@@ -60,12 +58,12 @@ serve port mtlss = Component $ \self ->
     { onConstruct = do
         ref <- askref self >>= newIORef 
         tid <- forkIO do
-          maybe Warp.runSettings WarpTLS.runTLS mtlss (Warp.setOnException exception (Warp.setServerName "pure" (Warp.setOnExceptionResponse onExceptionResponse (Warp.setPort port Warp.defaultSettings)))) $ \request respond -> do
-            eps <- readIORef ref
-            let p = toTxt (rawPathInfo request)
-            case List.find (\Handler { methods, path } -> p == path && requestMethod request `Prelude.elem` methods) eps of
-              Nothing -> respond (responseLBS status404 [] mempty)
-              Just (Handler f _ _) -> f request respond
+          maybe Warp.runSettings WarpTLS.runTLS mtlss (Warp.setOnException exception (Warp.setServerName "pure" (Warp.setOnExceptionResponse onExceptionResponse (Warp.setPort port Warp.defaultSettings)))) $ \request respond ->
+            with request do
+              eps <- readIORef ref
+              case listToMaybe (Data.Maybe.mapMaybe handler eps) of
+                Nothing -> respond (responseLBS notFound404 [] mempty)
+                Just f  -> f request respond
         pure (ref,tid)
     , onReceive = \eps (ref,tid) -> writeIORef ref eps >> pure (ref,tid)
     , onUnmounted = getref self >>= \(_,tid) -> killThread tid
@@ -74,46 +72,62 @@ serve port mtlss = Component $ \self ->
   where
     exception :: Maybe Request -> SomeException -> IO ()
     exception r se
-      | Just Respond {} <- fromException se
-      = pure ()
-
-      | otherwise
-      = Warp.defaultOnException r se
+      | Just Respond {} <- fromException se = pure ()
+      | Just Unauthorized <- fromException se = pure ()
+      | otherwise = Warp.defaultOnException r se
       
     onExceptionResponse :: SomeException -> Response
     onExceptionResponse e
       | Just (Respond s hs t) <- fromException e 
       = responseLBS s hs (fromTxt t)
 
+      | Just Unauthorized <- fromException e
+      = responseLBS unauthorized401 [] def
+
       | otherwise 
       = Warp.defaultOnExceptionResponse e
 
--- I think it would be beneficial to parameterize Handler with a reified constraint context;
--- if `Handler App` => { endpoint :: Props App |- Application, methods :: [Method], path :: Txt }
--- then we can store the entailment-based endpoint statically in a hashmap and do O(1) dispatch.
--- Then the server would be responsible for satisfying the entailment proof at execution.
--- This would maintain the dynamics of each endpoint, while reducing the update cost - the
--- server could avoid being parameterized on the `[Handler App]`. This would prevent dynamism in
--- the set of handlers, but not dynamism in the handlers themselves. This might be a worthy
--- trade-off. It does, however, introduce the possibility of accidental constraint satisfaction;
--- if the `endpoint :: Props App |- Application` captures an existential, it would be annoying to
--- debug/catch. It would be nice to be able to have a constraint that can /only/ be satisfied in
--- the entailment monad, but I don't yet see how to approach that. Another issue is the cost of
--- constraint satisfaction; I know GHC is exceptional at eliminating unused variables, but the
--- server will still have to satisfy all of the constraints in `Props App` manually, regardless
--- of which ones the endpoint will actually use - the endpoint itself can drop whatever it 
--- doesn't need, but I think the server will still have to pass them, which could be costly, 
--- though I'm not sure how costly the current approach is and how the two might compare.
-data Handler = Handler { endpoint :: Application, methods :: [Method], path :: Txt }
+newtype Handler = Handler { handler :: Exists Request => Maybe Application }
+
+method :: Exists Request => Method.Method
+method = requestMethod it
+
+path :: Exists Request => Txt
+path = toTxt (rawPathInfo it)
+
+host :: Exists Request => Host
+host = fromTxt (Txt.init (Txt.dropWhileEnd (/= ':') (toTxt (show (remoteHost it)))))
+
+agent :: Exists Request => Agent
+agent = fromTxt (maybe def toTxt (requestHeaderUserAgent it))
+ 
+class ToMethod (method :: Endpoint.Method) where
+  toMethod :: Method.Method
+
+instance ToMethod 'Endpoint.GET where toMethod = methodGet
+instance ToMethod 'Endpoint.HEAD where toMethod = methodHead
+instance ToMethod 'Endpoint.POST where toMethod = methodPost
+instance ToMethod 'Endpoint.PATCH where toMethod = methodPatch
+instance ToMethod 'Endpoint.DELETE where toMethod = methodDelete
+instance ToMethod 'Endpoint.OPTIONS where toMethod = methodOptions
+instance ToMethod 'Endpoint.CONNECT where toMethod = methodConnect
+
+match :: forall method x. ToMethod method => Endpoint method x -> (Exists Request => Bool)
+match (Endpoint _ p) = method == toMethod @method && path == p
 
 class Channel a where
-  channel :: Endpoint a -> a -> Handler
+  channel :: Endpoint 'Endpoint.GET a -> Bool -> a -> Handler
 
-instance {-# OVERLAPPING #-} ToJSON r => Channel (IO [r]) where
-  channel (Endpoint (path,_)) l = Handler {..}
+instance Channel Void where
+  channel ep _ _ = Handler (if match ep then Just endpoint else Nothing)
     where
-      methods = [methodPost,methodGet,methodOptions]
+      endpoint :: Exists Request => Application
+      endpoint request respond = respond (responseLBS status200 [] def) 
 
+instance ToJSON r => Channel (IO [r]) where
+  channel ep _ l = Handler (if match ep then Just endpoint else Nothing)
+    where
+      endpoint :: Exists Request => Application
       endpoint _ respond = do
         let 
           responder write flush = 
@@ -121,9 +135,16 @@ instance {-# OVERLAPPING #-} ToJSON r => Channel (IO [r]) where
               push b = do
                 write ("data: " <> fromLazyByteString (encode b) <> "\n\n")
                 flush
-            in
-              handle (\Unauthorized -> pure ())
-                (l >>= mapM_ push)
+
+              handler e 
+                -- short-circuits simply end the stream without raising an error
+                -- while unknown exceptions get re-thrown.
+                | Just Unauthorized <- fromException e = pure ()
+                | Just Respond {}   <- fromException e = pure () 
+                | otherwise                            = E.throw e
+
+            in 
+              handle handler (l >>= mapM_ push)
 
         respond (responseStream status200 
           [(hContentType,"text/event-stream")
@@ -133,123 +154,141 @@ instance {-# OVERLAPPING #-} ToJSON r => Channel (IO [r]) where
           )
 
 instance (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [r]) where 
-  channel (Endpoint (path,_)) l = Handler {..}
+  channel ep showParseErrors l = Handler (if match ep then Just endpoint else Nothing)
     where
-      methods = [methodPost,methodGet,methodOptions]
+      endpoint :: Exists Request => Application
+      endpoint request respond = do
+        let
+          payload
+            | method == methodGet
+            , Just b64 <- join (List.lookup "payload" (queryString request))
+            , Right bs <- B64.decode (BSL.fromStrict b64) 
+            = pure bs
 
-      endpoint request respond
-        | requestMethod request == methodOptions =
-          respond (responseLBS status200 [(hAllow,"POST, GET, OPTIONS")] def)
+            | otherwise = consumeRequestBodyLazy request
 
-        | otherwise = do
-          let
-            payload
-              | requestMethod request == methodGet
-              , Just b64 <- join (List.lookup "payload" (queryString request))
-              , Right bs <- B64.decode (BSL.fromStrict b64) 
-              = pure bs
+        pl <- payload
+        case eitherDecode pl of
+          Left e -> respond (responseLBS status400 [] (if showParseErrors then encode e else def))
+          Right (a :: a) -> do
+            let 
+              responder write flush = 
+                let
+                  push b = do
+                    write ("data: " <> fromLazyByteString (encode b) <> "\n\n")
+                    flush
 
-              | otherwise = consumeRequestBodyLazy request
+                  handler e
+                    -- short-circuits simply end the stream without raising an error
+                    -- while unknown exceptions get re-thrown.
+                    | Just Unauthorized <- fromException e = pure ()
+                    | Just Respond {}   <- fromException e = pure ()
+                    | otherwise                            = E.throw e
 
-          pl <- payload
-          case eitherDecode pl of
-            Left e -> respond (responseLBS status400 [] (encode e))
-            Right (a :: a) -> do
-              let 
-                responder write flush = 
-                  let
-                    push b = do
-                      write ("data: " <> fromLazyByteString (encode b) <> "\n\n")
-                      flush
-                  in
-                    handle (\Unauthorized -> pure ())
-                      (l a >>= mapM_ push)
+                in
+                  handle handler (l a >>= mapM_ push)
 
-              respond (responseStream status200 
-                [(hContentType,"text/event-stream")
-                ,(hCacheControl,"no-cache")
-                ,(hConnection,"keep-alive")
-                ] responder
-                )
+            respond (responseStream status200 
+              [(hContentType,"text/event-stream")
+              ,(hCacheControl,"no-cache")
+              ,(hConnection,"keep-alive")
+              ] responder
+              )
+
+reshape :: Endpoint method a -> Endpoint method b
+reshape = fromTxt . toTxt
 
 instance (Typeable a, Typeable b, FromJSON a, FromJSON b, ToJSON r) => Channel (a -> b -> IO [r]) where
-  channel path l = channel (fromTxt (toTxt path)) (uncurry l)
+  channel path showParseErrors l = channel (reshape path) showParseErrors (uncurry l)
 
 instance (Typeable a, Typeable b, Typeable c, FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Channel (a -> b -> c -> IO [r]) where
-  channel path l = channel (fromTxt (toTxt path)) (\(a,b,c) -> l a b c)
+  channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c) -> l a b c)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, FromJSON a, FromJSON b, FromJSON c, FromJSON d, ToJSON r) => Channel (a -> b -> c -> d -> IO [r]) where
-  channel path l = channel (fromTxt (toTxt path)) (\(a,b,c,d) -> l a b c d)
+  channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d) -> l a b c d)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, ToJSON r) => Channel (a -> b -> c -> d -> e -> IO [r]) where
-  channel path l = channel (fromTxt (toTxt path)) (\(a,b,c,d,e) -> l a b c d e)
+  channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d,e) -> l a b c d e)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, ToJSON r) => Channel (a -> b -> c -> d -> e -> f -> IO [r]) where
-  channel path l = channel (fromTxt (toTxt path)) (\(a,b,c,d,e,f) -> l a b c d e f)
+  channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d,e,f) -> l a b c d e f)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, FromJSON g, ToJSON r) => Channel (a -> b -> c -> d -> e -> f -> g -> IO [r]) where
-  channel path l = channel (fromTxt (toTxt path)) (\(a,b,c,d,e,f,g) -> l a b c d e f g)
+  channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d,e,f,g) -> l a b c d e f g)
 
 class Lambda a where
-  lambda :: Endpoint a -> a -> Handler
+  lambda :: ToMethod method => Endpoint method a -> Bool -> Bool -> (Exists Request => a) -> Handler
 
-instance {-# OVERLAPPING #-} ToJSON r => Lambda (IO r) where
-  lambda (Endpoint (path,_)) l = Handler {..}
+instance Lambda Void where
+  lambda ep _ _ _ = Handler (if match ep then Just endpoint else Nothing)
     where
-      methods = [methodPost,methodGet,methodOptions]
+      endpoint :: Exists Request => Application
+      endpoint request respond = respond (responseLBS status200 [] def) 
 
-      endpoint request respond
-        | requestMethod request == methodOptions =
-          respond (responseLBS status200 [(hAllow,"POST, GET, OPTIONS")] def)
+instance ToJSON r => Lambda (IO r) where
+  lambda ep showParseErrors showExceptions l = Handler (if match ep then Just endpoint else Nothing)
+    where
+      endpoint :: Exists Request => Application
+      endpoint request respond = do
+        let 
+          passthrough e 
+            | Just Respond {}   <- fromException e = E.throw e
+            | Just Unauthorized <- fromException e = E.throw e
+            | otherwise                            = pure (Left (show e))
 
-        | otherwise = do
-          r <- handle (\Unauthorized -> pure (responseLBS unauthorized401 [] def)) do
-            responseLBS status200 [(hContentType,"application/json")] . encode <$> l
-          respond r
+        er <- handle passthrough (Right <$> (l >>= evaluate . force . encode))
+        respond do
+          case er of
+            Left e  -> responseLBS status500 [(hContentType,"application/json")] (if showExceptions then encode e else def)
+            Right r -> responseLBS status200 [(hContentType,"application/json")] r
 
 instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where 
-  lambda (Endpoint (path,_)) l = Handler {..}
+  lambda ep showParseErrors showExceptions l = Handler (if match ep then Just endpoint else Nothing)
     where
-      methods = [methodPost,methodGet,methodOptions]
+      endpoint :: Exists Request => Application
+      endpoint request respond = do
+        let
+          payload
+            | method == methodGet
+            , Just b64 <- join (List.lookup "payload" (queryString request))
+            , Right bs <- B64.decode (BSL.fromStrict b64) 
+            = pure bs
 
-      endpoint request respond
-        | requestMethod request == methodOptions =
-          respond (responseLBS status200 [(hAllow,"POST, GET, OPTIONS")] def)
+            | otherwise = consumeRequestBodyLazy request
 
-        | otherwise = do
-          let
-            payload
-              | requestMethod request == methodGet
-              , Just b64 <- join (List.lookup "payload" (queryString request))
-              , Right bs <- B64.decode (BSL.fromStrict b64) 
-              = pure bs
+        pl <- payload
+        case eitherDecode pl of
+          Left e -> respond (responseLBS status400 [(hContentType,"application/json")] (if showParseErrors then encode e else def))
+          Right (a :: a) -> do
+            let 
+              passthrough e 
+                | Just Respond {}   <- fromException e = E.throw e
+                | Just Unauthorized <- fromException e = E.throw e
+                | otherwise                            = pure (Left (show e))
 
-              | otherwise = consumeRequestBodyLazy request
-
-          pl <- payload
-          respond =<< case eitherDecode pl of
-            Left e -> pure (responseLBS status400 [] (encode e))
-            Right (a :: a) ->
-              handle (\Unauthorized -> pure (responseLBS unauthorized401 [] def)) do
-                responseLBS status200 [(hContentType,"application/json")] . encode <$> l a
+            er <- handle passthrough (Right <$> (l a >>= evaluate . force . encode))
+            respond do
+              case er of
+                Left e  -> responseLBS status500 [(hContentType,"application/json")] (if showExceptions then encode e else def)
+                Right r -> responseLBS status200 [(hContentType,"application/json")] r
 
 instance (Typeable a, Typeable b, FromJSON a, FromJSON b, ToJSON r) => Lambda (a -> b -> IO r) where
-  lambda path l = lambda (fromTxt (toTxt path)) (uncurry l)
+  lambda path showParseErrors showExceptions l = lambda (reshape path) showParseErrors showExceptions (uncurry l)
 
 instance (Typeable a, Typeable b, Typeable c, FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Lambda (a -> b -> c -> IO r) where
-  lambda path l = lambda (fromTxt (toTxt path)) (\(a,b,c) -> l a b c)
+  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c) -> l a b c)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, FromJSON a, FromJSON b, FromJSON c, FromJSON d, ToJSON r) => Lambda (a -> b -> c -> d -> IO r) where
-  lambda path l = lambda (fromTxt (toTxt path)) (\(a,b,c,d) -> l a b c d)
+  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c,d) -> l a b c d)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, ToJSON r) => Lambda (a -> b -> c -> d -> e -> IO r) where
-  lambda path l = lambda (fromTxt (toTxt path)) (\(a,b,c,d,e) -> l a b c d e)
+  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c,d,e) -> l a b c d e)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, ToJSON r) => Lambda (a -> b -> c -> d -> e -> f -> IO r) where
-  lambda path l = lambda (fromTxt (toTxt path)) (\(a,b,c,d,e,f) -> l a b c d e f)
+  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c,d,e,f) -> l a b c d e f)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, FromJSON g, ToJSON r) => Lambda (a -> b -> c -> d -> e -> f -> g -> IO r) where
-  lambda path l = lambda (fromTxt (toTxt path)) (\(a,b,c,d,e,f,g) -> l a b c d e f g)
+  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c,d,e,f,g) -> l a b c d e f g)
 
 cache :: Time -> Middleware
 cache (Seconds duration _) app request respond = 
@@ -257,89 +296,71 @@ cache (Seconds duration _) app request respond =
     (respond . mapResponseHeaders (++ [(hCacheControl,"public, max-age=" <> fromTxt (toTxt @Int (round duration)))]))
 
 middleware :: Middleware -> Handler -> Handler
-middleware mw Handler {..} = 
-  Handler
-    { endpoint = mw endpoint
-    , ..
-    }
+middleware f (Handler h) = Handler (fmap f h)
 
 logging :: Log.Logging Request => Log.Level -> Middleware
 logging level app request respond = do
   Log.log level request
   app request respond
- 
-withIdentity :: Lambda r => Endpoint r -> (Host -> Agent -> r) -> Handler
-withIdentity ep f = Handler (go :: Application) [methodPost,methodGet,methodOptions] (toTxt ep)
-  where
-    go request respond =
-      let 
-        h = fromTxt (Txt.init (Txt.dropWhileEnd (/= ':') (toTxt (show (remoteHost request)))))
-        ua = fromTxt (maybe def toTxt (requestHeaderUserAgent request))
 
-      in
-        Server.endpoint (lambda ep (f h ua)) request respond
-
--- Note here that the middlewares are context-dependent, but do not have access to
--- authentication, etc.... 
---
--- Some thoughts:
---  1. This doesn't seem to render the middleware safe. That is, third-party middlewares
---     can still see the content of the request.
---  2. This doesn't allow for authentication-dependent middlewares, like caching based
---     on user role, etc....
---
 class Resource r => Server r where
+
+  cors :: Bool
+  cors = False
+
+  showParseErrors :: Bool
+  showParseErrors = False
+
+  showExceptions :: Bool
+  showExceptions = False
 
   type Context r :: Constraint
   type Context r = ()
 
-  handlers :: Context r => [Server.Handler]
+  handlers :: Context r => Server.Handler
   default handlers 
     :: ( Context r
-       , ToJSON r, FromJSON r
-       , Typeable (Auth r), FromJSON (Auth r)
-       , Typeable (Name r), FromJSON (Name r)
-       , ToJSON (Product r), FromJSON (Product r)
-       , Typeable (Event r), ToJSON (Event r), FromJSON (Event r)
-       , ToJSON (Preview r)
-       , ToJSON (Result r)
-       , Typeable (Query r), FromJSON (Query r)
-       , ToJSON (Name r)
-       ) => [Server.Handler]
-  handlers = 
-    [ middleware (createMiddleware @r) (lambda (Endpoint.create @r) (Server.create @r))
-    , middleware (readMiddleware @r) (lambda (Endpoint.read @r) (Server.read @r))
-    , middleware (rawMiddleware @r) (lambda (Endpoint.raw @r) (Server.raw @r))
-    , middleware (updateMiddleware @r) (lambda (Endpoint.update @r) (Server.update @r))
-    , middleware (queryMiddleware @r) (lambda (Endpoint.query @r) (Server.query @r))
-    ]
+       , Lambda (Create r)
+       , Lambda (Update r)
+       , Lambda (Query r)
+       ) => Server.Handler
+  handlers = Handler (if path == toTxt (base @r) then go else Nothing)
+    where
+      go :: Exists Request => Maybe Application
+      go | method == methodGet     = fmap (queryMiddleware  @r) (handler (lambda (Endpoint.query  @r) (showParseErrors @r) (showExceptions @r) (Server.query  @r)))
+         | method == methodPatch   = fmap (updateMiddleware @r) (handler (lambda (Endpoint.update @r) (showParseErrors @r) (showExceptions @r) (Server.update @r)))
+         | method == methodPost    = fmap (createMiddleware @r) (handler (lambda (Endpoint.create @r) (showParseErrors @r) (showExceptions @r) (Server.create @r)))
+         | method == methodOptions = Just \_ respond -> do
+            let
+              methods = "GET, PATCH, POST, OPTIONS"
+              hs | cors @r = 
+                   [ ("Access-Control-Allow-Origin","*")
+                   , ("Access-Control-Allow-Methods",methods)
+                   , ("Access-Control-Max-Age","86400")
+                   , (hAllow,methods)
+                   ]
+                 | otherwise = 
+                   [ (hAllow,methods) ]
 
-  create :: Context r => Auth r -> r -> IO (Maybe (Name r))
-  create = unauthorized
+            respond (responseLBS status200 hs def)
+
+         | otherwise = Just \_ respond -> 
+            respond (responseLBS notImplemented501 [] def)
+
+  create :: Context r => Create r
+  create = respond 501 mempty
 
   createMiddleware :: Context r => Middleware
   createMiddleware = id
 
-  raw :: Context r => Auth r -> Name r -> IO (Maybe r)
-  raw = unauthorized
-
-  rawMiddleware :: Context r => Middleware
-  rawMiddleware = id
-
-  read :: Context r => Maybe (Auth r) -> Name r -> IO (Maybe (Product r))
-  read = unauthorized
-  
-  readMiddleware :: Context r => Middleware
-  readMiddleware = id
-
-  update :: Context r => Auth r -> Name r -> Event r -> IO ()
-  update = unauthorized
+  update :: Context r => Update r
+  update = respond 501 mempty
   
   updateMiddleware :: Context r => Middleware
   updateMiddleware = id
 
-  query :: Context r => Maybe (Auth r) -> Maybe (Query r) -> IO (Result r)
-  query = unauthorized
+  query :: Context r => Query r
+  query = respond 501 mempty
   
   queryMiddleware :: Context r => Middleware
   queryMiddleware = id
@@ -351,4 +372,4 @@ respond :: Int -> Txt -> a
 respond c = respondWith (toEnum c) []
 
 respondWith :: Status -> [Header] -> Txt -> a
-respondWith s hs = Control.Exception.throw . Respond s hs
+respondWith s hs = E.throw . Respond s hs

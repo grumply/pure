@@ -1,4 +1,4 @@
-{-# language CPP, TypeApplications, RankNTypes, BlockArguments, ScopedTypeVariables, FlexibleContexts, OverloadedStrings #-}
+{-# language CPP, TypeApplications, RankNTypes, BlockArguments, ScopedTypeVariables, FlexibleContexts, OverloadedStrings, DataKinds #-}
 module Pure.Auth 
   ( module Export
   , Object
@@ -48,7 +48,7 @@ import Pure.Auth.GHC.Crypto
 import Pure.Auth.GHC as Export hiding (AuthEvent,activate,register,recover,startDelete,delete,recentAuthEvents,login,startRecover,updateEmail,updatePassword,logout,logoutAll)
 #endif
 
-type Object c e a = Endpoint (Token c -> Stream e -> IO (Token e,Int,Maybe a))
+type Object c e a = GET (Token c -> Stream e -> IO (Token e,Int,Maybe a))
 
 live :: forall c e a. (API c, Typeable c, Typeable e, FromJSON a, FromJSON e, Typeable a, ToJSON a, ToJSON e, ToJSON (Stream e), Aggregable e a, Exists (Token c)) => Object c e a -> Stream e -> ((Producer e, Exists a) => View) -> View
 live = liveWith @c @e @a (jittered Second & limitDelay (Seconds 30 0))
@@ -62,7 +62,8 @@ liveWith policy o s v =
         ir <- newIORef i
         let
 
-          publisher = post @c (fromTxt (toTxt o) <> "/write" :: Endpoint (Token e -> Stream e -> e -> IO ())) t s
+          publisher :: e -> IO ()
+          publisher = patch @c (fromTxt (toTxt o) <> "/write") t s
 
           integrate :: (Int,e) -> IO ()
           integrate (j,e) = modifyrefM_ self \p (tid,pub,i,a) -> do
@@ -118,7 +119,7 @@ foreign import javascript unsafe
 #ifndef __GHCJS__
 object :: forall c e a. (Typeable c, Typeable e, Typeable a, FromJSON (Stream e), ToJSON a, ToJSON e, FromJSON e, Streamable e, Aggregable e a, Ord (Stream e), Pool c, Secret c, Pool e, Secret e) => Object c e a -> Time -> (Username c -> Stream e -> IO (Maybe Bool)) -> [Server.Handler]
 object o dur f =
-  [ Server.lambda (o <> "/read") do
+  [ Server.lambda (o <> "/read") False False do
       authenticated @c \s -> do
         permissions <- f (user @c) s
         let ps = ("id",toTxt (Sorcerer.stream s)) : maybe [] (bool [("read","")] [("read",""),("write","")]) permissions
@@ -127,7 +128,7 @@ object o dur f =
         let t = sign (fromTxt (toTxt (user :: Username c))) (now + dur) ps 
         pure (t,i,a)
 
-  , Server.lambda (fromTxt (toTxt o) <> "/write") do
+  , Server.lambda (fromTxt (toTxt o) <> "/write" :: PATCH (Token e -> Stream e -> e -> IO ())) False False do
       authenticated @e \(s :: Stream e) (e :: e) -> do
         authorized @e "write" \_ -> do
           authorized @e "id" \x -> 
@@ -135,7 +136,7 @@ object o dur f =
               then Sorcerer.write s e 
               else unauthorized
 
-  , Server.channel @(Token e -> Stream e -> Int -> IO [(Int,e)]) (fromTxt (toTxt o) <> "/events") do
+  , Server.channel (fromTxt (toTxt o) <> "/events" :: GET (Token e -> Stream e -> Int -> IO [(Int,e)]) ) False do
       authenticated @e \(s :: Stream e) n -> do
         authorized @e "read" \_ -> do
           authorized @e "id" \x -> do

@@ -1,4 +1,4 @@
-{-# language DerivingVia, TypeApplications, ScopedTypeVariables, TypeFamilies, GADTs, MultiParamTypeClasses, AllowAmbiguousTypes, OverloadedStrings #-}
+{-# language DerivingVia, TypeApplications, ScopedTypeVariables, TypeFamilies, GADTs, MultiParamTypeClasses, AllowAmbiguousTypes, OverloadedStrings, DataKinds, UndecidableInstances #-}
 module Endpoint where
 
 import Control.Exception
@@ -10,29 +10,41 @@ import Data.String
 import Data.Theme
 import Data.Txt as Txt
 import Data.Typeable
+import Data.ByteString
+import Data.Void
 
-newtype Endpoint a = Endpoint (Txt,Proxy a)
+data Method = GET | HEAD | POST | PUT | PATCH | DELETE | OPTIONS | CONNECT
 
-instance Show (Endpoint a) where
-  show (Endpoint (path,_)) = fromTxt path
+data Endpoint (method :: Method) a = Endpoint !(Proxy a) Txt
 
-instance IsString (Endpoint a) where
-  fromString str = Endpoint (fromString str,Proxy)
+type GET = Endpoint 'GET
+type HEAD = Endpoint 'HEAD 
+type PATCH = Endpoint 'PATCH
+type POST = Endpoint 'POST 
+type PUT = Endpoint 'PUT 
+type DELETE = Endpoint 'DELETE 
+type CONNECT = Endpoint 'CONNECT 
 
-instance ToTxt (Endpoint a) where
-  toTxt (Endpoint (path,_)) = path
+instance Show (Endpoint method a) where
+  show (Endpoint _ t) = fromTxt t
 
-instance FromTxt (Endpoint a) where
-  fromTxt path = Endpoint (path,Proxy)
+instance IsString (Endpoint method a) where
+  fromString str = Endpoint Proxy (fromString str)
 
-endpoint :: Txt -> Endpoint a
-endpoint path = Endpoint (path,Proxy)
+instance ToTxt (Endpoint method a) where
+  toTxt (Endpoint _ path) = path
 
-instance Monoid (Endpoint a) where
-  mempty = Endpoint (mempty,Proxy)
+instance FromTxt (Endpoint method a) where
+  fromTxt = Endpoint Proxy
 
-instance Semigroup (Endpoint a) where
-  (<>) (Endpoint (pl,_)) (Endpoint (pr,_)) = Endpoint (pl <> pr,Proxy)
+endpoint :: Txt -> Endpoint method a
+endpoint = fromTxt
+
+instance Monoid (Endpoint method a) where
+  mempty = fromTxt mempty
+
+instance Semigroup (Endpoint method a) where
+  (<>) (Endpoint _ pl) (Endpoint _ pr) = fromTxt (pl <> pr)
 
 newtype Host = Host Txt
   deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
@@ -50,48 +62,37 @@ class API r where
   api :: Txt
 
 class Typeable r => Resource r where
+ 
+  type Create r :: *
+  type Create r = Void
 
-  type Auth r :: *
-  type Name r :: *
-
-  data Event r :: *
-
-  data Product r :: *
-  data Preview r :: *
+  type Update r :: *
+  type Update r = Void
 
   type Query r :: *
-  type Query r = ()
-
-  type Result r :: *
-  type Result r = [Preview r]
+  type Query r = Void
 
   {-# NOINLINE base #-}
-  -- This should be done at compile-time, but haskell.nix GHCJS doesn't include ghcjs-th support.
-  -- So, the best we can do is noinline it and hope that it only ever gets evaluated once.
-  base :: Endpoint x
-  base = fromString ('/' : fmap Char.toLower rep)
-    where
-      rep = fmap limit $ go (typeRep (Proxy :: Proxy r))
-        where
-          limit c | isAscii c && isAlphaNum c = c | otherwise = '_'
-          go tr =
-            let tc = show (typeRepTyCon tr)
-                trs = typeRepArgs tr
-            in List.intercalate "_" (tc : fmap go trs)
+  base :: Endpoint method x
+  base = defaultBase @r
+    
+  create :: POST (Create r)
+  create = base @r
 
-  create :: Endpoint (Auth r -> r -> IO (Maybe (Name r)))
-  create = base @r <> "/create"
+  update :: PATCH (Update r)
+  update = base @r
 
-  raw :: Endpoint (Auth r -> Name r -> IO (Maybe r))
-  raw = base @r <> "/raw"
+  query :: GET (Query r)
+  query = base @r
 
-  read :: Endpoint (Maybe (Auth r) -> Name r -> IO (Maybe (Product r)))
-  read = base @r <> "/read"
-
-  update :: Endpoint (Auth r -> Name r -> Event r -> IO ())
-  update = base @r <> "/update"
-
-  query :: Endpoint (Maybe (Auth r) -> Maybe (Query r) -> IO (Result r))
-  query = base @r <> "/query"
-
+defaultBase :: forall r method x. Typeable r => Endpoint method x
+defaultBase = fromString ('/' : fmap Char.toLower rep)
+  where
+    rep = limit <$> go (typeRep (Proxy :: Proxy r))
+      where
+        limit c | isAscii c && isAlphaNum c = c | otherwise = '_'
+        go tr =
+          let tc = show (typeRepTyCon tr)
+              trs = typeRepArgs tr
+          in List.intercalate "_" (tc : fmap go trs)
 

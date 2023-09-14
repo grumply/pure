@@ -72,11 +72,10 @@ data Token (c :: *) = Token
     deriving anyclass (ToJSON,FromJSON)
 type role Token nominal
 
-newtype User c = User (Token c)
-type Authenticated c = Exists (User c)
+type Authenticated c = Exists (Token c)
 
 token :: forall c. Authenticated c => Token c
-token = let User t = it :: User c in t
+token = it
 
 user :: forall c. Authenticated c => Username c
 user = owner (token @c)
@@ -107,7 +106,7 @@ secret = let Secret s = it :: Secret_ c in s
 
 #ifdef __GHCJS__
 authenticated :: (Authenticated c => r) -> (Token c -> r)
-authenticated r t = with (User t) r
+authenticated r t = with t r
 #else
 authenticated :: forall c r. (Pool c, Secret c) => (Authenticated c => r) -> (Token c -> r)
 authenticated r t@Token {..} 
@@ -116,7 +115,7 @@ authenticated r t@Token {..}
   , h == fromTxt proof
   , unsafePerformIO (doesFileExist (pool @c <> h))
   , unsafePerformIO ((expires >) <$> time)
-  = with (User t) r
+  = with t r
 
   | otherwise 
   = unauthorized
@@ -124,10 +123,9 @@ authenticated r t@Token {..}
 
 authorized :: forall c r. Authenticated c => Txt -> (Txt -> r) -> r
 authorized c r =
-  let User a = it :: User c
-  in case List.lookup c (claims a) of
-      Just x -> r x
-      _      -> unauthorized
+  case List.lookup c (claims @c it) of
+    Just x -> r x
+    _      -> unauthorized
 
 #ifdef __GHCJS__
 authorized' :: forall c r. Authenticated c => Txt -> (Txt -> r) -> r
@@ -135,7 +133,7 @@ authorized' c r = authorized @c c r
 #else
 authorized' :: forall c r. (Pool c, Authenticated c) => Txt -> (Txt -> r) -> r
 authorized' c r
-  | User Token { proof } <- it :: User c
+  | Token { proof } <- it :: Token c
   , unsafePerformIO (doesFileExist (pool @c <> fromTxt proof)) 
   = authorized @c c r
 

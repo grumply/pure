@@ -9,37 +9,37 @@ import Endpoint
 import GHC.Generics
 import Pure.Auth.Data
 
-register :: Endpoint (Username c -> Email -> Password -> IO Bool)
+register :: POST (Username c -> Email -> Password -> IO Bool)
 register = "/auth/register"
 
-activate :: Endpoint (Key -> Username c -> Email -> IO (Maybe (Token c)))
+activate :: PATCH (Key -> Username c -> Email -> IO (Maybe (Token c)))
 activate = "/auth/activate"
 
-login :: Endpoint (Username c -> Password -> IO (Maybe (Token c)))
+login :: PATCH (Username c -> Password -> IO (Maybe (Token c)))
 login = "/auth/login"
 
-logout :: Endpoint (Token c -> IO ())
+logout :: PATCH (Token c -> IO ())
 logout = "/auth/logout"
 
-logoutAll :: Endpoint (Username c -> Password -> IO ())
+logoutAll :: PATCH (Username c -> Password -> IO ())
 logoutAll = "/auth/logout/all"
 
-startRecover :: Endpoint (Username c -> Email -> IO ())
+startRecover :: PATCH (Username c -> Email -> IO ())
 startRecover = "/auth/recover/initiate"
 
-recover :: Endpoint (Username c -> Email -> Password -> Key -> IO (Maybe (Token c)))
+recover :: PATCH (Username c -> Email -> Password -> Key -> IO (Maybe (Token c)))
 recover = "/auth/recover/confirm"
 
-startDelete :: Endpoint (Username c -> Email -> Password -> IO ())
+startDelete :: PATCH (Username c -> Email -> Password -> IO ())
 startDelete = "/auth/delete/initiate"
 
-delete :: Endpoint (Username c -> Email -> Key -> IO Bool)
+delete :: PATCH (Username c -> Email -> Key -> IO Bool)
 delete = "/auth/delete/confirm"
 
-updateEmail :: Endpoint (Username c -> Password -> Email -> Email -> IO Bool)
+updateEmail :: PATCH (Username c -> Password -> Email -> Email -> IO Bool)
 updateEmail = "/auth/update/email"
 
-updatePassword :: Endpoint (Username c -> Password -> Email -> Password -> IO Bool)
+updatePassword :: PATCH (Username c -> Password -> Email -> Password -> IO Bool)
 updatePassword = "/auth/update/password"
 
 -- TODO
@@ -61,5 +61,6 @@ data AuthEvent
     }
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (ToJSON,FromJSON)
-recentAuthEvents :: Endpoint (Token c -> IO [AuthEvent])
+
+recentAuthEvents :: GET (Token c -> IO [AuthEvent])
 recentAuthEvents = "/auth/events/recent"

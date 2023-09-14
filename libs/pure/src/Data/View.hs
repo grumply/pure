@@ -29,7 +29,7 @@ import Data.Traversable (for)
 import Data.Type.Equality
 import Data.Typeable (TypeRep,Typeable,tyConName,typeRepTyCon,typeOf,typeRep,typeRepFingerprint,cast)
 import Data.Unique (Unique,newUnique)
-import GHC.Exts as Exts (IsList(..),Any,Constraint,reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#,Proxy#,proxy#)
+import GHC.Exts as Exts (IsList(..),Any,Constraint,reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#,Proxy#,proxy#,inline)
 import GHC.Fingerprint.Type (Fingerprint())
 import GHC.Generics (Generic(..))
 import GHC.Stack
@@ -808,7 +808,7 @@ newtype Witness a r = Witness (Exists a => r)
 -- inexplicable happens.
 {-# INLINABLE with #-}
 with :: forall a r. a -> (Exists a => r) -> r
-with a w = unsafeCoerce (Witness w :: Witness a r) a
+with a w = inline (unsafeCoerce (Witness w :: Witness a r)) (inline a)
 
 {-# INLINE using #-}
 -- | Like `contramap` for existentials; existential refinement. 
@@ -878,6 +878,10 @@ yield = effect
 {-# INLINE stream #-}
 stream :: (a -> IO ()) -> (Producer a => b) -> b
 stream f = with (Handler (\a after -> f a >> after >> pure True))
+
+{-# INLINE consume #-}
+consume :: (a -> IO ()) -> (Producer a => b) -> b
+consume = stream
 
 {-# INLINE events #-}
 events :: forall a b. (Exists a => IO ()) -> (Producer a => b) -> b

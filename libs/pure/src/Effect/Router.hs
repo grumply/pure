@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, MultiParamTypeClasses, ScopedTypeVariables, OverloadedStrings, RankNTypes, FlexibleContexts, TypeApplications, ConstraintKinds, AllowAmbiguousTypes, TypeOperators #-}
+{-# LANGUAGE CPP, MultiParamTypeClasses, ScopedTypeVariables, OverloadedStrings, RankNTypes, FlexibleContexts, TypeApplications, ConstraintKinds, AllowAmbiguousTypes, TypeOperators, DataKinds, TypeFamilies #-}
 module Effect.Router
   ( Router, Route, Routes
   , routes_, Effect.Router.route, page
@@ -17,6 +17,7 @@ import qualified Data.Router as Export hiding (route)
 import qualified Data.Router as Router
 import Data.Txt
 import qualified Data.Txt as Txt
+import Data.Type.Equality
 import Data.View hiding (On)
 
 data Route rt = Route Txt rt
@@ -53,19 +54,19 @@ router rtng v = do
       Nothing -> Null
       Just (sub,rt) -> with (Route @rt sub rt) v
 
-subrouter :: forall rt' rt. (Typeable rt, Router rt') => (forall a. Routing rt a) -> (Router rt => View) -> View
+subrouter :: forall from to. ((from == to) ~ False, Typeable to) => (forall a. Routing to a) -> (Router to => View) -> (Router from => View)
 subrouter rtng v = do
   let
-    initialize :: (Router rt', Modify (Maybe (Txt,rt))) => IO (Maybe (Txt,rt),Maybe (Txt,rt) -> IO ())
+    initialize :: (Router from, Modify (Maybe (Txt,to))) => IO (Maybe (Txt,to),Maybe (Txt,to) -> IO ())
     initialize = do
-      let Route path _ = it :: Route rt'
+      let Route path _ = it :: Route from
       mrt <- Router.route (rtng >>= \x -> getPath >>= \p -> pure (p,x)) path
-      pure (mrt :: Maybe (Txt,rt),\_ -> pure ())
+      pure (mrt :: Maybe (Txt,to),\_ -> pure ())
 
   stateWith (const pure) initialize $ do
     case it of
       Nothing -> Null
-      Just (sub,rt) -> with (Route @rt sub rt) v
+      Just (sub,rt) -> with (Route @to sub rt) v
 
 router' :: forall rt. Typeable rt => (forall a. Routing rt a) -> (Router rt => View) -> View
 router' rtng v = do
@@ -89,42 +90,42 @@ router' rtng v = do
       Nothing -> Null
       Just (sub,rt) -> with (Route @rt sub rt) v
 
-subrouter' :: forall rt' rt. (Typeable rt, Router rt') => (forall a. Routing rt a) -> (Router rt => View) -> View
+subrouter' :: forall from to. ((from == to) ~ False, Typeable to) => (forall a. Routing to a) -> (Router to => View) -> (Router from => View)
 subrouter' rtng v = do
   let
-    initialize :: (Router rt', Modify (Maybe (Txt,rt))) => IO (Maybe (Txt,rt),Maybe (Txt,rt) -> IO ())
+    initialize :: (Router from, Modify (Maybe (Txt,to))) => IO (Maybe (Txt,to),Maybe (Txt,to) -> IO ())
     initialize = do
-      let Route path _ = it :: Route rt'
+      let Route path _ = it :: Route from
       mrt <- Router.route (rtng >>= \x -> getPath >>= \p -> pure (p,x)) path
-      pure (mrt :: Maybe (Txt,rt),\_ -> pure ())
+      pure (mrt :: Maybe (Txt,to),\_ -> pure ())
 
   stateWith' (const pure) initialize $ do
     case it of
       Nothing -> Null
-      Just (sub,rt) -> with (Route @rt sub rt) v
+      Just (sub,rt) -> with (Route @to sub rt) v
 
 type Routes ctx = forall a. Routing (ctx |- View) a
 
-routed :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx |- View) => View) -> (ctx => View)
-routed rs v = router rs (let (d :: ctx |- View) = current in with d v)
+routed :: forall ctx. Typeable ctx => Routes ctx -> (Router (ctx |- View) => View) -> (ctx => View)
+routed = router
 
-subrouted :: forall rt ctx. (Router rt, Typeable ctx) => Routes ctx -> (Exists (ctx |- View) => View) -> (ctx => View)
-subrouted rs v = subrouter @rt rs (let (d :: ctx |- View) = current in with d v)
+subrouted :: forall from to. ((from == to) ~ False, Typeable to) => Routes to -> (Router (to |- View) => View) -> ((Router (from |- View), from, to) => View)
+subrouted = subrouter @(from |- View) @(to |- View)
 
-routed' :: forall ctx. Typeable ctx => Routes ctx -> (Exists (ctx |- View) => View) -> (ctx => View)
-routed' rs v = router' rs (let (d :: ctx |- View) = current in with d v)
+routed' :: forall ctx. Typeable ctx => Routes ctx -> (Router (ctx |- View) => View) -> (ctx => View)
+routed' = router' 
 
-subrouted' :: forall rt ctx. (Router rt, Typeable ctx) => Routes ctx -> (Exists (ctx |- View) => View) -> (ctx => View)
-subrouted' rs v = subrouter' @rt rs (let (d :: ctx |- View) = current in with d v)
+subrouted' :: forall from to. ((from == to) ~ False, Typeable to) => Routes to -> (Router (to |- View) => View) -> ((Router (from |- View), from, to) => View)
+subrouted' = subrouter' @(from |- View) @(to |- View)
 
-page :: forall ctx. Exists (ctx |- View) => (ctx => View)
-page = weak (it :: ctx |- View) (prove (it :: ctx |- View))
+page :: forall ctx. Router (ctx |- View) => (ctx => View)
+page = weak (current :: ctx |- View) (prove (current :: ctx |- View))
 
 routes_ :: Routes () -> View
 routes_ rs = routed @() rs (page @())
 
-route :: forall ctx. (ctx |- View) -> (forall a. Routing (ctx |- View) a)
-route = dispatch 
+route :: forall ctx. (ctx => View) -> (forall a. Routing (ctx |- View) a)
+route v = dispatch (proof v)
 
 lref :: Txt -> View -> View
 lref t a = OnClickWith intercept (\_ -> goto t) (Href t a)

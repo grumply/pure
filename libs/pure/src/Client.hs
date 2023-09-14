@@ -1,14 +1,11 @@
 {-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, TypeOperators, DefaultSignatures, ViewPatterns #-}
 module Client 
-  ( Client.post
-  , Client.get
-  , Client.got
-  , Get(), Got(Unsafe), Post()
+  ( Get(..), Got(..), Post(..), Patch(..)
+  , Client.query, Client.update, Client.create
   -- ,ws,wssend,wsmessage,wserror
   , sseWith, sse
   , base, API(..)
-  , Query, Result, Auth, Name, Event, Product, Preview
-  , Client(..)
+  , Query, Update, Create
   , module Export
   ) where
 
@@ -44,7 +41,7 @@ import System.IO.Unsafe
 import Prelude hiding (or)
 
 class Post api req where
-  post :: Endpoint req -> req
+  post :: POST req -> req
 
 instance (API api, Typeable r, FromJSON r) => Post api (IO r) where
   post ep = do
@@ -80,8 +77,45 @@ instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, T
 instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Post api (a -> b -> c -> d -> e -> f -> g -> IO r) where
   post ep a b c d e f g = post @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
+class Patch api req where
+  patch :: PATCH req -> req
+
+instance (API api, Typeable r, FromJSON r) => Patch api (IO r) where
+  patch ep = do
+    let url = api @api <> toTxt ep
+    r <- Fetch.patch Fetch.json url def
+    case r of
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
+
+instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Patch api (a -> IO r) where
+  patch ep a = do
+    let url = api @api <> toTxt ep
+    r <- Fetch.patch Fetch.json url (JSON.encode a) 
+    case r of
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
+ 
+instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Patch api (a -> b -> IO r) where
+  patch ep a b = patch @api (fromTxt (toTxt ep)) (a,b)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Patch api (a -> b -> c -> IO r) where
+  patch ep a b c = patch @api (fromTxt (toTxt ep)) (a,b,c)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Patch api (a -> b -> c -> d -> IO r) where
+  patch ep a b c d = patch @api (fromTxt (toTxt ep)) (a,b,c,d)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Patch api (a -> b -> c -> d -> e -> IO r) where
+  patch ep a b c d e = patch @api (fromTxt (toTxt ep)) (a,b,c,d,e)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Patch api (a -> b -> c -> d -> e -> f -> IO r) where
+  patch ep a b c d e f = patch @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Patch api (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  patch ep a b c d e f g = patch @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
+
 class Get api req where
-  get :: Endpoint req -> req
+  get :: GET req -> req
 
 instance (API api, Typeable r, FromJSON r) => Get api (IO r) where
   get ep = do
@@ -127,7 +161,7 @@ instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, T
 
 class Got api req where
   type Unsafe req :: *
-  got :: Endpoint req -> Unsafe req
+  got :: GET req -> Unsafe req
 
 instance (API api, Typeable r, FromJSON r) => Got api (IO r) where
   type Unsafe (IO r) = r
@@ -264,95 +298,12 @@ wserror :: Exists Websocket => View -> (Producer WebsocketError => View)
 wserror = OnMounted (\_ -> onRaw (it :: Websocket) "error" def (\_ -> yield . WebsocketError))
 #endif
 
-class Resource r => Client r where 
+query :: forall api r. (Resource r, Got api (Query r)) => Unsafe (Query r)
+query = Client.got @api (Endpoint.query @r)
 
-  type Context r :: Constraint 
-  type Context r = ()
+update :: forall api r. (Resource r, Patch api (Update r)) => Update r
+update = patch @api (Endpoint.update @r)
 
-  routes :: forall x. Context r => Maybe (Auth r) -> Routing (x |- View) ()
-  default routes 
-    :: forall x.
-       ( Context r
-       , API r
-       , Typeable (Context r)
-       , Typeable (Query r)
-       , Typeable (Result r)
-       , Typeable (Preview r)
-       , Typeable (Event r)
-       , Typeable (Product r)
-       , Typeable (Auth r), ToJSON (Auth r)
-       , Typeable (Name r), FromTxt (Name r), ToTxt (Name r), ToJSON (Name r), FromJSON (Name r)
-       , ToJSON r, FromJSON r
-       , ToJSON (Event r)
-       , ToJSON (Query r)
-       , FromJSON (Preview r)
-       , FromJSON (Product r)
-       , FromJSON (Query r)
-       , FromJSON (Result r)
-       ) => Maybe (Auth r) -> Routing (x |- View) ()
-  routes (Just a) = void do
+create :: forall api r.  (Resource r, Post api (Create r)) => Create r
+create = post @api (Endpoint.create @r)
 
-    Effect.Router.match (fromTxt (toTxt (base @r))) do
-      rs <- liftIO (Client.get @r (Endpoint.query @r) (Just a) Nothing)
-      route (with rs (proof (Client.query @r)))
-
-    path (fromTxt (toTxt (base @r))) do
-
-      path "/new" do
-        route do
-          proof do
-            cont @(Context r) do
-              stream (post @r (Endpoint.create @r) a >=> maybe def (\nm -> goto (toTxt (base @r) <> "/" <> toTxt nm))) do 
-                proof (Client.create @r)
-        
-      path "/:res" do
-        k <- "res" 
-        path "/edit" do
-
-          mr <- liftIO (post @r (Endpoint.raw @r) a k)
-          case mr of
-            Nothing -> 
-              route do
-                proof do
-                  cont @(Context r) do
-                    stream (post @r (Endpoint.create @r) a >=> maybe def (\nm -> goto (toTxt (base @r) <> "/" <> toTxt nm))) do 
-                      proof (Client.create @r)
-            Just r -> 
-              stream (post @r (Endpoint.update @r) a k) do
-                route (with r (with k (proof (Client.update @r))))
-
-        mr <- liftIO (Client.get @r (Endpoint.read @r) (Just a) k)
-        case mr of
-          Nothing -> do
-            rs <- liftIO (Client.get @r (Endpoint.query @r) (Just a) Nothing)
-            route (with rs (proof (Client.query @r)))
-          Just r ->
-            route (with k (with r (proof (Client.read @r))))
-
-  routes Nothing = void do
-
-    Effect.Router.match (fromTxt (toTxt (base @r))) do
-      rs <- liftIO (Client.get @r (Endpoint.query @r) Nothing Nothing)
-      route (with rs (proof (Client.query @r)))
-    
-    path (fromTxt (toTxt (base @r)) <> "/:res") do
-      k <- "res" 
-      mr <- liftIO (Client.get @r (Endpoint.read @r) Nothing k)
-      case mr of
-        Nothing -> do
-          rs <- liftIO (Client.get @r (Endpoint.query @r) Nothing Nothing)
-          route (with rs (proof (Client.query @r)))
-        Just r ->
-          route (with k (with r (proof (Client.read @r))))
-
-  create :: (Context r, Producer r) => View
-  create = Data.View.Null
-
-  read :: (Context r, Exists (Name r), Exists (Product r)) => View
-  read = Data.View.Null
-
-  update :: (Context r, Exists r, Exists (Name r), Producer (Event r)) => View
-  update = Data.View.Null
-
-  query :: (Context r, Exists (Result r)) => View
-  query = Data.View.Null

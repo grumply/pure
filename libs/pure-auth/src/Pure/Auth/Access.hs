@@ -51,18 +51,18 @@ storeToken = void . Localstorage.put ("token/" <> rep @domain)
 deleteToken :: forall domain. Typeable domain => IO ()
 deleteToken = void (Localstorage.delete ("token/" <> rep @domain))
 
-newtype Access domain = Access { fromAccess :: Maybe (Token domain) }
+type Access domain = Maybe (Token domain)
 
 type Authentication domain = (Typeable domain, State (Access domain), Logging Value)
 
 setToken :: forall domain. Modify (Access domain) => Token domain -> IO ()
-setToken = put . Access . Just
+setToken = put . Just
 
 clearToken :: forall domain. Modify (Access domain) => IO ()
-clearToken = put (Access Nothing :: Access domain)
+clearToken = put (Nothing :: Access domain)
 
 access :: forall domain. (Typeable domain, Logging Value) => (Authentication domain => View) -> View
-access = stateIO (Access <$> readToken @domain)
+access = stateIO (readToken @domain)
 
 -- | Wraps up a common approach to authentication.
 --
@@ -74,18 +74,18 @@ simple :: forall domain. (Logging Value, API domain, Typeable domain) => (Authen
 simple v = access @domain (guarded @domain (auth @domain) v)
 
 mtoken :: forall domain. Authentication domain => Maybe (Token domain)
-mtoken = fromAccess it
+mtoken = it
 
 -- | A generic authorization primitive for a given authentication domain. 
 guarded :: forall domain a. Authentication domain => a -> (Authenticated domain => a) -> a
 guarded unauthenticated authenticated = 
   maybe unauthenticated 
-    (\t -> with (User @domain t) authenticated) 
-    (fromAccess (it :: Access domain))
+    (\t -> with t authenticated) 
+    (it :: Access domain)
 
 logout :: forall domain. (Typeable domain, API domain, Authenticated domain, State (Access domain)) => IO ()
 logout = do
-  post @domain Auth.logout (token @domain)
+  patch @domain Auth.logout (token @domain)
   deleteToken @domain
   clearToken @domain
 
@@ -94,7 +94,7 @@ upgraded t = do
   storeToken t
   setToken t
 
-auth :: forall domain. (API domain, Typeable domain) => Authentication domain => View
+auth :: forall domain. (API domain, Typeable domain, Authentication domain) => View
 auth = 
   stream (upgraded @domain) do
     cont @(Producer (Token domain)) do
@@ -113,7 +113,7 @@ loginForm = Data.View.proof do
       setUsername = let In InputEvent { value = un } = it in put (un,pw)
       setPassword = let In InputEvent { value = pw } = it in put (un,pw)
 
-      login = post @domain (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def yield
+      login = patch @domain (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def yield
 
     Div <||>
       [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]
@@ -135,7 +135,7 @@ recoverForm = Data.View.proof do
       setUsername = let In InputEvent { value = un } = it in put (un,em)
       setEmail = let In InputEvent { value = em } = it in put (un,em)
 
-      recover = post @domain (Auth.startRecover @domain) (fromTxt un) (fromTxt em)
+      recover = patch @domain (Auth.startRecover @domain) (fromTxt un) (fromTxt em)
 
     Div <||>
       [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]

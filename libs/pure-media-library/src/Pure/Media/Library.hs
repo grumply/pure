@@ -17,13 +17,13 @@ import Data.Events as Events (pattern OnChangeWith,target,intercept)
 import Data.HTML (pattern Accept)
 #endif
 
-upload :: Endpoint app -> Endpoint (Token app -> ByteTxt -> IO (Maybe (Marker ByteTxt)))
+upload :: (forall method x. Endpoint method x) -> POST (Token app -> ByteTxt -> IO (Maybe (Marker ByteTxt)))
 upload = (<> "/media/upload") . fromTxt . toTxt
 
-delete :: Endpoint app -> Endpoint (Token app -> Marker ByteTxt -> IO ())
+delete :: (forall method x. Endpoint method x) -> PATCH (Token app -> Marker ByteTxt -> IO ())
 delete = (<> "/media/delete") . fromTxt . toTxt
 
-list :: Endpoint app -> Endpoint (Token app -> IO [Marker ByteTxt]) 
+list :: (forall method x. Endpoint method x) -> GET (Token app -> IO [Marker ByteTxt]) 
 list = (<> "/media/list") . fromTxt . toTxt
 
 #ifndef __GHCJS__
@@ -32,9 +32,9 @@ data Config = Config
   , root :: FilePath
   }
 
-media :: forall app. (Typeable app, Pool app, Secret app) => Endpoint app -> Config -> [Handler]
+media :: forall app. (Typeable app, Pool app, Secret app) => (forall method x. Endpoint method x) -> Config -> [Handler]
 media ep Config {..} =
-  [ lambda (upload ep) do
+  [ lambda (upload ep) False False do
       authenticated @app \contents -> do
         valid <- validate contents
         if valid then do
@@ -47,13 +47,13 @@ media ep Config {..} =
         else
           pure Nothing
         
-  , lambda (delete ep) do
+  , lambda (delete ep) False False do
       authenticated @app \marker -> do
         let fp = root </> fromTxt (toTxt (user @app)) </> fromTxt (toTxt marker)
         exists <- doesFileExist fp
         when exists (removeFile fp)
 
-  , lambda (list ep) do
+  , lambda (list ep) False False do
       authenticated @app do
         let dir = root </> fromTxt (toTxt (user @app))
         exists <- doesDirectoryExist dir
@@ -70,15 +70,14 @@ media ep Config {..} =
 #else
 -- | Note: Endpoint app is needed to disambiguate the endpoints in case you want to have multiple
 --         upload endpoints for different media libraries.
-uploader :: forall api app. (API api, Typeable app, Authenticated app, Producer (Marker ByteTxt)) => Endpoint app -> View
+uploader :: forall api app. (API api, Typeable app, Authenticated app, Producer (Marker ByteTxt)) => (forall method x. Endpoint method x) -> View
 uploader ep = Input <| OnChangeWith intercept select . Type "file" . Accept "image/*"
   where
-
     select :: Evt -> IO ()
     select (Events.target -> Just (coerce -> node)) = getFiles node >>= traverse_ onUpload
     select _ = pure ()
 
     onUpload :: (Txt,ByteTxt) -> IO ()
-    onUpload (name,content) = post @api (upload ep) token content >>= traverse_ yield
+    onUpload (name,content) = post @api (upload ep) (token @app) content >>= traverse_ yield
 #endif
 

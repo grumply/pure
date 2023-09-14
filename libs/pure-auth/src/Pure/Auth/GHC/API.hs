@@ -333,7 +333,7 @@ recentAuthEvents onSuccess host agent t@(owner -> un) = do
     pure []
 
 data Config c = Config
-  { base :: forall x. Endpoint x
+  { base :: forall method x. Endpoint method x
   , duration :: Time
   , validate :: Username c -> IO Bool -- You might want to blacklist certain user names. 
   , onRegister :: Host -> Agent -> Username c -> Email -> Key -> IO () -> IO ()
@@ -384,8 +384,8 @@ simpleValidator (toTxt -> un)
 authentication :: forall c. (Typeable c, Secret c, Pool c, Limiter c) => Config c -> [Server.Handler]
 authentication Config {..} =
   [ withIdentity (base <> API.register) (register validate onRegister)
-  , withIdentity (base <> API.activate) (activate onActivate Month)
-  , withIdentity (base <> API.login) (login onLogin Month)
+  , withIdentity (base <> API.activate) (activate onActivate Month) 
+  , withIdentity (base <> API.login) (login onLogin Month) 
   , withIdentity (base <> API.logout) (logout onLogout)
   , withIdentity (base <> API.logoutAll) (logoutAll onLogoutAll)
   , withIdentity (base <> API.startRecover) (startRecover onStartRecover)
@@ -396,7 +396,11 @@ authentication Config {..} =
   , withIdentity (base <> API.updatePassword) (updatePassword onUpdatePassword duration)
   , withIdentity (base <> API.recentAuthEvents) (recentAuthEvents onListRecentAuthEvents)
   ]
+  where
+    withIdentity :: (ToMethod method, Lambda r) => Endpoint method r -> (Host -> Agent -> r) -> Server.Handler
+    withIdentity ep f = lambda ep False False (f Server.host Server.agent)
 
+-- recentAuthEvents :: forall c. (Typeable c, Limiter c) => (Host -> Agent -> Username c -> IO ()) -> Host -> Agent -> Token c -> IO [API.AuthEvent]
 simpleAuth :: forall c. (Limiter c, Secret c, Pool c) => Username c -> Time -> Config c
 simpleAuth admin t = def
   { onRegister = \h a un e k activate -> activate
