@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, TypeOperators, DefaultSignatures, ViewPatterns #-}
 module Client 
   ( Get_(..), Got_(..), Post_(..), Patch_(..), Delete_(..), Put_(..)
-  , Client.query, Client.update, Client.create, Client.place, Client.delete
+  , Client.query, Client.update, Client.create, Client.place, Client.delete, Client.query'
   -- ,ws,wssend,wsmessage,wserror
   , sseWith, sse
   , base, API(..)
