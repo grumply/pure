@@ -15,13 +15,13 @@ import Data.Sorcerer as Sorcerer hiding (event,Deleted)
 import Data.Time as Time
 import Data.Txt as Txt
 import Data.Typeable
-import Endpoint hiding (Auth,read)
+import Endpoint hiding (Auth,read,delete)
 import Prelude hiding (read)
 import qualified Pure.Auth.API as API
 import Pure.Auth.Data
 import Pure.Auth.GHC.Auth
 import Pure.Auth.GHC.Crypto
-import Server hiding (Auth,recover,read,write)
+import Server hiding (Auth,recover,read,write,delete)
 
 newtype Limiter_ (c :: *) = Limiter { allowed :: Host -> Username c -> IO Bool }
 type Limiter c = Exists (Limiter_ c)

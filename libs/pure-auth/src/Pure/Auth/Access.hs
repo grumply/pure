@@ -85,7 +85,7 @@ guarded unauthenticated authenticated =
 
 logout :: forall domain. (Typeable domain, API domain, Authenticated domain, State (Access domain)) => IO ()
 logout = do
-  patch @domain Auth.logout (token @domain)
+  patch_ @domain Auth.logout (token @domain)
   deleteToken @domain
   clearToken @domain
 
@@ -113,7 +113,7 @@ loginForm = Data.View.proof do
       setUsername = let In InputEvent { value = un } = it in put (un,pw)
       setPassword = let In InputEvent { value = pw } = it in put (un,pw)
 
-      login = patch @domain (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def yield
+      login = patch_ @domain (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def yield
 
     Div <||>
       [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]
@@ -135,7 +135,7 @@ recoverForm = Data.View.proof do
       setUsername = let In InputEvent { value = un } = it in put (un,em)
       setEmail = let In InputEvent { value = em } = it in put (un,em)
 
-      recover = patch @domain (Auth.startRecover @domain) (fromTxt un) (fromTxt em)
+      recover = patch_ @domain (Auth.startRecover @domain) (fromTxt un) (fromTxt em)
 
     Div <||>
       [ Label <| Display block |> [ "Username: ", Input <| inputs setUsername ]
@@ -159,7 +159,7 @@ registerForm = Data.View.proof do
       setEmail    = let In InputEvent { value = em } = it in put (un,pw,em)
 
       register = do
-        post @domain (Auth.register @domain) (fromTxt un) (fromTxt em) (fromTxt pw) 
+        post_ @domain (Auth.register @domain) (fromTxt un) (fromTxt em) (fromTxt pw) 
         -- TODO
         -- post api (Auth.login @domain) (fromTxt un) (fromTxt pw) >>= maybe def Producer.yield
 

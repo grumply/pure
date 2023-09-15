@@ -10,7 +10,7 @@ module Server
   , Request(..)
   , WarpTLS.tlsSettings
   , Server(..)
-  , Resource,Create,Update,Query
+  , Methods,Create,Update,Query
   , respond, respondWith
   , module Export
   ) where
@@ -108,6 +108,7 @@ instance ToMethod 'Endpoint.GET where toMethod = methodGet
 instance ToMethod 'Endpoint.HEAD where toMethod = methodHead
 instance ToMethod 'Endpoint.POST where toMethod = methodPost
 instance ToMethod 'Endpoint.PATCH where toMethod = methodPatch
+instance ToMethod 'Endpoint.PUT where toMethod = methodPut
 instance ToMethod 'Endpoint.DELETE where toMethod = methodDelete
 instance ToMethod 'Endpoint.OPTIONS where toMethod = methodOptions
 instance ToMethod 'Endpoint.CONNECT where toMethod = methodConnect
@@ -160,7 +161,7 @@ instance (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [r]) where
       endpoint request respond = do
         let
           payload
-            | method == methodGet
+            | method == methodGet || method == methodDelete
             , Just b64 <- join (List.lookup "payload" (queryString request))
             , Right bs <- B64.decode (BSL.fromStrict b64) 
             = pure bs
@@ -249,7 +250,7 @@ instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where
       endpoint request respond = do
         let
           payload
-            | method == methodGet
+            | method == methodGet || method == methodDelete
             , Just b64 <- join (List.lookup "payload" (queryString request))
             , Right bs <- B64.decode (BSL.fromStrict b64) 
             = pure bs
@@ -303,7 +304,7 @@ logging level app request respond = do
   Log.log level request
   app request respond
 
-class Resource r => Server r where
+class Methods r => Server r where
 
   cors :: Bool
   cors = False
@@ -323,6 +324,8 @@ class Resource r => Server r where
        , Lambda (Create r)
        , Lambda (Update r)
        , Lambda (Query r)
+       , Lambda (Place r)
+       , Lambda (Delete r)
        ) => Server.Handler
   handlers = Handler (if path == toTxt (base @r) then go else Nothing)
     where
@@ -330,6 +333,8 @@ class Resource r => Server r where
       go | method == methodGet     = fmap (queryMiddleware  @r) (handler (lambda (Endpoint.query  @r) (showParseErrors @r) (showExceptions @r) (Server.query  @r)))
          | method == methodPatch   = fmap (updateMiddleware @r) (handler (lambda (Endpoint.update @r) (showParseErrors @r) (showExceptions @r) (Server.update @r)))
          | method == methodPost    = fmap (createMiddleware @r) (handler (lambda (Endpoint.create @r) (showParseErrors @r) (showExceptions @r) (Server.create @r)))
+         | method == methodPut     = fmap (placeMiddleware @r)  (handler (lambda (Endpoint.place @r) (showParseErrors @r) (showExceptions @r) (Server.place @r)))
+         | method == methodDelete  = fmap (deleteMiddleware @r) (handler (lambda (Endpoint.delete @r) (showParseErrors @r) (showExceptions @r) (Server.delete @r)))
          | method == methodOptions = Just \_ respond -> do
             let
               methods = "GET, PATCH, POST, OPTIONS"
@@ -364,6 +369,18 @@ class Resource r => Server r where
   
   queryMiddleware :: Context r => Middleware
   queryMiddleware = id
+
+  place :: Context r => Place r
+  place = respond 501 mempty
+
+  placeMiddleware :: Context r => Middleware
+  placeMiddleware = id
+
+  delete :: Context r => Delete r
+  delete = respond 501 mempty
+
+  deleteMiddleware :: Context r => Middleware
+  deleteMiddleware = id
 
 data Respond = Respond Status [Header] Txt deriving Show
 instance Exception Respond

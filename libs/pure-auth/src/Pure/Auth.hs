@@ -58,12 +58,12 @@ liveWith policy o s v =
 #ifdef __GHCJS__
   flip Component (Data.View.proof @(Exists a, Producer e) v) \self -> def
     { onConstruct = do
-        (t,i,ma) <- Client.get @c (o <> "/read") (it :: Token c) s
+        (t,i,ma) <- Client.get_ @c (o <> "/read") (it :: Token c) s
         ir <- newIORef i
         let
 
           publisher :: e -> IO ()
-          publisher = patch @c (fromTxt (toTxt o) <> "/write") t s
+          publisher = patch_ @c (fromTxt (toTxt o) <> "/write") t s
 
           integrate :: (Int,e) -> IO ()
           integrate (j,e) = modifyrefM_ self \p (tid,pub,i,a) -> do

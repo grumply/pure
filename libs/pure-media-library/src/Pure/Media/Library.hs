@@ -47,7 +47,7 @@ media ep Config {..} =
         else
           pure Nothing
         
-  , lambda (delete ep) False False do
+  , lambda (Pure.Media.Library.delete ep) False False do
       authenticated @app \marker -> do
         let fp = root </> fromTxt (toTxt (user @app)) </> fromTxt (toTxt marker)
         exists <- doesFileExist fp
@@ -78,6 +78,6 @@ uploader ep = Input <| OnChangeWith intercept select . Type "file" . Accept "ima
     select _ = pure ()
 
     onUpload :: (Txt,ByteTxt) -> IO ()
-    onUpload (name,content) = post @api (upload ep) (token @app) content >>= traverse_ yield
+    onUpload (name,content) = post_ @api (upload ep) (token @app) content >>= traverse_ yield
 #endif
 

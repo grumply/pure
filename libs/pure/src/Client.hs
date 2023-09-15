@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, TypeOperators, DefaultSignatures, ViewPatterns #-}
 module Client 
-  ( Get(..), Got(..), Post(..), Patch(..)
-  , Client.query, Client.update, Client.create
+  ( Get_(..), Got_(..), Post_(..), Patch_(..), Delete_(..), Put_(..)
+  , Client.query, Client.update, Client.create, Client.place, Client.delete
   -- ,ws,wssend,wsmessage,wserror
   , sseWith, sse
   , base, API(..)
@@ -9,7 +9,7 @@ module Client
   , module Export
   ) where
 
-import Pure as Export hiding (Event,liftIO,throw,index,read,get,Result)
+import Pure as Export hiding (Event,liftIO,throw,index,read,get,Result,place)
 import qualified Pure as Export (throw)
 
 import Data.JSON as JSON hiding (Key,Result)
@@ -40,93 +40,93 @@ import Endpoint
 import System.IO.Unsafe
 import Prelude hiding (or)
 
-class Post api req where
-  post :: POST req -> req
+class Post_ api req where
+  post_ :: POST req -> req
 
-instance (API api, Typeable r, FromJSON r) => Post api (IO r) where
-  post ep = do
+instance (API api, Typeable r, FromJSON r) => Post_ api (IO r) where
+  post_ ep = do
     let url = api @api <> toTxt ep
     r <- Fetch.post Fetch.json url def
     case r of
       Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
       _ -> throw r
 
-instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Post api (a -> IO r) where
-  post ep a = do
+instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Post_ api (a -> IO r) where
+  post_ ep a = do
     let url = api @api <> toTxt ep
     r <- Fetch.post Fetch.json url (JSON.encode a) 
     case r of
       Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
       _ -> throw r
  
-instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Post api (a -> b -> IO r) where
-  post ep a b = post @api (fromTxt (toTxt ep)) (a,b)
+instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Post_ api (a -> b -> IO r) where
+  post_ ep a b = post_ @api (fromTxt (toTxt ep)) (a,b)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Post api (a -> b -> c -> IO r) where
-  post ep a b c = post @api (fromTxt (toTxt ep)) (a,b,c)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Post_ api (a -> b -> c -> IO r) where
+  post_ ep a b c = post_ @api (fromTxt (toTxt ep)) (a,b,c)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Post api (a -> b -> c -> d -> IO r) where
-  post ep a b c d = post @api (fromTxt (toTxt ep)) (a,b,c,d)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Post_ api (a -> b -> c -> d -> IO r) where
+  post_ ep a b c d = post_ @api (fromTxt (toTxt ep)) (a,b,c,d)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Post api (a -> b -> c -> d -> e -> IO r) where
-  post ep a b c d e = post @api (fromTxt (toTxt ep)) (a,b,c,d,e)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Post_ api (a -> b -> c -> d -> e -> IO r) where
+  post_ ep a b c d e = post_ @api (fromTxt (toTxt ep)) (a,b,c,d,e)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Post api (a -> b -> c -> d -> e -> f -> IO r) where
-  post ep a b c d e f = post @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Post_ api (a -> b -> c -> d -> e -> f -> IO r) where
+  post_ ep a b c d e f = post_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Post api (a -> b -> c -> d -> e -> f -> g -> IO r) where
-  post ep a b c d e f g = post @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Post_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  post_ ep a b c d e f g = post_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
-class Patch api req where
-  patch :: PATCH req -> req
+class Patch_ api req where
+  patch_ :: PATCH req -> req
 
-instance (API api, Typeable r, FromJSON r) => Patch api (IO r) where
-  patch ep = do
+instance (API api, Typeable r, FromJSON r) => Patch_ api (IO r) where
+  patch_ ep = do
     let url = api @api <> toTxt ep
     r <- Fetch.patch Fetch.json url def
     case r of
       Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
       _ -> throw r
 
-instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Patch api (a -> IO r) where
-  patch ep a = do
+instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Patch_ api (a -> IO r) where
+  patch_ ep a = do
     let url = api @api <> toTxt ep
     r <- Fetch.patch Fetch.json url (JSON.encode a) 
     case r of
       Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
       _ -> throw r
  
-instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Patch api (a -> b -> IO r) where
-  patch ep a b = patch @api (fromTxt (toTxt ep)) (a,b)
+instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Patch_ api (a -> b -> IO r) where
+  patch_ ep a b = patch_ @api (fromTxt (toTxt ep)) (a,b)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Patch api (a -> b -> c -> IO r) where
-  patch ep a b c = patch @api (fromTxt (toTxt ep)) (a,b,c)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Patch_ api (a -> b -> c -> IO r) where
+  patch_ ep a b c = patch_ @api (fromTxt (toTxt ep)) (a,b,c)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Patch api (a -> b -> c -> d -> IO r) where
-  patch ep a b c d = patch @api (fromTxt (toTxt ep)) (a,b,c,d)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Patch_ api (a -> b -> c -> d -> IO r) where
+  patch_ ep a b c d = patch_ @api (fromTxt (toTxt ep)) (a,b,c,d)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Patch api (a -> b -> c -> d -> e -> IO r) where
-  patch ep a b c d e = patch @api (fromTxt (toTxt ep)) (a,b,c,d,e)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Patch_ api (a -> b -> c -> d -> e -> IO r) where
+  patch_ ep a b c d e = patch_ @api (fromTxt (toTxt ep)) (a,b,c,d,e)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Patch api (a -> b -> c -> d -> e -> f -> IO r) where
-  patch ep a b c d e f = patch @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Patch_ api (a -> b -> c -> d -> e -> f -> IO r) where
+  patch_ ep a b c d e f = patch_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Patch api (a -> b -> c -> d -> e -> f -> g -> IO r) where
-  patch ep a b c d e f g = patch @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Patch_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  patch_ ep a b c d e f g = patch_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
-class Get api req where
-  get :: GET req -> req
+class Get_ api req where
+  get_ :: GET req -> req
 
-instance (API api, Typeable r, FromJSON r) => Get api (IO r) where
-  get ep = do
+instance (API api, Typeable r, FromJSON r) => Get_ api (IO r) where
+  get_ ep = do
     let url = api @api <> toTxt ep
     r <- Fetch.get Fetch.json url 
     case r of
       Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
       _ -> throw r
 
-instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Get api (a -> IO r) where
-  get ep a = do
+instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Get_ api (a -> IO r) where
+  get_ ep a = do
 #ifdef __GHCJS__
     let url = api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a))
     r <- Fetch.get Fetch.json url
@@ -141,59 +141,141 @@ instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Get api (a -
       _ -> throw r
 #endif
 
-instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Get api (a -> b -> IO r) where
-  get ep a b = Client.get @api (fromTxt (toTxt ep)) (a,b)
+instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Get_ api (a -> b -> IO r) where
+  get_ ep a b = Client.get_ @api (fromTxt (toTxt ep)) (a,b)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Get api (a -> b -> c -> IO r) where
-  get ep a b c = Client.get @api (fromTxt (toTxt ep)) (a,b,c)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Get_ api (a -> b -> c -> IO r) where
+  get_ ep a b c = Client.get_ @api (fromTxt (toTxt ep)) (a,b,c)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Get api (a -> b -> c -> d -> IO r) where
-  get ep a b c d = Client.get @api (fromTxt (toTxt ep)) (a,b,c,d)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Get_ api (a -> b -> c -> d -> IO r) where
+  get_ ep a b c d = Client.get_ @api (fromTxt (toTxt ep)) (a,b,c,d)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Get api (a -> b -> c -> d -> e -> IO r) where
-  get ep a b c d e = Client.get @api (fromTxt (toTxt ep)) (a,b,c,d,e)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Get_ api (a -> b -> c -> d -> e -> IO r) where
+  get_ ep a b c d e = Client.get_ @api (fromTxt (toTxt ep)) (a,b,c,d,e)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Get api (a -> b -> c -> d -> e -> f -> IO r) where
-  get ep a b c d e f = Client.get @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Get_ api (a -> b -> c -> d -> e -> f -> IO r) where
+  get_ ep a b c d e f = Client.get_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
 
-instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Get api (a -> b -> c -> d -> e -> f -> g -> IO r) where
-  get ep a b c d e f g = Client.get @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Get_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  get_ ep a b c d e f g = Client.get_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
-class Got api req where
+class Got_ api req where
   type Unsafe req :: *
-  got :: GET req -> Unsafe req
+  got_ :: GET req -> Unsafe req
 
-instance (API api, Typeable r, FromJSON r) => Got api (IO r) where
+instance (API api, Typeable r, FromJSON r) => Got_ api (IO r) where
   type Unsafe (IO r) = r
-  got ep = unsafePerformIO (Client.get @api ep)
+  got_ ep = unsafePerformIO (Client.get_ @api ep)
 
-instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a) => Got api (a -> IO r) where
+instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a) => Got_ api (a -> IO r) where
   type Unsafe (a -> IO r) = a -> r
-  got ep a = unsafePerformIO (Client.get @api ep a)
+  got_ ep a = unsafePerformIO (Client.get_ @api ep a)
 
-instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b) => Got api (a -> b -> IO r) where
+instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b) => Got_ api (a -> b -> IO r) where
   type Unsafe (a -> b -> IO r) = a -> b -> r
-  got ep a b = unsafePerformIO (Client.get @api ep a b)
+  got_ ep a b = unsafePerformIO (Client.get_ @api ep a b)
 
-instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c) => Got api (a -> b -> c -> IO r) where
+instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c) => Got_ api (a -> b -> c -> IO r) where
   type Unsafe (a -> b -> c -> IO r) = a -> b -> c -> r
-  got ep a b c = unsafePerformIO (Client.get @api ep a b c)
+  got_ ep a b c = unsafePerformIO (Client.get_ @api ep a b c)
 
-instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d) => Got api (a -> b -> c -> d -> IO r) where
+instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d) => Got_ api (a -> b -> c -> d -> IO r) where
   type Unsafe (a -> b -> c -> d -> IO r) = a -> b -> c -> d -> r
-  got ep a b c d = unsafePerformIO (Client.get @api ep a b c d)
+  got_ ep a b c d = unsafePerformIO (Client.get_ @api ep a b c d)
 
-instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e) => Got api (a -> b -> c -> d -> e -> IO r) where
+instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e) => Got_ api (a -> b -> c -> d -> e -> IO r) where
   type Unsafe (a -> b -> c -> d -> e -> IO r) = a -> b -> c -> d -> e -> r
-  got ep a b c d e = unsafePerformIO (Client.get @api ep a b c d e)
+  got_ ep a b c d e = unsafePerformIO (Client.get_ @api ep a b c d e)
 
-instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e, Typeable f, ToJSON f) => Got api (a -> b -> c -> d -> e -> f -> IO r) where
+instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e, Typeable f, ToJSON f) => Got_ api (a -> b -> c -> d -> e -> f -> IO r) where
   type Unsafe (a -> b -> c -> d -> e -> f -> IO r) = a -> b -> c -> d -> e -> f -> r
-  got ep a b c d e f = unsafePerformIO (Client.get @api ep a b c d e f)
+  got_ ep a b c d e f = unsafePerformIO (Client.get_ @api ep a b c d e f)
 
-instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e, Typeable f, ToJSON f, Typeable g, ToJSON g) => Got api (a -> b -> c -> d -> e -> f -> g -> IO r) where
+instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJSON b, Typeable c, ToJSON c, Typeable d, ToJSON d, Typeable e, ToJSON e, Typeable f, ToJSON f, Typeable g, ToJSON g) => Got_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
   type Unsafe (a -> b -> c -> d -> e -> f -> g -> IO r) = a -> b -> c -> d -> e -> f -> g -> r
-  got ep a b c d e f g = unsafePerformIO (Client.get @api ep a b c d e f g)
+  got_ ep a b c d e f g = unsafePerformIO (Client.get_ @api ep a b c d e f g)
+
+class Delete_ api req where
+  delete_ :: DELETE req -> req
+
+instance (API api, Typeable r, FromJSON r) => Delete_ api (IO r) where
+  delete_ ep = do
+    let url = api @api <> toTxt ep
+    r <- Fetch.delete Fetch.json url 
+    case r of
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
+
+instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Delete_ api (a -> IO r) where
+  delete_ ep a = do
+#ifdef __GHCJS__
+    let url = api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (btoa_js (encode a))
+    r <- Fetch.delete Fetch.json url
+    case r of
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
+#else
+    let url = api @api <> toTxt ep <> "?payload=" <> encodeURIComponent (toTxt (B64.encode (Aeson.encode a)))
+    r <- Fetch.delete Fetch.json url
+    case r of
+      Fetch.Response n (decodeEither -> Right r) -> pure r
+      _ -> throw r
+#endif
+
+instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Delete_ api (a -> b -> IO r) where
+  delete_ ep a b = Client.delete_ @api (fromTxt (toTxt ep)) (a,b)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Delete_ api (a -> b -> c -> IO r) where
+  delete_ ep a b c = Client.delete_ @api (fromTxt (toTxt ep)) (a,b,c)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Delete_ api (a -> b -> c -> d -> IO r) where
+  delete_ ep a b c d = Client.delete_ @api (fromTxt (toTxt ep)) (a,b,c,d)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Delete_ api (a -> b -> c -> d -> e -> IO r) where
+  delete_ ep a b c d e = Client.delete_ @api (fromTxt (toTxt ep)) (a,b,c,d,e)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Delete_ api (a -> b -> c -> d -> e -> f -> IO r) where
+  delete_ ep a b c d e f = Client.delete_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Delete_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  delete_ ep a b c d e f g = Client.delete_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
+
+class Put_ api req where
+  put_ :: PUT req -> req
+
+instance (API api, Typeable r, FromJSON r) => Put_ api (IO r) where
+  put_ ep = do
+    let url = api @api <> toTxt ep
+    r <- Fetch.put Fetch.json url def
+    case r of
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
+
+instance (API api, Typeable a, Typeable r, ToJSON a, FromJSON r) => Put_ api (a -> IO r) where
+  put_ ep a = do
+    let url = api @api <> toTxt ep
+    r <- Fetch.put Fetch.json url (JSON.encode a) 
+    case r of
+      Fetch.Response (Fetch.Good _) (decodeEither -> Right r) -> pure r
+      _ -> throw r
+ 
+instance (API api, Typeable a, Typeable b, Typeable r, ToJSON a, ToJSON b, FromJSON r) => Put_ api (a -> b -> IO r) where
+  put_ ep a b = Client.put_ @api (fromTxt (toTxt ep)) (a,b)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable r, ToJSON a, ToJSON b, ToJSON c, FromJSON r) => Put_ api (a -> b -> c -> IO r) where
+  put_ ep a b c = Client.put_ @api (fromTxt (toTxt ep)) (a,b,c)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, FromJSON r) => Put_ api (a -> b -> c -> d -> IO r) where
+  put_ ep a b c d = Client.put_ @api (fromTxt (toTxt ep)) (a,b,c,d)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, FromJSON r) => Put_ api (a -> b -> c -> d -> e -> IO r) where
+  put_ ep a b c d e = Client.put_ @api (fromTxt (toTxt ep)) (a,b,c,d,e)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, FromJSON r) => Put_ api (a -> b -> c -> d -> e -> f -> IO r) where
+  put_ ep a b c d e f = Client.put_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f)
+
+instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Put_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
+  put_ ep a b c d e f g = Client.put_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
@@ -298,12 +380,20 @@ wserror :: Exists Websocket => View -> (Producer WebsocketError => View)
 wserror = OnMounted (\_ -> onRaw (it :: Websocket) "error" def (\_ -> yield . WebsocketError))
 #endif
 
-query :: forall api r. (Resource r, Got api (Query r)) => Unsafe (Query r)
-query = Client.got @api (Endpoint.query @r)
+query :: forall api r. (Methods r, Got_ api (Query r)) => Unsafe (Query r)
+query = Client.got_ @api (Endpoint.query @r)
 
-update :: forall api r. (Resource r, Patch api (Update r)) => Update r
-update = patch @api (Endpoint.update @r)
+query' :: forall api r. (Methods r, Get_ api (Query r)) => Query r
+query' = Client.get_ @api (Endpoint.query @r)
 
-create :: forall api r.  (Resource r, Post api (Create r)) => Create r
-create = post @api (Endpoint.create @r)
+update :: forall api r. (Methods r, Patch_ api (Update r)) => Update r
+update = Client.patch_ @api (Endpoint.update @r)
 
+create :: forall api r. (Methods r, Post_ api (Create r)) => Create r
+create = Client.post_ @api (Endpoint.create @r)
+
+delete :: forall api r. (Methods r, Delete_ api (Delete r)) => Delete r
+delete = Client.delete_ @api (Endpoint.delete @r)
+
+place :: forall api r. (Methods r, Put_ api (Place r)) => Place r
+place = Client.put_ @api (Endpoint.place @r)

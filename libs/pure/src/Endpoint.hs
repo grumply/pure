@@ -61,7 +61,7 @@ unauthorized = throw Unauthorized
 class API r where
   api :: Txt
 
-class Typeable r => Resource r where
+class Typeable r => Methods r where
  
   type Create r :: *
   type Create r = Void
@@ -71,6 +71,12 @@ class Typeable r => Resource r where
 
   type Query r :: *
   type Query r = Void
+
+  type Place r :: *
+  type Place r = Void
+
+  type Delete r :: *
+  type Delete r = Void
 
   {-# NOINLINE base #-}
   base :: Endpoint method x
@@ -84,6 +90,12 @@ class Typeable r => Resource r where
 
   query :: GET (Query r)
   query = base @r
+
+  place :: PUT (Place r)
+  place = base @r
+
+  delete :: DELETE (Delete r)
+  delete = base @r
 
 defaultBase :: forall r method x. Typeable r => Endpoint method x
 defaultBase = fromString ('/' : fmap Char.toLower rep)
