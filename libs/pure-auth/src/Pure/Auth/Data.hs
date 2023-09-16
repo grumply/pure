@@ -17,18 +17,6 @@ import Endpoint
 import GHC.Generics
 import GHC.TypeLits
 import System.IO.Unsafe
-#ifndef __GHCJS__
-import Crypto.Cipher.AES (AES256)
-import Crypto.Cipher.Types (BlockCipher(..), Cipher(..), nullIV, KeySizeSpecifier(..), IV, makeIV)
-import Crypto.Error (CryptoFailable(..), CryptoError(..))
-import Crypto.Hash
-import Crypto.Random
-import Crypto.MAC.HMAC
-import Data.Aeson as JSON
-import Data.ByteString.Char8 as B
-import qualified Data.ByteString.Base64 as B64
-import System.Directory
-#endif
 
 newtype Hash (rounds :: Nat) hashOf = Hash Txt
   deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
@@ -72,22 +60,6 @@ data Token (c :: *) = Token
     deriving anyclass (ToJSON,FromJSON)
 type role Token nominal
 
-type Authenticated c = Exists (Token c)
-
-token :: forall c. Authenticated c => Token c
-token = it
-
-user :: forall c. Authenticated c => Username c
-user = owner (token @c)
-
-role :: forall c. Authenticated c => Maybe Txt
-role = List.lookup "role" (claims (token @c))
-
-asRole :: forall c a. Authenticated c => Txt -> a -> a
-asRole r f 
-  | Just r == role @c = f 
-  | otherwise         = unauthorized
-
 newtype Pool_ c = Pool FilePath
 type role Pool_ nominal
 type Pool c = Exists (Pool_ c)
@@ -103,87 +75,3 @@ type Secret c = Exists (Secret_ c)
 
 secret :: forall c. Secret c => BS.ByteString
 secret = let Secret s = it :: Secret_ c in s
-
-#ifdef __GHCJS__
-authenticated :: (Authenticated c => r) -> (Token c -> r)
-authenticated r t = with t r
-#else
-authenticated :: forall c r. (Pool c, Secret c) => (Authenticated c => r) -> (Token c -> r)
-authenticated r t@Token {..} 
-  | Secret s <- it :: Secret_ c
-  , h <- show (hmacGetDigest (hmac @B.ByteString @B.ByteString @SHA256 s (BSL.toStrict (JSON.encode (owner,expires,claims)))))
-  , h == fromTxt proof
-  , unsafePerformIO (doesFileExist (pool @c <> h))
-  , unsafePerformIO ((expires >) <$> time)
-  = with t r
-
-  | otherwise 
-  = unauthorized
-#endif
-
-authorized :: forall c r. Authenticated c => Txt -> (Txt -> r) -> r
-authorized c r =
-  case List.lookup c (claims @c it) of
-    Just x -> r x
-    _      -> unauthorized
-
-#ifdef __GHCJS__
-authorized' :: forall c r. Authenticated c => Txt -> (Txt -> r) -> r
-authorized' c r = authorized @c c r
-#else
-authorized' :: forall c r. (Pool c, Authenticated c) => Txt -> (Txt -> r) -> r
-authorized' c r
-  | Token { proof } <- it :: Token c
-  , unsafePerformIO (doesFileExist (pool @c <> fromTxt proof)) 
-  = authorized @c c r
-
-  | otherwise 
-  = unauthorized
-#endif
-
-#ifdef __GHCJS__
-decrypted :: forall c r. Authenticated c => Txt -> (Txt -> r) -> r
-decrypted c r = authorized @c c r
-#else
-decrypted :: forall c r. (Secret c, Authenticated c) => Txt -> (Txt -> r) -> r
-decrypted c r = authorized @c c (maybe unauthorized r . decrypt @c)
-
-encrypt :: forall c. Secret c => Txt -> IO (Maybe Txt)
-encrypt msg = do
-  let Secret s = it :: Secret_ c 
-  k :: B.ByteString <- getRandomBytes 16
-  case cipherInit @AES256 s of
-    CryptoPassed c -> do
-      let 
-        Just iv = makeIV k
-        ct = ctrCombine c iv (fromTxt msg)
-        m = B64.encode k <> B.cons '.' (B64.encode ct)
-      pure (Just (toTxt m))
-    _ -> 
-      pure Nothing
-
-decrypt :: forall c. Secret c => Txt -> Maybe Txt
-decrypt msg = do
-  let Secret s = it :: Secret_ c 
-  case cipherInit @AES256 s of
-    CryptoPassed c -> 
-        let 
-          (key,Txt.uncons -> Just ('.',pay)) = Txt.break (== '.') msg
-          Right k = B64.decode (fromTxt key)
-          Right m = B64.decode (fromTxt pay)
-          Just iv = makeIV k
-        in
-          Just (toTxt (ctrCombine c iv m))
-    _ -> 
-      Nothing
-
-decryptFile :: forall c. Secret c => FilePath -> IO (Maybe Txt)
-decryptFile fp = decrypt @c <$> Txt.readFile fp
-
-encryptFile :: forall c. Secret c => FilePath -> Txt -> IO ()
-encryptFile fp cnt = do
-  encrypt @c cnt >>= \case
-    Just e -> Txt.writeFile fp e
-    _      -> error "Cipher initialization failed." -- this isn't recoverable? Shouldn't encrypt throw this, then?
-#endif
-

@@ -1,6 +1,9 @@
 {-# language BlockArguments, RankNTypes, TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables, RecordWildCards, NamedFieldPuns, FlexibleContexts, AllowAmbiguousTypes, BangPatterns, ConstraintKinds, ViewPatterns #-}
 module Pure.Auth.GHC.Crypto where
 
+import Pure.Auth.Auth
+import Pure.Auth.Data
+
 import Control.Concurrent (MVar,newMVar,modifyMVar)
 import Control.Exception
 import Crypto.Hash
@@ -23,7 +26,6 @@ import Data.Proxy (Proxy(..))
 import Data.Txt as Txt (Txt,ToTxt(..),FromTxt(..),toLower,length,null,break,uncons)
 import Data.View hiding (throw)
 import GHC.TypeNats (Nat,KnownNat(..),natVal)
-import Pure.Auth.Data
 import System.Directory
 import System.IO
 import System.IO.Error
@@ -180,7 +182,7 @@ sign owner expires@(Seconds i _) claims =
     proof = toTxt h
 
 upgrade :: forall c. (Pool c, Secret c, Authenticated c) => Txt -> Txt -> Token c
-upgrade k v = sign (user @c) (expires (token @c)) (go (claims (token @c)))
+upgrade k v = sign (name @c) (expires (token @c)) (go (claims (token @c)))
   where
     go [] = [(k,v)]
     go ((k',v'):kvs)
@@ -188,10 +190,10 @@ upgrade k v = sign (user @c) (expires (token @c)) (go (claims (token @c)))
       | otherwise = (k',v') : go kvs
 
 downgrade :: forall c. (Pool c, Secret c, Authenticated c) => Txt -> Token c
-downgrade k = sign (user @c) (expires (token @c)) (List.filter ((/= k) . fst) (claims (token @c))) 
+downgrade k = sign (name @c) (expires (token @c)) (List.filter ((/= k) . fst) (claims (token @c))) 
 
 bump :: forall c. (Pool c, Secret c, Authenticated c) => Time -> Token c
-bump t = sign (user @c) t (claims (token @c))
+bump t = sign (name @c) t (claims (token @c))
 
 revoke :: forall c. Pool c => Txt -> IO ()
 revoke proof = handle (\(ioe :: IOError) -> if isDoesNotExistError ioe then pure () else throw ioe) (removeFile (pool @c <> fromTxt proof))

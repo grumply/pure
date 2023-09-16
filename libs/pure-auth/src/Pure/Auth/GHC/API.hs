@@ -290,7 +290,7 @@ startDelete onSuccess host agent un e p = do
   else
     pure ()
 
-delete :: forall c. (Typeable c, Limiter c) => (Host -> Agent -> Username c -> Email -> IO ()) -> Host -> Agent -> Username c -> Email -> Key -> IO Bool
+delete :: forall c. (Typeable c, Limiter c, Pool c) => (Host -> Agent -> Username c -> Email -> IO ()) -> Host -> Agent -> Username c -> Email -> Key -> IO Bool
 delete onSuccess host agent un email key = do
 
   allow <- allowed it host un
@@ -299,10 +299,11 @@ delete onSuccess host agent un email key = do
 
     read (AuthEventStream un :: Stream (AuthEvent c)) >>= \case
 
-      Just (Auth { email = e , deletion = Just k } :: Auth c)
+      Just (Auth { email = e , deletion = Just k, tokens } :: Auth c)
         | checkHash key k, checkHash email e -> do
           time <- Time.time
           write (AuthEventStream un :: Stream (AuthEvent c)) (Deleted {..} :: AuthEvent c)
+          for_ tokens (revoke @c)
           onSuccess host agent un email
           pure True
 
@@ -400,7 +401,6 @@ authentication Config {..} =
     withIdentity :: (ToMethod method, Lambda r) => Endpoint method r -> (Host -> Agent -> r) -> Server.Handler
     withIdentity ep f = lambda ep False False (f Server.host Server.agent)
 
--- recentAuthEvents :: forall c. (Typeable c, Limiter c) => (Host -> Agent -> Username c -> IO ()) -> Host -> Agent -> Token c -> IO [API.AuthEvent]
 simpleAuth :: forall c. (Limiter c, Secret c, Pool c) => Username c -> Time -> Config c
 simpleAuth admin t = def
   { onRegister = \h a un e k activate -> activate

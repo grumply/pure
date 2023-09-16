@@ -1,44 +1,21 @@
 {-# LANGUAGE TypeApplications, RankNTypes, OverloadedStrings, DuplicateRecordFields, TypeFamilies, FlexibleContexts, ScopedTypeVariables, AllowAmbiguousTypes, UndecidableInstances, DataKinds, BlockArguments, ConstraintKinds, PatternSynonyms, DerivingVia, PolyKinds #-}
-module Pure.Auth.Access
-  ( Authentication
-  , Authenticated
-  , access
-  , simple
-  , guarded
-  , mtoken
-  , token
-  , user
-  , role
-  , authenticated
-  , authorized
-  , authorized'
-  , upgraded
-  , Token
-  , auth
-  ) where
+module Pure.Auth.Access where
 
 import qualified Pure.Auth.API as Auth
-import Pure.Auth.Data
+import Pure.Auth.Data (Token)
+import Pure.Auth.Auth (Authentication, Access, Authenticated, token, guarded )
+
 import Client hiding (user)
 import Endpoint (API(..))
-import Data.Log
-import Data.Kind
-import Data.List as List
+import Data.Log (Logging)
 import qualified Data.Localstorage as LS
-import Data.String
-import Data.View
+import Data.View (proof)
 import Data.HTML (pattern Button,pattern Div,pattern H2,pattern Input,pattern P,pattern Placeholder,pattern TabIndex, pattern Type,pattern Value)
 import Data.Events (pattern OnClick,pattern OnInput,value)
 import Data.Default (Default(..))
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import Data.Theme (Theme,pattern Themed,rep)
 import Data.Foldable (for_,traverse_)
-
-import Control.Concurrent hiding (yield)
-import Control.Monad
-import Data.Maybe
-import Data.Try
-import Data.Typeable
 
 import qualified Data.Localstorage as Localstorage
 
@@ -51,18 +28,16 @@ storeToken = void . Localstorage.put ("token/" <> rep @domain)
 deleteToken :: forall domain. Typeable domain => IO ()
 deleteToken = void (Localstorage.delete ("token/" <> rep @domain))
 
-type Access domain = Maybe (Token domain)
-
-type Authentication domain = (Typeable domain, State (Access domain), Logging Value)
-
 setToken :: forall domain. Modify (Access domain) => Token domain -> IO ()
 setToken = put . Just
 
 clearToken :: forall domain. Modify (Access domain) => IO ()
 clearToken = put (Nothing :: Access domain)
 
-access :: forall domain. (Typeable domain, Logging Value) => (Authentication domain => View) -> View
+access :: forall domain. (API domain, Typeable domain, Logging Value) => (Authenticating domain => View) -> View
 access = stateIO (readToken @domain)
+
+type Authenticating domain = (API domain, State (Access domain), Typeable domain, Logging Value)
 
 -- | Wraps up a common approach to authentication.
 --
@@ -70,37 +45,27 @@ access = stateIO (readToken @domain)
 --
 -- > authentication @domain (guarded @domain Null (basic @domain) v)
 --
-simple :: forall domain. (Logging Value, API domain, Typeable domain) => (Authenticated domain => View) -> View
+simple :: forall domain. Authenticating domain => (Authenticated domain => View) -> View
 simple v = access @domain (guarded @domain (auth @domain) v)
 
-mtoken :: forall domain. Authentication domain => Maybe (Token domain)
-mtoken = it
-
--- | A generic authorization primitive for a given authentication domain. 
-guarded :: forall domain a. Authentication domain => a -> (Authenticated domain => a) -> a
-guarded unauthenticated authenticated = 
-  maybe unauthenticated 
-    (\t -> with t authenticated) 
-    (it :: Access domain)
-
-logout :: forall domain. (Typeable domain, API domain, Authenticated domain, State (Access domain)) => IO ()
+logout :: forall domain. (Authenticating domain, Authenticated domain) => IO ()
 logout = do
   patch_ @domain Auth.logout (token @domain)
   deleteToken @domain
   clearToken @domain
 
-upgraded :: Authentication c => Token c -> IO ()
+upgraded :: Authenticating domain => Token domain -> IO ()
 upgraded t = do
   storeToken t
   setToken t
 
-auth :: forall domain. (API domain, Typeable domain, Authentication domain) => View
+auth :: forall domain. Authenticating domain => View
 auth = 
   stream (upgraded @domain) do
     cont @(Producer (Token domain)) do
       loginForm @domain
 
-logoutForm :: forall domain. (Typeable domain, API domain, Authenticated domain, State (Access domain)) => View
+logoutForm :: forall domain. (Authenticating domain, Authenticated domain) => View
 logoutForm = Div <||> [ Button <| clicks (logout @domain) |> [ "Logout" ] ]
 
 loginForm :: forall domain. (API domain, Typeable domain) => Dynamic (Producer (Token domain)) 
@@ -125,7 +90,7 @@ loginForm = Data.View.proof do
         ]
       ]
 
-recoverForm :: forall domain. (Endpoint.API domain, Typeable domain) => Dynamic (Producer (Token domain)) 
+recoverForm :: forall domain. (API domain, Typeable domain) => Dynamic (Producer (Token domain)) 
 recoverForm = Data.View.proof do
   state (def :: Txt,def:: Txt) do
     let 

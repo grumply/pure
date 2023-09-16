@@ -1,16 +1,8 @@
 {-# language CPP, TypeApplications, RankNTypes, BlockArguments, ScopedTypeVariables, FlexibleContexts, OverloadedStrings, DataKinds #-}
 module Pure.Auth 
   ( module Export
-  , Object
-  , liveWith, live
-  , Authenticated
-  , token, user, role, asRole
-  , authenticated, authorized, authorized', decrypted
-  , Username()
+  , Object, liveWith, live
 #ifndef __GHCJS__
-  , encrypt, decrypt
-  , encryptFile, decryptFile
-  , Secret, Pool
   , Pure.Auth.object
 #endif
   ) where
@@ -39,13 +31,14 @@ import Data.Typeable
 import Data.URI
 import Data.View
 import Endpoint
-import Pure.Auth.Data as Export (Token)
-import Pure.Auth.API as Export
-import Pure.Auth.Data
 
+import Pure.Auth.Data
+import Pure.Auth.Auth as Export
 #ifndef __GHCJS__
-import Pure.Auth.GHC.Crypto 
+import Pure.Auth.API as Export
 import Pure.Auth.GHC as Export hiding (AuthEvent,activate,register,recover,startDelete,delete,recentAuthEvents,login,startRecover,updateEmail,updatePassword,logout,logoutAll)
+#else
+import Pure.Auth.Access as Export
 #endif
 
 type Object c e a = GET (Token c -> Stream e -> IO (Token e,Int,Maybe a))
@@ -121,11 +114,11 @@ object :: forall c e a. (Typeable c, Typeable e, Typeable a, FromJSON (Stream e)
 object o dur f =
   [ Server.lambda (o <> "/read") False False do
       authenticated @c \s -> do
-        permissions <- f (user @c) s
+        permissions <- f (name @c) s
         let ps = ("id",toTxt (Sorcerer.stream s)) : maybe [] (bool [("read","")] [("read",""),("write","")]) permissions
         (i,a) <- Sorcerer.read' s
         now <- Data.Time.time
-        let t = sign (fromTxt (toTxt (user :: Username c))) (now + dur) ps 
+        let t = sign (fromTxt (toTxt (name @c))) (now + dur) ps 
         pure (t,i,a)
 
   , Server.lambda (fromTxt (toTxt o) <> "/write" :: PATCH (Token e -> Stream e -> e -> IO ())) False False do

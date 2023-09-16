@@ -5,6 +5,7 @@ version:             0.8.0.0
 library
   exposed-modules:
       Pure.Auth
+    , Pure.Auth.Auth
     , Pure.Auth.API
     , Pure.Auth.Data
     , Pure.Auth.Access
