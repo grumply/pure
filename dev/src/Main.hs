@@ -34,9 +34,9 @@ main = do
 
 server :: IO ()
 server = do
-  fe <- doesFileExist "server.crt"
+  fe <- doesFileExist "data/server.crt"
   let p = if fe then 443 else 80
-  (if fe then runTLS (tlsSettings "server.crt" "server.key") else runSettings)
+  (if fe then runTLS (tlsSettings "data/server.crt" "data/server.key") else runSettings)
     (setServerName "pure-dev" (setPort p defaultSettings)) 
     app
   where
@@ -56,13 +56,13 @@ server = do
         ( "static" : _) -> fileServer req send
 
         _
-          | Just True <- fmap isBot (requestHeaderUserAgent req) ->
+          -- | Just True <- fmap isBot (requestHeaderUserAgent req) ->
             -- If the UA contains 'bot', 'crawl', or 'spider', serve a
             -- statically rendered version. This allows us to serve content over
             -- a websocket for real users and still serve content to search
             -- engines. See https://webmasters.stackexchange.com/a/64805 for a
             -- justification.
-            fileServer req { pathInfo = addHTMLExtension ("static" : pathInfo req) } send
+          -- fileServer req { pathInfo = addHTMLExtension ("static" : pathInfo req) } send
 
           | otherwise -> 
             -- In all other cases, serve the index.html as a fallback.
@@ -83,12 +83,12 @@ frontend mgr = do
     forkIO do
       forever do
         takeMVar buildTrigger
-        let cmd = proc "js-unknown-ghcjs-cabal" ["build","frontend"]
+        let cmd = proc "js-unknown-ghcjs-cabal" ["build","frontend","--builddir=dist-newstyle/ghcjs"]
         print (cmdspec cmd)
         withCreateProcess cmd $ \_ _ _ ph ->
           waitForProcess ph >>= \case
             ExitSuccess -> do
-              let cmd = shell "cp dist-newstyle/build/js-ghcjs/ghcjs-*/frontend-*/x/frontend/opt/build/frontend/frontend.jsexe/all.js dist/all.js"
+              let cmd = shell "cp \"$(js-unknown-ghcjs-cabal list-bin exe:frontend --builddir=dist-newstyle/ghcjs).jsexe/all.js\" dist/all.js"
               print (cmdspec cmd)
               withCreateProcess cmd $ \_ _ _ -> void . waitForProcess
             _ -> 
@@ -106,25 +106,29 @@ frontend mgr = do
 backend :: WatchManager -> IO (IO ())
 backend mgr = do
 
+  first <- newMVar ()
   buildTrigger <- newMVar ()
   runTrigger <- newEmptyMVar
+
+  let run = tryPutMVar runTrigger ()
 
   builder <- 
     forkIO do
       forever do
+        mf <- tryTakeMVar first
         takeMVar buildTrigger
-        let cmd = proc "cabal" ["build","backend"]
+        let cmd = proc "cabal" ["build","backend","--builddir=dist-newstyle/ghc"]
         print (cmdspec cmd)
-        withCreateProcess cmd $ \_ _ _ ph ->
+        withCreateProcess cmd $ \_ _ _ ph -> do
           waitForProcess ph >>= \case
-            ExitSuccess -> void (tryPutMVar runTrigger ())
-            _ -> pure ()
+            ExitSuccess -> void run
+            _ -> maybe (pure ()) (const (void run)) mf
 
   runner <- 
     forkIO do
       takeMVar runTrigger
       forever do
-        let cmd = proc "cabal" ["run","backend"]
+        let cmd = shell "\"$(cabal list-bin exe:backend --builddir=dist-newstyle/ghc)\""
         print (cmdspec cmd)
         withCreateProcess cmd { create_group = True } $ \_ _ _ ph -> do
           catch (takeMVar runTrigger) (\(_ :: AsyncException) -> interruptProcessGroupOf ph)
