@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, ConstraintKinds, TypeSynonymInstances, FlexibleInstances, DerivingVia #-}
-module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,JSONParseError(..),decodeThrow,JSON,module Export) where
+module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,JSONParseError(..),decodeThrow,decodeThrowBS,JSON,module Export) where
 
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
@@ -99,3 +99,7 @@ decodeThrow t =
   case decodeEither t of
     Left err -> throw (JSONParseError err)
     Right a  -> a
+
+{-# INLINE decodeThrowBS #-}
+decodeThrowBS :: FromJSON a => BSL.ByteString -> a
+decodeThrowBS = either (throw . JSONParseError) id . decodeBSEither
