@@ -12,6 +12,8 @@ module Server
   , Server(..)
   , Methods,Create,Update,Query
   , respond, respondWith
+  , respondFile, respondFileWith
+  , respondFilePart, respondFilePartWith
   , module Export
   ) where
 
@@ -72,14 +74,17 @@ serve port mtlss = Component $ \self ->
   where
     exception :: Maybe Request -> SomeException -> IO ()
     exception r se
-      | Just Respond {} <- fromException se = pure ()
+      | Just (_ :: Respond) <- fromException se = pure ()
       | Just Unauthorized <- fromException se = pure ()
       | otherwise = Warp.defaultOnException r se
       
     onExceptionResponse :: SomeException -> Response
     onExceptionResponse e
-      | Just (Respond s hs t) <- fromException e 
-      = responseLBS s hs (fromTxt t)
+      | Just r <- fromException e 
+      = case r of
+          Respond s hs t -> responseLBS s hs (fromTxt t)
+          RespondFile s hs fp -> responseFile s hs fp Nothing
+          RespondFilePart s hs fp p -> responseFile s hs fp (Just p)
 
       | Just Unauthorized <- fromException e
       = responseLBS unauthorized401 [] def
@@ -140,9 +145,9 @@ instance ToJSON r => Channel (IO [r]) where
               handler e 
                 -- short-circuits simply end the stream without raising an error
                 -- while unknown exceptions get re-thrown.
-                | Just Unauthorized <- fromException e = pure ()
-                | Just Respond {}   <- fromException e = pure () 
-                | otherwise                            = E.throw e
+                | Just Unauthorized   <- fromException e = pure ()
+                | Just (_ :: Respond) <- fromException e = pure () 
+                | otherwise                              = E.throw e
 
             in 
               handle handler (l >>= mapM_ push)
@@ -182,9 +187,9 @@ instance (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [r]) where
                   handler e
                     -- short-circuits simply end the stream without raising an error
                     -- while unknown exceptions get re-thrown.
-                    | Just Unauthorized <- fromException e = pure ()
-                    | Just Respond {}   <- fromException e = pure ()
-                    | otherwise                            = E.throw e
+                    | Just Unauthorized   <- fromException e = pure ()
+                    | Just (_ :: Respond) <- fromException e = pure ()
+                    | otherwise                              = E.throw e
 
                 in
                   handle handler (l a >>= mapM_ push)
@@ -233,9 +238,9 @@ instance ToJSON r => Lambda (IO r) where
       endpoint request respond = do
         let 
           passthrough e 
-            | Just Respond {}   <- fromException e = E.throw e
-            | Just Unauthorized <- fromException e = E.throw e
-            | otherwise                            = pure (Left (show e))
+            | Just (_ :: Respond) <- fromException e = E.throw e
+            | Just Unauthorized   <- fromException e = E.throw e
+            | otherwise                              = pure (Left (show e))
 
         er <- handle passthrough (Right <$> (l >>= evaluate . force . encode))
         respond do
@@ -263,9 +268,9 @@ instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where
           Right (a :: a) -> do
             let 
               passthrough e 
-                | Just Respond {}   <- fromException e = E.throw e
-                | Just Unauthorized <- fromException e = E.throw e
-                | otherwise                            = pure (Left (show e))
+                | Just (_ :: Respond) <- fromException e = E.throw e
+                | Just Unauthorized   <- fromException e = E.throw e
+                | otherwise                              = pure (Left (show e))
 
             er <- handle passthrough (Right <$> (l a >>= evaluate . force . encode))
             respond do
@@ -315,12 +320,12 @@ class Methods r => Server r where
   showExceptions :: Bool
   showExceptions = False
 
-  type Context r :: Constraint
-  type Context r = ()
+  type Env r :: Constraint
+  type Env r = ()
 
-  handlers :: Context r => Server.Handler
+  handlers :: Env r => Server.Handler
   default handlers 
-    :: ( Context r
+    :: ( Env r
        , Lambda (Create r)
        , Lambda (Update r)
        , Lambda (Query r)
@@ -352,41 +357,57 @@ class Methods r => Server r where
          | otherwise = Just \_ respond -> 
             respond (responseLBS notImplemented501 [] def)
 
-  create :: Context r => Create r
+  create :: (Exists Request, Env r) => Create r
   create = respond 501 mempty
 
-  createMiddleware :: Context r => Middleware
+  createMiddleware :: (Exists Request, Env r) => Middleware
   createMiddleware = id
 
-  update :: Context r => Update r
+  update :: (Exists Request, Env r) => Update r
   update = respond 501 mempty
   
-  updateMiddleware :: Context r => Middleware
+  updateMiddleware :: (Exists Request, Env r) => Middleware
   updateMiddleware = id
 
-  query :: Context r => Query r
+  query :: (Exists Request, Env r) => Query r
   query = respond 501 mempty
   
-  queryMiddleware :: Context r => Middleware
+  queryMiddleware :: (Exists Request, Env r) => Middleware
   queryMiddleware = id
 
-  place :: Context r => Place r
+  place :: (Exists Request, Env r) => Place r
   place = respond 501 mempty
 
-  placeMiddleware :: Context r => Middleware
+  placeMiddleware :: (Exists Request, Env r) => Middleware
   placeMiddleware = id
 
-  delete :: Context r => Delete r
+  delete :: (Exists Request, Env r) => Delete r
   delete = respond 501 mempty
 
-  deleteMiddleware :: Context r => Middleware
+  deleteMiddleware :: (Exists Request, Env r) => Middleware
   deleteMiddleware = id
 
-data Respond = Respond Status [Header] Txt deriving Show
+data Respond 
+  = Respond Status [Header] Txt 
+  | RespondFile Status [Header] FilePath 
+  | RespondFilePart Status [Header] FilePath FilePart
+  deriving Show
 instance Exception Respond
 
 respond :: Int -> Txt -> a
 respond c = respondWith (toEnum c) []
 
 respondWith :: Status -> [Header] -> Txt -> a
-respondWith s hs = E.throw . Respond s hs
+respondWith s hs t = E.throw (Respond s hs t)
+
+respondFile :: Int -> FilePath -> a
+respondFile c = respondFileWith (toEnum c) []
+
+respondFileWith :: Status -> [Header] -> FilePath -> a
+respondFileWith s hs fp = E.throw (RespondFile s hs fp)
+
+respondFilePart :: Int -> FilePath -> FilePart -> a
+respondFilePart c = respondFilePartWith (toEnum c) []
+
+respondFilePartWith :: Status -> [Header] -> FilePath -> FilePart -> a
+respondFilePartWith s hs fp p = E.throw (RespondFilePart s hs fp p)
