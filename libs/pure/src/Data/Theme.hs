@@ -107,9 +107,13 @@ addTheme = do
   unless tw $
     case css (theme @t p) of
       Children cs _ 
-        | [] <- cs                                 -> pure ()
-        | [ TextView _ "" ] <- cs                  -> pure ()
+        -- Some themes are simply meant to be type-safe tags for other themes.
+        -- We try to avoid cluttering <head> with empty style elements. 
+        -- This can probably be simplifed to just the first case?
         | [ ReactiveView _ (TextView _ "") ] <- cs -> pure ()
+        | [ TextView _ "" ] <- cs                  -> pure ()
+        | [] <- cs                                 -> pure ()
+
       content -> inject Lifted.head (Attribute "data-pure-theme" pre content)
 
 hasTheme :: forall t b. (Theme t) => View -> Bool
