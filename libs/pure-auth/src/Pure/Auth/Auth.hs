@@ -8,6 +8,7 @@ module Pure.Auth.Auth
 
   ,Access
   ,Authentication
+  ,Authenticating
   ,mtoken
   ,guarded
   ,as
@@ -60,11 +61,14 @@ If the token is invalid, `greet` is expected to throw `Unauthorized`.
 import Pure.Auth.Data (Secret,Secret_(..),secret,Pool,pool,Token(..),Username,pool)
 
 import Data.ByteString.Lazy as BSL (toStrict)
+import Data.JSON (Value)
 import Data.List as List (lookup)
+import Data.Log (Logging)
 import Data.Time (time)
 import Data.Txt (Txt)
-import Data.View (with,Exists(..))
-import Endpoint (unauthorized)
+import Data.Typeable (Typeable)
+import Data.View (with,Exists(..),State)
+import Endpoint (API,unauthorized)
 import System.IO.Unsafe (unsafePerformIO)
 
 #ifndef __GHCJS__
@@ -104,6 +108,7 @@ user = (== name)
 
 type Access domain = Maybe (Token domain)
 type Authentication domain = Exists (Access domain)
+type Authenticating domain = (API domain, State (Access domain), Typeable domain, Logging Value)
 
 -- | A generic authorization primitive for a given authentication domain. 
 guarded :: forall domain a. Authentication domain => a -> (Authenticated domain => a) -> a

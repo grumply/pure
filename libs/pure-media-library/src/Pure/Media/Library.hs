@@ -34,7 +34,7 @@ data Config = Config
 
 media :: forall app. (Typeable app, Pool app, Secret app) => (forall method x. Endpoint method x) -> Config -> [Handler]
 media ep Config {..} =
-  [ lambda (upload ep) False False do
+  [ lambda (upload ep) False False [] do
       authenticated @app \contents -> do
         valid <- validate contents
         if valid then do
@@ -47,13 +47,13 @@ media ep Config {..} =
         else
           pure Nothing
         
-  , lambda (Pure.Media.Library.delete ep) False False do
+  , lambda (Pure.Media.Library.delete ep) False False [] do
       authenticated @app \marker -> do
         let fp = root </> fromTxt (toTxt (name @app)) </> fromTxt (toTxt marker)
         exists <- doesFileExist fp
         when exists (removeFile fp)
 
-  , lambda (list ep) False False do
+  , lambda (list ep) False False [] do
       authenticated @app do
         let dir = root </> fromTxt (toTxt (name @app))
         exists <- doesDirectoryExist dir

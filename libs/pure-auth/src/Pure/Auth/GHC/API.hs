@@ -399,7 +399,7 @@ authentication Config {..} =
   ]
   where
     withIdentity :: (ToMethod method, Lambda r) => Endpoint method r -> (Host -> Agent -> r) -> Server.Handler
-    withIdentity ep f = lambda ep False False (f Server.host Server.agent)
+    withIdentity ep f = lambda ep False False [] (f Server.host Server.agent)
 
 simpleAuth :: forall c. (Limiter c, Secret c, Pool c) => Username c -> Time -> Config c
 simpleAuth admin t = def

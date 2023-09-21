@@ -3,7 +3,7 @@ module Pure.Auth.Access where
 
 import qualified Pure.Auth.API as Auth
 import Pure.Auth.Data (Token)
-import Pure.Auth.Auth (Authentication, Access, Authenticated, token, guarded )
+import Pure.Auth.Auth (Authentication, Access, Authenticated, Authenticating, token, guarded )
 
 import Client hiding (user)
 import Endpoint (API(..))
@@ -36,8 +36,6 @@ clearToken = put (Nothing :: Access domain)
 
 access :: forall domain. (API domain, Typeable domain, Logging Value) => (Authenticating domain => View) -> View
 access = stateIO (readToken @domain)
-
-type Authenticating domain = (API domain, State (Access domain), Typeable domain, Logging Value)
 
 -- | Wraps up a common approach to authentication.
 --

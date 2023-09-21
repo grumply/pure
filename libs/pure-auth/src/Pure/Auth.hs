@@ -112,7 +112,7 @@ foreign import javascript unsafe
 #ifndef __GHCJS__
 object :: forall c e a. (Typeable c, Typeable e, Typeable a, FromJSON (Stream e), ToJSON a, ToJSON e, FromJSON e, Streamable e, Aggregable e a, Ord (Stream e), Pool c, Secret c, Pool e, Secret e) => Object c e a -> Time -> (Username c -> Stream e -> IO (Maybe Bool)) -> [Server.Handler]
 object o dur f =
-  [ Server.lambda (o <> "/read") False False do
+  [ Server.lambda (o <> "/read") False False [] do
       authenticated @c \s -> do
         permissions <- f (name @c) s
         let ps = ("id",toTxt (Sorcerer.stream s)) : maybe [] (bool [("read","")] [("read",""),("write","")]) permissions
@@ -121,7 +121,7 @@ object o dur f =
         let t = sign (fromTxt (toTxt (name @c))) (now + dur) ps 
         pure (t,i,a)
 
-  , Server.lambda (fromTxt (toTxt o) <> "/write" :: PATCH (Token e -> Stream e -> e -> IO ())) False False do
+  , Server.lambda (fromTxt (toTxt o) <> "/write" :: PATCH (Token e -> Stream e -> e -> IO ())) False False [] do
       authenticated @e \(s :: Stream e) (e :: e) -> do
         authorized @e "write" \_ -> do
           authorized @e "id" \x -> 
