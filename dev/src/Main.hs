@@ -17,6 +17,7 @@ import System.Exit
 import System.FSNotify hiding (Action)
 import System.Process
 import System.IO
+import System.Posix.Signals
 
 main :: IO ()
 main = do
@@ -27,10 +28,15 @@ main = do
       { confDebounce = Debounce (realToFrac (0.5 :: Double)) 
       }
 
+  blocker <- newEmptyMVar
+
   withManagerConf config $ \mgr -> do
-    frontend mgr 
-    backend mgr 
-    server
+    stopFrontend <- frontend mgr 
+    stopBackend <- backend mgr 
+    serving <- forkIO server
+    installHandler keyboardSignal (Catch (stopFrontend >> stopBackend >> putMVar blocker ())) Nothing
+    takeMVar blocker
+    killThread serving
 
 server :: IO ()
 server = do
@@ -91,7 +97,7 @@ frontend mgr = do
               let cmd = shell "cp \"$(js-unknown-ghcjs-cabal list-bin exe:frontend --builddir=dist-newstyle/ghcjs).jsexe/all.js\" dist/all.js"
               print (cmdspec cmd)
               withCreateProcess cmd $ \_ _ _ -> void . waitForProcess
-            _ -> 
+            _ ->
               pure ()
 
   watchTree mgr "app/frontend" (const True) $ \ev ->
@@ -131,8 +137,8 @@ backend mgr = do
         let cmd = shell "\"$(cabal list-bin exe:backend --builddir=dist-newstyle/ghc)\""
         print (cmdspec cmd)
         withCreateProcess cmd { create_group = True } $ \_ _ _ ph -> do
-          catch (takeMVar runTrigger) (\(_ :: AsyncException) -> interruptProcessGroupOf ph)
-          catch (interruptProcessGroupOf ph) (\(_ :: SomeException) -> pure ()) 
+          takeMVar runTrigger
+          interruptProcessGroupOf ph
           waitForProcess ph
 
   watchTree mgr "app/backend" (const True) $ \ev ->
