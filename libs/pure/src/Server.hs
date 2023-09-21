@@ -14,6 +14,7 @@ module Server
   , respond, respondWith
   , respondFile, respondFileWith
   , respondFilePart, respondFilePartWith
+  , corsHeaders
   , module Export
   ) where
 
@@ -43,6 +44,7 @@ import Data.View hiding (Event,Handler,channel)
 import Data.Void
 import GHC.Generics
 
+import qualified Data.ByteString as BS
 import Data.ByteString.Lazy as BSL
 import Data.Binary.Builder (fromLazyByteString)
 import qualified Data.ByteString.Base64.Lazy as B64
@@ -223,16 +225,16 @@ instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f
   channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d,e,f,g) -> l a b c d e f g)
 
 class Lambda a where
-  lambda :: ToMethod method => Endpoint method a -> Bool -> Bool -> (Exists Request => a) -> Handler
+  lambda :: ToMethod method => Endpoint method a -> Bool -> Bool -> [Header] -> (Exists Request => a) -> Handler
 
 instance Lambda Void where
-  lambda ep _ _ _ = Handler (if match ep then Just endpoint else Nothing)
+  lambda ep _ _ _ _ = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
       endpoint request respond = respond (responseLBS status200 [] def) 
 
 instance ToJSON r => Lambda (IO r) where
-  lambda ep showParseErrors showExceptions l = Handler (if match ep then Just endpoint else Nothing)
+  lambda ep showParseErrors showExceptions headers l = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
       endpoint request respond = do
@@ -246,10 +248,10 @@ instance ToJSON r => Lambda (IO r) where
         respond do
           case er of
             Left e  -> responseLBS status500 [(hContentType,"application/json")] (if showExceptions then encode e else def)
-            Right r -> responseLBS status200 [(hContentType,"application/json")] r
+            Right r -> responseLBS status200 ((hContentType,"application/json"):headers) r
 
 instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where 
-  lambda ep showParseErrors showExceptions l = Handler (if match ep then Just endpoint else Nothing)
+  lambda ep showParseErrors showExceptions headers l = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
       endpoint request respond = do
@@ -276,25 +278,25 @@ instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where
             respond do
               case er of
                 Left e  -> responseLBS status500 [(hContentType,"application/json")] (if showExceptions then encode e else def)
-                Right r -> responseLBS status200 [(hContentType,"application/json")] r
+                Right r -> responseLBS status200 ((hContentType,"application/json"):headers) r
 
 instance (Typeable a, Typeable b, FromJSON a, FromJSON b, ToJSON r) => Lambda (a -> b -> IO r) where
-  lambda path showParseErrors showExceptions l = lambda (reshape path) showParseErrors showExceptions (uncurry l)
+  lambda path showParseErrors showExceptions headers l = lambda (reshape path) showParseErrors showExceptions headers (uncurry l)
 
 instance (Typeable a, Typeable b, Typeable c, FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Lambda (a -> b -> c -> IO r) where
-  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c) -> l a b c)
+  lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c) -> l a b c)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, FromJSON a, FromJSON b, FromJSON c, FromJSON d, ToJSON r) => Lambda (a -> b -> c -> d -> IO r) where
-  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c,d) -> l a b c d)
+  lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c,d) -> l a b c d)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, ToJSON r) => Lambda (a -> b -> c -> d -> e -> IO r) where
-  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c,d,e) -> l a b c d e)
+  lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c,d,e) -> l a b c d e)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, ToJSON r) => Lambda (a -> b -> c -> d -> e -> f -> IO r) where
-  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c,d,e,f) -> l a b c d e f)
+  lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c,d,e,f) -> l a b c d e f)
 
 instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, FromJSON g, ToJSON r) => Lambda (a -> b -> c -> d -> e -> f -> g -> IO r) where
-  lambda path showParseErrors showException l = lambda (reshape path) showParseErrors showException (\(a,b,c,d,e,f,g) -> l a b c d e f g)
+  lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c,d,e,f,g) -> l a b c d e f g)
 
 cache :: Time -> Middleware
 cache (Seconds duration _) app request respond = 
@@ -311,8 +313,11 @@ logging level app request respond = do
 
 class Methods r => Server r where
 
-  cors :: Bool
-  cors = False
+  cors :: [Header]
+  cors = []
+              
+  methods :: BS.ByteString             
+  methods = "GET, PATCH, POST, PUT, DELETE, OPTIONS"
 
   showParseErrors :: Bool
   showParseErrors = False
@@ -335,27 +340,13 @@ class Methods r => Server r where
   handlers = Handler (if path == toTxt (base @r) then go else Nothing)
     where
       go :: Exists Request => Maybe Application
-      go | method == methodGet     = fmap (queryMiddleware  @r) (handler (lambda (Endpoint.query  @r) (showParseErrors @r) (showExceptions @r) (Server.query  @r)))
-         | method == methodPatch   = fmap (updateMiddleware @r) (handler (lambda (Endpoint.update @r) (showParseErrors @r) (showExceptions @r) (Server.update @r)))
-         | method == methodPost    = fmap (createMiddleware @r) (handler (lambda (Endpoint.create @r) (showParseErrors @r) (showExceptions @r) (Server.create @r)))
-         | method == methodPut     = fmap (placeMiddleware @r)  (handler (lambda (Endpoint.place @r) (showParseErrors @r) (showExceptions @r) (Server.place @r)))
-         | method == methodDelete  = fmap (deleteMiddleware @r) (handler (lambda (Endpoint.delete @r) (showParseErrors @r) (showExceptions @r) (Server.delete @r)))
-         | method == methodOptions = Just \_ respond -> do
-            let
-              methods = "GET, PATCH, POST, OPTIONS"
-              hs | cors @r = 
-                   [ ("Access-Control-Allow-Origin","*")
-                   , ("Access-Control-Allow-Methods",methods)
-                   , ("Access-Control-Max-Age","86400")
-                   , (hAllow,methods)
-                   ]
-                 | otherwise = 
-                   [ (hAllow,methods) ]
-
-            respond (responseLBS status200 hs def)
-
-         | otherwise = Just \_ respond -> 
-            respond (responseLBS notImplemented501 [] def)
+      go | method == methodGet     = fmap (queryMiddleware  @r) (handler (lambda (Endpoint.query  @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.query  @r)))
+         | method == methodPatch   = fmap (updateMiddleware @r) (handler (lambda (Endpoint.update @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.update @r)))
+         | method == methodPost    = fmap (createMiddleware @r) (handler (lambda (Endpoint.create @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.create @r)))
+         | method == methodPut     = fmap (placeMiddleware @r)  (handler (lambda (Endpoint.place @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.place @r)))
+         | method == methodDelete  = fmap (deleteMiddleware @r) (handler (lambda (Endpoint.delete @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.delete @r)))
+         | method == methodOptions = Just \_ respond -> respond (responseLBS status200 ((hAllow,methods @r):cors @r) def)
+         | otherwise = Just \_ respond -> respond (responseLBS notImplemented501 [] def)
 
   create :: (Exists Request, Env r) => Create r
   create = respond 501 mempty
@@ -395,19 +386,26 @@ data Respond
 instance Exception Respond
 
 respond :: Int -> Txt -> a
-respond c = respondWith (toEnum c) []
+respond c = respondWith (toEnum c) [(hContentType,"application/json")]
 
-respondWith :: Status -> [Header] -> Txt -> a
-respondWith s hs t = E.throw (Respond s hs t)
+respondWith :: Int -> [Header] -> Txt -> a
+respondWith s hs t = E.throw (Respond (toEnum s) ((hContentType,"application/json"):hs) t)
 
 respondFile :: Int -> FilePath -> a
-respondFile c = respondFileWith (toEnum c) []
+respondFile c = respondFileWith (toEnum c) [(hContentType,"application/json")]
 
-respondFileWith :: Status -> [Header] -> FilePath -> a
-respondFileWith s hs fp = E.throw (RespondFile s hs fp)
+respondFileWith :: Int -> [Header] -> FilePath -> a
+respondFileWith s hs fp = E.throw (RespondFile (toEnum s) ((hContentType,"application/json"):hs) fp)
 
 respondFilePart :: Int -> FilePath -> FilePart -> a
-respondFilePart c = respondFilePartWith (toEnum c) []
+respondFilePart c = respondFilePartWith (toEnum c) [(hContentType,"application/json")]
 
-respondFilePartWith :: Status -> [Header] -> FilePath -> FilePart -> a
-respondFilePartWith s hs fp p = E.throw (RespondFilePart s hs fp p)
+respondFilePartWith :: Int -> [Header] -> FilePath -> FilePart -> a
+respondFilePartWith s hs fp p = E.throw (RespondFilePart (toEnum s) ((hContentType,"application/json"):hs) fp p)
+
+corsHeaders :: forall r. Server r => [Header]
+corsHeaders =
+  [ ("Access-Control-Allow-Origin","*")
+  , ("Access-Control-Allow-Methods",methods @r)
+  , ("Access-Control-Max-Age","86400")
+  ]
