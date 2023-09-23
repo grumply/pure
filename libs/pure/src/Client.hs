@@ -380,20 +380,79 @@ wserror :: Exists Websocket => View -> (Producer WebsocketError => View)
 wserror = OnMounted (\_ -> onRaw (it :: Websocket) "error" def (\_ -> yield . WebsocketError))
 #endif
 
+-- | Send a `GET` request to the given endpoint using `unsafePerformIO`
+-- following the `Query` specification for `r`.
+--
+-- > instance Methods SomeR where
+-- >   type Query SomeR = ParamA -> ParamB -> IO ResponseR
+-- >
+-- > let 
+-- >   r :: ResponseR
+-- >   r = query @SomeR a b
+--
+--
+-- Notes: 
+--   1. Use with or within `or` or `caught` is strongly suggested.
+--   2. All parameters will be base64-encoded in a `payload` query parameter.
+--      For large payloads, this could be an issue.
+-- 
 query :: forall api r. (Methods r, Got_ api (Query r)) => Unsafe (Query r)
 query = Client.got_ @api (Endpoint.query @r)
 
+-- | Send a `GET` request to the given endpoint following the `Query`
+-- specification for `r`.
+--
+-- > instance Methods SomeR where
+-- >   type Query SomeR = ParamA -> ParamB -> IO ResponseR
+-- >
+-- > r :: ResponseR <- query @SomeR a b
+--
+-- Note: All parameters will be base64-encoded in a `payload` query parameter.
+--       For large payloads, this could be an issue.
+-- 
 query' :: forall api r. (Methods r, Get_ api (Query r)) => Query r
 query' = Client.get_ @api (Endpoint.query @r)
 
+-- | Send a `PATCH` request to the given endpoint following the `Update`
+-- specification for `r`.
+--
+-- > instance Methods SomeR where
+-- >   type Update SomeR = ParamA -> ParamB -> IO ResponseR
+-- >
+-- > r :: ResponseR <- update @SomeR a b
+--
 update :: forall api r. (Methods r, Patch_ api (Update r)) => Update r
 update = Client.patch_ @api (Endpoint.update @r)
 
+-- | Send a `POST` request to the given endpoint following the `Create`
+-- specification for `r`.
+--
+-- > instance Methods SomeR where
+-- >   type Create SomeR = ParamA -> ParamB -> IO ResponseR
+-- >
+-- > r :: ResponseR <- create @SomeR a b
+--
 create :: forall api r. (Methods r, Post_ api (Create r)) => Create r
 create = Client.post_ @api (Endpoint.create @r)
 
+-- | Send a `DELETE` request to the given endpoint following the `Delete`
+-- specification for `r`.
+--
+-- > instance Methods SomeR where
+-- >   type Delete SomeR = ParamA -> ParamB -> IO ResponseR
+-- >
+-- > r :: ResponseR <- delete @SomeR a b
+--
 delete :: forall api r. (Methods r, Delete_ api (Delete r)) => Delete r
 delete = Client.delete_ @api (Endpoint.delete @r)
 
+-- | Send a `PUT` request to the given endpoint following the `Place`
+-- specification for `r`.
+--
+-- > instance Methods SomeR where
+-- >   type Place SomeR = ParamA -> ParamB -> IO ResponseR
+-- >
+-- > r :: ResponseR <- place @SomeR a b
+--
 place :: forall api r. (Methods r, Put_ api (Place r)) => Place r
 place = Client.put_ @api (Endpoint.place @r)
