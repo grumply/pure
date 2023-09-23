@@ -136,8 +136,7 @@ object o dur f =
             if Sorcerer.stream s == fromTxt x then do
               chan     <- newChan
               listener <- Data.View.stream (writeChan chan) (subscribeStream s id)
-              Exception.handle (\(se :: SomeException) -> unlisten listener >> Exception.throw se) do
-                List.zip [n+1..] <$> liftM2 (++) (Sorcerer.events n s) (getChanContents chan)
+              List.zip [n+1..] <$> liftM2 (++) (Sorcerer.events n s) (getChanContents chan) `onException` unlisten listener
             else
               unauthorized
 

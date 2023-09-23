@@ -41,11 +41,8 @@ postForm hs0 url payload = do
   let
     hs = fmap (\(h,v) -> (fromString (fromTxt h),fromString (fromTxt v))) hs0 
     opts = defaults & headers .~ (("Content-Type","application/x-www-form-urlencoded") : List.filter ((/= "Content-Type") . fst) hs)
-  rsp <- handle @SomeException (pure . Left) (Right <$> Wreq.postWith opts (fromTxt url) params)
-  pure $
-    case rsp of
-      Left se -> Failure se
-      Right r -> Response (r ^. responseStatus . statusCode) (toTxt $ r ^. responseBody)
+  rsp <- Wreq.postWith opts (fromTxt url) params
+  pure (Response (rsp ^. responseStatus . statusCode) (toTxt $ rsp ^. responseBody))
   where
     params = fmap (\(k,v) -> fromTxt k := v) payload
 
@@ -53,8 +50,5 @@ lift f hs0 url payload = do
   let
     hs = fmap (\(h,v) -> (fromString (fromTxt h),fromString (fromTxt v))) hs0 
     opts = defaults & headers .~ hs
-  rsp <- handle @SomeException (pure . Left) (Right <$> f opts (fromTxt url) (fromTxt payload :: ByteString))
-  pure $
-    case rsp of
-      Left se -> Failure se
-      Right r -> Response (r ^. responseStatus . statusCode) (toTxt $ r ^. responseBody)
+  rsp <- f opts (fromTxt url) (fromTxt payload :: ByteString)
+  pure (Response (rsp ^. responseStatus . statusCode) (toTxt $ rsp ^. responseBody))

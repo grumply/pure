@@ -769,6 +769,27 @@ infixr 9 |#>
 (|#>) :: (View -> View) -> [(Int,View)] -> View -> View
 (|#>) f cs = setKeyedChildren cs . f
 
+-- The following three functions are extraordinarily unsafe. 
+-- People will hate them. I hate them. 
+--
+-- They allow for building complex UIs of dependent 
+-- resources without the use of Component:
+--
+-- > someView fallback = build `or` fallback
+-- >   where
+-- >     build =
+-- >       let SomeResource { someSubresource, .. } = unsafePerformIO (parse <$> <some http GET>)
+-- >           SomeDependentResource {..} = unsafePerformIO (parse <$> <some http GET> someSubresource)
+-- >       <use SomeResource and/or SomeDependentResource>
+--
+-- Staying out of IO here is extraordinarly convenient and,
+-- in particular cases, can have large implications for 
+-- performance. The one rule I attempt to stick to is: 
+-- they only be used for GET requests. To that end, see
+-- `Client` for unsafe GET request code that simplifies this
+-- use-case.
+--
+
 within :: Time -> a -> a
 within t a = unsafePerformIO (fromJust <$> timeout t (evaluate a))
 
@@ -917,6 +938,12 @@ data Async a = Async
   , result :: MVar a
   }
 
+-- | Await is semantically equivalent to `it`, but is meant to convey the fact
+-- that the existential will take time to materialize. Thus, `await` is a
+-- convenience often used with `lazy`.
+--
+-- > await = it
+--
 await :: Exists a => a
 await = it
 
@@ -1248,6 +1275,13 @@ type family Readers (xs :: [*]) :: Constraint where
   Readers '[] = ()
 
 {-# INLINE ask #-}
+-- | `ask` is semantically equivalent to `it`, but is meant to convey the fact
+-- that the existential is treated as a read-only value, even if that is not
+-- the case. `Reader` does not guarantee a value to be static, it only
+-- gurantees availability.
+--
+-- > ask = it
+--
 ask :: Reader a => a
 ask = it
 
@@ -1311,6 +1345,13 @@ put :: Modify a => a -> IO ()
 put = modify . const
 
 {-# INLINE get #-}
+-- | `get` is semantically equivalent to `it`, but is meant to convey the fact
+-- that the existential is within a read-write context. `get` does not guarantee
+-- that a value is within a read-write context because doing so would incur a
+-- structural dependency on the `Modify` context.
+--
+-- > get = it
+--
 get :: Exists a => a
 get = it
 
@@ -1467,8 +1508,15 @@ event :: a -> (Event a => b) -> b
 event = with
 
 {-# INLINE read #-}
+-- | `read` is semantically equivalent to `it`, but is meant to convey the fact
+-- that the existential is within a reactive context. 
+--
+-- > get = it
+--
 read :: Event a => a
 read = it
+
+{-# WARNING one, occs, ambs, improving, amb ["These are experimental; do not expect fixed or consistent operation."] #-}
 
 {-# INLINE one #-}
 one :: a -> a

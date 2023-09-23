@@ -31,7 +31,7 @@ pattern JSON :: (JSON.FromJSON a, JSON.ToJSON a) => a -> Txt
 pattern JSON a <- (JSON.decode -> Just a) where
   JSON a = JSON.encode a
 
-data Response = Response Int Txt | Failure SomeException
+data Response = Response Int Txt
   deriving Show
 instance Exception Response
 

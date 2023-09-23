@@ -2,7 +2,7 @@
 module Data.View.Build (inject,prebuild,cleanup,race',suspense,suspenses,anticipation) where
 
 import Control.Concurrent (MVar,newEmptyMVar,putMVar,takeMVar,readMVar,yield,forkIO,killThread)
-import Control.Exception (SomeException,catch,mask,evaluate,onException)
+import Control.Exception (catch,mask,evaluate,onException,BlockedIndefinitelyOnMVar)
 import Control.Monad.ST (ST,runST)
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad (void,unless,join,when,(>=>),forM_)
@@ -167,33 +167,30 @@ race' vs v = lazy run v
       pure v
 
 -- | Deep suspense. Crosses component boundaries via use of `prebuild`.
--- Works across, for example, nested `request`s.
+-- Works across, for example, nested `lazy`s.
 --
 -- Suppose you have a primary request whose response dictates further nested
 -- requests. With `suspense`, it is possible to apply suspense to the full 
 -- view, including the secondary requests, as if it were a unified request.
 --
 -- In the following example, a suspense view will render after 100ms unless
--- all requests have resolved:
+-- all lazy views have resolved:
 --
 -- > suspense (Milliseconds 100 0) "Loading" do
--- >   request @SomeDomain someCachingPolicy someAPI someReq someReqPayload
+-- >   lazy <some IO action producing a list> do
 -- >     Div <||>
--- >       [ request @SomeDomain someCachingPolicy' someAPI' someReq' x do
--- >           { ... await :: someRsp' ... }
--- >       | x <- await :: [someReqPayload']
+-- >       [ lazy <some IO action based on `x`>
+-- >           { ... await :: <some result from the nested `lazy`> ... }
+-- >       | x <- await :: <some list response from the wrapping `lazy`>
 -- >       ]
 --
 -- To bypass deep suspense, see `fork`, which initially renders
--- a `Null` and then subsequently replaces it with the desired view.
+-- a `Null` and then subsequently replaces it with the desired view. 
 --
 -- Only the actions of `build` are subject to suspense. The component threads
 -- generated in build are forked and, therefore, not subject to suspense.
 -- Therefore, suspense includes `onConstruct`, `onMount`, and the initial 
 -- `render`/nested `build`.
---
--- Note that `suspense` is not reactive. Once it is rendered, only changes
--- to the supplied target view will be seen, without added suspense.
 --
 suspense :: Time -> View -> View -> View
 suspense t sus = suspenses True [(t,sus)]
@@ -214,23 +211,14 @@ suspense t sus = suspenses True [(t,sus)]
 -- >   anticipation 0 "Loading" do
 -- >     { ... await ... }
 --
--- Note that `anticipation` is not reactive. Once it is rendered, only changes
--- to the supplied target view will be seen, without added suspense.
---
 anticipation :: Time -> View -> View -> View
 anticipation t sus = suspenses False [(t,sus)]
 
--- | suspenses allows for a sequence of replacing transclusions at timed
+-- | `suspenses` allows for a sequence of replacing transclusions at timed
 -- intervals while a target `View` is being built. This approach is likely to
 -- cause bugs, especially in the presence of rich/dynamic views. If `deep`, the
 -- view is built with `prebuild`, if not `deep`, the view is simply forced with
 -- `evaluate`.
---
--- Note that `supsense'` is not reactive. Once it is rendered, only changes to
--- the supplied target view will be seen, without added suspense. It isn't
--- immediately obvious how to make `suspenses` deeply reactive with the
--- `prebuild` strategy without incurring a severe performance cost.
---
 suspenses :: Bool -> [(Time,View)] -> View -> View
 suspenses deep tvs v = stateWith' (\_ -> pure) initialize it
   where
@@ -258,11 +246,22 @@ suspenses deep tvs v = stateWith' (\_ -> pure) initialize it
               -- just used `evaluate`, the initialization methods of 
               -- components would not be run and suspense would only apply 
               -- to any `unsafePerformIO` or similar in the view preimage.
-              -- That would still be useful inside an `async` when `await`
+              -- That would still be useful inside a `lazy @a` when `await @a`
               -- is called, but it is much less interesting than the deep 
               -- suspense achieved with prebuild.
+              -- 
+              -- The unfortunate side-effect is that the view-building, and 
+              -- side-effects within suspense, cannot be stopped.
+              -- 
+              -- More fundamentally, this shows that there is a need for a
+              -- better mechanism for lifecycle management within pure. An
+              -- approach to automatic cleanup would be quite welcome. This
+              -- is an extraordinarily difficult problem with, I assume, a
+              -- very simply solution - I just don't yet have the correct 
+              -- perspective.
               x <- if deep then prebuild v else evaluate v
-              restore (putMVar mv x) `onException` (if deep then cleanup x else pure ())
+              let onE | deep = cleanup x | otherwise = pure ()
+              restore (putMVar mv x) `onException` onE 
 
       pure (Null,const (killThread t1 >> killThread t2))
 
@@ -473,7 +472,7 @@ addLifecycle mtd e (Mounted f _) = do
 
 awaitComponentPatches pq = do
   mpq <- readIORef pq
-  for mpq collect `catch` \(_ :: SomeException) -> return Nothing
+  for mpq collect `catch` \(_ :: BlockedIndefinitelyOnMVar) -> return Nothing
 
 newComponentThread :: forall props state. MVar () -> Ref props state -> Comp props state -> View -> View -> props -> state -> IO ()
 newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state ->
