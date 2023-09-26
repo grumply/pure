@@ -164,7 +164,7 @@ activateWith policy ws_ host port secure = do
   s <- newSeed
   void $ do
     forkIO $ do
-      msock <- retrying policy $
+      msock <- retryingIO policy $
         tryNewWebsocket (toTxt $ (if secure then "wss://" else "ws://") ++ host ++ ':': show port) 
           >>= maybe retry pure
       for_ msock $ \sock -> do

@@ -301,7 +301,7 @@ sseWith policy host ep =
         forkIO do
           handle (\ThreadKilled -> stop) do
             void do
-              retrying policy do
+              retryingIO policy do
                 mv <- newEmptyMVar
                 pl <- askref self
                 es <- new_event_source_js (host <> ep <> "?payload=" <> encodeURIComponent (btoa_js (encode pl)))
@@ -348,7 +348,7 @@ ws policy url =
     open = do
       s <- newIORef def
       let stop = join (readIORef s)
-      retrying policy do
+      retryingIO policy do
         ws <- new_websocket_js url 
         mv <- newEmptyMVar
         fail <- onRaw ws "error" def (\_ _ -> putMVar mv (stop >> retry))

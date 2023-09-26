@@ -380,23 +380,28 @@ ago now t
 
     years = 
       let Years ys (Months ms _) = now - t
-      in ns ys "year" <> " " <> ns ms "month" <> " ago"
+      in if ys < 11 then ns ys "year" <> " " <> ns ms "month" <> " ago"
+         else ns ys "year" <> " ago"
     
     months =
       let Months ms (Weeks ws _) = now - t
-      in ns ms "month" <> " " <> ns ws "week" <> " ago"
+      in if ms < 13 then ns ms "month" <> " " <> ns ws "week" <> " ago"
+         else ns ms "month" <> " ago"
 
     weeks =
       let Weeks ws (Days ds _) = now - t
-      in ns ws "week" <> " " <> ns ds "day" <> " ago"
+      in if ws < 5 then ns ws "week" <> " " <> ns ds "day" <> " ago"
+         else ns ws "week" <> " ago"
 
     days =
       let Days ds (Hours hs _) = now - t
-      in ns ds "day" <> " " <> ns hs "hour" <> " ago"
+      in if ds < 8 then ns ds "day" <> " " <> ns hs "hour" <> " ago"
+         else ns ds "day" <> " ago" 
 
     hours =
       let Hours hs (Minutes ms _) = now - t
-      in ns hs "hour" <> " " <> ns ms "minute" <> " ago"
+      in if hs < 25 then ns hs "hour" <> " " <> ns ms "minute" <> " ago"
+         else ns hs "hour" <> " ago"
 
     minutes =
       let Minutes ms _ = now - t

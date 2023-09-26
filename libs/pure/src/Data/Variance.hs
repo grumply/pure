@@ -71,10 +71,8 @@ instance Semigroup Variance where
           | vCount c < 2 = 0
           | otherwise    = vMean2 c
 
-        var = Variance c m m2' min_ max_
-
       in
-        var `seq` var
+        Variance c m m2' min_ max_
         
 
 count :: Variance -> Int
@@ -101,13 +99,12 @@ vary f a Variance {..} =
   let b = realToFrac (f a)
       count = vCount + 1
       delta = b - vMean
-      mean = vMean + (delta / count)
+      mean = vMean + delta / count
       mean2 = vMean2 + delta * (b - mean)
-      mx = max b vMaximum
+      mx = if vCount == 0 then b else max b vMaximum
       mn = if vCount == 0 then b else min b vMinimum
-      var = Variance count mean mean2 mn mx
   in
-    var `seq` var
+    Variance count mean mean2 mn mx
 
 {-# RULES
 "vary f a mempty" forall f a. vary f a mempty = let b = realToFrac (f a) in Variance 1 b 0 b b

@@ -97,9 +97,8 @@ instance Semigroup Covariance where
         miny = min (cMinimumY c1) (cMinimumY c2)
         maxy = max (cMaximumY c1) (cMaximumY c2)
 
-        cov = Covariance count meanx meany meanx2 meany2 minx maxx miny maxy c
        in
-         cov `seq` cov
+         Covariance count meanx meany meanx2 meany2 minx maxx miny maxy c
 
 
 count :: Covariance -> Int
@@ -181,10 +180,8 @@ covary f g a Covariance {..} =
     maxx = max cMaximumX x
     miny = min cMinimumY y
     maxy = max cMaximumY y
-
-    cov = Covariance count meanx meany meanx2 meany2 minx maxx miny maxy c
    in
-     cov `seq` cov
+     Covariance count meanx meany meanx2 meany2 minx maxx miny maxy c
 
 {-# INLINE [1] covaries #-}
 covaries :: (Foldable f, Real x, Real y) => (a -> x) -> (a -> y) -> f a -> Covariance

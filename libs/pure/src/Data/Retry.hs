@@ -1,14 +1,15 @@
 {-# language AllowAmbiguousTypes, TypeApplications, LambdaCase, ScopedTypeVariables, RecordWildCards, FlexibleContexts, RankNTypes #-}
-module Data.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci,logRetry,logFailure,onRetry,onFailure) where
+module Data.Retry (retry,Status(..),Policy(..),recover,recoverWith,recoverWithIO,recovering,retrying,retryingIO,limitRetries,limitTries,limitDelay,limitDuration,constant,exponential,jittered,fibonacci,logRetry,logFailure,onRetry,onFailure) where
 
 import Control.Exception
 import Data.Foldable
 import Data.JSON
 import Data.Random (newSeed,uniformR,generate)
 import Data.Time
-import Data.View (Exists,with)
+import Data.View (Exists,with,caught)
 
 import GHC.Stack
+import System.IO.Unsafe
 
 import Data.Log as Log hiding (Policy)
 
@@ -31,7 +32,7 @@ Nothing
 data Retry = Retry deriving Show
 instance Exception Retry
 
-retry :: IO a
+retry :: a
 retry = throw Retry
 
 data Status = Status
@@ -73,13 +74,13 @@ instance Semigroup Policy where
 
 -- | Retry the action if an exception of the given type is caught. 
 -- Requires type application.
-recover :: forall e a. Exception e => IO a -> IO a
-recover = handle (\(_ :: e) -> retry) 
+recover :: forall e a. Exception e => a -> a
+recover = flip caught (\(_ :: e) -> retry) 
 
 -- | Analyze exceptions of type `e`, and determine if the action should be
 -- retried. If it shouldn't be retried, the exception is re-thrown.
-recoverWith :: Exception e => (e -> Bool) -> IO a -> IO a
-recoverWith f = handle (\e -> if f e then retry else throw e)
+recoverWith :: Exception e => (e -> Bool) -> a -> a
+recoverWith f = flip caught (\e -> if f e then retry else throw e)
 
 -- | Analyze exceptions of type `e`, and determine, effectfully, if the
 -- action should be retried. If it shouldn't be retried, the exception is
@@ -92,11 +93,25 @@ recovering :: IO a -> IO a
 recovering = recover @SomeException
 
 -- | With a given policy, try the given action. If the policy fails, Nothing is returned.
-retrying :: Policy -> (Exists Status => IO a) -> IO (Maybe a)
-retrying (Policy policy) io = newInitialStatus >>= go
+retryingIO :: Policy -> (Exists Status => IO a) -> IO (Maybe a)
+retryingIO (Policy policy) io = newInitialStatus >>= go
   where
     go status@Status {..} =
       handle (\Retry -> pure Nothing) (Just <$> with status io) >>= \case
+        Just a -> pure (Just a)
+        _ -> do
+          current <- time
+          md <- policy status { current = current }
+          case md of
+            Nothing -> pure Nothing
+            Just t  -> delay t >> go Status { retries = retries + 1, .. }
+
+-- | With a given policy, try the given action. If the policy fails, Nothing is returned.
+retrying :: Policy -> (Exists Status => a) -> Maybe a
+retrying (Policy policy) a = unsafePerformIO (newInitialStatus >>= go)
+  where
+    go status@Status {..} =
+      handle (\Retry -> pure Nothing) (Just <$> with status (evaluate a)) >>= \case
         Just a -> pure (Just a)
         _ -> do
           current <- time

@@ -71,7 +71,7 @@ liveWith policy o s v =
           Data.View.stream integrate do
             handle (\ThreadKilled -> stop) do
               void do
-                retrying policy do
+                retryingIO policy do
                   mv  <- newEmptyMVar
                   i <- readIORef ir
                   es  <- new_event_source_js (api @c <> toTxt o <> "/events?payload=" <> encodeURIComponent (btoa_js (encode (t,s,i))))

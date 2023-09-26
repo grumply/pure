@@ -120,6 +120,26 @@ encodeBase62 (Marker w1 w2) = Txt.reverse (t1 <> t2)
       | otherwise = '0'
 
 {-# INLINABLE decodeBase62 #-}
+#ifdef __GHCJS__
+-- Fixes a bug that arises when using closure compiler with Word64.
+decodeBase62 :: Txt -> Marker a
+decodeBase62 t = Marker w1 w2
+  where 
+    w1 = fromIntegral (decodeInteger (Txt.dropEnd 11 t))
+    w2 = fromIntegral (decodeInteger (Txt.drop 11 t))
+
+    decodeInteger :: Txt -> Integer
+    decodeInteger = Txt.foldl' go 0
+      where
+        go w (base62_decode_char -> c) = w * 62 + c
+
+    base62_decode_char :: Char -> Integer
+    base62_decode_char (fromIntegral . ord -> c)
+      | c >= 48 , c <= 57  = c - 48
+      | c >= 64 , c <= 90  = c - 55
+      | c >= 97 , c <= 122 = c - 61
+      | otherwise          = 0
+#else
 decodeBase62 :: Txt -> Marker a
 decodeBase62 t = Marker w1 w2
   where 
@@ -137,6 +157,7 @@ decodeBase62 t = Marker w1 w2
       | c >= 64 , c <= 90  = c - 55
       | c >= 97 , c <= 122 = c - 61
       | otherwise          = 0
+#endif
 
 {-# INLINE hex #-}
 hex :: Marker a -> Txt
@@ -161,6 +182,25 @@ encodeBase16 (Marker w1 w2) = Txt.reverse (t1 <> t2)
       | otherwise = '0'
 
 {-# INLINABLE decodeBase16 #-}
+#ifdef __GHCJS__
+-- Fixes a bug that arises when using closure compiler with Word64.
+decodeBase16 :: Txt -> Marker a
+decodeBase16 t = Marker w1 w2
+  where 
+    w1 = fromIntegral (decodeInteger (Txt.dropEnd 16 t))
+    w2 = fromIntegral (decodeInteger (Txt.drop 16 t))
+
+    decodeInteger :: Txt -> Integer
+    decodeInteger = Txt.foldl' go 0
+      where
+        go w (base16_decode_char -> c) = w * 16 + c
+
+    base16_decode_char :: Char -> Integer
+    base16_decode_char (fromIntegral . ord -> c)
+      | c >= 48 , c <= 57  = c - 48
+      | c >= 97 , c <= 102 = c - 87
+      | otherwise          = 0
+#else
 decodeBase16 :: Txt -> Marker a
 decodeBase16 t = Marker w1 w2
   where 
@@ -177,6 +217,7 @@ decodeBase16 t = Marker w1 w2
       | c >= 48 , c <= 57  = c - 48
       | c >= 97 , c <= 102 = c - 87
       | otherwise          = 0
+#endif
 
 {-# INLINE uuid #-}
 uuid :: Marker a -> Txt

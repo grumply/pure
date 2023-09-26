@@ -338,7 +338,7 @@ clientWith root policy params options = do
   forkIO $ do 
     fix $ \restart -> do
       ctx <- C.initConnectionContext
-      mconn <- retrying policy (C.connectTo ctx params)
+      mconn <- retryingIO policy (C.connectTo ctx params)
       for_ mconn $ \conn -> do
         start <- Time.time
         stream <- WS.makeStream (reader conn) (writer conn)
