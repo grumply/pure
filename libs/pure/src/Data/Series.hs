@@ -1,4 +1,4 @@
-{-# language MultiParamTypeClasses, FlexibleInstances, ScopedTypeVariables, BangPatterns, DerivingStrategies, DeriveAnyClass, DeriveGeneric #-}
+{-# language MultiParamTypeClasses, FlexibleInstances, ScopedTypeVariables, BangPatterns, DerivingStrategies, DeriveAnyClass, DeriveGeneric, DerivingVia #-}
 module Data.Series 
   ( Series()
   , Policy(..)
@@ -8,15 +8,23 @@ module Data.Series
   , new
   , integrate
 
-  , summary
   , Data.Series.null
-  , size
 
+  , analyze
+  , size
   , variance
   , stdDev
   , Data.Series.mean
   , Data.Series.minimum
   , Data.Series.maximum
+
+  , Summary(..)
+  , summarySize
+  , summaryVariance
+  , summaryStdDev
+  , summaryMean
+  , summaryMinimum
+  , summaryMaximum
 
   , points
   , summaries
@@ -32,10 +40,13 @@ import Data.Coerce (coerce)
 import Data.JSON (ToJSON(..),FromJSON(..))
 import Data.Maybe (fromJust,isNothing)
 import Data.Time
-import Data.Variance (Variance(),varies,vary,minimum,maximum,populationVariance,populationStdDev,count,mean)
+import Data.Variance (Variance(),varies,vary,minimum,maximum,populationVariance,populationStdDev,count,mean,sampleVariance,sampleStdDev)
 import Data.List as List
 import Data.Ord
 import GHC.Generics
+
+newtype Summary = Summary { summary :: Variance }
+  deriving (Eq,Ord,ToJSON,FromJSON,Show,Monoid,Semigroup) via Variance
 
 -- | Check if a `Series` is empty.
 --
@@ -44,12 +55,19 @@ import GHC.Generics
 null :: Series a -> Bool
 null (Root mt _ _ _) = isNothing mt
 
+-- | Get a full-series analysis. 
+--
+-- O(1)
+--
+analyze :: Series a -> Variance
+analyze (Root _ _ v _) = v
+
 -- | Get the total count of items in and summarized by the series.
 --
 -- O(1)
 --
 size :: Series a -> Int
-size = count . summary
+size = count . analyze
 
 -- | Get the mean value of the series.
 --
@@ -58,7 +76,7 @@ size = count . summary
 -- O(1)
 --
 mean :: Series a -> Maybe Double
-mean = Data.Variance.mean . summary
+mean = Data.Variance.mean . analyze
 
 -- | Get the population variance of the series. 
 --
@@ -67,7 +85,7 @@ mean = Data.Variance.mean . summary
 -- O(1)
 --
 variance :: Series a -> Maybe Double
-variance = populationVariance . summary
+variance = populationVariance . analyze
 
 -- | Get the population standard deviation of the series.
 -- 
@@ -76,28 +94,73 @@ variance = populationVariance . summary
 -- O(1)
 --
 stdDev :: Series a -> Maybe Double
-stdDev = populationStdDev . summary
+stdDev = populationStdDev . analyze
 
 -- | Get the series maximum, if the series is non-empty.
 --
 -- O(1)
 --
 maximum :: Series a -> Maybe Double
-maximum = Data.Variance.maximum . summary
+maximum = Data.Variance.maximum . analyze
 
 -- | Get the series minimum, if the series is non-empty.
 --
 -- O(1)
 --
 minimum :: Series a -> Maybe Double
-minimum = Data.Variance.minimum . summary
+minimum = Data.Variance.minimum . analyze
 
--- | Get the full-series summary. 
+-- | Get a summary size.
 --
 -- O(1)
 --
-summary :: Series a -> Variance
-summary (Root _ _ v _) = v
+summarySize :: Summary -> Int
+summarySize = coerce count
+
+-- | Get a summary variance.
+--
+-- Nothing, if empty.
+--
+-- O(1)
+--
+summaryVariance :: Summary -> Maybe Double
+summaryVariance = coerce sampleVariance 
+
+-- | Get a summary standard deviation.
+--
+-- Nothing, if empty.
+-- 
+-- O(1)
+--
+summaryStdDev :: Summary -> Maybe Double
+summaryStdDev = coerce sampleStdDev 
+
+-- | Get a summary mean.
+--
+-- Nothing, if empty.
+--
+-- O(1)
+--
+summaryMean :: Summary -> Maybe Double
+summaryMean = coerce Data.Variance.mean
+
+-- | Get a summary maximum.
+--
+-- Nothing, if empty.
+--
+-- O(1)
+--
+summaryMaximum :: Summary -> Maybe Double
+summaryMaximum = coerce Data.Variance.maximum
+
+-- | Get a summary minimum.
+--
+-- Nothing, if empty.
+--
+-- O(1)
+--
+summaryMinimum :: Summary -> Maybe Double
+summaryMinimum = coerce Data.Variance.minimum
 
 -- | Extract the un-summarized time-tagged values from a series. 
 --
@@ -110,7 +173,7 @@ summary (Root _ _ v _) = v
 points :: Series a -> [(Time,a)]
 points (Root _ _ _ (Series _ v _ _)) = List.reverse v
 
--- | Extract the summarized time-tagged `Variance`s from a series. 
+-- | Extract the summarized time-tagged `Summary`s from a series. 
 --
 -- Note that this extraction method must reverse each level of summaries
 -- before concatenation. This is the most expensive common operation on a
@@ -120,17 +183,17 @@ points (Root _ _ _ (Series _ v _ _)) = List.reverse v
 --
 -- O(n); n = results
 --
-summaries :: Series a -> [(Time,Time,Variance)]
+summaries :: Series a -> [(Time,Time,Summary)]
 summaries (Root _ _ _ (Series mt _ _ (Just sv))) = build (extract sv)
   where    
-    build :: [(Time,Variance)] -> [(Time,Time,Variance)]
+    build :: [(Time,Summary)] -> [(Time,Time,Summary)]
     build tvs = zipWith go tvs (tail (fmap (Just . fst) tvs) <> [Nothing])
       where
-        go :: (Time,Variance) -> Maybe Time -> (Time,Time,Variance)
+        go :: (Time,Summary) -> Maybe Time -> (Time,Time,Summary)
         go (start,v) (Just end) = (start,end,v)
         go (start,v) Nothing    = (start,fromJust mt,v)
 
-    extract :: Series Variance -> [(Time,Variance)]
+    extract :: Series Summary -> [(Time,Summary)]
     extract (Series _ b _ (Just v)) = extract v <> List.reverse b
     extract (Series _ _ _ Nothing) = []
 summaries _ = []
@@ -140,7 +203,7 @@ summaries _ = []
 --
 -- O(n)
 --
-findSummary :: Time -> Series a -> Maybe (Time,Time,Variance)
+findSummary :: Time -> Series a -> Maybe (Time,Time,Summary)
 findSummary t = wrapping . summaries
   where
     wrapping ((s,e,v):ss)
@@ -161,11 +224,11 @@ findPoint p = closest . points
     closest []  = Nothing
     closest pts = Just (minimumBy (comparing (abs . subtract p . fst)) pts)
 
--- | Extract the summaries and points that overlap the given open-ended range of times.
--- The summaries (Variance) are expected to be non-overlapping and non-overlapping with
--- the list of points, assuming that the series was correctly constructed with strictly-
--- increasing times.
-range :: Maybe Time -> Maybe Time -> Series a -> ([(Time,Time,Variance)],[(Time,a)])
+-- | Extract the summaries and points that overlap the given open-ended range of
+-- times. The summaries are expected to be non-overlapping and non-overlapping
+-- with the list of points, assuming that the series was correctly constructed
+-- with strictly-increasing times.
+range :: Maybe Time -> Maybe Time -> Series a -> ([(Time,Time,Summary)],[(Time,a)])
 range mstart mend sa = (filter summaryInRange (summaries sa),filter pointInRange (points sa))
   where
     summaryInRange (s,e,v) =
@@ -193,7 +256,7 @@ data Series a
     { sStart    :: !(Maybe Time)
     , sBuffer   :: ![(Time,a)]
     , sCount    :: {-# UNPACK #-}!Int
-    , sSummary  :: !(Maybe (Series Variance))
+    , sSummary  :: !(Maybe (Series Summary))
     }
 
 instance ToJSON a => ToJSON (Series a) where
@@ -223,21 +286,21 @@ instance FromJSON a => FromJSON (Series a) where
 -- Warning: Partial - a valid policy is required.
 --
 -- A valid policy depends on the Policy type:
---   Natural: Natural policies must be non-empty and composed of strictly-increasing [Granularity].
+--   Clock: Clock policies must be non-empty and composed of strictly-increasing [Granularity].
 --   Hybrid: Hybrid policies must be non-empty and composed of strictly-increasing [Granularity].
---   Custom: Custom policies must be non-empty and composed of strictly-increasing [Time].
+--   Elapsed: Elapsed policies must be non-empty and composed of strictly-increasing [Time].
 --   Fixed: All fixed policies are valid. 
 --
 -- Note that an empty `Fixed` policy for `Series a` is equivalent to `(Maybe a,Maybe Time,Variance)`
 -- with worse constant factors.
 --   
 new :: Policy -> Series a
-new p@(Natural ts) | not (coerce validTimes ts) = 
-  error "Natural policies must be non-empty and composed of strictly-increasing [Granularity]."
+new p@(Clock ts) | not (coerce validTimes ts) = 
+  error "Clock policies must be non-empty and composed of strictly-increasing [Granularity]."
 new p@(Hybrid its) | not (coerce validTimes (fmap fst its)) = 
   error "Hybrid policies must be non-empty and composed of strictly-increasing [Granularity]."
-new p@(Custom ts) | not (validTimes ts) = 
-  error "Custom policies must be non-empty and composed of strictly-increasing [Time]."
+new p@(Elapsed ts) | not (validTimes ts) = 
+  error "Elapsed policies must be non-empty and composed of strictly-increasing [Time]."
 new p = Root Nothing p mempty (Series Nothing [] 0 Nothing)
 
 validTimes :: [Time] -> Bool
@@ -262,7 +325,7 @@ day = Granularity Day
 -- Policy should be considered to affect only the space characteristics
 -- and not the time characteristics of event integration/insert.
 --
--- The natural policy gives wall-clock-delimited naturality: the `minute` 
+-- The clock policy gives wall-clock-delimited naturality: the `minute` 
 -- granularity will aggregate at wall-clock minutes, the `hour` granularity
 -- at wall-clock hours, etc....
 --
@@ -299,13 +362,13 @@ day = Granularity Day
 -- assumption was that the client-side query logic can necessarily aggregate on
 -- the expected boundaries. I'm sure there are still issues here, but
 -- performance was my primary importance.
-data Policy = Natural [Granularity] | Fixed [Int] | Hybrid [(Granularity,Int)] | Custom [Time]
+data Policy = Clock [Granularity] | Fixed [Int] | Hybrid [(Granularity,Int)] | Elapsed [Time]
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
 {-# INLINE peel #-}
 peel :: Policy -> Policy
-peel (Natural (t:ts)) = Natural ts
+peel (Clock (t:ts)) = Clock ts
 peel (Fixed (i:is)) = Fixed is
 peel (Hybrid (ti:tis)) = Hybrid tis
 peel x = x
@@ -313,8 +376,8 @@ peel x = x
 {-# INLINE shouldAggregate #-}
 shouldAggregate :: Policy -> Time -> Time -> Int -> Maybe Bool
 shouldAggregate (Fixed (i:_)) _ _ count = Just (count >= i)
-shouldAggregate (Custom (t:_)) start current _ = Just (current - start >= t)
-shouldAggregate (Natural (Granularity t:_)) start current _ = 
+shouldAggregate (Elapsed (t:_)) start current _ = Just (current - start >= t)
+shouldAggregate (Clock (Granularity t:_)) start current _ = 
   case t of
     Second ->
       let Seconds s _ = current
@@ -334,7 +397,7 @@ shouldAggregate (Natural (Granularity t:_)) start current _ =
       in Just (d > d')
 shouldAggregate (Hybrid ((t,i):_)) start current count
   | count >= i = Just True
-  | otherwise  = shouldAggregate (Natural [t]) start current count
+  | otherwise  = shouldAggregate (Clock [t]) start current count
 shouldAggregate _ _ _ _ = Nothing
 
 
@@ -357,7 +420,7 @@ integrate now a (Root _ ls v s) = Root (Just now) ls (vary id a v) (go ls s)
           let
             b' = [(now,a)]
             c' = 1
-            !s' = summarize (peel p) start (varies snd b) s
+            !s' = summarize (peel p) start (Summary (varies snd b)) s
           in
             Series (Just now) b' c' (Just s')
 
@@ -371,7 +434,7 @@ integrate now a (Root _ ls v s) = Root (Just now) ls (vary id a v) (go ls s)
         Nothing -> 
           Series (Just start) ((now,a) : init b) c s
 
-    summarize :: Policy -> Time -> Variance -> Maybe (Series Variance) -> Series Variance
+    summarize :: Policy -> Time -> Summary -> Maybe (Series Summary) -> Series Summary
     summarize _ t v Nothing = Series (Just t) [(t,v)] 1 Nothing
     summarize p t v (Just (Series (Just start) b c s)) =
       case shouldAggregate p start now c of
