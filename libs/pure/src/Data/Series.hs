@@ -210,7 +210,7 @@ integrate now a (Root _ ls v s) = Root (Just now) ls (vary id a v) (go ls s)
             c' = 1
             !s' = summarize (peel p) start (mconcat (fmap snd b)) s
           in
-            Series (Just now) b' b c' (Just s')
+            Series (Just now) b' l c' (Just s')
 
         Just False ->
           let
