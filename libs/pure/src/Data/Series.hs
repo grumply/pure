@@ -78,20 +78,30 @@ size = count . analyze
 mean :: Series a -> Maybe Double
 mean = Data.Variance.mean . analyze
 
--- | Get the population variance of the series. 
+-- | Get the population variance of the series, assuming the series to be fully
+-- representative.
 --
 -- Nothing if size < 2. 
 --
 -- O(1)
+--
+-- If you are sampling events, you might want to consider:
+-- 
+-- > Data.Variance.sampleVariance . analyze
 --
 variance :: Series a -> Maybe Double
 variance = populationVariance . analyze
 
--- | Get the population standard deviation of the series.
+-- | Get the population standard deviation of the series, assuming the series to
+-- be fully representative.
 -- 
 -- Nothing if size < 2. 
 --
 -- O(1)
+--
+-- If you are sampling events, you might want to consider:
+-- 
+-- > Data.Variance.sampleStdDev . analyze
 --
 stdDev :: Series a -> Maybe Double
 stdDev = populationStdDev . analyze
