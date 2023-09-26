@@ -123,6 +123,7 @@ library
     Data.Random.Internal
     Data.Retry
     Data.Router
+    Data.Series
     Data.Scroll
     Data.Shadows
     Data.Slug
