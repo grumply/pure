@@ -3,8 +3,11 @@ module Data.Marker
   ( Marker
   , markIO
   , mark
+  , pattern Base62
   , base62
+  , pattern Hex
   , hex
+  , pattern UUID
   , uuid
   , timestamp
   , encodeBase62
@@ -34,11 +37,14 @@ import GHC.Word (Word64(..))
 import GHC.Generics (Generic)
 import System.IO.Unsafe (unsafePerformIO)
 
--- Reasonably performant UUID-compatible time-tagged randoms based, roughly, 
+-- Reasonably performant UUID-compatible* time-tagged randoms based, roughly, 
 -- on ideas from https://github.com/anthonynsimon/timeflake
 --
 -- Combines a 48-bit time in milliseconds with an 80 bit random. Not 
 -- cryptographically secure.
+--
+-- * UUID-compatability is purely textual; if your external use only parses
+--   spec-valid UUIDs, it will fail.
 --
 data Marker a = Marker {-# UNPACK #-}!Word64 {-# UNPACK #-}!Word64
   deriving (Generic,Eq,Ord,Show)
@@ -70,37 +76,62 @@ instance FromTxt (Marker a) where
       36 -> decodeUUID t
       _  -> error "Data.Marker (fromTxt :: Txt -> Marker): invalid encoded Marker length"
 
-
--- | Generate an action to create a `Marker` in IO.
---
 {-# INLINE mark #-}
+-- | A `Generator` that can be used to produce an IO action to create a Marker.
+-- If you have a local `Seed`, this can be more performant than using `markIO`,
+-- though I expect it to be a rare use-case as `markIO` is expected to be 
+-- performant enough for nearly all use-cases.
 mark :: Generator (IO (Marker a))
 mark = do
   r1 <- uniformR 0 (2 ^ 16 - 1) 
   r2 <- uniform
   pure do
-    Milliseconds ms _ <- time -- ms is whole in the Milliseconds pattern
+    Milliseconds ms _ <- time
     pure (Marker (shift (fromIntegral (round ms)) 16 .|. r1) r2)
 
 {-# INLINE timestamp #-}
+-- | Extract the `Time` in milliseconds from a `Marker`.
 timestamp :: Marker a -> Time
 timestamp (Marker w1 _) = Milliseconds (fromIntegral (shift w1 (-16))) 0
 
 {-# NOINLINE globalMarkerSeed #-}
+-- This global marker seed is not exported. The failure mode of this 
+-- unsafePerformIO is simply a performance degredation.
 globalMarkerSeed :: IORef Seed
 globalMarkerSeed = unsafePerformIO do
   s <- newSeed
   newIORef s
 
 {-# INLINABLE markIO #-}
+-- | Produce a `Marker` for an arbitrary nominal type `a` in IO. This uses a
+-- global `Seed` via an `atomicModifyIORef'`, so has an implicit bottleneck,
+-- though it is unlikely to be a performance bottleneck. Note that the random
+-- used is generated via PCG and is not cryptographically secure.
 markIO :: IO (Marker a)
 markIO = join (atomicModifyIORef' globalMarkerSeed (generate mark))
 
+-- | Base62 is a pattern synonym for the pair of: encodeBase62/decodeBase62. 
+pattern Base62 :: Marker a -> Txt
+pattern Base62 m <- (decodeBase62 -> m) where
+  Base62 = encodeBase62
+
 {-# INLINE base62 #-}
+-- | Encode a marker to a base62-encoded. This is a synonym for `encodeBase62`.
+-- 
+-- Note, it is expected that:
+--
+-- > decodeBase62 (base62 m) == m
+--
 base62 :: Marker a -> Txt
 base62 = encodeBase62
 
 {-# INLINABLE encodeBase62 #-}
+-- | Encode a marker to a base62.
+-- 
+-- Note, it is expected that:
+--
+-- > decodeBase62 (encodeBase62 m) == m
+--
 encodeBase62 :: Marker a -> Txt
 encodeBase62 (Marker w1 w2) = Txt.reverse (t1 <> t2)
   where 
@@ -120,10 +151,22 @@ encodeBase62 (Marker w1 w2) = Txt.reverse (t1 <> t2)
       | otherwise = '0'
 
 {-# INLINABLE decodeBase62 #-}
+-- | Decode a marker encoded in base62. There is no failure; the 
+-- marker generated from the empty text, for example, is `Marker 0 0`.
+--
+-- Note, it is expected that:
+--
+-- > decodeBase62 (encodeBase62 m) == m
+--
 #ifdef __GHCJS__
--- Fixes a bug that arises when using closure compiler with Word64.
 decodeBase62 :: Txt -> Marker a
 decodeBase62 t = Marker w1 w2
+-- Fixes a bug that arises when using closure compiler with Word64.
+-- We could use this approach on both GHC and GHCJS, but it would likely
+-- be far less performant than just having the split, and there's not
+-- much here to manage - just some duplication. We could have a num
+-- type that is specialized per-compiler, and then the `fromIntegral`
+-- would inline as `id` on GHC, but I don't see any real reason to do so.
   where 
     w1 = fromIntegral (decodeInteger (Txt.dropEnd 11 t))
     w2 = fromIntegral (decodeInteger (Txt.drop 11 t))
@@ -159,11 +202,29 @@ decodeBase62 t = Marker w1 w2
       | otherwise          = 0
 #endif
 
+-- | Hex is a pattern synonym for the pair of: encodeBase16/decodeBase16. 
+pattern Hex :: Marker a -> Txt
+pattern Hex m <- (decodeBase16 -> m) where
+  Hex = encodeBase16
+
 {-# INLINE hex #-}
+-- | Encode a marker to a hexadecimal-style text. This is a synonym for 
+-- `encodeBase16`.
+-- 
+-- Note, it is expected that:
+--
+-- > decodeBase16 (hex m) == m
+--
 hex :: Marker a -> Txt
 hex = encodeBase16
 
 {-# INLINABLE encodeBase16 #-}
+-- | Encode a marker to a hexadecimal-style text.
+-- 
+-- Note, it is expected that:
+--
+-- > decodeBase16 (encodeBase16 m) == m
+--
 encodeBase16 :: Marker a -> Txt
 encodeBase16 (Marker w1 w2) = Txt.reverse (t1 <> t2)
   where 
@@ -182,10 +243,22 @@ encodeBase16 (Marker w1 w2) = Txt.reverse (t1 <> t2)
       | otherwise = '0'
 
 {-# INLINABLE decodeBase16 #-}
+-- | Decode a marker encoded as hexadecimal. There is no failure; the 
+-- marker generated from the empty text, for example, is `Marker 0 0`.
+--
+-- Note, it is expected that:
+--
+-- > decodeBase16 (encodeBase16 m) == m
+--
 #ifdef __GHCJS__
--- Fixes a bug that arises when using closure compiler with Word64.
 decodeBase16 :: Txt -> Marker a
 decodeBase16 t = Marker w1 w2
+-- Fixes a bug that arises when using closure compiler with Word64.
+-- We could use this approach on both GHC and GHCJS, but it would likely
+-- be far less performant than just having the split, and there's not
+-- much here to manage - just some duplication. We could have a num
+-- type that is specialized per-compiler, and then the `fromIntegral`
+-- would inline as `id` on GHC, but I don't see any real reason to do so.
   where 
     w1 = fromIntegral (decodeInteger (Txt.dropEnd 16 t))
     w2 = fromIntegral (decodeInteger (Txt.drop 16 t))
@@ -220,10 +293,28 @@ decodeBase16 t = Marker w1 w2
 #endif
 
 {-# INLINE uuid #-}
+{-# WARNING uuid "Does not produce a spec-valid UUID." #-}
+-- | Encode a Marker to 'look like' a UUID. This is often sufficient for many
+-- external use-cases that require UUIDs. 
+--
+-- Synonym for `encodeUUID`.
+--
+-- Note, it is expected that:
+--
+-- > decodeUUID (uuid m) == m
+--
 uuid :: Marker a -> Txt
 uuid = encodeUUID
 
 {-# INLINABLE encodeUUID #-}
+{-# WARNING encodeUUID "Does not produce a spec-valid UUID." #-}
+-- | Encode a Marker to 'look like' a UUID. This is often sufficient for many
+-- external use-cases that require UUIDs. 
+--
+-- Note, it is expected that:
+--
+-- > decodeUUID (encodeUUID m) == m
+--
 encodeUUID :: Marker a -> Txt
 encodeUUID = Txt.unfoldrN 36 go . (36,) . encodeBase16
   where
@@ -233,5 +324,20 @@ encodeUUID = Txt.unfoldrN 36 go . (36,) . encodeBase16
       | otherwise = fmap (\(x,y) -> (x,(n - 1,y))) (Txt.uncons x)
 
 {-# INLINABLE decodeUUID #-}
+{-# WARNING decodeUUID "Does not validate UUID." #-}
+-- | Decode a Marker from any Txt value. If the value is a valid UUID, this will
+-- generate a Marker, though not necessarily a Marker that supports the expected
+-- Marker interface. 
+--
+-- Note, it is expected that:
+--
+-- > decodeUUID (encodeUUID m) == m
+-- 
 decodeUUID :: Txt -> Marker a
 decodeUUID = decodeBase16 . Txt.filter (/= '-')
+
+{-# WARNING UUID "Does not produce spec-valid UUIDs or validate UUIDs before parsing." #-}
+-- | UUID is a pattern synoym for the pair of: decodeUUID/encodeUUID. 
+pattern UUID :: Marker a -> Txt
+pattern UUID uuid <- (decodeUUID -> uuid) where
+  UUID = encodeUUID
