@@ -1,6 +1,4 @@
 {-# LANGUAGE CPP, FlexibleContexts, TypeFamilies, ScopedTypeVariables, BangPatterns, MagicHash, UnboxedTuples, TypeApplications, ViewPatterns #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use camelCase" #-}
 module Data.Random (module Data.Random, module Data.Random.Generator, System.Random.RandomGen(..), System.Random.Random(..)) where
 
 import Control.Monad
@@ -29,17 +27,13 @@ import qualified System.Random
 import GHC.Prim
 import GHC.Word
 
-
-
-
+#ifndef __GHCJS__
+#import "MachDeps.h"
+#endif
 
 instance System.Random.RandomGen Seed where
-    {-# INLINE genWord64 #-}
-    genWord64 seed =
-      let (!seed',!i) = generate (fromIntegral <$> int) seed
-      in (i,seed')
     {-# INLINE next #-}
-    next seed =
+    next seed = 
         let (!seed',!i) = generate int seed
         in (i,seed')
     {-# INLINE split #-}
@@ -48,7 +42,7 @@ instance System.Random.RandomGen Seed where
         in (randSeed,seed')
 
 -- | Variate taken from Bryan O'Sullivan's mwc-random with changes made for
--- uniformR when 64 == 32, for performance. 
+-- uniformR when WORD_SIZE_IN_BITS == 32, for performance. 
 --
 -- Some concessions were made to keep bounded generation non-conditional and efficient.
 --
@@ -91,11 +85,11 @@ instance Variate Int32 where
 
 instance Variate Int64 where
     -- | Produces in the range [minBound..maxBound]
-
-
-
+#if (defined __GHCJS__ || WORD_SIZE_IN_BITS == 32)
+    uniform = wordsTo64Bit <$> uniform <*> uniform
+#else
     uniform = fmap fromIntegral int
-
+#endif
     {-# INLINE uniform #-}
     -- | Produces in the range [lo + 1..hi]
     uniformR a b = fmap (a +) (uniformRange_internal (b - a))
@@ -111,7 +105,7 @@ instance Variate Int where
 
 instance Variate Word8 where
     -- | Produces in the range [minBound..maxBound]
-    uniform = fromIntegral <$> int
+    uniform = fromIntegral <$> int 
     {-# INLINE uniform #-}
     -- | Produces in the range [lo + 1..hi]
     uniformR a b = fmap (a +) (uniformRange_internal (b - a))
@@ -119,7 +113,7 @@ instance Variate Word8 where
 
 instance Variate Word16 where
     -- | Produces in the range [minBound..maxBound]
-    uniform = fromIntegral <$> int
+    uniform = fromIntegral <$> int 
     {-# INLINE uniform #-}
     -- | Produces in the range [lo + 1..hi]
     uniformR a b = fmap (a +) (uniformRange_internal (b - a))
@@ -127,7 +121,7 @@ instance Variate Word16 where
 
 instance Variate Word32 where
     -- | Produces in the range [minBound..maxBound]
-    uniform = fromIntegral <$> int
+    uniform = fromIntegral <$> int 
     {-# INLINE uniform #-}
     -- | Produces in the range [lo + 1..hi]
     uniformR a b = fmap (a +) (uniformRange_internal (b - a))
@@ -135,11 +129,11 @@ instance Variate Word32 where
 
 instance Variate Word64 where
     -- | Produces in the range [minBound..maxBound]
-
-
-
+#if (defined __GHCJS__ || WORD_SIZE_IN_BITS == 32)
+    uniform = wordsTo64Bit <$> uniform <*> uniform
+#else
     uniform = fromIntegral <$> int
-
+#endif
     {-# INLINE uniform #-}
     -- | Produces in the range [lo + 1..hi]
     uniformR a b = fmap (a +) (uniformRange_internal (b - a))
@@ -156,7 +150,7 @@ instance Variate Word where
 instance Variate Bool where
     uniform = wordToBool <$> uniform
     {-# INLINE uniform #-}
-    uniformR a b
+    uniformR a b 
       | a < b = pure a
       | otherwise = uniform
     {-# INLINE uniformR #-}
@@ -170,21 +164,21 @@ instance Variate Float where
     {-# INLINE uniformR #-}
 
 instance Variate Double where
-
-
-
-
-
-
-
-
+#if ( defined __GHCJS__ || WORD_SIZE_IN_BITS == 32 )
+    -- | Produces in the range [2**(-53)..1]
+    uniform = wordsToDouble <$> uniform <*> uniform
+    {-# INLINE uniform #-}
+    -- | Produces in the range [lo..hi]
+    uniformR a b = (\w1 w2 -> a + (b - a) * wordsToDouble w1 w2) <$> uniform <*> uniform
+    {-# INLINE uniformR #-}
+#else
     -- | Produces in the range [2**(-53)..1]
     uniform = word64ToDouble <$> uniform
     {-# INLINE uniform #-}
     -- | Produces in the range [lo..hi]
     uniformR a b = fmap (\w -> a + (b - a) * wordsToDouble (fromIntegral $ w `unsafeShiftR` 32) (fromIntegral w)) (uniform @Word64)
     {-# INLINE uniformR #-}
-
+#endif
 
 {-# INLINE boolean #-}
 boolean :: Generator Bool
@@ -216,7 +210,7 @@ shuffle as = V.toList . shuffleVector (V.fromList as)
 
 {-# INLINE shuffleVector #-}
 shuffleVector :: G.Vector v a => v a -> Seed -> v a
-shuffleVector v0 seed = G.modify (`shuffleMVector` seed) v0
+shuffleVector v0 seed = G.modify (flip shuffleMVector seed) v0
 
 {-# INLINE shuffleMVector #-}
 shuffleMVector :: (PrimMonad m, GM.MVector v a) => v (PrimState m) a -> Seed -> m ()
@@ -229,7 +223,7 @@ shuffleMVector v = go (GM.length v)
         let destination = i - 1
             (seed',source) = fmap (subtract 1) (generate (uniformR 0 i) seed)
         GM.unsafeSwap v source destination
-        go destination seed'
+        go destination seed' 
 
 {-# INLINE choose #-}
 choose :: forall a. (Bounded a,Enum a) => Generator a
@@ -250,13 +244,13 @@ uniformRange_internal (fromIntegral -> W# upper) = do
     word2 :: Word <- uniform
     pure $ fromIntegral $ W#
       (case (# word1, word2 #) of
-        (# W# w1, W# w2 #) ->
+        (# W# w1, W# w2 #) -> 
           case timesWord2# upper w1 of
-            (# result, fraction #) ->
+            (# result, fraction #) -> 
               case timesWord2# upper w2 of
-                (# x, _ #) ->
+                (# x, _ #) -> 
                   case plusWord2# fraction x of
-                    (# _, carry #) ->
+                    (# _, carry #) -> 
                       plusWord# result (int2Word# (gtWord# carry (int2Word# 0#)))
       )
 
@@ -286,10 +280,10 @@ uniformRange_internal x1 x2 = Generator go
 
 {-# INLINE independentSeed #-}
 independentSeed :: Generator Seed
-independentSeed = Generator go
+independentSeed = Generator go 
   where
     {-# INLINE go #-}
-    go seed0 =
+    go seed0 = 
         let !gen = uniformR (-1) maxBound
             (!seed1,(!state,!b,!c)) = generate ((,,) <$> gen <*> gen <*> gen) seed0
             !incr = (b `xor` c) .|. 1
@@ -298,7 +292,9 @@ independentSeed = Generator go
 
 {-# INLINE independent #-}
 independent :: (Seed -> a) -> Generator a
-independent f = f <$> independentSeed
+independent f = do
+  seed' <- independentSeed
+  pure (f seed')
 
 {-# INLINE list #-}
 list :: Generator a -> Generator [a]
@@ -307,14 +303,14 @@ list gen = go <$> independentSeed
 
 {-# INLINE vector #-}
 vector :: forall v a. (G.Vector v a) => Int -> Generator a -> Generator (v a)
-vector n g =
+vector n g = 
     -- Since the state isn't recoverable from G.unfoldrN, 
     -- we use an independent seed.
     G.unfoldrN n go <$> independentSeed
   where
     {-# INLINE go #-}
     go :: Seed -> Maybe (a,Seed)
-    go seed =
+    go seed = 
         let (seed',a) = generate g seed
         in Just (a,seed')
 
@@ -322,7 +318,7 @@ vector n g =
 -- `uniform` for Double produces in the range (0,1]. 
 -- To produce a Double in the interval [0,1):
 --
--- > pure sub <*> uniform
+-- > sub <$> uniform
 --
 {-# INLINE sub #-}
 sub :: Double -> Double
@@ -356,7 +352,7 @@ standard :: Generator Double
 standard = loop
   where
     loop = do
-      u  <- fmap (subtract 1 . (*2)) uniform
+      u  <- (subtract 1 . (*2)) `liftM` uniform
       ri <- uniform
       let i  = fromIntegral ((ri :: Word32) .&. 127)
           bi = U.unsafeIndex blocks i
@@ -375,8 +371,8 @@ standard = loop
                else loop
     normalTail neg  = tailing
       where tailing  = do
-              x <- fmap ((/rNorm) . log) uniform
-              y <- fmap log uniform
+              x <- ((/rNorm) . log) `liftM` uniform
+              y <- log              `liftM` uniform
               if y * (-2) < x * x
                 then tailing
                 else return $! if neg then x - rNorm else rNorm - x
@@ -421,13 +417,13 @@ gamma a b
 chiSquare :: Int -> Generator Double
 chiSquare n
   | n <= 0    = error "Data.Random.chiSquare: number of degrees of freedom must be positive"
-  | otherwise = (2 *) <$> gamma (0.5 * fromIntegral n) 1
+  | otherwise = (\x -> 2 * x) <$> gamma (0.5 * fromIntegral n) 1 
 
 {-# INLINE geometric0 #-}
 geometric0 :: Double -> Generator Int
 geometric0 p
   | p == 1          = pure 0
-  | p >  0 && p < 1 = floor . logBase (1 - p) <$> uniform
+  | p >  0 && p < 1 = (\q -> floor $ log q / log (1 - p)) <$> uniform
   | otherwise       = error "Data.Random.geometric0: probability out of [0,1] range"
 
 {-# INLINE geometric1 #-}
@@ -444,7 +440,7 @@ beta a b = do
 {-# INLINE dirichlet #-}
 dirichlet :: (Traversable t) => t Double -> Generator (t Double)
 dirichlet t = do
-  t' <- mapM (`gamma` 1) t
+  t' <- mapM (flip gamma 1) t
   let total = foldl' (+) 0 t'
   return $ fmap (/total) t'
 
@@ -458,8 +454,8 @@ categorical v
     | G.null v = error "Data.Random.categorical: empty weights"
     | otherwise = do
         let cv  = G.scanl1' (+) v
-        p <- fmap (G.last cv *) uniform
-        return $
+        p <- (G.last cv *) `liftM` uniform
+        return $ 
           case G.findIndex (>=p) cv of
             Just i  -> i
             Nothing -> error "Data.Random.categorical: bad weights"
@@ -475,4 +471,3 @@ logCategorical v
 {-# INLINE sqr #-}
 sqr :: Double -> Double
 sqr x = x * x
-
