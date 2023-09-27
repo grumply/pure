@@ -32,6 +32,10 @@ import GHC.Word
 #endif
 
 instance System.Random.RandomGen Seed where
+    {-# INLINE genWord64 #-}
+    genWord64 seed =
+      let (!seed',!i) = generate (fromIntegral <$> int) seed
+      in (i,seed')
     {-# INLINE next #-}
     next seed = 
         let (!seed',!i) = generate int seed
