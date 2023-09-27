@@ -113,6 +113,7 @@ library
     Data.HTML
     Data.Idle
     Data.JSON
+    Data.Key
     Data.Limiter
     Data.Localstorage
     Data.Log
