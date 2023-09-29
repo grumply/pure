@@ -137,6 +137,7 @@ library
     Data.Theme
     Data.Time
     Data.Time.Internal
+    Data.Trace
     Data.Try
     Data.Txt
     Data.Txt.Trie
