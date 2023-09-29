@@ -1,4 +1,4 @@
-{-# language DeriveAnyClass, BlockArguments, DerivingStrategies, DeriveGeneric, PatternSynonyms, ViewPatterns, MagicHash, UnboxedTuples, BangPatterns, TypeApplications, PartialTypeSignatures, CPP, TupleSections, GADTs, OverloadedStrings, RoleAnnotations #-}
+{-# language DeriveAnyClass, BlockArguments, DerivingStrategies, DeriveGeneric, PatternSynonyms, ViewPatterns, MagicHash, UnboxedTuples, BangPatterns, TypeApplications, PartialTypeSignatures, CPP, TupleSections, GADTs, OverloadedStrings, RoleAnnotations, PolyKinds #-}
 module Data.Marker 
   ( Marker
   , markIO
@@ -16,6 +16,11 @@ module Data.Marker
   , decodeBase16
   , encodeUUID
   , decodeUUID
+
+  , encodeFingerprint
+  , decodeFingerprint
+  , unsafeFingerprintToMarker 
+  , markerToFingerprint
   ) where
 
 import Data.JSON (ToJSON(..),FromJSON(..))
@@ -33,9 +38,29 @@ import Data.Hashable (Hashable(..))
 import Control.Monad (join)
 import Data.Bits (shift,(.|.))
 import Data.IORef (IORef,newIORef,atomicModifyIORef')
-import GHC.Word (Word64(..))
+import GHC.Fingerprint (Fingerprint(..))
 import GHC.Generics (Generic)
+import GHC.Word (Word64(..))
 import System.IO.Unsafe (unsafePerformIO)
+
+-- | Safely convert a Fingerprint to a Base62-encoded Txt through Marker.
+encodeFingerprint :: Fingerprint -> Txt
+encodeFingerprint = encodeBase62 . unsafeFingerprintToMarker
+
+-- | Convert a Base62-encoded Txt to a Fingerprint through Marker.
+decodeFingerprint :: Txt -> Fingerprint
+decodeFingerprint = markerToFingerprint . decodeBase62
+
+-- | Convert a Fingerprint to a Marker. This is unsafe, and should
+-- be used cautiously, as the conversion doesn't maintain the expected
+-- orderability of Marker.
+{-# WARNING unsafeFingerprintToMarker "Does not maintain the expected orderability of Marker" #-}
+unsafeFingerprintToMarker :: Fingerprint -> Marker Fingerprint
+unsafeFingerprintToMarker (Fingerprint w1 w2) = Marker w1 w2
+
+-- | Convert a Marker to a Fingerprint.
+markerToFingerprint :: Marker Fingerprint -> Fingerprint
+markerToFingerprint (Marker w1 w2) = Fingerprint w1 w2
 
 -- Reasonably performant UUID-compatible* time-tagged randoms based, roughly, 
 -- on ideas from https://github.com/anthonynsimon/timeflake
@@ -46,7 +71,7 @@ import System.IO.Unsafe (unsafePerformIO)
 -- * UUID-compatability is purely textual; if your external use only parses
 --   spec-valid UUIDs, it will fail.
 --
-data Marker a = Marker {-# UNPACK #-}!Word64 {-# UNPACK #-}!Word64
+data Marker (a :: k) = Marker {-# UNPACK #-}!Word64 {-# UNPACK #-}!Word64
   deriving (Generic,Eq,Ord,Show)
 type role Marker nominal
 

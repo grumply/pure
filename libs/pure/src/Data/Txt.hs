@@ -8,7 +8,6 @@ module Data.Txt
   ) where
 
 import Data.Char
-import Data.Default
 import Data.List as List
 import Data.String
 
@@ -103,8 +102,6 @@ i = QuasiQuoter {
   where
     err name  = error ("Data.Txt.i: This QuasiQuoter can not be used as a " ++ name)
 -}
-instance Default Txt where
-  def = mempty
 
 instance ToTxt a => ToTxt (Maybe a) where
   toTxt (Just a) = toTxt a

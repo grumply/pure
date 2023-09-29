@@ -15,11 +15,14 @@ import Data.Sequence (Seq)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
 import Data.Tree (Tree(..))
+import Data.Txt (Txt())
 
 import Data.ByteString as BS
 import Data.ByteString.Lazy as BSL
 
 import GHC.Generics
+
+import Data.Aeson (Value(Null))
 
 class Default a where
   def :: a
@@ -28,6 +31,8 @@ class Default a where
 
 instance Default Bool where def = False
 
+instance Default Txt where def = mempty
+instance Default Value where def = Null
 instance Default () where def = ()
 instance Default Ordering where def = EQ
 instance Default Any where def = Any False
