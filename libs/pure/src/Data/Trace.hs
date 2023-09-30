@@ -49,7 +49,7 @@ class (Typeable t, ToJSON t, FromJSON t) => Trace t where
     | otherwise 
     = Nothing
 
-instance Trace Value 
+instance Trace Value
 
 -- | A generic wrapper for a trace that is serializable and aggregable.
 -- This is much like the `SomeException` type in `Control.Exception`, with
@@ -62,9 +62,29 @@ instance Trace Value
 -- `SomeTrace` simply pulls out the associated tracing context (`[Key]`) and the
 -- `Time` it was generated.
 --
+-- TODO: 
+--   Switch to a stable version of `Fingerprint`.
+--
+--   Related discussions: 
+--     https://mail.haskell.org/pipermail/haskell-cafe/2014-October/116355.html
+--     https://stackoverflow.com/questions/32444236/serialisable-stable-representation-of-a-type
+--
+--   A potential replacement:
+--     https://hackage.haskell.org/package/hashabler-1.2.1
+--
 data SomeTrace = SomeTrace Fingerprint [Key] Time Value
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
+
+-- | SomeValue is a workaround for the case in which a type Fingerprint changes
+-- but you still need to inspect old trace data. With stable fingerprints, this
+-- would be unnecessary.
+newtype SomeValue = SomeValue Value 
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
+instance Trace SomeValue where
+  toTrace = error "Construction of SomeValue traces is disallowed."
+  fromTrace (SomeTrace _ ks t v) = Just (ks,t,SomeValue v)
 
 instance Trace SomeTrace where
   toTrace _ _ = id
