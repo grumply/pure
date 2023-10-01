@@ -1,14 +1,21 @@
-{-# language BlockArguments, DerivingStrategies, DeriveGeneric, DeriveAnyClass, ConstraintKinds, FlexibleContexts, RankNTypes, ScopedTypeVariables, StandaloneDeriving, AllowAmbiguousTypes, DataKinds, TypeOperators, TypeFamilies, TypeApplications, UndecidableInstances, FlexibleInstances, MultiParamTypeClasses, GADTs, PolyKinds #-}
+{-# language BlockArguments, DerivingStrategies, DeriveGeneric, DeriveAnyClass, ConstraintKinds, FlexibleContexts, RankNTypes, ScopedTypeVariables, StandaloneDeriving, AllowAmbiguousTypes, DataKinds, TypeOperators, TypeFamilies, TypeApplications, UndecidableInstances, FlexibleInstances, MultiParamTypeClasses, GADTs, PolyKinds, ExplicitNamespaces, ViewPatterns #-}
 module Data.Trace 
   ( Trace(..)
   , SomeTrace
   , Tracing
   , Tracer
   , tracer
-  , tracingWith
   , tracing
+  , tracingView
   , traces 
   , Emits(..)
+  , Flow
+  , Flows
+  , addFlow
+  , buildFlows
+  , mapFlows
+  , withFlows
+  , flowTracer
   ) where
 
 import Data.Foldable (for_)
@@ -16,26 +23,36 @@ import Data.JSON (ToJSON(..),FromJSON(..),Result(..),Value,fromJSON)
 import Data.Key (Key,keyIO,timestamp,keyToFingerprint,fingerprintToKey,unsafeFromKey,toKey)
 import Data.Marker (Marker)
 import Data.Time (Time,time)
-import Data.Type.Equality
 import Data.View (Exists(..),with,Producer,stream,yield)
 import Data.IORef (newIORef,mkWeakIORef,readIORef,IORef)
 import GHC.Fingerprint (Fingerprint(..))
 import GHC.Generics (Generic)
 import GHC.Types (Constraint)
 import GHC.Weak (deRefWeak,Weak)
-import GHC.TypeLits
+import GHC.TypeLits (TypeError,ErrorMessage(..),Nat,type (+))
 import System.IO.Unsafe (unsafePerformIO)
 import Data.Typeable (Typeable,typeOf,typeRepFingerprint)
-import GHC.TypeLits
+
+import Data.Function (on)
+import Data.List (groupBy,sortBy)
+import Data.Maybe (mapMaybe,fromJust)
+import Data.Ord (compare)
+import Data.Tree (Tree(..),Forest)
+import Data.View (State,state,modify,View,lazy)
 
 {- |
 
-The Data.Trace module provides a versatile framework for tracing that supports arbitrary JSON-isoformable data. It offers:
+Data.Trace is a library for hierarchical tracing of ToJSON + FromJSON data.
 
-- A generic wrapper (`SomeTrace`) to encapsulate traceable data
-- Easy-to-use inspection mechanisms via the `Trace` typeclass
+- A generic wrapper (`SomeTrace`) to encapsulate trace data 
+- Easy-to-use inspection mechanisms via the `Trace` type class
+- Simple instrumentation via the `Tracing` constraint
 - Modular handling of tracing through `tracer`
-- Type-safe (up to arbitrary trace data types in the wrapper) and hierarchy-agnostic tracing using `tracing` and the `emit` method from the `Emit` type class.
+- Type-safe and hierarchy-agnostic tracing using `tracing` and `emit` 
+
+tl;dr: Create your trace data types and add `Trace` instances. Instrument your
+code with a `Tracing` constraint. Satisfy the `Tracing` constraint with `tracer`
+as a base-case and `tracing` otherwise. Use `emit` to produce traces.
 
 ## Features
 
@@ -64,9 +81,17 @@ The Data.Trace module provides a versatile framework for tracing that supports a
    library tailored for your application domain. For example:
 
    ```haskell
-   data ClientPerformance = PageRenderStart Txt | FooterRenderStart Txt | PageUnloaded Txt
-   data ServerPerformance = Entry Txt | Exit Txt | ...
-   -- etc ...
+   data ClientPerformance 
+     = PageRenderStart Txt 
+     | HeaderRenderStart Txt
+     | ContentRenderStart Txt
+     | AsideRenderStart Txt
+     | FooterRenderStart Txt 
+     | ...
+   data ServerPerformance 
+     = Entry Txt 
+     | Exit Txt 
+     | ...
    ```
 
    The only constraint is that they be JSON-isoformable (ToJSON <=> FromJSON).
@@ -92,15 +117,13 @@ The Data.Trace module provides a versatile framework for tracing that supports a
    using a fixed-depth approach:
 
    ```haskell
-   type PageTracing n = Tracing ClientPerformance n -- Define a type alias for clarity
+   -- Define a type alias for clarity
+   type PageTracing n = Tracing ClientPerformance n 
 
-   -- Wrap the view in a trace that starts with a `PageRenderStart` and ends with a `PageUnloaded`.
+   -- Wrap the view in a trace that starts with a `PageRenderStart` and ends
+   -- with a `PageUnloaded`.
    tracePage :: (PageTracing 1 => View) -> (PageTracing 0 => View)
-   tracePage v = 
-     tracingWith @ClientPerformance @0 
-       (Just (PageRenderStart slug)) 
-       (Just (PageUnloaded slug))
-       v
+   tracePage = tracing @ClientPerformance @0
 
    -- Emit a trace event for the client performance at this point in the view.
    pageTrace :: PageTracing 1 => ClientPerformance -> View -> View
@@ -110,15 +133,17 @@ The Data.Trace module provides a versatile framework for tracing that supports a
    page :: PageTracing 0 => Page -> View
    page Page { slug } =  -- Assume `slug` is an identifier for the page
      tracePage do
-       Article <||>
-         [ pageTrace (HeaderRenderStart slug) do  -- Trace when header starts rendering
-            <... render page header ...>
-         , pageTrace (ContentRenderStart slug) do  -- Trace when content starts rendering
-            <... render page content proper ...>
-         , pageTrace (AsideRenderStart slug) do  -- Trace when aside starts rendering
-            <... render page aside ...>
-         , pageTrace (FooterRenderStart slug) do  -- Trace when footer starts rendering
-         ]
+       lazy (pageTrace (PageRenderStart slug)) do
+         Article <||>
+           [ pageTrace (HeaderRenderStart slug) do -- Trace header render start
+               <... render page header ...>
+           , pageTrace (ContentRenderStart slug) do -- Trace content render start 
+               <... render page content proper ...>
+           , pageTrace (AsideRenderStart slug) do -- Trace aside render start
+               <... render page aside ...>
+           , pageTrace (FooterRenderStart slug) do -- Trace footer render start
+               <... render page footer ...>
+           ]
    ```
 
    Tracing in this way can be used to keep track of performance across client
@@ -170,11 +195,18 @@ instance FromJSON Fingerprint where
 class (Typeable t, ToJSON t, FromJSON t) => Trace t where
   toTrace :: [Key] -> Time -> t -> SomeTrace
   fromTrace :: SomeTrace -> Maybe ([Key],Time,t)
+  fromTraceUnsafe :: SomeTrace -> Maybe ([Key],Time,t)
 
   toTrace ks t v = SomeTrace (typeRepFingerprint (typeOf v)) ks t (toJSON v)
   fromTrace (SomeTrace fp ks t v)
     | fp == typeRepFingerprint (typeOf (undefined :: t))
     , Success x <- fromJSON v 
+    = Just (ks,t,x)
+
+    | otherwise 
+    = Nothing
+  fromTraceUnsafe (SomeTrace fp ks t v)
+    | Success x <- fromJSON v 
     = Just (ks,t,x)
 
     | otherwise 
@@ -206,16 +238,6 @@ instance Trace Value
 data SomeTrace = SomeTrace Fingerprint [Key] Time Value
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
-
--- | SomeValue is a workaround for the case in which a type Fingerprint changes
--- but you still need to inspect old trace data. With stable fingerprints, this
--- would be unnecessary.
-newtype SomeValue = SomeValue Value 
-  deriving stock Generic
-  deriving anyclass (ToJSON,FromJSON)
-instance Trace SomeValue where
-  toTrace = error "Construction of SomeValue traces is disallowed."
-  fromTrace (SomeTrace _ ks t v) = Just (ks,t,SomeValue v)
 
 instance Trace SomeTrace where
   toTrace _ _ = id
@@ -359,46 +381,79 @@ instance {-# OVERLAPPABLE #-} Tracing domain n => Emits domain n where
 --   emit @domain @(n + 1) SomeTraceData
 -- ```
 --
--- ## Lifecycle Tracing
--- Using `tracingWith`, you may optionally emit traces when the context is
--- initialized, and/or when it is garbage collected by supplying the optional
--- `begin` and `end` arguments.
---
 -- ## Nesting Caution
 -- Creating the same trace context (`n + 1`), through `tracing`, in a nested
 -- fashion will produce ambiguous traces. Separate them into distinct functions
 -- to avoid this.
 --
--- ## Trace Finalization
--- Note the final trace is not guaranteed to be emitted timely, as it is emitted
--- when the context is cleaned up and the `Weak` associated with the `Key` 
--- constructed for the new context is finalized. If you need timely final traces,
--- you must annotate the code yourself in the location of your choosing.
---
--- ## Exceptions
--- There are no specified operational semantics with respect to exceptions 
--- within `tracing`; there is no catching and re-throwing to emit a final trace.
---
-tracingWith :: forall domain n begin end x. (Trace begin, Trace end, Tracing domain n) => Maybe begin -> Maybe end -> (Tracing domain (n + 1) => x) -> x
-tracingWith minitial mfinal x = unsafeGetKey `seq` with (Traces (unsafeGetKey : traces @domain @n) :: Traces domain (n + 1)) x
+{-# INLINE tracing #-}
+tracing :: forall domain n x. (Typeable domain, Tracing domain n) => (Tracing domain (n + 1) => x) -> x
+tracing = with (Traces (traces @domain @n ++ [k]) :: Traces domain (n + 1)) 
   where
+    {-# NOINLINE k #-}
+    k :: Key
+    k = unsafePerformIO keyIO
 
-    unsafeGetKey :: Key
-    unsafeGetKey = unsafePerformIO do
-      mior <- deRefWeak trace
-      case mior of
-        Nothing -> error "Invariant broken: tracing no longer available."
-        Just ior -> readIORef ior
+-- `tracing` specialized to `View` that guarantees a unique trace for each
+-- unique view. This can avoid an issue where, when using `tracing` within
+-- a helper function, the traces get inlined into it and each use of the
+-- helper function sees the same trace hierarchy.
+{-# INLINE tracingView #-}
+tracingView :: forall domain n. Tracing domain n => (Tracing domain (n + 1) => View) -> View
+tracingView v = 
+  lazy keyIO do
+    with (Traces (traces @domain @n ++ [it]) :: Traces domain (n + 1)) do
+      v
 
-    {-# NOINLINE trace #-}
-    trace = unsafePerformIO do
-      k <- keyIO
-      for_ minitial (yield . toTrace (k : traces @domain @n) (timestamp k))
-      ior <- newIORef k
-      mkWeakIORef ior do
-        now <- time
-        for_ mfinal (yield . toTrace (k : traces @domain @n) now)
+type Flow a = Tree (Key,[(Time,a)])
+type Flows a = Forest (Key,[(Time,a)])
 
--- | A synonym for `tracingWith @domain @n Nothing Nothing`.
-tracing :: forall domain n x. Tracing domain n => (Tracing domain (n + 1) => x) -> x
-tracing = tracingWith @domain @n (Nothing @SomeTrace) (Nothing @SomeTrace)
+addFlow :: forall a. ([Key],Time,a) -> Flows a -> Flows a
+addFlow (ks,at,t) fs = go ks fs
+  where
+    go :: [Key] -> Flows a -> Flows a
+    go ks [] = [toFlow ks]
+    go (k:ks) fs@(f@(Node (key,ts) children) : rest)
+      | k > key            = toFlow (k:ks) : fs
+      | k == key, [] <- ks = Node (key,addTrace ts) children : rest
+      | k == key           = Node (key,ts) (go ks children) : rest
+      | otherwise          = f : go (k:ks) rest
+
+    toFlow :: [Key] -> Flow a
+    toFlow []     = error "invariant broken: SomeTrace has depth 0."
+    toFlow [k]    = Node (k,[(at,t)]) []
+    toFlow (k:ks) = Node (k,[]) [toFlow ks]
+
+    addTrace :: [(Time,a)] -> [(Time,a)]
+    addTrace [] = [(at,t)]
+    addTrace ts@(x : rest)
+      | at >= fst x = (at,t) : ts
+      | otherwise   = x : addTrace rest
+
+buildFlows :: forall a. Trace a => [SomeTrace] -> Flows a
+buildFlows = foldr addFlow ([] :: Flows a) . mapMaybe fromTrace
+
+mapFlows :: forall a. Trace a => Flows SomeTrace -> Flows a
+mapFlows = mapMaybe go
+  where
+    go :: Flow SomeTrace -> Maybe (Flow a)
+    go (Node (k,mapMaybe extract -> ts) (mapFlows -> cs)) 
+      | [] <- ts
+      , [] <- cs 
+      = Nothing
+
+      | otherwise 
+      = Just (Node (k,ts) cs)
+
+    extract :: (Time,SomeTrace) -> Maybe (Time,a)
+    extract (t,st) =
+      case fromTrace st of
+        Nothing -> Nothing
+        Just (_,_,a) -> Just (t,a)
+
+withFlows :: forall a. Typeable a => (State (Flows a) => View) -> View
+withFlows = state ([] :: Flows a)
+
+flowTracer :: forall a. (Trace a, State (Flows a)) => SomeTrace -> IO ()
+flowTracer (fromTrace -> Just a) = modify (addFlow @a a)
+flowTracer _ = pure ()
