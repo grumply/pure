@@ -802,34 +802,20 @@ or l r = Data.View.caught @SomeException l (const r)
 class Exists a where
   it :: a
 
-{-
-data Witness a r = Witness (Exists a => Proxy a -> r)
-
--- This configuration is not preferable, but it avoids a constraint satisfaction 
--- propagation issue. Using the `unsafeCoerce` approach for `with` along with
--- `GHC.Exts.inline` was able to completely remove dictionaries from the generated 
--- core, but calls to `with` were (sometimes) allowed to satisfy non-local 
--- `Exists` constraints! 
---
--- See: https://gitlab.haskell.org/ghc/ghc/-/issues/21575
---
-{-# NOINLINE withWitness #-}
-withWitness :: forall a r. (Exists a => Proxy a -> r) -> a -> Proxy a -> r
-withWitness w a p = magicDict (Witness w) a p
-
-{-# INLINE with' #-}
-with' :: forall a r. a -> (Exists a => r) -> r
-with' a w = withWitness (\_ -> w) a Proxy
--}
-
 newtype Witness a r = Witness (Exists a => r)
 
--- This approach is likely to produce bugs, but the performance improvement over
--- the magicDict version can be massive. Keep `with` in mind if anything
--- inexplicable happens.
-{-# INLINABLE with #-}
+-- using `inline` on the `unsafeCoerce` seems to avoid an issue with GHC 
+-- floating `it` values out at some optimization levels on GHC < 8.11 (16893
+-- fixed in 8.11). I suspect that the `inline` /slightly/ delays the coercion -
+-- just enough to avoid the issue. Hopefully it is sufficient for all cases
+-- since the inline `with` can produce /much/ better core than the noinline
+-- version and `with` is used quite a lot. I suspect that there are still
+-- issues, but hopefully they're minimized enough for this approach to work
+-- until I can switch to 9.* with the new JS backend and the newer coercion
+-- mechanisms (and, perhaps, switch to magicDict).
+{-# INLINE with #-}
 with :: forall a r. a -> (Exists a => r) -> r
-with a w = inline (unsafeCoerce (Witness w :: Witness a r)) (inline a)
+with a w = inline (unsafeCoerce (Witness w :: Witness a r)) a
 
 {-# INLINE using #-}
 -- | Like `contramap` for existentials; existential refinement. 
