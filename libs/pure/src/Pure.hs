@@ -32,6 +32,7 @@ import Data.Default as Export
 import Data.Hashable as Export
 import Data.HTML as Export hiding (Style,DateTime,Select,Accept,Alt,ContextMenu,Meta,Selected,Async,Form)
 import Data.JSON as Export hiding (Null,Key,lookup,match,Number)
+import Data.Key as Export hiding (timestamp)
 import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list,exponential) 
 import Data.Scroll as Export
@@ -39,6 +40,7 @@ import Data.Slug as Export
 import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize,translate,events,empty,change,lower)
 import Data.Theme as Export hiding (within)
 import Data.Time as Export hiding (Time_,every,duration)
+import Data.Trace as Export
 import Data.Try as Export hiding (try)
 import Data.Txt as Export (Txt,ToTxt(..),FromTxt(..))
 import Data.View as Export hiding (queueComponentUpdate,getHost,initialize,content,Styles,On,Raw,lifecycles,Lifecycles,attributes)
