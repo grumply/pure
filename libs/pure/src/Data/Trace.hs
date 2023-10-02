@@ -628,25 +628,19 @@ mapFlows = mapMaybe go
 {-# INLINE flow #-}
 flow :: forall domain a. (Typeable a, Trace a) => ((Exists (Flow a), Tracing domain 0) => View) -> View
 flow x = 
-  with (Traces [root] :: Traces domain 0) do
-    state (keyFlow [root] :: Flow a) do
-      stream (modify . addToFlow @a) do
-        x
-  where
-    {-# NOINLINE root #-}
-    root :: Key
-    root = unsafePerformIO keyIO
+  lazy keyIO do
+    with (Traces [it] :: Traces domain 0) do
+      state (keyFlow [it] :: Flow a) do
+        stream (modify . addToFlow @a) do
+          x
 
 -- | Construct a `Flows` tracer context. This tracer will integrate all 
 -- `emit`ted values into the `Flows` state that is supplied to the `View`.
 {-# INLINE flows #-}
 flows :: forall domain a. (Typeable a, Trace a) => ((Exists (Flows a), Tracing domain 0) => View) -> View
 flows x = 
-  state ([] :: Flows a) do
-    with (Traces [root] :: Traces domain 0) do
-      stream (modify . addToFlows @a) do
-        x
-  where
-    {-# NOINLINE root #-}
-    root :: Key
-    root = unsafePerformIO keyIO
+  lazy keyIO do
+    with (Traces [it] :: Traces domain 0) do
+      state ([] :: Flows a) do
+        stream (modify . addToFlows @a) do
+          x
