@@ -4,9 +4,12 @@ module Data.Trace
   , SomeTrace
   , Tracing
   , Tracer
+  , Key
+  , keyIO
   , tracer
   , tracerWith
   , tracing
+  , tracingWith
   , tracingView
   , traces 
   , emit
@@ -21,13 +24,19 @@ module Data.Trace
   , mergeFlows
   ) where
 
-import Data.Foldable (for_)
+import Data.Bifunctor (first)
+import Data.Foldable (traverse_)
+import Data.Function (on)
+import Data.IORef (newIORef,mkWeakIORef,readIORef,IORef)
 import Data.JSON (ToJSON(..),FromJSON(..),Result(..),Value,fromJSON)
 import Data.Key (Key,keyIO,timestamp,keyToFingerprint,fingerprintToKey,unsafeFromKey,toKey)
+import Data.List as List (groupBy,sortBy,length)
 import Data.Marker (Marker)
+import Data.Maybe (mapMaybe,fromJust,listToMaybe)
+import Data.Ord (compare)
 import Data.Time (Time,time)
-import Data.View (Exists(..),with,Producer,stream,yield)
-import Data.IORef (newIORef,mkWeakIORef,readIORef,IORef)
+import Data.Tree (Tree(..),Forest)
+import Data.View (Exists(..),with,Producer,stream,yield,State,state,modify,View,lazy)
 import GHC.Fingerprint (Fingerprint(..))
 import GHC.Generics (Generic)
 import GHC.Types (Constraint)
@@ -35,15 +44,6 @@ import GHC.Weak (deRefWeak,Weak)
 import GHC.TypeLits (TypeError,ErrorMessage(..),Nat,type (+))
 import System.IO.Unsafe (unsafePerformIO)
 import Data.Typeable (Typeable,typeOf,typeRepFingerprint)
-
-import Data.Bifunctor (first)
-import Data.Foldable (traverse_)
-import Data.Function (on)
-import Data.List as List (groupBy,sortBy,length)
-import Data.Maybe (mapMaybe,fromJust,listToMaybe)
-import Data.Ord (compare)
-import Data.Tree (Tree(..),Forest)
-import Data.View (State,state,modify,View,lazy)
 
 {- |
 
@@ -417,25 +417,70 @@ instance {-# OVERLAPPABLE #-} Tracing domain n => Emits domain n where
 -- fashion will produce ambiguous traces. Separate them into distinct functions
 -- to avoid this.
 --
--- ## Duplicated Trace Contexts
--- Due to the way `tracing` is implemented, using it within a helper, say for
--- depth-independent tracing, can, depending on your use-case, lead to
--- unexpected results. For example:
---
+-- ## Stable Keys
+-- The way `tracing` works may result in unexpected key behavior. For example:
 -- ```
--- someTracingHelper :: 
+-- demo :: forall d n. Tracing d n => IO () -> IO ()
+-- demo f = do
+--   tracing @d @n do
+--     emit @d @(n + 1) SomeStartTrace 
+--     f
+--     emit @d @(n + 1) SomeEndTrace
+--
+-- main = do
+--   tracer @() (putStrLn . fromTxt . pretty) do
+--     demo @() @0 (print "1")
+--     demo @() @0 (print "2")
+-- ```
+-- You would likely expect the above code to produce 3 unique keys: 
+--   - one in the root `tracer`
+--   - one in the first call to `demo`
+--   - one in the second call to `demo`
+-- Instead, only produce 2 unique keys: 
+--   - one in the root tracer
+--   - one in the first call to `demo`
+-- The key produced in the first call to demo is then reused. If you
+-- mark `demo` as INLINE, you will get 3 unique keys, as you might
+-- expect.
+--
+-- Now consider this implementation of `test`:
+-- ```
+-- test n = do
+--   tracer @() (putStrLn . fromTxt . pretty) do
+--     replicateM n (demo @() @0 (pure ()))
+-- ```
+-- In this case, no matter what `n` you pass to `test` or what inlining you
+-- mark `demo` with, you will only get 2 unique keys from `test`.
+-- 
+-- ### Workarounds
+-- 1. Use `tracingWith` to manually supply a unique `Key` generated with 
+--    `key` or `keyIO`. Exercise caution to avoid key re-use.
+-- 2. If dealing with a `View` hierarchy, `tracingView` ensures a unique `Key`
+--    for each call.
+--
+-- ### Why Care?
+-- Tracing is often done with respect to the code, and not the operational
+-- semantics, so stable keys can be a powerful tool to aggregate associated
+-- traces in a way that is often complex or cumbersome to do manually. 
+--
 {-# INLINE tracing #-}
-tracing :: forall domain n x. (Typeable domain, Tracing domain n) => (Tracing domain (n + 1) => x) -> x
+tracing :: forall domain n x. Tracing domain n => (Tracing domain (n + 1) => x) -> x
 tracing = with (Traces (traces @domain @n ++ [k]) :: Traces domain (n + 1)) 
   where
     {-# NOINLINE k #-}
     k :: Key
     k = unsafePerformIO keyIO
 
--- `tracing` specialized to `View` that guarantees a unique trace for each
--- unique view. This can avoid an issue where, when using `tracing` within
--- a helper function, the traces get inlined into it and each use of the
--- helper function sees the same trace hierarchy.
+-- | A specialization of `tracing` that allows for supplying a custom `Key`.
+-- See the comments in [Stable Keys] for `tracingWith` to understand why this
+-- might be necessary.
+{-# INLINE tracingWith #-}
+tracingWith :: forall domain n x. Tracing domain n => Key -> (Tracing domain (n + 1) => x) -> x
+tracingWith k = with (Traces (traces @domain @n ++ [k]) :: Traces domain (n + 1)) 
+
+-- | A specialization of `tracingView` that guarantees a new trace hierarchy on
+-- each call. See the comments in [Stable Keys] for `tracingWith` to understand
+-- why this might be necessary.
 {-# INLINE tracingView #-}
 tracingView :: forall domain n. Tracing domain n => (Tracing domain (n + 1) => View) -> View
 tracingView v = 
@@ -580,6 +625,7 @@ mapFlows = mapMaybe go
 
 -- | Construct a `Flow` tracer context. This tracer will integrate all `emit`ted
 -- values into the `Flow` state that is supplied to the `View`.
+{-# INLINE flow #-}
 flow :: forall domain a. (Typeable a, Trace a) => ((Exists (Flow a), Tracing domain 0) => View) -> View
 flow x = 
   with (Traces [root] :: Traces domain 0) do
@@ -593,6 +639,7 @@ flow x =
 
 -- | Construct a `Flows` tracer context. This tracer will integrate all 
 -- `emit`ted values into the `Flows` state that is supplied to the `View`.
+{-# INLINE flows #-}
 flows :: forall domain a. (Typeable a, Trace a) => ((Exists (Flows a), Tracing domain 0) => View) -> View
 flows x = 
   state ([] :: Flows a) do
