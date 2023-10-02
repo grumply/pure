@@ -5,10 +5,11 @@ module Data.Trace
   , Tracing
   , Tracer
   , tracer
+  , tracerWith
   , tracing
   , tracingView
   , traces 
-  , Emits(..)
+  , emit
   , Flow
   , Flows
   , addFlow
@@ -276,6 +277,19 @@ type Tracer domain = Tracing domain 0
 -- | Initializes the base `Tracing domain 0` context by specifying how traces
 -- are to be managed.
 --
+-- This is a synonym for `tracerWith [root]` where `root` is dynamically
+-- generated once for a given `tracer`.
+{-# INLINE tracer #-}
+tracer :: forall domain x. (SomeTrace -> IO ()) -> (Tracing domain 0 => x) -> x
+tracer h x = stream h (with (Traces [root] :: Traces domain 0) x)
+  where
+    {-# NOINLINE root #-}
+    root :: Key
+    root = unsafePerformIO keyIO
+
+-- | Initial the base `Tracing domain 0` context by specifying the root keys
+-- and how traces are to be managed. 
+--
 -- ## Configuration
 -- Use this function to configure the trace management strategy, such as
 -- storage, routing, or analysis.
@@ -296,12 +310,10 @@ type Tracer domain = Tracing domain 0
 -- Note that this is the only way to establish the base `Tracing domain 0`
 -- context, which is essential for using `tracing`.
 -- 
--- ## Trace Hierarchy
--- The initialized `Tracing domain 0` context does not contain any tracing
--- hierarchy by default. It simply provides a framework within which a
--- domain-specific tracing hierarchy can be constructed and managed.
-tracer :: forall domain x. (SomeTrace -> IO ()) -> (Tracing domain 0 => x) -> x
-tracer h x = stream h (with (Traces [] :: Traces domain 0) x)
+{-# INLINE tracerWith #-}
+tracerWith :: forall domain x. [Key] -> (SomeTrace -> IO ()) -> (Tracing domain 0 => x) -> x
+tracerWith [] _ _ = error "Invalid root trace depth: 0"
+tracerWith root h x = stream h (with (Traces root :: Traces domain 0) x)
 
 newtype Traces (domain :: k) (n :: Nat) = Traces [Key]
 
@@ -321,7 +333,6 @@ traces = let Traces ts = it :: Traces domain n in ts
 --
 -- ## Requirements
 -- - Must be invoked within an existing tracing context for the same `domain` and depth.
--- - Emitting at a depth of `0` is a compile-time error to prevent orphan traces.
 --
 -- ## Establishing Context
 -- For establishing a tracing context, see `tracer` and `tracing`.
@@ -334,9 +345,21 @@ traces = let Traces ts = it :: Traces domain n in ts
 -- ```
 --
 -- ## Trace Types
--- Any data type may be emitted at any level (other than `0`) as long as it has
--- a `Trace` instance. This is analogous to how `throw` can handle any type with
+-- Any data type may be emitted at any level as long as it has a `Trace`
+-- instance. This is analogous to how `throw` can handle any type with
 -- an `Exception` instance.
+emit :: forall domain n t. (Tracing domain n, Trace t) => t -> IO ()
+emit t = do
+  now <- time
+  yield (toTrace (traces @domain @n) now t)
+
+{-
+-- Unfortunately, this approach does not work in depth-independent helpers since
+-- `n` cannot be inferred. It works well for depth-dependent contexts, though.
+-- I'll have to figure out another way to guarantee that all traces are at 
+-- `depth > 0`. I have considered having tracer introduce a Key, but that ties
+-- all traced contexts to a tracer in a way that I'm not sure is desirable.
+
 class Emits domain n where
   emit :: forall t. Trace t => t -> IO ()
 
@@ -349,6 +372,7 @@ instance {-# OVERLAPPABLE #-} Tracing domain n => Emits domain n where
   emit t = do
     now <- time
     yield (toTrace (traces @domain @n) now t)
+-}
 
 -- | The `tracing` function establishes a new trace context relative to an
 -- existing one, incrementing the depth (`n`) by 1.
