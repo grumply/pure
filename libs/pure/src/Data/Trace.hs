@@ -12,11 +12,13 @@ module Data.Trace
   , emit
   , Flow
   , Flows
-  , addFlow
-  , buildFlows
+  , flow
+  , flows
+  , mapFlow
   , mapFlows
-  , withFlows
-  , flowTracer
+  , buildFlow
+  , buildFlows
+  , mergeFlows
   ) where
 
 import Data.Foldable (for_)
@@ -34,9 +36,11 @@ import GHC.TypeLits (TypeError,ErrorMessage(..),Nat,type (+))
 import System.IO.Unsafe (unsafePerformIO)
 import Data.Typeable (Typeable,typeOf,typeRepFingerprint)
 
+import Data.Bifunctor (first)
+import Data.Foldable (traverse_)
 import Data.Function (on)
-import Data.List (groupBy,sortBy)
-import Data.Maybe (mapMaybe,fromJust)
+import Data.List as List (groupBy,sortBy,length)
+import Data.Maybe (mapMaybe,fromJust,listToMaybe)
 import Data.Ord (compare)
 import Data.Tree (Tree(..),Forest)
 import Data.View (State,state,modify,View,lazy)
@@ -244,6 +248,9 @@ instance Trace SomeTrace where
   toTrace _ _ = id
   fromTrace st@(SomeTrace _ ks t _) = Just (ks,t,st)
 
+traceKeys :: SomeTrace -> [Key]
+traceKeys (SomeTrace _ ks _ _) = ks
+
 -- | Core tracing constraint for associating code with a specific tracing
 -- hierarchy and depth.
 --
@@ -410,6 +417,13 @@ instance {-# OVERLAPPABLE #-} Tracing domain n => Emits domain n where
 -- fashion will produce ambiguous traces. Separate them into distinct functions
 -- to avoid this.
 --
+-- ## Duplicated Trace Contexts
+-- Due to the way `tracing` is implemented, using it within a helper, say for
+-- depth-independent tracing, can, depending on your use-case, lead to
+-- unexpected results. For example:
+--
+-- ```
+-- someTracingHelper :: 
 {-# INLINE tracing #-}
 tracing :: forall domain n x. (Typeable domain, Tracing domain n) => (Tracing domain (n + 1) => x) -> x
 tracing = with (Traces (traces @domain @n ++ [k]) :: Traces domain (n + 1)) 
@@ -432,31 +446,120 @@ tracingView v =
 type Flow a = Tree (Key,[(Time,a)])
 type Flows a = Forest (Key,[(Time,a)])
 
-addFlow :: forall a. ([Key],Time,a) -> Flows a -> Flows a
-addFlow (ks,at,t) fs = go ks fs
+-- | Contruct an empty `Flow a` from a `[Key]`.
+--
+-- This is purely a convenience to construct a `Flow` when the only data
+-- available is a `[Key]`, which can occur at some tracing roots.
+keyFlow :: [Key] -> Flow a
+keyFlow = go
+  where
+    go [] = error "invariant broken: SomeTrace has depth 0."
+    go [k] = Node (k,[]) []
+    go (k:ks) = Node (k,[]) [go ks]
+
+-- | Construct a `Flow a` from a `[Key]`, a `Time` and an `a`.
+--
+-- This is used as a base case for some flow merges.
+toFlow :: [Key] -> Time -> a -> Flow a
+toFlow ks0 at a = go ks0
+  where
+    go [] = error "invariant broken: SomeTrace has depth 0."
+    go [k] = Node (k,[(at,a)]) []
+    go (k:ks) = Node (k,[]) [go ks]
+
+-- | Integrate a `SomeTrace` into a `Flow a`. 
+addToFlow :: Trace a => SomeTrace -> Flow a -> Flow a
+addToFlow (SomeTrace fp (kl:ks) t v) f@(Node (kr,ts) cs) =
+  let k = min kl kr in head (addToFlows (SomeTrace fp (k : ks) t v) [Node (k,ts) cs])
+addToFlow _ _ = error "invariant broken: SomeTrace has depth 0."
+
+-- | Merge a `Flows a` into a `Flow a` by taking the minimum root `Key` and 
+-- merging the traces and children as expected.
+mergeFlows :: Flows a -> Flow a
+mergeFlows fs =
+  Node (minimum ks,merge (flip compare `on` fst) ts)
+    (merge (flip compare `on` (fst . rootLabel)) cs)
+  where
+    ks = fmap (\(Node (k,_) _) -> k) fs
+    ts = fmap (\(Node (_,ts) _) -> ts) fs
+    cs = fmap (\(Node _ cs) -> cs) fs
+
+    -- A helper to merge a list of sorted lists. Should be O(kn log k) for k lists
+    -- of average length n. In theory, this should be slightly better than the 
+    -- concatenate-and-sort impelementation when k^k < n.
+    merge :: forall a. (a -> a -> Ordering) -> [[a]] -> [a]
+    merge ord xss
+      | ks ** ks < ns = mergesort xss
+      | otherwise     = simplesort xss
+      where
+        ks, ns :: Double
+        ks = fromIntegral (List.length xss)
+        ns = fromIntegral (sum (fmap List.length xss))
+
+        simplesort = sortBy ord . concat 
+
+        mergesort []   = []
+        mergesort [xs] = xs
+        mergesort xss  = mergesort (work xss)
+          where
+            work :: [[a]] -> [[a]]
+            work []          = []
+            work [xs]        = [xs]
+            work (xs:ys:xss) = work (go xs ys : work xss)
+              where
+                go :: [a] -> [a] -> [a]
+                go [] ys = ys
+                go xs [] = xs
+                go (x:xs) (y:ys)
+                  | LT <- ord x y = x : go xs (y:ys)
+                  | otherwise     = y : go (x:xs) ys
+
+-- | Integrate a `SomeTrace` into a `Flows a` via `fromTrace`.
+addToFlows :: forall a. Trace a => SomeTrace -> Flows a -> Flows a
+addToFlows (fromTrace -> Just (ks,at,t)) = go ks
   where
     go :: [Key] -> Flows a -> Flows a
-    go ks [] = [toFlow ks]
+    go ks [] = [toFlow ks at t]
     go (k:ks) fs@(f@(Node (key,ts) children) : rest)
-      | k > key            = toFlow (k:ks) : fs
+      | k > key            = toFlow (k:ks) at t : fs
       | k == key, [] <- ks = Node (key,addTrace ts) children : rest
       | k == key           = Node (key,ts) (go ks children) : rest
       | otherwise          = f : go (k:ks) rest
-
-    toFlow :: [Key] -> Flow a
-    toFlow []     = error "invariant broken: SomeTrace has depth 0."
-    toFlow [k]    = Node (k,[(at,t)]) []
-    toFlow (k:ks) = Node (k,[]) [toFlow ks]
 
     addTrace :: [(Time,a)] -> [(Time,a)]
     addTrace [] = [(at,t)]
     addTrace ts@(x : rest)
       | at >= fst x = (at,t) : ts
       | otherwise   = x : addTrace rest
+addToFlows _ = id
 
+-- | Construct a `Flows a` from a given `[SomeTrace]`. Note that `a` may be
+-- specified as `SomeTrace`.
+--
+-- > buildFlows == foldr addFlow []
+--
 buildFlows :: forall a. Trace a => [SomeTrace] -> Flows a
-buildFlows = foldr addFlow ([] :: Flows a) . mapMaybe fromTrace
+buildFlows = foldr (addToFlows @a) []
 
+-- | Construct a `Flow a` from a given `[SomeTrace]`. Note that `a` may be
+-- specified as `SomeTrace`.
+--
+-- > buildFlow == mergeFlows . buildFlows
+--
+buildFlow :: forall a. Trace a => [SomeTrace] -> Flow a
+buildFlow = mergeFlows . buildFlows
+
+-- | Analyze a `Flow SomeTrace` for instances of the type `a`.
+-- If there are no `a`s, `Nothing` is returned. On success, 
+-- the `Flow` will be as shallow as possible.
+-- 
+-- > mapFlow == listToMaybe . mapFlows . (:[])
+--
+mapFlow :: Trace a => Flow SomeTrace -> Maybe (Flow a)
+mapFlow = listToMaybe . mapFlows . (:[])
+
+-- | Analyze a `Flows SomeTrace` for instances of the type `a`.
+-- The `Flow`s will be as shallow as possible; `mapFlows` prunes.
 mapFlows :: forall a. Trace a => Flows SomeTrace -> Flows a
 mapFlows = mapMaybe go
   where
@@ -475,9 +578,28 @@ mapFlows = mapMaybe go
         Nothing -> Nothing
         Just (_,_,a) -> Just (t,a)
 
-withFlows :: forall a. Typeable a => (State (Flows a) => View) -> View
-withFlows = state ([] :: Flows a)
+-- | Construct a `Flow` tracer context. This tracer will integrate all `emit`ted
+-- values into the `Flow` state that is supplied to the `View`.
+flow :: forall domain a. (Typeable a, Trace a) => ((Exists (Flow a), Tracing domain 0) => View) -> View
+flow x = 
+  with (Traces [root] :: Traces domain 0) do
+    state (keyFlow [root] :: Flow a) do
+      stream (modify . addToFlow @a) do
+        x
+  where
+    {-# NOINLINE root #-}
+    root :: Key
+    root = unsafePerformIO keyIO
 
-flowTracer :: forall a. (Trace a, State (Flows a)) => SomeTrace -> IO ()
-flowTracer (fromTrace -> Just a) = modify (addFlow @a a)
-flowTracer _ = pure ()
+-- | Construct a `Flows` tracer context. This tracer will integrate all 
+-- `emit`ted values into the `Flows` state that is supplied to the `View`.
+flows :: forall domain a. (Typeable a, Trace a) => ((Exists (Flows a), Tracing domain 0) => View) -> View
+flows x = 
+  state ([] :: Flows a) do
+    with (Traces [root] :: Traces domain 0) do
+      stream (modify . addToFlows @a) do
+        x
+  where
+    {-# NOINLINE root #-}
+    root :: Key
+    root = unsafePerformIO keyIO
