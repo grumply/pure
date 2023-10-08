@@ -338,7 +338,7 @@ class Methods r => Server r where
        , Lambda (Place r)
        , Lambda (Delete r)
        ) => Server.Handler
-  handlers = Handler (if path == toTxt (base @r) then go else Nothing)
+  handlers = Handler (if path == toTxt (endpoint @r) then go else Nothing)
     where
       go :: Exists Request => Maybe Application
       go | method == methodGet     = fmap (queryMiddleware  @r) (handler (lambda (Endpoint.query  @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.query  @r)))

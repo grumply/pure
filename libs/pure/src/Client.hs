@@ -4,7 +4,7 @@ module Client
   , Client.query, Client.update, Client.create, Client.place, Client.delete, Client.query'
   -- ,ws,wssend,wsmessage,wserror
   , sseWith, sse
-  , base, API(..)
+  , endpoint, API(..)
   , Query, Update, Create
   , module Export
   ) where
