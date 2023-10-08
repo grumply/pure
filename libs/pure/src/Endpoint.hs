@@ -216,19 +216,19 @@ class Typeable r => Methods r where
   endpoint :: Endpoint method x
   endpoint = defaultBase @r
     
-create :: POST (Create r)
+create :: forall r. Methods r => POST (Create r)
 create = endpoint @r
 
-update :: PATCH (Update r)
+update :: forall r. Methods r => PATCH (Update r)
 update = endpoint @r
 
-query :: GET (Query r)
+query :: forall r. Methods r => GET (Query r)
 query = endpoint @r
 
-place :: PUT (Place r)
+place :: forall r. Methods r => PUT (Place r)
 place = endpoint @r
 
-delete :: DELETE (Delete r)
+delete :: forall r. Methods r => DELETE (Delete r)
 delete = endpoint @r
 
 defaultBase :: forall r method x. Typeable r => Endpoint method x
