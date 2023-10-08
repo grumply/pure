@@ -3,6 +3,7 @@ module Server
   ( Handler(..)
   , serve
   , Lambda(..), Channel(..), ToMethod(..)
+  , SomeEventId(),EventId(..),lastEventId
   , middleware, cache, logging
   , path, method, agent, host, match
   , unauthorized
@@ -19,7 +20,7 @@ module Server
   , module Export
   ) where
 
-import qualified Pure as Export hiding (Handler,read,Read)
+import qualified Pure as Export hiding (Handler,read,Read,Key)
 
 import Control.Concurrent
 import Control.Exception as E (SomeException,Exception(..),throw,handle,catch,evaluate)
@@ -37,6 +38,8 @@ import Data.Map as Map
 import Data.Kind
 import qualified Data.List as List
 import Data.Maybe
+import Data.Marker (Marker(..))
+import Data.Key (Key(..))
 import Data.Time (pattern Seconds,pattern Second,Time)
 import Data.Traversable
 import Data.Typeable
@@ -44,6 +47,7 @@ import Data.Txt as Txt
 import Data.View hiding (Event,Handler,channel)
 import Data.Void
 import GHC.Generics
+import Text.Read (readMaybe)
 
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy as BSL
@@ -124,16 +128,70 @@ instance ToMethod 'Endpoint.CONNECT where toMethod = methodConnect
 match :: forall method x. ToMethod method => Endpoint method x -> (Exists Request => Bool)
 match (Endpoint _ p) = method == toMethod @method && path == p
 
+newtype SomeEventId = SomeEventId Txt
+class EventId x where
+  toEventId :: x -> SomeEventId
+  default toEventId :: Show x => x -> SomeEventId
+  toEventId = SomeEventId . toTxt . show
+  fromEventId :: SomeEventId -> Maybe x
+  default fromEventId :: Read x => SomeEventId -> Maybe x
+  fromEventId (SomeEventId x) = readMaybe (fromTxt x)
+instance EventId Txt where
+  toEventId = SomeEventId
+  fromEventId (SomeEventId eid) = Just eid
+instance EventId Int
+instance EventId Integer
+instance EventId (Marker a) where
+  toEventId = SomeEventId . toTxt
+  fromEventId (SomeEventId e) = Just (fromTxt e)
+instance EventId Data.Key.Key where
+  toEventId = SomeEventId . toTxt
+  fromEventId (SomeEventId e) = Just (fromTxt e)
+
+lastEventId :: (Exists Request, EventId x) => Maybe x
+lastEventId = do
+  eid <- Prelude.lookup "last-event-id" (requestHeaders it)
+  fromEventId (SomeEventId (toTxt eid))
+
 class Channel a where
-  channel :: Endpoint 'Endpoint.GET a -> Bool -> a -> Handler
+  channel :: Endpoint 'Endpoint.GET a -> Bool -> (Exists Request => a) -> Handler
 
 instance Channel Void where
   channel ep _ _ = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
-      endpoint request respond = respond (responseLBS status200 [] def) 
+      endpoint request respond = respond (responseLBS status501 [] def) 
 
-instance ToJSON r => Channel (IO [r]) where
+instance {-# OVERLAPPING #-} ToJSON r => Channel (IO [(SomeEventId,r)]) where
+  channel ep _ l = Handler (if match ep then Just endpoint else Nothing)
+    where
+      endpoint :: Exists Request => Application
+      endpoint _ respond = do
+        let 
+          responder write flush = 
+            let
+              push (SomeEventId eid,b) = do
+                write ("id: " <> fromLazyByteString (fromTxt eid) <> "\ndata: " <> fromLazyByteString (encode b) <> "\n\n")
+                flush
+
+              handler e 
+                -- short-circuits simply end the stream without raising an error
+                -- while unknown exceptions get re-thrown.
+                | Just Unauthorized   <- fromException e = pure ()
+                | Just (_ :: Respond) <- fromException e = pure () 
+                | otherwise                              = E.throw e
+
+            in 
+              handle handler (l >>= mapM_ push)
+
+        respond (responseStream status200 
+          [(hContentType,"text/event-stream")
+          ,(hCacheControl,"no-cache")
+          ,(hConnection,"keep-alive")
+          ] responder
+          )
+
+instance {-# OVERLAPPABLE #-} ToJSON r => Channel (IO [r]) where
   channel ep _ l = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
@@ -162,7 +220,50 @@ instance ToJSON r => Channel (IO [r]) where
           ] responder
           )
 
-instance (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [r]) where 
+instance {-# OVERLAPPING #-} (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [(SomeEventId,r)]) where 
+  channel ep showParseErrors l = Handler (if match ep then Just endpoint else Nothing)
+    where
+      endpoint :: Exists Request => Application
+      endpoint request respond = do
+        let
+          payload
+            | method == methodGet || method == methodDelete
+            , Just b64 <- join (List.lookup "payload" (queryString request))
+            , Right bs <- B64.decode (BSL.fromStrict b64) 
+            = pure bs
+
+            | otherwise = consumeRequestBodyLazy request
+
+        pl <- payload
+        case eitherDecode pl of
+          Left e -> respond (responseLBS status400 [] (if showParseErrors then encode e else def))
+          Right (a :: a) -> do
+            let 
+              responder write flush = 
+                let
+                  push (SomeEventId eid,b) = do
+                    write ("id: " <> fromLazyByteString (fromTxt eid) <> "\ndata: " <> fromLazyByteString (encode b) <> "\n\n")
+                    flush
+
+                  handler e
+                    -- short-circuits simply end the stream without raising an error
+                    -- while unknown exceptions get re-thrown.
+                    | Just Unauthorized   <- fromException e = pure ()
+                    | Just (_ :: Respond) <- fromException e = pure ()
+                    | otherwise                              = E.throw e
+
+                in
+                  handle handler (l a >>= mapM_ push)
+
+            respond (responseStream status200 
+              [(hContentType,"text/event-stream")
+              ,(hCacheControl,"no-cache")
+              ,(hConnection,"keep-alive")
+              ] responder
+              )
+
+
+instance {-# OVERLAPPABLE #-} (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [r]) where 
   channel ep showParseErrors l = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
@@ -232,7 +333,7 @@ instance Lambda Void where
   lambda ep _ _ _ _ = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
-      endpoint request respond = respond (responseLBS status200 [] def) 
+      endpoint request respond = respond (responseLBS status501 [] def) 
 
 instance ToJSON r => Lambda (IO r) where
   lambda ep showParseErrors showExceptions headers l = Handler (if match ep then Just endpoint else Nothing)
