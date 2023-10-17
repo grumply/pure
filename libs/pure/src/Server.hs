@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, PatternSynonyms, ScopedTypeVariables, FlexibleContexts, BlockArguments, NamedFieldPuns, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, DerivingVia, TypeFamilies, ConstrainedClassMethods, DefaultSignatures, MultiWayIf, DataKinds, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -O2 #-}
 module Server 
   ( Handler(..)
   , serve

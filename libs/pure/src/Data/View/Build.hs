@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, OverloadedStrings, RankNTypes, ScopedTypeVariables, PatternSynonyms, ViewPatterns, MagicHash, RecordWildCards, BangPatterns, LambdaCase, FlexibleContexts, TypeFamilies #-}
+{-# OPTIONS_GHC -O2 #-}
 module Data.View.Build (inject,prebuild,cleanup,race',suspense,suspenses,anticipation) where
 
 import Control.Concurrent (MVar,newEmptyMVar,putMVar,takeMVar,readMVar,yield,forkIO,killThread)

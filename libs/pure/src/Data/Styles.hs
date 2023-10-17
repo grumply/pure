@@ -1,4 +1,5 @@
 {-# language OverloadedStrings, ViewPatterns, PatternSynonyms, FlexibleInstances #-}
+{-# OPTIONS_GHC -O2 #-}
 module Data.Styles where
 
 import Data.Txt as Txt

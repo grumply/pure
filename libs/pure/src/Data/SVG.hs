@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms, OverloadedStrings #-}
+{-# OPTIONS_GHC -O2 #-}
 module Data.SVG where
 
 import Data.Txt

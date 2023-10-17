@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, OverloadedStrings, ForeignFunctionInterface, JavaScriptFFI, BangPatterns, ViewPatterns, FlexibleContexts, DefaultSignatures, RecordWildCards, ScopedTypeVariables, TypeSynonymInstances #-}
+{-# OPTIONS_GHC -O2 #-}
 module Data.DOM
     ( module Data.DOM
 #ifdef __GHCJS__

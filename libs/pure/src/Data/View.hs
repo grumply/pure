@@ -1,4 +1,5 @@
 {-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts, ConstraintKinds, BlockArguments, MultiWayIf, LambdaCase, DuplicateRecordFields, TypeOperators, DerivingVia, DataKinds, NamedFieldPuns, TypeFamilies, DeriveFunctor, UndecidableInstances, InstanceSigs, RoleAnnotations, ConstrainedClassMethods  #-}
+{-# OPTIONS_GHC -O2 #-}
 module Data.View (module Data.View, Typeable()) where
 
 import Data.Functor.Identity (Identity(..))

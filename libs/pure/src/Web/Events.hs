@@ -1,4 +1,5 @@
 {-# language PatternSynonyms, RankNTypes, FlexibleContexts, OverloadedStrings, ViewPatterns, TypeApplications, CPP, DuplicateRecordFields, LambdaCase, BlockArguments, RecordWildCards, MagicHash #-}
+{-# OPTIONS_GHC -O2 #-}
 module Web.Events where
 
 import Control.Arrow ((&&&))

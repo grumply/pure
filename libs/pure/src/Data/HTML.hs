@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms, OverloadedStrings, ViewPatterns #-}
+{-# OPTIONS_GHC -O2 #-}
 module Data.HTML where
 
 import Data.Txt
