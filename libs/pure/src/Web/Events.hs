@@ -615,6 +615,7 @@ data Button = Primary | Auxiliary | Secondary | Back | Forward | OtherButton Int
 data MouseEvent = MouseEvent
   { eventObject :: JSV
   , target :: Node
+  , currentTarget :: Node
   , relatedTarget :: Maybe Node
   , clientX :: Double
   , clientY :: Double
@@ -635,10 +636,11 @@ data MouseEvent = MouseEvent
   }
 
 toMouseEvent :: Evt -> MouseEvent
-toMouseEvent (evtObj -> o) = let err = error "Invalid MouseEvent." in
+toMouseEvent e@(evtObj -> o) = let err = error "Invalid MouseEvent." in
   MouseEvent 
     { eventObject = o
     , target = maybe err (coerce :: JSV -> Node) (o .# "target")
+    , currentTarget = coerce (evtTarget e)
     , relatedTarget = fmap (coerce :: JSV -> Node) (o .# "relatedTarget")
     , clientX = fromMaybe err (o .# "clientX")
     , clientY = fromMaybe err (o .# "clientY")
@@ -753,6 +755,28 @@ mouseLeave = mouseLeaveWith def yield
 
 mouseLeaves :: (Exists MouseLeave => IO ()) -> View -> View
 mouseLeaves f = events @MouseLeave f mouseLeave
+
+newtype MouseDown = MouseDown MouseEvent
+
+mouseDownWith :: Options -> (MouseDown -> IO ()) -> View -> View
+mouseDownWith opts f = OnWith opts "mousedown" (f . MouseDown . toMouseEvent)
+
+mouseDown :: View -> (Producer MouseDown => View)
+mouseDown = mouseDownWith def yield
+
+mouseDowns :: (Exists MouseDown => IO ()) -> View -> View
+mouseDowns f = events @MouseDown f mouseDown
+
+newtype MouseUp = MouseUp MouseEvent
+
+mouseUpWith :: Options -> (MouseUp -> IO ()) -> View -> View
+mouseUpWith opts f = OnWith opts "mouseup" (f . MouseUp . toMouseEvent)
+
+mouseUp :: View -> (Producer MouseUp => View)
+mouseUp = mouseUpWith def yield
+
+mouseUps :: (Exists MouseUp => IO ()) -> View -> View
+mouseUps f = events @MouseUp f mouseUp
 
 newtype ContextMenu = ContextMenu MouseEvent
 
@@ -1218,6 +1242,8 @@ data Touch = Touch
   , target :: Node
   , screenX :: Double
   , screenY :: Double
+  , offsetX :: Double
+  , offsetY :: Double
   , clientX :: Double
   , clientY :: Double
   , radiusX :: Double
@@ -1237,6 +1263,8 @@ toTouch o = let err = error "Invalid Touch Object." in
     , target = maybe err (coerce :: JSV -> Node) (o .# "identifier")
     , screenX = fromMaybe err (o .# "screenX")
     , screenY = fromMaybe err (o .# "screenX")
+    , offsetX = fromMaybe err (o .# "offsetX")
+    , offsetY = fromMaybe err (o .# "offsetY")
     , clientX = fromMaybe err (o .# "clientX")
     , clientY = fromMaybe err (o .# "clientY")
     , radiusX = fromMaybe err (o .# "radiusX")
@@ -1256,6 +1284,7 @@ data TouchEvent = TouchEvent
   , touches :: [Touch]
   , targetTouches :: [Touch]
   , changedTouches :: [Touch]
+  , currentTarget :: Node
   , altKey :: Bool
   , metaKey :: Bool
   , ctrlKey :: Bool
@@ -1263,7 +1292,7 @@ data TouchEvent = TouchEvent
   }
 
 toTouchEvent :: Evt -> TouchEvent
-toTouchEvent (evtObj -> o) = let err = error "Invalid TouchEvent Object." in
+toTouchEvent e@(evtObj -> o) = let err = error "Invalid TouchEvent Object." in
   TouchEvent 
     { eventObject = o
 #ifdef __GHCJS__
@@ -1275,6 +1304,7 @@ toTouchEvent (evtObj -> o) = let err = error "Invalid TouchEvent Object." in
     , targetTouches = []
     , changedTouches = []
 #endif
+    , currentTarget = coerce (evtTarget e)
     , altKey = fromMaybe err (o .# "altKey")
     , metaKey = fromMaybe err (o .# "metaKey")
     , ctrlKey = fromMaybe err (o .# "ctrlKey")
