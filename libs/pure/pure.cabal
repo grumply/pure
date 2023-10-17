@@ -118,6 +118,7 @@ library
     Data.Localstorage
     Data.Log
     Data.Marker
+    Data.Point
     Data.Queue
     Data.Random
     Data.Random.Generator
