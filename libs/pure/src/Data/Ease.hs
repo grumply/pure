@@ -5,31 +5,38 @@ module Data.Ease where
 -- is a value between 0 and 1. For some easings, this value may pass below 0
 -- or above 1 before eventually settling at 1.
 --
--- Scrolling example (p = position, t = time):
+-- Scrolling example:
 --
--- > scrollTo ease dur pEnd = do
--- >   tStart <- millis
--- >   let tEnd = tStart + dur
--- >       tick = ease dur
--- >
--- >   let loop pCurrent = void $ addAnimationFrame $ do
--- >           now <- millis
--- >           let delta = tick (now - tStart) * (pCurrent - pStart)
--- >               pNew  = pCurrent + delta
--- >           setScrollY pNew
--- >           unlesss (now >= tEnd) (loop pNew)
--- >
--- >   getScrollY >>= loop
+-- > scrollTo :: Ease -> Time -> Int -> IO ()
+-- > scrollTo ease dur end = do
+-- >   start <- time
+-- >   begin <- getScrollY
+-- >   let 
+-- >     dy = end - start
+-- >     end = start + dur
+-- >     tick t = coerce ease dur (t - start)
+-- >     loop current = void $ addAnimationFrame $ do
+-- >       now <- time
+-- >       if now >= end then 
+-- >         setScrollY end 
+-- >       else do
+-- >         let new = tick now * dy
+-- >         setScrollY new
+-- >         loop new
+-- >   loop begin
 --
 -- Used with an ease as:
 --
--- > scrollTo easeInCubic 600 destination
+-- > scrollTo easeInCubic (Seconds 2 0) destination
 
 type TotalDuration = Double
 type Elapsed = Double
 type Scalar = Double
 
 type Ease = TotalDuration -> Elapsed -> Scalar
+
+easeLinear :: Ease
+easeLinear d t = t / d
 
 easeInQuad :: Ease
 easeInQuad d t =
