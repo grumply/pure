@@ -17,6 +17,7 @@ import System.Exit
 import System.FSNotify hiding (Action)
 import System.Process
 import System.IO
+import System.IO.Error
 import System.Posix.Signals
 
 main :: IO ()
@@ -138,8 +139,10 @@ backend mgr = do
         print (cmdspec cmd)
         withCreateProcess cmd { create_group = True } $ \_ _ _ ph -> do
           takeMVar runTrigger
-          interruptProcessGroupOf ph
-          waitForProcess ph
+          mpid <- getPid ph
+          for_ mpid \_ -> do
+            tryJust (guard . isDoesNotExistError) (interruptProcessGroupOf ph)
+            waitForProcess ph
 
   watchTree mgr "app/backend" (const True) $ \ev ->
     void (tryPutMVar buildTrigger ())
