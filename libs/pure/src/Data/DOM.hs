@@ -41,6 +41,13 @@ instance Default JSVal where
 type JSV = ()
 #endif
 
+instance Eq JSV where
+#ifdef __GHCJS__
+  (==) = same
+#else
+  (==) _ _ = True
+#endif
+
 #ifdef __GHCJS__
 logJSV :: Coercible x JSV => x -> IO ()
 logJSV x = log_js (coerce x)
@@ -49,17 +56,17 @@ logJSV :: Coercible x JSV => x -> IO ()
 logJSV _ = pure ()
 #endif
 
-newtype Win     = Win JSV
-newtype Doc     = Doc JSV
-newtype Head    = Head JSV
-newtype Body    = Body JSV
-newtype Element = Element JSV
-newtype Text    = Text JSV
-newtype Node    = Node JSV
-newtype Frag    = Frag JSV
+newtype Win     = Win JSV deriving (Eq)
+newtype Doc     = Doc JSV deriving (Eq)
+newtype Head    = Head JSV deriving (Eq)
+newtype Body    = Body JSV deriving (Eq)
+newtype Element = Element JSV deriving (Eq)
+newtype Text    = Text JSV deriving (Eq)
+newtype Node    = Node JSV deriving (Eq)
+newtype Frag    = Frag JSV deriving (Eq)
 
-newtype History = History JSV
-newtype Loc     = Loc JSV
+newtype History = History JSV deriving (Eq)
+newtype Loc     = Loc JSV deriving (Eq)
 
 {-# INLINE toJSV #-}
 toJSV :: Coercible a JSV => a -> JSV
