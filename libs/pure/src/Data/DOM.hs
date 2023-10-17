@@ -41,11 +41,9 @@ instance Default JSVal where
 type JSV = ()
 #endif
 
-instance Eq JSV where
 #ifdef __GHCJS__
+instance Eq JSV where
   (==) = same
-#else
-  (==) _ _ = True
 #endif
 
 #ifdef __GHCJS__
