@@ -1,5 +1,5 @@
 {-# language BlockArguments, ScopedTypeVariables, RankNTypes, DuplicateRecordFields, NamedFieldPuns, ConstraintKinds, FlexibleContexts, GADTs, TypeApplications, BangPatterns, AllowAmbiguousTypes, CPP, PatternSynonyms, OverloadedStrings, RecordWildCards, LambdaCase #-}
-module Web where
+module Web (Web,play,play',play_,become,become_,Web.error,void,web,web',fix,fix',run,run',Web.read,Web.show,prompt,Web.reader,Parser) where
 
 import Control.Concurrent hiding (yield)
 import qualified Data.Function as F
@@ -27,21 +27,55 @@ import Data.View.Build (diffDeferred)
 import Data.List as List
 import Data.IORef
 import Control.Monad (when)
+import Data.Coerce
 
 data OI = Output View | Display (MVar View) View
 type Web = Producer OI
+
+{-# INLINE play #-}
+play :: forall a. (Web => a) -> View
+play a = discard @a (play_ @a False a) 
+
+{-# INLINE play' #-}
+play' :: (Web => a) -> (Producer a => View)
+play' = play_ False
+
+{-# INLINE play_ #-}
+play_ :: Bool -> (Web => a) -> (Producer a => View)
+play_ synchronous a = SimpleHTML "template" <| OnMounted go
+  where
+    go n = do
+      mv <- newMVar (NullView (Just (coerce n)),NullView Nothing) 
+      tid <- forkIO do
+        let x = runner synchronous mv a
+        -- this seq is important!
+        x `seq` yield x
+      pure do
+        (old,_) <- takeMVar mv
+        killThread tid
+        cleanup old
 
 {-# NOINLINE become #-}
 become :: (Producer a => View) -> (Web => a)
 become v = unsafePerformIO do
   mv <- newEmptyMVar
-  -- Unfortunately, we have to force all fields in `v` to 
-  -- get the correct ordering of `become`s.
+  -- this deepseq is important!
   let send v = v `deepseq` yield (Output v) 
   v' <- handle (\(se :: SomeException) -> send (txt (Show.show se)))
           (send (consume (putMVar mv) v))
   a <- takeMVar mv
   pure a
+
+{-# NOINLINE become_ #-}
+become_ :: View -> (Web => ())
+become_ v = unsafePerformIO do
+  mv <- newEmptyMVar
+  -- this deepseq is important!
+  let send v = v `deepseq` yield (Display mv v)
+  handle (\(se :: SomeException) -> send (txt (Show.show se))) (send v)
+  takeMVar mv
+  -- performMajorGC
+  pure ()
 
 error :: Txt -> (Web => a)
 error = become . fromTxt
@@ -49,19 +83,7 @@ error = become . fromTxt
 void :: View -> (Web => Void)
 void = become
 
-{-# NOINLINE display #-}
--- This is probably not a good idea. Doing something like
--- `delayed Second (display _)` might work, but it feels egregious!
-display :: View -> (Web => ())
-display v = unsafePerformIO do
-  mv <- newEmptyMVar
-  let send v = v `deepseq` yield (Display mv v)
-  handle (\(se :: SomeException) -> send (txt (Show.show se))) (send v)
-  takeMVar mv
-  -- performMajorGC
-  pure ()
-
-{-# NOINLINE web' #-}
+{-# INLINE web' #-}
 web' :: Bool -> Node -> (Web => a) -> a
 web' synchronous n a = builder `seq` (consume (writeChan chan) a)
   where
@@ -133,7 +155,57 @@ web' synchronous n a = builder `seq` (consume (writeChan chan) a)
           
           pure new_old
 
-{-# NOINLINE web #-}
+{-# NOINLINE runner #-}
+runner :: Bool -> MVar (View,View) -> (Web => a) -> a
+runner synchronous st a = consume builder a
+  where
+    {-# INLINE builder #-}
+    builder :: OI -> IO ()
+    builder (Output new) =
+      takeMVar st >>= \(old,mid) -> do
+        v <- diff old mid new
+        putMVar st (v,new)
+    builder (Display mv new) =
+      takeMVar st >>= \(old,mid) -> do
+        v <- diff old mid new
+        putMVar mv v
+        putMVar st (v,new)
+
+    runPlan :: [IO ()] -> IO ()
+    runPlan plan = let !p = sequence_ (List.reverse plan) in p
+
+    diff old mid new = do
+      mtd <- newIORef []
+      let
+        (!plan,!plan',!new_old) = buildPlan $ \p p' -> 
+            diffDeferred mtd p p' old mid new
+
+        hasAnimations = not (List.null plan)
+        hasIdleWork = not (List.null plan')
+        
+      mounts <- plan `seq` plan' `seq` readIORef mtd
+
+#ifdef __GHCJS__
+      when hasAnimations $ do
+        if synchronous then do
+          barrier <- newEmptyMVar
+          addAnimation $ do
+            runPlan plan
+            putMVar barrier ()
+          takeMVar barrier
+        else
+          runPlan plan
+#else
+      runPlan plan
+#endif
+
+      runPlan plan'
+
+      runPlan mounts
+      
+      pure new_old
+
+{-# INLINE web #-}
 web :: Bool -> Node -> (Web => a) -> a
 web synchronous n a = consume builder a
   where
@@ -276,7 +348,4 @@ dup :: a -> (a,a)
 dup !a = (a,a)
 
 show :: Show a => a -> (Web => b)
-show a = become (txt (Show.show a))
-
--- sub :: View -> (Web => a) -> View
--- sub v a = v <| OnMounted (\n -> web False n a)
+show !a = become (txt (Show.show a))
