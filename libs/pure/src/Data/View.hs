@@ -1,4 +1,4 @@
-{-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts, ConstraintKinds, BlockArguments, MultiWayIf, LambdaCase, DuplicateRecordFields, TypeOperators, DerivingVia, DataKinds, NamedFieldPuns, TypeFamilies, DeriveFunctor, UndecidableInstances, InstanceSigs, RoleAnnotations, ConstrainedClassMethods  #-}
+{-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts, ConstraintKinds, BlockArguments, MultiWayIf, LambdaCase, DuplicateRecordFields, TypeOperators, DerivingVia, DataKinds, NamedFieldPuns, TypeFamilies, DeriveFunctor, UndecidableInstances, InstanceSigs, RoleAnnotations, ConstrainedClassMethods, DeriveAnyClass, DeriveGeneric #-}
 {-# OPTIONS_GHC -O2 #-}
 module Data.View (module Data.View, Typeable()) where
 
@@ -9,6 +9,7 @@ import Control.Arrow ((&&&))
 import Control.Applicative (Applicative(..),Alternative(..))
 import Control.Comonad (Comonad(..),ComonadApply(..))
 import Control.Concurrent (ThreadId,forkIO,killThread,myThreadId,MVar,newMVar,newEmptyMVar,readMVar,putMVar,takeMVar)
+import Control.DeepSeq (NFData(..),deepseq)
 import Control.Exception (mask,onException,evaluate,Exception,catch,throw,SomeException)
 import Control.Monad (void,join,forever,unless,when,MonadPlus(..))
 import Control.Monad.Fix (MonadFix(..))
@@ -47,9 +48,12 @@ import Data.Set (Set)
 import Data.Set as Set (empty,fromList,null,empty,union,toList,insert)
 import Data.Map.Lazy as Map (Map,fromList,null,empty,union,toList,insert,singleton)
 
-data Target = ElementTarget | WindowTarget | DocumentTarget deriving Eq
+data Target = ElementTarget | WindowTarget | DocumentTarget
+  deriving (Eq,Generic,NFData)
 
 newtype ListenerAction = ListenerAction (Evt -> IO ())
+instance NFData ListenerAction where 
+  rnf ListenerAction {} = ()
 
 data Listener =
   On
@@ -61,9 +65,17 @@ data Listener =
     , eventStopper  :: IO ()
     }
 
+instance NFData Listener where
+  rnf On {..} =
+    eventName `deepseq` eventTarget `deepseq` eventOptions `deepseq`  eventAction `deepseq` ()
+
 data Lifecycle 
   = Created (Node -> IO (IO ())) (IO ()) 
   | Mounted (Node -> IO (IO ())) (IO ())
+  
+instance NFData Lifecycle where
+  rnf Created {} = ()
+  rnf Mounted {} = ()
 
 data Comp props state = Comp
   { deferred       :: Bool
@@ -122,6 +134,7 @@ data Features =
     , listeners  :: [Listener]
     , lifecycles :: [Lifecycle]
     }
+  deriving (Generic,NFData)
 
 instance Monoid Features where
   {-# INLINE mempty #-}
@@ -214,6 +227,21 @@ data View where
   Prebuilt :: 
     { prebuilt :: View 
     } -> View
+
+instance NFData View where
+  rnf HTMLView {..} = tag `deepseq` features `deepseq` children `deepseq` ()
+  rnf TextView {..} = content `deepseq` ()
+  rnf NullView {..} = ()
+  rnf RawView {..} = tag `deepseq` features `deepseq` content `deepseq` ()
+  rnf SVGView {..} = tag `deepseq` features `deepseq` xlinks `deepseq` children `deepseq` ()
+  rnf KHTMLView {..} = tag `deepseq` features `deepseq` keyedChildren `deepseq` ()
+  rnf KSVGView {..} = tag `deepseq` features `deepseq` xlinks `deepseq` keyedChildren `deepseq` ()
+  rnf ReactiveView {..} = reactiveView `deepseq` ()
+  rnf WeakView {..} = weakView `deepseq` ()
+  rnf PortalView {..} = portalDestination `deepseq` portalView `deepseq` ()
+  rnf ComponentView {..} = __rep `deepseq` ()
+  rnf TaggedView {..} = __tag `deepseq` rnf taggedView
+  rnf Prebuilt {..} = ()
 
 instance Default View where
   {-# INLINE def #-}
@@ -350,7 +378,7 @@ pattern Tag v <- TaggedView ((==) (typeRepFingerprint (typeRep (Proxy :: Proxy t
 
 {-# INLINE txt #-}
 txt :: ToTxt a => a -> View
-txt a = reactive a (TextView Nothing (toTxt a))
+txt a = TextView Nothing (toTxt a)
 
 pattern Txt :: Txt -> View
 pattern Txt t <- (TextView _ t) where
@@ -939,6 +967,8 @@ parv a = lazy (evaluate a)
 
 {-# INLINE lazy #-}
 -- Note that only the asynchrony of the first action can be witnessed in View
+-- To witness the asynchrony of reconciled effects, use `weak` to recreate the
+-- `View` on each reconciliation.
 lazy :: forall a. Typeable a => IO a -> (Exists a => View) -> View
 lazy io v = go (Asynchronous io (proof v))
   where
@@ -1081,7 +1111,8 @@ instance Default Lifecycles where
     forall lc1 lc2 v. lifecycle lc1 (lifecycle lc2 v) = lifecycle (lc1 <> lc2) v
  #-}
 
-{-# INLINE [1] lifecycle #-}
+
+{-# NOINLINE lifecycle #-}
 lifecycle :: Lifecycles -> View -> View
 lifecycle ls v = component go (ls,v)
   where

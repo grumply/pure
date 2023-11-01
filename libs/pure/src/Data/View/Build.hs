@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, OverloadedStrings, RankNTypes, ScopedTypeVariables, PatternSynonyms, ViewPatterns, MagicHash, RecordWildCards, BangPatterns, LambdaCase, FlexibleContexts, TypeFamilies #-}
 {-# OPTIONS_GHC -O2 #-}
-module Data.View.Build (inject,prebuild,cleanup,race',suspense,suspenses,anticipation) where
+module Data.View.Build (inject,prebuild,cleanup,race',suspense,suspenses,anticipation,diffDeferred,buildPlan,build) where
 
 import Control.Concurrent (MVar,newEmptyMVar,putMVar,takeMVar,readMVar,yield,forkIO,killThread)
 import Control.Exception (catch,mask,evaluate,onException,BlockedIndefinitelyOnMVar)
@@ -143,11 +143,12 @@ x === y = isTrue# (unsafeCoerce# reallyUnsafePtrEquality# x y)
 x /== y = Prelude.not (x === y)
 
 -- | Given a host node and a View, build and embed the View.
-inject :: IsNode e => e -> View -> IO ()
+inject :: IsNode e => e -> View -> IO View
 inject host v = do
   mtd <- newIORef []
-  build mtd (Just $ toNode host) v
+  v' <- build mtd (Just $ toNode host) v
   runPlan =<< readIORef mtd
+  pure v'
 
 -- | Pre-build a view for later use.
 prebuild :: View -> IO View

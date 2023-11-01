@@ -38,7 +38,8 @@ library
     unix,
     base64-bytestring,
     comonad,
-    unbounded-delays
+    unbounded-delays,
+    deepseq
 
   hs-source-dirs: src
 
@@ -161,6 +162,7 @@ library
     Effect.Title
     Effect.Websocket
     Endpoint
+    Web
     Web.DataTransfer
     Web.Events
     Web.File

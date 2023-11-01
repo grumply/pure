@@ -82,7 +82,7 @@ loop = flip fix
 
 {-# INLINE run #-}
 run :: View -> IO ()
-run = inject body
+run = void . inject body
 
 -- | A rearranged variant of `bool` with a default `id` false branch. Useful for
 -- applying conditional styling if you have trouble remembering the order of

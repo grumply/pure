@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, OverloadedStrings, ForeignFunctionInterface, JavaScriptFFI, BangPatterns, ViewPatterns, FlexibleContexts, DefaultSignatures, RecordWildCards, ScopedTypeVariables, TypeSynonymInstances #-}
+{-# LANGUAGE CPP, OverloadedStrings, ForeignFunctionInterface, JavaScriptFFI, BangPatterns, ViewPatterns, FlexibleContexts, DefaultSignatures, RecordWildCards, ScopedTypeVariables, TypeSynonymInstances, DeriveGeneric, DeriveAnyClass #-}
 {-# OPTIONS_GHC -O2 #-}
 module Data.DOM
     ( module Data.DOM
@@ -9,12 +9,14 @@ module Data.DOM
 
 import Control.Monad (when,join)
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.DeepSeq (NFData(..),deepseq)
 import Data.Coerce (Coercible(),coerce)
 import Data.Int
 import Data.List as List (intercalate,reverse)
 import Data.Maybe (fromMaybe)
 import Data.IORef (newIORef,readIORef,writeIORef)
 import GHC.Clock (getMonotonicTimeNSec)
+import GHC.Generics (Generic())
 import GHC.Stack (HasCallStack,getCallStack,callStack,srcLocModule)
 import Text.Printf (printf)
 import Prelude hiding (head)
@@ -58,9 +60,9 @@ newtype Win     = Win JSV deriving (Eq)
 newtype Doc     = Doc JSV deriving (Eq)
 newtype Head    = Head JSV deriving (Eq)
 newtype Body    = Body JSV deriving (Eq)
-newtype Element = Element JSV deriving (Eq)
+newtype Element = Element JSV deriving (Eq,Generic,NFData)
 newtype Text    = Text JSV deriving (Eq)
-newtype Node    = Node JSV deriving (Eq)
+newtype Node    = Node JSV deriving (Eq,Generic,NFData)
 newtype Frag    = Frag JSV deriving (Eq)
 
 newtype History = History JSV deriving (Eq)
@@ -97,13 +99,13 @@ data Evt = Evt
   { evtObj            :: JSV
   , evtTarget         :: JSV
   , evtRemoveListener :: IO ()
-  }
+  } 
 
 data Options = Options
   { preventDef   :: Bool
   , stopProp     :: Bool
   , passive      :: Bool
-  } deriving (Eq,Show)
+  } deriving (Eq,Show,Generic,NFData)
 instance Default Options where
   def = Options False False False
 
@@ -114,7 +116,7 @@ data Rect = Rect
     , bottom :: Double
     , width :: Double
     , height :: Double
-    } deriving (Eq,Show)
+    } deriving (Generic,NFData,Eq,Show)
 
 instance Default Rect where def = Rect 0 0 0 0 0 0
 
@@ -184,7 +186,7 @@ foreign import javascript unsafe
   "if ($1.parentNode) { $1.parentNode.replaceChild($2,$1); }" replace_node_js :: Node -> Node -> IO ()
 
 foreign import javascript unsafe
-  "$1.textContent=$2" replace_text_js :: Text -> Txt -> IO ()
+  "$1.nodeValue=$2" replace_text_js :: Text -> Txt -> IO ()
 
 foreign import javascript unsafe
   "$1.textContent = ''" clear_node_js :: Node -> IO ()

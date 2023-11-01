@@ -114,7 +114,7 @@ addTheme = do
         | [ TextView _ "" ] <- cs                  -> pure ()
         | [] <- cs                                 -> pure ()
 
-      content -> inject Lifted.head (Attribute "data-pure-theme" pre content)
+      content -> void (inject Lifted.head (Attribute "data-pure-theme" pre content))
 
 hasTheme :: forall t b. (Theme t) => View -> Bool
 hasTheme (Classes cs b) = let Namespace t = namespace @t in t `elem` cs
