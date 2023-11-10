@@ -9,6 +9,7 @@ module Data.Router
   , map
   , runRouting, evalRouting
   , goto
+  , stencil
   ) where
 
 import Data.DOM

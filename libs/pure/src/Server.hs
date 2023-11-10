@@ -65,7 +65,7 @@ import Endpoint
 serve :: Warp.Port -> Maybe WarpTLS.TLSSettings -> [Handler] -> View
 serve port mtlss = Component $ \self -> 
   def
-    { onConstruct = do
+    { construct = do
         ref <- askref self >>= newIORef 
         tid <- forkIO do
           maybe Warp.runSettings WarpTLS.runTLS mtlss (Warp.setOnException exception (Warp.setServerName "pure" (Warp.setOnExceptionResponse onExceptionResponse (Warp.setPort port Warp.defaultSettings)))) $ \request respond ->

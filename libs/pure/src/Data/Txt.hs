@@ -26,8 +26,8 @@ import qualified Data.Text.Lazy.Encoding as TL
 import Data.Bits
 import Data.Word
 
-instance IsString (Txt -> Txt) where
-  fromString s = (toTxt s <>)
+-- instance IsString (Txt -> Txt) where
+--  fromString s = (toTxt s <>)
 
 instance Num (Txt -> Txt) where
   (-) a b = \x -> a x - b x

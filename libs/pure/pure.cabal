@@ -24,6 +24,7 @@ library
     ghc-prim,
     hashable,
     mtl,
+    transformers,
     origami-fold,
     random,
     stm,
@@ -39,7 +40,7 @@ library
     base64-bytestring,
     comonad,
     unbounded-delays,
-    deepseq
+    parallel
 
   hs-source-dirs: src
 

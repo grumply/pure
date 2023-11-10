@@ -295,7 +295,7 @@ sseWith policy host ep =
   const Data.View.Null
 #else
   Component \self -> def
-    { onConstruct = do
+    { construct = do
         rs <- newIORef def
         let stop = join (readIORef rs)
         forkIO do

@@ -79,9 +79,10 @@ instance NFData Lifecycle where
 
 data Comp props state = Comp
   { deferred       :: Bool
-  , onInitialize   :: state -> IO state
+  , animated       :: Bool
+  , construct      :: IO state
+  , initialize     :: state -> IO state
   , onInitialized  :: IO ()
-  , onConstruct    :: IO state
   , onMount        :: state -> IO state
   , onExecuting    :: state -> IO state
   , onMounted      :: IO ()
@@ -97,8 +98,9 @@ instance Default (Comp props state) where
   {-# INLINE def #-}
   def = Comp
     { deferred      = False
-    , onConstruct   = return (error "Comp.construct: no initial state supplied.")
-    , onInitialize  = return
+    , animated      = False
+    , construct     = return (error "Comp.construct: no initial state supplied.")
+    , initialize    = return
     , onInitialized = return ()
     , onMount       = return
     , onExecuting   = return
@@ -494,8 +496,10 @@ getFeatures :: View -> Features
 getFeatures NullView {} = mempty
 getFeatures TextView {} = mempty
 getFeatures ComponentView {} = mempty
+getFeatures TaggedView {..} = getFeatures taggedView
+getFeatures ReactiveView {..} = getFeatures reactiveView
+getFeatures WeakView {..} = getFeatures weakView
 getFeatures PortalView{..} = getFeatures portalView
-getFeatures TaggedView{..} = getFeatures taggedView
 getFeatures Prebuilt {..}  = getFeatures prebuilt
 getFeatures v = features v
 
@@ -504,16 +508,51 @@ setFeatures :: Features -> View -> View
 setFeatures _ v@NullView {} = v
 setFeatures _ v@TextView {} = v
 setFeatures _ v@ComponentView {} = v
+setFeatures fs ReactiveView {..} = ReactiveView { reactiveView = setFeatures fs reactiveView, .. }
+setFeatures fs WeakView {..} = WeakView { weakView = setFeatures fs weakView, .. }
 setFeatures fs PortalView{..} = PortalView { portalView = setFeatures fs portalView, .. }
 setFeatures fs TaggedView{..} = TaggedView { taggedView = setFeatures fs taggedView, .. }
 setFeatures fs Prebuilt {..}  = Prebuilt { prebuilt = setFeatures fs prebuilt }
 setFeatures fs v = v { features = fs }
 
+
 {-# RULES 
+
   "features: set . set" forall fs fs' x. setFeatures fs (setFeatures fs' x) = setFeatures fs x;
   "features: get . set" forall fs x. getFeatures (setFeatures fs x) = fs;
-  "features: add . add" forall fs gs x. addFeatures fs (addFeatures gs x)  = addFeatures (gs <> fs) x;
+  "features: add . add" forall fs gs x. addFeatures fs (addFeatures gs x) = addFeatures (gs <> fs) x;
+
+  "getFeatures HTMLView" forall e t cs f     . getFeatures (HTMLView e t f cs)      = f;
+  "getFeatures SVGView" forall e t cs ls f   . getFeatures (SVGView e t f ls cs)    = f;
+  "getFeatures TextView" forall t c          . getFeatures (TextView t c)           = mempty;
+  "getFeatures NullView" forall e            . getFeatures (NullView e)             = mempty;
+  "getFeatures RawView" forall e t f c       . getFeatures (RawView e t f c)        = f;
+  "getFeatures KHTMLView" forall e t cs f    . getFeatures (KHTMLView e t f cs)     = f;
+  "getFeatures KSVGView" forall e t cs ls f  . getFeatures (KSVGView e t f ls cs)   = f;
+  "getFeatures ReactiveView" forall a v      . getFeatures (ReactiveView a v)       = getFeatures v;
+  "getFeatures WeakView" forall a v          . getFeatures (WeakView a v)           = getFeatures v;
+  "getFeatures PortalView" forall p d v      . getFeatures (PortalView p d v)       = getFeatures v;
+  "getFeatures ComponentView" forall _r r c p. getFeatures (ComponentView _r r c p) = mempty;
+  "getFeatures TaggedView" forall _t v       . getFeatures (TaggedView _t v)        = getFeatures v;
+  "getFeatures Prebuilt" forall v            . getFeatures (Prebuilt v)             = getFeatures v;
+
+
+  "setFeatures HTMLView" forall e t cs f f'    . setFeatures f (HTMLView e t f' cs)     = HTMLView e t f cs;
+  "setFeatures SVGView" forall e t cs ls f f'  . setFeatures f (SVGView e t f' ls cs)   = SVGView e t f ls cs;
+  "setFeatures TextView" forall t c f          . setFeatures f (TextView t c)           = TextView t c;
+  "setFeatures NullView" forall e f            . setFeatures f (NullView e)             = NullView e;
+  "setFeatures RawView" forall e t f c f'      . setFeatures f (RawView e t f' c)       = RawView e t f c;
+  "setFeatures KHTMLView" forall e t cs f f'   . setFeatures f (KHTMLView e t f' cs)    = KHTMLView e t f cs;
+  "setFeatures KSVGView" forall e t cs ls f f' . setFeatures f (KSVGView e t f' ls cs)  = KSVGView e t f ls cs;
+  "setFeatures ReactiveView" forall a v f      . setFeatures f (ReactiveView a v)       = ReactiveView a (setFeatures f v);
+  "setFeatures WeakView" forall a v f          . setFeatures f (WeakView a v)           = WeakView a (setFeatures f v);
+  "setFeatures PortalView" forall p d v f      . setFeatures f (PortalView p d v)       = PortalView p d (setFeatures f v);
+  "setFeatures ComponentView" forall _r r c p f. setFeatures f (ComponentView _r r c p) = ComponentView _r r c p;
+  "setFeatures TaggedView" forall _t v f       . setFeatures f (TaggedView _t v)        = TaggedView _t (setFeatures f v);
+  "setFeatures Prebuilt" forall v f            . setFeatures f (Prebuilt v)             = Prebuilt (setFeatures f v);
+
   #-}
+
 
 pattern SetFeatures :: Features -> View -> View
 pattern SetFeatures fs a <- (getFeatures &&& id -> (fs,a)) where
@@ -534,6 +573,7 @@ addClasses cs v = setFeatures ((getFeatures v) { classes = Set.union (Set.fromLi
 {-# INLINE [1] setClasses #-}
 setClasses :: [Txt] -> View -> View
 setClasses cs v = setFeatures (getFeatures v) { classes = Set.fromList cs } v
+
 
 {-# RULES 
   "addClass . addClass == addClasses" forall c1 c2 v. addClass c1 (addClass c2 v) = addClasses [c1,c2] v;
@@ -656,44 +696,79 @@ pattern OnMounted :: (Node -> IO (IO ())) -> View -> View
 pattern OnMounted f a <- Lifecycle (Mounted f _) a where
   OnMounted f a = Lifecycle (Mounted f (pure ())) a
 
+{-# INLINE [1] addXLinks #-}
+addXLinks :: Map.Map Txt Txt -> View -> View
+addXLinks ls v = setXLinks (getXLinks v <> ls) v
+
 {-# INLINE [1] getXLinks #-}
-getXLinks :: View -> [(Txt,Txt)]
-getXLinks SVGView {..} = Map.toList xlinks
-getXLinks KSVGView {..} = Map.toList xlinks
+getXLinks :: View -> Map.Map Txt Txt
+getXLinks SVGView {..} = xlinks
+getXLinks KSVGView {..} = xlinks
 getXLinks PortalView {..} = getXLinks portalView
 getXLinks TaggedView {..} = getXLinks taggedView
 getXLinks Prebuilt {..} = getXLinks prebuilt
-getXLinks _ = []
+getXLinks ReactiveView {..} = getXLinks reactiveView
+getXLinks WeakView {..} = getXLinks weakView
+getXLinks _ = mempty
 
 {-# INLINE [1] setXLinks #-}
-setXLinks :: [(Txt,Txt)] -> View -> View
-setXLinks xl khtml@SVGView {} = khtml { xlinks = Map.fromList xl }
-setXLinks xl ksvg@KSVGView {} = ksvg { xlinks = Map.fromList xl }
+setXLinks :: Map.Map Txt Txt -> View -> View
+setXLinks xl khtml@SVGView {} = khtml { xlinks = xl }
+setXLinks xl ksvg@KSVGView {} = ksvg { xlinks = xl }
 setXLinks xl PortalView {..} = PortalView { portalView = setXLinks xl portalView, .. }
 setXLinks xl TaggedView {..} = TaggedView { taggedView = setXLinks xl taggedView, .. }
 setXLinks xl Prebuilt {..} = Prebuilt { prebuilt = setXLinks xl prebuilt }
+setXLinks xl ReactiveView {..} = ReactiveView { reactiveView = setXLinks xl reactiveView, .. }
+setXLinks xl WeakView {..} = WeakView { weakView = setXLinks xl weakView, .. }
 setXLinks _ v = v
 
-{-# INLINE [1] addXLinks #-}
-addXLinks :: [(Txt,Txt)] -> View -> View
-addXLinks xl v@SVGView {} = v { xlinks = Map.union (Map.fromList xl) (xlinks v) }
-addXLinks xl v@KSVGView {} = v { xlinks = Map.union (Map.fromList xl) (xlinks v) }
-addXLinks xl PortalView {..} = PortalView { portalView = addXLinks xl portalView, .. }
-addXLinks xl TaggedView {..} = TaggedView { taggedView = addXLinks xl taggedView, .. }
-addXLinks xl Prebuilt {..} = Prebuilt { prebuilt = addXLinks xl prebuilt }
-addXLinks _ v = v
+{-# RULES 
+
+  "xlinks: set . set" forall ls ls' x. setXLinks ls (setXLinks ls' x) = setXLinks ls x;
+  "xlinks: get . set" forall ls x.     getXLinks (setXLinks ls x)     = ls;
+  "xlinks: add . add" forall ls ls' x. addXLinks ls (addXLinks ls' x) = addXLinks (ls' <> ls) x;
+
+  "getXLinks HTMLView" forall e t cs f      . getXLinks (HTMLView e t f cs)      = mempty;
+  "getXLinks SVGView" forall e t cs ls f    . getXLinks (SVGView e t f ls cs)    = ls;
+  "getXLinks TextView" forall t c           . getXLinks (TextView t c)           = mempty;
+  "getXLinks NullView" forall e             . getXLinks (NullView e)             = mempty;
+  "getXLinks RawView" forall e t f c        . getXLinks (RawView e t f c)        = mempty;
+  "getXLinks KHTMLView" forall e t cs f     . getXLinks (KHTMLView e t f cs)     = mempty;
+  "getXLinks KSVGView" forall e t cs ls f   . getXLinks (KSVGView e t f ls cs)   = ls;
+  "getXLinks ReactiveView" forall a v       . getXLinks (ReactiveView a v)       = getXLinks v;
+  "getXLinks WeakView" forall a v           . getXLinks (WeakView a v)           = getXLinks v;
+  "getXLinks PortalView" forall p d v       . getXLinks (PortalView p d v)       = getXLinks v;
+  "getXLinks ComponentView" forall _r r c p . getXLinks (ComponentView _r r c p) = mempty;
+  "getXLinks TaggedView" forall _t v        . getXLinks (TaggedView _t v)        = getXLinks v;
+  "getXLinks Prebuilt" forall v             . getXLinks (Prebuilt v)             = getXLinks v;
+
+  "setXLinks HTMLView" forall e t cs f ls      . setXLinks ls (HTMLView e t f cs)      = HTMLView e t f cs;
+  "setXLinks SVGView" forall e t cs ls f ls'   . setXLinks ls (SVGView e t f ls' cs)   = SVGView e t f ls cs;
+  "setXLinks TextView" forall t c ls           . setXLinks ls (TextView t c)           = TextView t c;
+  "setXLinks NullView" forall e ls             . setXLinks ls (NullView e)             = NullView e;
+  "setXLinks RawView" forall e t f c ls        . setXLinks ls (RawView e t f c)        = RawView e t f c;
+  "setXLinks KHTMLView" forall e t cs f ls     . setXLinks ls (KHTMLView e t f cs)     = KHTMLView e t f cs;
+  "setXLinks KSVGView" forall e t cs ls f ls'  . setXLinks ls (KSVGView e t f ls' cs)  = KSVGView e t f ls cs;
+  "setXLinks ReactiveView" forall a v ls       . setXLinks ls (ReactiveView a v)       = ReactiveView a (setXLinks ls v);
+  "setXLinks WeakView" forall a v ls           . setXLinks ls (WeakView a v)           = WeakView a (setXLinks ls v);
+  "setXLinks PortalView" forall p d v ls       . setXLinks ls (PortalView p d v)       = PortalView p d (setXLinks ls v);
+  "setXLinks ComponentView" forall _r r c p ls . setXLinks ls (ComponentView _r r c p) = ComponentView _r r c p;
+  "setXLinks TaggedView" forall _t v ls        . setXLinks ls (TaggedView _t v)        = TaggedView _t (setXLinks ls v);
+  "setXLinks Prebuilt" forall v ls             . setXLinks ls (Prebuilt v)             = Prebuilt (setXLinks ls v);
+
+  #-}
 
 pattern XLink :: Txt -> Txt -> View -> View
 pattern XLink k v a <- (const (error "The XLink pattern does not support matching, only construction. For pattern matching on xlinks, use the XLinks pattern with Data.List.lookup.","") &&& id -> ((k,v),a)) where
   XLink k v a =
     let xls = getXLinks a
-    in setXLinks ((k,v):xls) a
+    in setXLinks (Map.singleton k v <> xls) a
 
-pattern SetXLinks :: [(Txt,Txt)] -> View -> View
+pattern SetXLinks :: Map.Map Txt Txt -> View -> View
 pattern SetXLinks xl v <- (getXLinks &&& id -> (xl,v)) where
   SetXLinks xl v = setXLinks xl v
 
-pattern XLinks :: [(Txt,Txt)] -> View -> View
+pattern XLinks :: Map.Map Txt Txt -> View -> View
 pattern XLinks xl v <- (getXLinks &&& id -> (xl,v)) where
   XLinks xl v = addXLinks xl v
 
@@ -704,6 +779,8 @@ getChildren v@SVGView {} = children v
 getChildren PortalView {..} = getChildren portalView
 getChildren TaggedView {..} = getChildren taggedView
 getChildren Prebuilt {..} = getChildren prebuilt
+getChildren ReactiveView {..} = getChildren reactiveView
+getChildren WeakView {..} = getChildren weakView
 getChildren _  = []
 
 {-# INLINE [1] setChildren #-}
@@ -713,21 +790,49 @@ setChildren cs v@SVGView {} = v { children = cs }
 setChildren cs PortalView {..} = PortalView { portalView = setChildren cs portalView, .. }
 setChildren cs TaggedView {..} = TaggedView { taggedView = setChildren cs taggedView, .. }
 setChildren cs Prebuilt {..} = Prebuilt { prebuilt = setChildren cs prebuilt }
+setChildren cs ReactiveView {..} = ReactiveView { reactiveView = setChildren cs reactiveView , .. }
+setChildren cs WeakView {..} = WeakView { weakView = setChildren cs weakView  , .. }
 setChildren _ v = v
 
 {-# INLINE [1] addChildren #-}
 addChildren :: [View] -> View -> View
-addChildren cs v@HTMLView {} = v { children = children v ++ cs }
-addChildren cs v@SVGView {} = v { children = children v ++ cs }
-addChildren cs PortalView {..} = PortalView { portalView = addChildren cs portalView, .. }
-addChildren cs TaggedView {..} = TaggedView { taggedView = addChildren cs taggedView, .. }
-addChildren cs Prebuilt {..} = Prebuilt { prebuilt = addChildren cs prebuilt }
-addChildren _ v = v
+addChildren cs v = setChildren (getChildren v <> cs) v
+
 
 {-# RULES 
+
   "children: set . set" forall fs fs' x. setChildren fs (setChildren fs' x) = setChildren fs x;
   "children: get . set" forall fs x. getChildren (setChildren fs x) = fs;
   "children: add . add" forall fs gs x. addChildren fs (addChildren gs x) = addChildren (gs <> fs) x;
+
+  "getChildren HTMLView" forall e t cs f     . getChildren (HTMLView e t f cs)      = cs;
+  "getChildren SVGView" forall e t cs ls f   . getChildren (SVGView e t f ls cs)    = cs;
+  "getChildren TextView" forall t c          . getChildren (TextView t c)           = [];
+  "getChildren NullView" forall e            . getChildren (NullView e)             = [];
+  "getChildren RawView" forall e t f c       . getChildren (RawView e t f c)        = [];
+  "getChildren KHTMLView" forall e t cs f    . getChildren (KHTMLView e t f cs)     = [];
+  "getChildren KSVGView" forall e t cs ls f  . getChildren (KSVGView e t f ls cs)   = [];
+  "getChildren ReactiveView" forall a v      . getChildren (ReactiveView a v)       = getChildren v;
+  "getChildren WeakView" forall a v          . getChildren (WeakView a v)           = getChildren v;
+  "getChildren PortalView" forall p d v      . getChildren (PortalView p d v)       = getChildren v;
+  "getChildren ComponentView" forall _r r c p. getChildren (ComponentView _r r c p) = [];
+  "getChildren TaggedView" forall _t v       . getChildren (TaggedView _t v)        = getChildren v;
+  "getChildren Prebuilt" forall v            . getChildren (Prebuilt v)             = getChildren v;
+
+  "setChildren HTMLView" forall e t cs f cs'    . setChildren cs (HTMLView e t f cs')     = HTMLView e t f cs;
+  "setChildren SVGView" forall e t cs ls f cs'  . setChildren cs (SVGView e t f ls cs')   = SVGView e t f ls cs;
+  "setChildren TextView" forall t c cs          . setChildren cs (TextView t c)           = TextView t c;
+  "setChildren NullView" forall e cs            . setChildren cs (NullView e)             = NullView e;
+  "setChildren RawView" forall e t f c cs       . setChildren cs (RawView e t f c)        = RawView e t f c;
+  "setChildren KHTMLView" forall e t kcs f cs   . setChildren cs (KHTMLView e t f kcs)    = KHTMLView e t f kcs;
+  "setChildren KSVGView" forall e t kcs ls f cs . setChildren cs (KSVGView e t f ls kcs)  = KSVGView e t f ls kcs;
+  "setChildren ReactiveView" forall a v cs      . setChildren cs (ReactiveView a v)       = ReactiveView a (setChildren cs v);
+  "setChildren WeakView" forall a v cs          . setChildren cs (WeakView a v)           = WeakView a (setChildren cs v);
+  "setChildren PortalView" forall p d v cs      . setChildren cs (PortalView p d v)       = PortalView p d (setChildren cs v);
+  "setChildren ComponentView" forall _r r c p cs. setChildren cs (ComponentView _r r c p) = ComponentView _r r c p;
+  "setChildren TaggedView" forall _t v cs       . setChildren cs (TaggedView _t v)        = TaggedView _t (setChildren cs v);
+  "setChildren Prebuilt" forall v cs            . setChildren cs (Prebuilt v)             = Prebuilt (setChildren cs v);
+
   #-}
 
 pattern SetChildren :: [View] -> View -> View
@@ -758,12 +863,43 @@ setKeyedChildren _ v = v
 
 {-# INLINE [1] addKeyedChildren #-}
 addKeyedChildren :: [(Int,View)] -> View -> View
-addKeyedChildren cs v@KHTMLView {} = v { keyedChildren = keyedChildren v ++ cs }
-addKeyedChildren cs v@KSVGView {} = v { keyedChildren = keyedChildren v ++ cs }
-addKeyedChildren cs PortalView {..} = PortalView { portalView = addKeyedChildren cs portalView, .. }
-addKeyedChildren cs TaggedView {..} = TaggedView { taggedView = addKeyedChildren cs taggedView, .. }
-addKeyedChildren cs Prebuilt {..} = Prebuilt { prebuilt = addKeyedChildren cs prebuilt }
-addKeyedChildren _ v = v
+addKeyedChildren kcs v = setKeyedChildren (getKeyedChildren v <> kcs) v
+
+{-# RULES 
+
+  "kchildren: set . set" forall fs fs' x. setKeyedChildren fs (setKeyedChildren fs' x) = setKeyedChildren fs x;
+  "kchildren: get . set" forall fs x. getKeyedChildren (setKeyedChildren fs x) = fs;
+  "kchildren: add . add" forall fs gs x. addKeyedChildren fs (addKeyedChildren gs x) = addKeyedChildren (gs <> fs) x;
+
+  "getKeyedChildren HTMLView" forall e t cs f      . getKeyedChildren (HTMLView e t f cs)      = [];
+  "getKeyedChildren SVGView" forall e t cs ls f    . getKeyedChildren (SVGView e t f ls cs)    = [];
+  "getKeyedChildren TextView" forall t c           . getKeyedChildren (TextView t c)           = [];
+  "getKeyedChildren NullView" forall e             . getKeyedChildren (NullView e)             = [];
+  "getKeyedChildren RawView" forall e t f c        . getKeyedChildren (RawView e t f c)        = [];
+  "getKeyedChildren KHTMLView" forall e t kcs f    . getKeyedChildren (KHTMLView e t f kcs)    = kcs;
+  "getKeyedChildren KSVGView" forall e t kcs ls f  . getKeyedChildren (KSVGView e t f ls kcs)  = kcs;
+  "getKeyedChildren ReactiveView" forall a v       . getKeyedChildren (ReactiveView a v)       = getKeyedChildren v;
+  "getKeyedChildren WeakView" forall a v           . getKeyedChildren (WeakView a v)           = getKeyedChildren v;
+  "getKeyedChildren PortalView" forall p d v       . getKeyedChildren (PortalView p d v)       = getKeyedChildren v;
+  "getKeyedChildren ComponentView" forall _r r c p . getKeyedChildren (ComponentView _r r c p) = [];
+  "getKeyedChildren TaggedView" forall _t v        . getKeyedChildren (TaggedView _t v)        = getKeyedChildren v;
+  "getKeyedChildren Prebuilt" forall v             . getKeyedChildren (Prebuilt v)             = getKeyedChildren v;
+
+  "setKeyedChildren HTMLView" forall e t cs f kcs      . setKeyedChildren kcs (HTMLView e t f cs)      = HTMLView e t f cs;
+  "setKeyedChildren SVGView" forall e t cs ls f kcs    . setKeyedChildren kcs (SVGView e t f ls cs)    = SVGView e t f ls cs;
+  "setKeyedChildren TextView" forall t c kcs           . setKeyedChildren kcs (TextView t c)           = TextView t c;
+  "setKeyedChildren NullView" forall e kcs             . setKeyedChildren kcs (NullView e)             = NullView e;
+  "setKeyedChildren RawView" forall e t f c kcs        . setKeyedChildren kcs (RawView e t f c)        = RawView e t f c;
+  "setKeyedChildren KHTMLView" forall e t kcs f kcs'   . setKeyedChildren kcs (KHTMLView e t f kcs')   = KHTMLView e t f kcs;
+  "setKeyedChildren KSVGView" forall e t kcs ls f kcs' . setKeyedChildren kcs (KSVGView e t f ls kcs') = KSVGView e t f ls kcs;
+  "setKeyedChildren ReactiveView" forall a v kcs       . setKeyedChildren kcs (ReactiveView a v)       = ReactiveView a (setKeyedChildren kcs v);
+  "setKeyedChildren WeakView" forall a v kcs           . setKeyedChildren kcs (WeakView a v)           = WeakView a (setKeyedChildren kcs v);
+  "setKeyedChildren PortalView" forall p d v kcs       . setKeyedChildren kcs (PortalView p d v)       = PortalView p d (setKeyedChildren kcs v);
+  "setKeyedChildren ComponentView" forall _r r c p kcs . setKeyedChildren kcs (ComponentView _r r c p) = ComponentView _r r c p;
+  "setKeyedChildren TaggedView" forall _t v kcs        . setKeyedChildren kcs (TaggedView _t v)        = TaggedView _t (setKeyedChildren kcs v);
+  "setKeyedChildren Prebuilt" forall v kcs             . setKeyedChildren kcs (Prebuilt v)             = Prebuilt (setKeyedChildren kcs v);
+
+  #-}
 
 pattern SetKeyedChildren :: [(Int,View)] -> View -> View
 pattern SetKeyedChildren ks v <- (getKeyedChildren &&& id -> (ks,v)) where
@@ -873,7 +1009,7 @@ unite left right = either (`with` left) (`with` right) (it :: Either a b)
 each :: forall f a b. (Functor f, Exists (f a)) => (Exists a => b) -> f b 
 each b = fmap (`with` b) (it :: f a)
 
-data Handler eff = Handler { runHandler :: eff -> IO () -> IO Bool }
+newtype Handler eff = Handler { runHandler :: eff -> IO () -> IO Bool }
 
 type Effect eff = Exists (Handler eff)
 
@@ -975,7 +1111,7 @@ lazy io v = go (Asynchronous io (proof v))
     go = component \self -> def
       { deferred = True
 
-      , onConstruct = do
+      , construct = do
           Asynchronous action view_ <- askref self
           result <- newEmptyMVar
           thread <- forkIO (action >>= putMVar result)
@@ -1035,7 +1171,7 @@ eager :: forall a. Typeable a => IO a -> (Exists a => View) -> View
 eager io v = go (Synchronous io (proof v))
   where
     go = component \self -> def
-      { onConstruct = do
+      { construct = do
         Synchronous action view_ <- askref self
         result <- action
         pure Sync {..}
@@ -1117,7 +1253,7 @@ lifecycle :: Lifecycles -> View -> View
 lifecycle ls v = component go (ls,v)
   where
     go self = def
-      { onConstruct = askref self >>= onStart . fst
+      { construct = askref self >>= onStart . fst
       , onMounted = askref self >>= onLoad . fst
       , onUpdate = \(_,v') _ -> do
           (ls,v) <- askref self
@@ -1140,7 +1276,7 @@ watch' :: IO () -> View
 watch' = component go
   where
     go self = def
-      { onConstruct = join (askref self)
+      { construct = join (askref self)
       , onUpdate    = const
       }
 
@@ -1148,7 +1284,7 @@ watching' :: (Typeable a, Typeable b) => a -> IO (b,IO ()) -> (Exists b => View)
 watching' a create v = component go (a,create,\b -> with b v)
   where
     go self = def
-      { onConstruct = askref self >>= \(_,create,_) -> create
+      { construct = askref self >>= \(_,create,_) -> create
       , onReceive = \(a,new,_) current@(_,cleanup) -> do
         (a',old,_) <- askref self
         if isTrue# (reallyUnsafePtrEquality# a a')
@@ -1184,7 +1320,7 @@ poll t f v = go (Polling t f (proof v))
     go = component \self -> def
       { deferred = True
 
-      , onConstruct = do
+      , construct = do
           begin <- time
           Polling interval action view_ <- askref self
           result <- newEmptyMVar
@@ -1592,7 +1728,7 @@ foldM step initial v = componentWith folder (\self -> with (upd self) (Fold step
     folder :: Ref (Fold eff a) (a,a -> IO ()) -> Comp (Fold eff a) (a,a -> IO ())
     folder self =
       def
-        { onConstruct = askref self >>= \(Fold _ initial _) -> initial >>= \(st,shutdown) -> pure (st,shutdown)
+        { construct = askref self >>= \(Fold _ initial _) -> initial >>= \(st,shutdown) -> pure (st,shutdown)
         , onUnmounted = getref self >>= \(st,shutdown) -> shutdown st
         , render = \(Fold _ _ v) (st,_) -> v st
         }
@@ -1936,8 +2072,8 @@ instance Monad (Form ctx) where
 instance MonadFail (Form ctx) where
   fail str = Form (proof (txt str))
 
-liftIO :: (ctx => IO a) -> Form ctx a
-liftIO io = Form (proof (lifecycle def { onStart = io >>= yield } Null))
+-- liftIO :: (ctx => IO a) -> Form ctx a
+-- liftIO io = Form (proof (lifecycle def { onStart = io >>= yield } Null))
 
 data Any2 = Any2 Any Any
 liftF2 :: forall ctx a b c. (a -> b -> c) -> Form ctx a -> Form ctx b -> Form ctx c

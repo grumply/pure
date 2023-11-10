@@ -37,50 +37,40 @@ type Txt = JSString
 
 class FromTxt a where
   fromTxt :: Txt -> a
-  {-# INLINE fromTxt #-}
   default fromTxt :: Coercible Txt a => Txt -> a
   fromTxt = coerce
 
 class ToTxt a where
   toTxt :: a -> Txt
-  {-# INLINE toTxt #-}
   default toTxt :: Coercible a Txt => a -> Txt
   toTxt = coerce
 
 readError :: String -> Txt -> a
 readError ty t = error ("Data.Txt.fromTxt: failed to read an " ++ ty ++ " when given: " ++ show t)
 
-{-# INLINE shortText #-}
 shortText :: Builder.Builder -> T.Text
 shortText = TL.toStrict . Builder.toLazyTextWith 32
 
 -- this instance must be the same as Text to guarantee compatability
 instance Hashable Txt where
-  {-# INLINE hashWithSalt #-}
   hashWithSalt salt jss = hashWithSalt salt (textFromJSString jss)
 
 instance FromTxt TL.Text where
-  {-# INLINE fromTxt #-}
   fromTxt = lazyTextFromJSString
 
 instance FromTxt T.Text where
-  {-# INLINE fromTxt #-}
   fromTxt = textFromJSString
 
 instance FromTxt JSString where
-  {-# INLINE fromTxt #-}
   fromTxt = id
 
 instance FromTxt String where
-  {-# INLINE fromTxt #-}
   fromTxt = unpack
 
 instance FromTxt BC.ByteString where
-  {-# INLINE fromTxt #-}
   fromTxt = BC.pack . unpack
 
 instance FromTxt BSLC.ByteString where
-  {-# INLINE fromTxt #-}
   fromTxt = BSLC.pack . unpack
 
 instance FromTxt Bool where
@@ -88,84 +78,64 @@ instance FromTxt Bool where
   fromTxt _ = False
 
 instance FromTxt Int where
-  {-# INLINE fromTxt #-}
   fromTxt t = fromMaybe (readError "Int" t) (T.readIntMaybe t)
 
 instance FromTxt Double where
-  {-# INLINE fromTxt #-}
   fromTxt t = fromMaybe (readError "Double" t) (T.readDoubleMaybe t)
 
 instance FromTxt Integer where
-  {-# INLINE fromTxt #-}
   fromTxt t = fromMaybe (readError "Integer" t) (T.readIntegerMaybe t)
 
 instance FromTxt Int64 where
-  {-# INLINE fromTxt #-}
   fromTxt t = fromMaybe (readError "Int64" t) (T.readInt64Maybe t)
 
 instance FromTxt Int32 where
-  {-# INLINE fromTxt #-}
   fromTxt t = maybe (readError "Int32" t) fromIntegral (T.readIntMaybe t)
 
 instance FromTxt Int16 where
-  {-# INLINE fromTxt #-}
   fromTxt t = maybe (readError "Int16" t) fromIntegral (T.readIntMaybe t)
 
 instance FromTxt Int8 where
-  {-# INLINE fromTxt #-}
   fromTxt t = maybe (readError "Int8" t) fromIntegral (T.readIntMaybe t)
 
 instance FromTxt Word64 where
-  {-# INLINE fromTxt #-}
   fromTxt t = fromMaybe (readError "Word64" t) (T.readWord64Maybe t)
 
 instance FromTxt Word32 where
-  {-# INLINE fromTxt #-}
   fromTxt t = maybe (readError "Word32" t) fromIntegral (T.readWord64Maybe t)
 
 instance FromTxt Word16 where
-  {-# INLINE fromTxt #-}
   fromTxt t = maybe (readError "Word16" t) fromIntegral (T.readWord64Maybe t)
 
 instance FromTxt Word8 where
-  {-# INLINE fromTxt #-}
   fromTxt t = maybe (readError "Word8" t) fromIntegral (T.readWord64Maybe t)
 
 instance FromTxt Word where -- Word is Word32 in GHCJS? I dunno....
-  {-# INLINE fromTxt #-}
   fromTxt t = maybe (readError "Word" t) fromIntegral (T.readWord64Maybe t)
 
 instance ToTxt T.Text where
-  {-# INLINE toTxt #-}
   toTxt = textToJSString
 
 instance ToTxt TL.Text where
-  {-# INLINE toTxt #-}
   toTxt = lazyTextToJSString
 
 instance ToTxt Char where
-  {-# INLINE toTxt #-}
   toTxt = singleton
 
 instance ToTxt String where
-  {-# INLINE toTxt #-}
   toTxt = pack
 
 instance ToTxt Bool where
-  {-# INLINE toTxt #-}
   toTxt True = "true"
   toTxt False = "false"
 
 instance ToTxt Int where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Word where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Integer where
-  {-# INLINE toTxt #-}
   -- There is a bug in the implementation of
   -- h$jsstringDecInteger that can result in
   --
@@ -177,42 +147,32 @@ instance ToTxt Integer where
   toTxt = toTxt . show
 
 instance ToTxt Float where
-  {-# INLINE toTxt #-}
   toTxt = realFloat
 
 instance ToTxt Double where
-  {-# INLINE toTxt #-}
   toTxt = realFloat
 
 instance ToTxt Int64 where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Int32 where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Int16 where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Int8 where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Word64 where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Word32 where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Word16 where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 
 instance ToTxt Word8 where
-  {-# INLINE toTxt #-}
   toTxt = decimal
 

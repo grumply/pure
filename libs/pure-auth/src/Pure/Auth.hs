@@ -50,7 +50,7 @@ liveWith :: forall c e a. (API c, Typeable c, Typeable e, FromJSON e, FromJSON a
 liveWith policy o s v = 
 #ifdef __GHCJS__
   flip Component (Data.View.proof @(Exists a, Producer e) v) \self -> def
-    { onConstruct = do
+    { construct = do
         (t,i,ma) <- Client.get_ @c (o <> "/read") (it :: Token c) s
         ir <- newIORef i
         let

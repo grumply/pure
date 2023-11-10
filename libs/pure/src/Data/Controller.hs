@@ -69,7 +69,7 @@ run Controller {..} = Component app . (Env @msg)
                   go mdl' msgs
           in 
             def 
-              { onConstruct = _model
+              { construct = _model
               , onExecuting = \mdl -> do
                 env <- askref self
                 update (coerce env) mdl _startup

@@ -183,7 +183,7 @@ main = do
 
     in
         def
-            { onConstruct = do
+            { construct = do
                 seed <- newSeed
                 return (Model seed V.empty 1)
             , render = \_ model ->

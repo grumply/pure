@@ -115,6 +115,7 @@ type Removals s = STRef s [View]
 newPlan :: ST s (Plan s)
 newPlan = newSTRef []
 
+{-# INLINE buildPlan #-}
 buildPlan :: (forall s. Plan s -> Plan s -> ST s a) -> ([IO ()],[IO ()],a)
 buildPlan f = runST $ do
   p  <- newPlan
@@ -143,6 +144,7 @@ x === y = isTrue# (unsafeCoerce# reallyUnsafePtrEquality# x y)
 x /== y = Prelude.not (x === y)
 
 -- | Given a host node and a View, build and embed the View.
+{-# INLINE inject #-}
 inject :: IsNode e => e -> View -> IO View
 inject host v = do
   mtd <- newIORef []
@@ -151,6 +153,7 @@ inject host v = do
   pure v'
 
 -- | Pre-build a view for later use.
+{-# INLINE prebuild #-}
 prebuild :: View -> IO View
 prebuild v = do
   mtd <- newIORef []
@@ -191,7 +194,7 @@ race' vs v = lazy run v
 --
 -- Only the actions of `build` are subject to suspense. The component threads
 -- generated in build are forked and, therefore, not subject to suspense.
--- Therefore, suspense includes `onConstruct`, `onMount`, and the initial 
+-- Therefore, suspense includes `construct`, `onMount`, and the initial 
 -- `render`/nested `build`.
 --
 suspense :: Time -> View -> View -> View
@@ -267,8 +270,13 @@ suspenses deep tvs v = stateWith' (\_ -> pure) initialize it
 
       pure (Null,const (killThread t1 >> killThread t2))
 
+{-# NOINLINE build #-}
 build :: IORef [IO ()] -> Maybe Node -> View -> IO View
-build mtd = start
+build = build'
+
+{-# INLINABLE build' #-}
+build' :: IORef [IO ()] -> Maybe Node -> View -> IO View
+build' mtd = start
   where
     start mparent = go
       where
@@ -304,7 +312,7 @@ build mtd = start
               ps = props cr
           writeIORef props_ ps
           writeIORef c_ c
-          state1 <- onConstruct c
+          state1 <- construct c
           writeIORef state_ state1
           state2 <- onMount c state1
           writeIORef state_ state2
@@ -467,7 +475,7 @@ addLifecycle mtd e (Created f _) = do
   stop <- f (toNode e)
   return (Created f stop)
 addLifecycle mtd e (Mounted f _) = do
-  cleanup <- newIORef undefined
+  cleanup <- newIORef (pure ())
   modifyIORef' mtd ((f (toNode e) >>= writeIORef cleanup):)
   let stop = join (readIORef cleanup)
   return (Mounted f stop)
@@ -505,7 +513,7 @@ newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state 
                 sameView = mid === new
 
                 (!plan,!plan',!new_old)
-                  | first || not sameView = buildPlan $ \p p' -> diffDeferred mtd p p' old mid new
+                  | first || not sameView = buildPlan $ \p p' -> diffDeferred' mtd p p' old mid new
                   | otherwise = ([],[],old)
 
                 hasAnimations = not (List.null plan)
@@ -531,31 +539,33 @@ newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state 
                 yield
 
 #ifdef __GHCJS__
-                sync $ \barrier -> do
-                  -- In the worst case, updating within an animation frame costs
-                  -- about 20%. But there are two major benefits: 
-                  --
-                  -- 1. (rate-limiting) synchronizing on the animation frame 
-                  --    prevents unintentional update loops from eating all CPU 
-                  --    cycles
-                  --
-                  -- 2. (batching updates) batching updates together minimizes reflows
-                  --
-                  -- In most cases, the cost of an animation frame is near-
-                  -- trivial.
-                  --
-                  -- One downside is that some updates that could happen
-                  -- together end up happening over two animation frames.
-                  --
-                  addAnimation $ do
-                    runPlan plan
-                    putMVar barrier ()
+                if animated then do
+                  sync $ \barrier -> do
+                    -- In the worst case, updating within an animation frame costs
+                    -- about 20%. But there are two major benefits: 
+                    --
+                    -- 1. (rate-limiting) synchronizing on the animation frame 
+                    --    prevents unintentional update loops from eating all CPU 
+                    --    cycles
+                    --
+                    -- 2. (batching updates) batching updates together minimizes reflows
+                    --
+                    -- In most cases, the cost of an animation frame is near-
+                    -- trivial.
+                    --
+                    -- One downside is that some updates that could happen
+                    -- together end up happening over two animation frames.
+                    --
+                    addAnimation $ do
+                      runPlan plan
+                      putMVar barrier ()
+                else
+                  runPlan plan
 #else
                 runPlan plan
 #endif
 
-              when hasIdleWork $ 
-                runPlan plan'
+              runPlan plan'
 
               runPlan mounts
 
@@ -627,47 +637,51 @@ cleanupLifecycle (Mounted _ clean) = clean
 cleanupListener :: Listener -> IO ()
 cleanupListener (On _ _ _ _ _ stp) = stp
 
-cleanup' :: View -> IO ()
-cleanup' = cleanup
-
+{-# NOINLINE cleanup #-}
 cleanup :: View -> IO ()
-cleanup RawView {..} = do
-  for_ (listeners features) cleanupListener
-  for_ (lifecycles features) cleanupLifecycle
-cleanup HTMLView {..} = do
-  for_ (listeners features) cleanupListener
-  for_ (lifecycles features) cleanupLifecycle
-  for_ children cleanup'
-cleanup SVGView {..} = do
-  for_ (listeners features) cleanupListener
-  for_ (lifecycles features) cleanupLifecycle
-  for_ children cleanup'
-cleanup ComponentView {..} = do
-  for_ record (`queueComponentUpdate` Unmount)
-cleanup PortalView {..} = do
-  for_ (getHost portalView) (addAnimation . removeNodeMaybe)
-  cleanup' portalView
-cleanup KHTMLView {..} = do
-  for_ (listeners features) cleanupListener
-  for_ (lifecycles features) cleanupLifecycle
-  for_ keyedChildren (cleanup' . snd)
-cleanup KSVGView {..} = do
-  for_ (listeners features) cleanupListener
-  for_ (lifecycles features) cleanupLifecycle
-  for_ keyedChildren (cleanup' . snd)
-cleanup Prebuilt {..} = do
-  cleanup' prebuilt
-cleanup _ = return ()
+cleanup = cleanup'
 
+{-# INLINABLE cleanup' #-}
+cleanup' :: View -> IO ()
+cleanup' RawView {..} = do
+  for_ (listeners features) cleanupListener
+  for_ (lifecycles features) cleanupLifecycle
+cleanup' HTMLView {..} = do
+  for_ (listeners features) cleanupListener
+  for_ (lifecycles features) cleanupLifecycle
+  for_ children cleanup'
+cleanup' SVGView {..} = do
+  for_ (listeners features) cleanupListener
+  for_ (lifecycles features) cleanupLifecycle
+  for_ children cleanup'
+cleanup' ComponentView {..} = do
+  for_ record (`queueComponentUpdate` Unmount)
+cleanup' PortalView {..} = do
+  for_ (getHost portalView) (addAnimation . removeNodeMaybe)
+  cleanup portalView
+cleanup' KHTMLView {..} = do
+  for_ (listeners features) cleanupListener
+  for_ (lifecycles features) cleanupLifecycle
+  for_ keyedChildren (cleanup' . snd)
+cleanup' KSVGView {..} = do
+  for_ (listeners features) cleanupListener
+  for_ (lifecycles features) cleanupLifecycle
+  for_ keyedChildren (cleanup' . snd)
+cleanup' Prebuilt {..} = do
+  cleanup' prebuilt
+cleanup' _ = return ()
+
+{-# NOINLINE diffDeferred #-}
 diffDeferred :: forall s. IORef [IO ()] -> Plan s -> Plan s -> View -> View -> View -> ST s View
 diffDeferred = diffDeferred'
 
 diffDeferred' :: forall s. IORef [IO ()] -> Plan s -> Plan s -> View -> View -> View -> ST s View
 diffDeferred' mounted plan plan' old !mid !new =
+  -- sameData = isTrue# (dataToTag# mid ==# dataToTag# new)
   if mid === new then return old else
       let
           replace = do
-            !new' <- unsafeIOToST (build mounted Nothing new)
+            !new' <- unsafeIOToST (build' mounted Nothing new)
             replaceDeferred plan plan' old new'
 
           sameTag = tag mid === tag new
@@ -675,21 +689,21 @@ diffDeferred' mounted plan plan' old !mid !new =
       in
         case (mid,new) of
           (Prebuilt pb,Prebuilt pb') ->
-            diffDeferred mounted plan plan' old pb pb'
+            diffDeferred' mounted plan plan' old pb pb'
 
           (Prebuilt pb,_) ->
-            diffDeferred mounted plan plan' old pb new
+            diffDeferred' mounted plan plan' old pb new
 
           (ReactiveView a f,ReactiveView a' f')
             | a === a'  -> return old
-            | otherwise -> diffDeferred mounted plan plan' old f f'
+            | otherwise -> diffDeferred' mounted plan plan' old f f'
 
           (WeakView a f,WeakView a' f')
-            | a === a' -> diffDeferred mounted plan plan' old f f'
+            | a === a' -> diffDeferred' mounted plan plan' old f f'
 
           (TaggedView t v,TaggedView t' v')
             | t === t' || t == t' ->
-              diffDeferred mounted plan plan' old v v'
+              diffDeferred' mounted plan plan' old v v'
 
           (ComponentView rep r v p,ComponentView rep' r' v' p')
             | rep === rep' || rep == rep'
@@ -701,7 +715,7 @@ diffDeferred' mounted plan plan' old !mid !new =
 
           (ComponentView {},_)
             | ComponentView _ (Just r0) _ _ <- old -> do
-              !new' <- unsafeIOToST (build mounted Nothing new)
+              !new' <- unsafeIOToST (build' mounted Nothing new)
               amendPlan plan $ do
                 old <- readIORef (crView r0)
                 replaceNode (fromJust $ getHost old) (fromJust $ getHost new')
@@ -734,11 +748,11 @@ diffDeferred' mounted plan plan' old !mid !new =
 
           (PortalView{},PortalView{})
             | same (toJSV (portalDestination old)) (toJSV (portalDestination new)) -> do
-              !v <- diffDeferred mounted plan plan' (portalView old) (portalView mid) (portalView new)
+              !v <- diffDeferred' mounted plan plan' (portalView old) (portalView mid) (portalView new)
               return old { portalView = v }
             | otherwise -> do
-              !built@(getHost -> Just h) <- unsafeIOToST (build mounted Nothing (portalView new))
-              amendPlan plan' (cleanup old)
+              !built@(getHost -> Just h) <- unsafeIOToST (build' mounted Nothing (portalView new))
+              amendPlan plan' (cleanup' old)
               amendPlan plan $ do
                 for_ (getHost (portalView old)) removeNode
                 append (toNode $ portalDestination new) h
@@ -746,21 +760,21 @@ diffDeferred' mounted plan plan' old !mid !new =
               return (PortalView (portalProxy old) (portalDestination new) built)
 
           (PortalView{},_) -> do
-            amendPlan plan' (cleanup old)
+            amendPlan plan' (cleanup' old)
             amendPlan plan $ for_ (getHost (portalView old)) removeNode
             replace
 
           (_,PortalView{}) -> do
-            !proxy <- unsafeIOToST (build mounted Nothing (NullView Nothing))
+            !proxy <- unsafeIOToST (build' mounted Nothing (NullView Nothing))
             replaceDeferred plan plan' old proxy
-            !built@(getHost -> Just h) <- unsafeIOToST (build mounted Nothing (portalView new))
+            !built@(getHost -> Just h) <- unsafeIOToST (build' mounted Nothing (portalView new))
             amendPlan plan $ append (toNode $ portalDestination new) h
             return (PortalView (fmap coerce $ getHost proxy) (portalDestination new) built)
           
           (_,Prebuilt pb) -> 
             -- I don't have any code that touches this case. 
             -- What would it look like? What usecase?
-            diffDeferred mounted plan plan' old mid pb
+            diffDeferred' mounted plan plan' old mid pb
 
           _ -> replace
 
@@ -1016,7 +1030,7 @@ diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
     ([],_ ) -> do
       !frag <- unsafeIOToST createFrag
       let n = Just (toNode frag)
-      !news' <- unsafeIOToST (traverse (build mounted n) news)
+      !news' <- unsafeIOToST (traverse (build' mounted n) news)
       amendPlan plan (append e frag)
       return news'
 
@@ -1034,7 +1048,7 @@ diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
         diff os ms ns
       where
         diff (old:olds) (mid:mids) (new:news) = do
-          !new'  <- diffDeferred mounted plan plan' old mid new
+          !new'  <- diffDeferred' mounted plan plan' old mid new
           !news' <- go olds mids news
           return (new' : news')
 
@@ -1045,7 +1059,7 @@ diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
         diff ~[] _ news = do
           !frag <- unsafeIOToST createFrag
           let n = Just (toNode frag)
-          !news' <- unsafeIOToST (for news (build mounted n))
+          !news' <- unsafeIOToST (for news (build' mounted n))
           amendPlan plan (append e frag)
           return news'
 
@@ -1057,7 +1071,7 @@ removeManyDeferred plan plan' vs = do
 removeDeferred :: Plan s -> Plan s -> View -> ST s ()
 removeDeferred plan plan' v = do
   for_ (getHost v) (amendPlan plan . removeNodeMaybe)
-  amendPlan plan' (cleanup v)
+  amendPlan plan' (cleanup' v)
 
 replaceDeferred :: Plan s -> Plan s -> View -> View -> ST s View
 replaceDeferred plan plan' old new = do
@@ -1068,7 +1082,7 @@ replaceDeferred plan plan' old new = do
         case getHost new of
           Nothing -> error "Expected new host in replaceDeferred; got nothing."
           Just nh -> replaceNode oh nh
-  amendPlan plan' (cleanup old)
+  amendPlan plan' (cleanup' old)
   return new
 
 replaceTextContentDeferred :: Plan s -> View -> View -> ST s View
@@ -1119,7 +1133,7 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
     ([],_ ) -> do
       !frag <- unsafeIOToST createFrag
       let n = Just (toNode frag)
-      !news' <- unsafeIOToST (traverse (traverse (build mounted n)) news)
+      !news' <- unsafeIOToST (traverse (traverse (build' mounted n)) news)
       amendPlan plan (append e frag)
       return news'
 
@@ -1217,18 +1231,18 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
         go dc _ [] _ news = do
           !frag <- unsafeIOToST createFrag
           let n = Just (toNode frag)
-          !news' <- unsafeIOToST (traverse (traverse (build mounted n)) news)
+          !news' <- unsafeIOToST (traverse (traverse (build' mounted n)) news)
           amendPlan plan (append e frag)
           return news'
 
         dKCD_helper :: DiffST s (Int,View)
         dKCD_helper (_,old) (_,mid) (nk,new) = do
-          !new' <- diffDeferred mounted plan plan' old mid new
+          !new' <- diffDeferred' mounted plan plan' old mid new
           return (nk,new')
 
         dKCD_ins :: Int -> Int -> View -> ST s (Int,View)
         dKCD_ins i nk new = do
           let ins ~(Just a) = amendPlan plan (insertAt (coerce e) a i)
-          !n' <- unsafeIOToST (build mounted Nothing new)
+          !n' <- unsafeIOToST (build' mounted Nothing new)
           ins (getHost n')
           return (nk,n')

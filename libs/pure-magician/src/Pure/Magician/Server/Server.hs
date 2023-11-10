@@ -69,7 +69,7 @@ server =
                 updConnections (IntMap.insert u ws)
       in
           def
-              { onConstruct = do
+              { construct = do
                   s <- askref self
                   case s of
                     Server {..} -> do

@@ -94,7 +94,7 @@ renderer :: (View,MVar View) -> View
 renderer = Component go
   where
     go self = def
-      { onConstruct = do
+      { construct = do
           (v,_) <- askref self
           return v
       , onMounted = do
