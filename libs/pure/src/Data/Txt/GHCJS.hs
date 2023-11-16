@@ -4,6 +4,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, UnliftedFFITypes #-}
+{-# OPTIONS_GHC -O #-}
 module Data.Txt.GHCJS (module Data.Txt.GHCJS, module Export) where
 
 import Data.Coerce
@@ -136,15 +137,7 @@ instance ToTxt Word where
   toTxt = decimal
 
 instance ToTxt Integer where
-  -- There is a bug in the implementation of
-  -- h$jsstringDecInteger that can result in
-  --
-  -- > decimal someInteger => "-"
-  --
-  -- The solution for now is to just go through
-  -- the show instance. Definitely needs some 
-  -- looking into, as it's a pretty nasty bug. 
-  toTxt = toTxt . show
+  toTxt = decimal
 
 instance ToTxt Float where
   toTxt = realFloat

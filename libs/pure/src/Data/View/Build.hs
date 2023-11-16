@@ -25,7 +25,7 @@ import Data.Set (Set)
 import qualified Data.Map.Strict as Map (fromList,toList,insert,difference,keys,differenceWith,null,elems,mergeWithKey,mapWithKey)
 import qualified Data.Set as Set (fromList,toList,insert,delete,null)
 
-import Data.View (pattern Null,Exists,it,lazy,stateWith',Modify,put,View(..),Features(..),Listener(..),Lifecycle(..),Comp(..),Target(..),getHost,setProps,queueComponentUpdate,Ref(..),ComponentPatch(..),asProxyOf,ListenerAction(..))
+import Data.View (pattern Null,Exists,it,lazy,stateWith',Modify,put,View(..),Features(..),Listener(..),Lifecycle(..),Comp(..),Target(..),getHost,setProps,queueComponentUpdate,Ref(..),ComponentPatch(..),asProxyOf,ListenerAction(..),(===),(/==))
 import Data.Time (Time,timeout)
 
 import Data.Animation
@@ -136,12 +136,6 @@ sync f = do
   barrier <- newEmptyMVar
   f barrier
   takeMVar barrier
-
-(===) :: a -> b -> Bool
-x === y = isTrue# (unsafeCoerce# reallyUnsafePtrEquality# x y)
-
-(/==) :: a -> b -> Bool
-x /== y = Prelude.not (x === y)
 
 -- | Given a host node and a View, build and embed the View.
 {-# INLINE inject #-}
@@ -294,7 +288,7 @@ build' mtd = start
           e <- create tag
           let n = Just (toNode e)
           fs <- setFeatures mtd e features
-          !cs <- traverse (start n) children
+          cs <- traverse (start n) children
           for_ mparent (`append` e)
           return o
             { elementHost = Just e
@@ -348,7 +342,7 @@ build' mtd = start
           e <- create tag
           let n = Just (toNode e)
           fs <- setFeatures mtd e features
-          !cs <- traverse (traverse (start n)) keyedChildren
+          cs <- traverse (traverse (start n)) keyedChildren
           for_ mparent (`append` e)
           return o
             { elementHost = Just e
@@ -360,7 +354,7 @@ build' mtd = start
           let n = Just (toNode e)
           setXLinks e xlinks
           fs <- setFeatures mtd e features
-          !cs <- traverse (start n) children
+          cs <- traverse (start n) children
           for_ mparent (`append` e)
           return o
             { elementHost = Just e
@@ -372,7 +366,7 @@ build' mtd = start
           let n = Just (toNode e)
           setXLinks e xlinks
           fs <- setFeatures mtd e features
-          !cs <- traverse (traverse (start n)) keyedChildren
+          cs <- traverse (traverse (start n)) keyedChildren
           for_ mparent (`append` e)
           return o
             { elementHost = Just e

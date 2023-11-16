@@ -1,4 +1,4 @@
-{-# language CPP, PatternSynonyms, ViewPatterns, DeriveGeneric, DerivingVia, TypeApplications, OverloadedStrings #-}
+{-# language CPP, PatternSynonyms, ViewPatterns, DeriveGeneric, DerivingVia, TypeApplications, OverloadedStrings, CPP #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
 module Data.Time (module Data.Time, module Export) where
@@ -52,8 +52,8 @@ delay t
   | t <= 0 = pure ()
   | t == 1 = yield
   | otherwise =
-    let (Microseconds us _) = t
-    in Unbounded.delay (round us)
+    let Milliseconds ms _ = t
+    in Unbounded.delay (round ms * 1000)
 
 timeout :: Time -> IO a -> IO (Maybe a)
 timeout (Microseconds us _) = Unbounded.timeout (round us)
@@ -208,9 +208,12 @@ pattern Microseconds us rest <- (fmap (* Microsecond) . properFraction . (/ Micr
 milliseconds :: Time -> Double
 milliseconds = realToFrac . (/Millisecond)
 
+to_millis_ :: Time -> (Double,Time)
+to_millis_ (Time_ (Millis ms)) = (fromIntegral (floor ms :: Int),Time_ (Millis (ms - fromIntegral (floor ms :: Int))))
+
 {-# complete Milliseconds #-}
 pattern Milliseconds :: Double -> Time -> Time
-pattern Milliseconds ms rest <- (properFraction -> (fromIntegral -> ms,rest)) where
+pattern Milliseconds ms rest <- (to_millis_ -> (ms,rest)) where
   Milliseconds ms rest = realToFrac ms + rest
 
 {-# INLINE seconds #-}
@@ -278,7 +281,18 @@ pattern Years ys rest <- (fmap (* Year) . properFraction . (/ Year) -> (fromInte
 
 pattern RFC3339 :: Time -> Txt
 pattern RFC3339 t <- (parseRFC3339 -> Just t) where
-  RFC3339 t = formatTime "%Y-%m-%dT%H:%M:%SZ" (utcTimeFromMillis (fromTime t :: Millis))
+  RFC3339 t = 
+#ifdef __GHCJS__
+    to_rfc3339_js t
+#else
+    formatTime "%Y-%m-%dT%H:%M:%SZ" (utcTimeFromMillis (fromTime t :: Millis))
+#endif
+    
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "$r = new Date($1).toISOString()" 
+    to_rfc3339_js :: Time -> Txt
+#endif
 
 parseRFC3339 :: ToTxt x => x -> Maybe Time
 parseRFC3339 txt = toTime . utcTimeToMillis <$> parse
@@ -330,10 +344,22 @@ fromPrettyDate = parseTime "%b%e, %Y"
 
 pattern PrettyTime :: Time -> Txt
 pattern PrettyTime t <- (fmap toTime . fromPrettyTime @Txt @UTCTime -> Just t) where
-  PrettyTime t = toPrettyTime @Txt @UTCTime (fromTime t)
+  PrettyTime t = toPrettyTime @Txt t
 
-toPrettyTime :: (FromTxt txt, Format.FormatTime t) => t -> txt
-toPrettyTime = formatTime "%l:%M%p"
+toPrettyTime :: (FromTxt txt, IsTime t) => t -> txt
+toPrettyTime = 
+#ifdef __GHCJS__
+  fromTxt . pretty_time_js . toTime
+#else
+  formatTime "%l:%M%p" . fromTime @UTCTime . toTime
+#endif
+  
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "var now = new Date($1); var hs = now.getHours(); var ms = now.getMinutes(); $r = hs % 12 + ':' + (ms < 10 ? '0' + ms : ms) + (hs > 11 ? 'pm' : 'am');" 
+    pretty_time_js :: Time -> Txt
+#endif
+  
 
 fromPrettyTime :: (ToTxt txt, Format.ParseTime t) => txt -> Maybe t
 fromPrettyTime = parseTime "%l:%M%p"
@@ -408,7 +434,7 @@ ago now t
       in toTxt (round ms :: Int) <> " minutes ago"
 
 duration :: Time -> Txt
-duration d
+duration t@(abs -> d)
   | Microseconds us _ <- d, us < 1000 = r us "us"
   | Milliseconds ms _ <- d, ms < 1000 = r ms "ms"
   | Seconds ss _      <- d, ss < 60   = r ss "s"
@@ -417,5 +443,8 @@ duration d
   | Days ds _         <- d            = r ds "d"
   where
     r :: Double -> Txt -> Txt
-    r = (<>) . toTxt @Int . round
+    r n t = signed (toTxt @Int (round n) <> t)
+
+    signed :: Txt -> Txt
+    signed | signum t < 0 = ("-" <>) | otherwise = id
 

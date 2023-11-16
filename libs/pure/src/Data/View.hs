@@ -36,6 +36,7 @@ import GHC.Fingerprint.Type (Fingerprint())
 import GHC.Generics (Generic(..))
 import GHC.Stack
 import System.IO.Unsafe (unsafePerformIO)
+import Type.Reflection (SomeTypeRep,someTypeRep)
 import Unsafe.Coerce (unsafeCoerce)
 
 import Data.Default (Default(..))
@@ -215,7 +216,7 @@ data View where
     } -> View
 
   ComponentView ::
-    { __rep  :: Fingerprint
+    { __rep  :: SomeTypeRep
     , record :: Maybe (Ref props state)
     , comp   :: Ref props state -> Comp props state
     , props  :: Ref props state -> props
@@ -256,6 +257,14 @@ instance IsString View where
 instance FromTxt View where
   {-# INLINE fromTxt #-}
   fromTxt = TextView Nothing
+
+{-# INLINE (===) #-}
+(===) :: a -> b -> Bool
+x === y = isTrue# (unsafeCoerce# reallyUnsafePtrEquality# x y)
+
+{-# INLINE (/==) #-}
+(/==) :: a -> b -> Bool
+x /== y = Prelude.not (x === y)
 
 {-# INLINE asProxyOf #-}
 asProxyOf :: a -> Proxy a
@@ -379,6 +388,8 @@ pattern Tag v <- TaggedView ((==) (typeRepFingerprint (typeRep (Proxy :: Proxy t
 -- Txt
 
 {-# INLINE txt #-}
+{-# SPECIALIZE txt :: Txt -> View #-}
+{-# SPECIALIZE txt :: String -> View #-}
 txt :: ToTxt a => a -> View
 txt a = TextView Nothing (toTxt a)
 
@@ -387,14 +398,14 @@ pattern Txt t <- (TextView _ t) where
   Txt t = TextView Nothing t
 
 {-# INLINE withType #-}
-withType :: Typeable a => Proxy a -> Fingerprint -> b -> b -> b
-withType p fp bad good
-  | typeRepFingerprint (typeRep p) == fp = good
-  | otherwise                            = bad
+withType :: Typeable a => Proxy a -> SomeTypeRep -> b -> b -> b
+withType p str bad good
+  | (someTypeRep p) === str || someTypeRep p == str = good
+  | otherwise                                       = bad
 
 viewComponent :: forall props state. (Typeable props, Typeable state) => View -> Maybe (Maybe (Ref props state),Ref props state -> Comp props state,Ref props state -> props)
 viewComponent (ComponentView rep f0 c0 ps0) =
-  withType (Proxy :: Proxy (props,state)) rep Nothing do
+  withType (Proxy @(props,state)) rep Nothing do
     Just (unsafeCoerce f0,unsafeCoerce c0,unsafeCoerce ps0)
 viewComponent _ = Nothing
 
@@ -404,7 +415,7 @@ applyComponent _ = Nothing
 
 pattern ComponentWith :: forall props state. (Typeable props, Typeable state) => (Ref props state -> Comp props state) -> (Ref props state -> props) -> View
 pattern ComponentWith v p <- (viewComponent -> Just (_,v,p)) where
-  ComponentWith v p = ComponentView (typeRepFingerprint (typeRep (Proxy :: Proxy (props,state)))) Nothing v p
+  ComponentWith v p = ComponentView (someTypeRep (Proxy :: Proxy (props,state))) Nothing v p
 
 pattern Component :: forall props state. (Typeable props, Typeable state) => (Ref props state -> Comp props state) -> props -> View
 pattern Component v p <- (applyComponent . viewComponent -> Just (v,p)) where
@@ -412,11 +423,11 @@ pattern Component v p <- (applyComponent . viewComponent -> Just (v,p)) where
 
 {-# INLINE componentWith #-}
 componentWith :: forall props state. (Typeable props, Typeable state) => (Ref props state -> Comp props state) -> (Ref props state -> props) -> View
-componentWith = ComponentView (typeRepFingerprint (typeRep (Proxy :: Proxy (props,state)))) Nothing
+componentWith = ComponentView (someTypeRep (Proxy :: Proxy (props,state))) Nothing
 
 {-# INLINE component #-}
 component :: forall props state. (Typeable props, Typeable state) => (Ref props state -> Comp props state) -> props -> View
-component v p = ComponentView (typeRepFingerprint (typeRep (Proxy :: Proxy (props,state)))) Nothing v (const p)
+component v p = ComponentView (someTypeRep (Proxy :: Proxy (props,state))) Nothing v (const p)
 
 pattern Null :: View
 pattern Null <- (NullView _) where
@@ -1101,7 +1112,7 @@ await = it
 parv :: Typeable a => a -> (Exists a => View) -> View
 parv a = lazy (evaluate a)
 
-{-# INLINE lazy #-}
+{-# NOINLINE lazy #-}
 -- Note that only the asynchrony of the first action can be witnessed in View
 -- To witness the asynchrony of reconciled effects, use `weak` to recreate the
 -- `View` on each reconciliation.
@@ -1166,7 +1177,7 @@ data Sync a = Sync
 seqv :: Typeable a => a -> (Exists a => View) -> View
 seqv a = eager (evaluate a)
 
-{-# INLINE eager #-}
+{-# NOINLINE eager #-}
 eager :: forall a. Typeable a => IO a -> (Exists a => View) -> View
 eager io v = go (Synchronous io (proof v))
   where
@@ -1312,7 +1323,7 @@ data Poll a = Poll
 every :: forall a. Typeable a => Time -> IO a -> (Exists a => View) -> View
 every = poll
 
-{-# INLINE poll #-}
+{-# NOINLINE poll #-}
 -- Note that only the asynchrony of the first action can be witnessed in View
 poll :: forall a. Typeable a => Time -> IO a -> (Exists a => View) -> View
 poll t f v = go (Polling t f (proof v))

@@ -1,6 +1,6 @@
 {-# language PatternSynonyms, DerivingVia, ViewPatterns, BlockArguments, ScopedTypeVariables, RankNTypes, DuplicateRecordFields, NamedFieldPuns, ConstraintKinds, FlexibleContexts, GADTs, TypeApplications, BangPatterns, AllowAmbiguousTypes, CPP, PatternSynonyms, OverloadedStrings, RecordWildCards, LambdaCase, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, DefaultSignatures, TypeOperators, TupleSections #-}
 {-# OPTIONS_GHC -O2 #-}
-module Web (pattern Route,Routed,withRoute,Web.route,routed,Stencil(),ToPath(..),FromPath(..),ui,ui_,Web.clear,done,Void,Web,play',play,fixp,play_,fixp_,animate,become,become_,Web.error,Web.void,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
+module Web (Web.dot,dot',dotWith,Web.at,at',atWith,Web.every,url,Web.path,Path(..),embed,pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,done,Void,Web,play_,play,playIO,animate,become,become_,Web.error,Web.void,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
 
 import Control.Concurrent hiding (yield)
 import qualified Data.Function as F
@@ -51,57 +51,138 @@ import Control.Monad.Trans.Class as T
 import Control.Monad.Writer
 import Control.Monad.Writer.Class
 import Data.Functor.Identity
-import Data.JSON (ToJSON,FromJSON)
+import Data.JSON (ToJSON,FromJSON,traceJSON)
 import Data.Time
+import Debug.Trace
+import Data.Default
+import qualified Data.Variance as Var
+
+{-# NOINLINE embed #-}
+embed :: (Web => a) -> (Producer a => View)
+embed wa = SimpleHTML "template" <| OnMounted go 
+  where
+    go node = do
+      om <- newMVar (NullView (Just (coerce node)),Null)
+      tid <- forkIO do
+        tid <- myThreadId
+        let !a = consume (work om) wa
+        yield a
+        (old,mid) <- takeMVar om
+        v <- diff old mid Null
+        putMVar om (v,Null)
+      pure do
+        killThread tid 
+        (old,_) <- takeMVar om 
+        traverse_ removeNode (getHost old)
+        cleanup old
+        
+    work :: MVar (View,View) -> OI -> IO ()
+    work mv = \case
+      Input new -> do
+        (old,mid) <- takeMVar mv
+        v <- diff old mid new
+        putMVar mv (v,new)
+      Output mr new -> do
+        (old,mid) <- takeMVar mv
+        v <- diff old mid new
+        putMVar mv (v,new)
+        putMVar mr ()
+
+    runPlan :: [IO ()] -> IO ()
+    runPlan plan = let !p = sequence_ (List.reverse plan) in p
+
+    diff old mid new = do
+      mtd <- newIORef []
+      let
+        (!plan,!plan',!new_old) = buildPlan $ \p p' -> 
+            diffDeferred mtd p p' old mid new
+        
+      mounts <- plan `seq` plan' `seq` readIORef mtd
+
+      runPlan plan
+      runPlan plan'
+      runPlan mounts
+      
+      pure new_old
 
 
 data OI = Input View | Output (MVar ()) View
 type Web = Producer OI
 
-{-# INLINE fixp_ #-}
-fixp_ :: Typeable a => (Web => a -> a) -> View
-fixp_ f = play_ (F.fix f)
-
-{-# INLINE fixp #-}
-fixp :: Typeable a => (Web => a -> a) -> (Producer a => View)
-fixp f = play (F.fix f)
-
-{-# INLINE play_ #-}
+{-# NOINLINE play_ #-}
 play_ :: forall a. Typeable a => (Web => a) -> View
-play_ a = discard @a (play' @a a) 
-
-{-# INLINE play #-}
-play :: Typeable a => (Web => a) -> (Producer a => View)
-play a = play' a
-
-
-{-# NOINLINE play' #-}
-play' :: forall a. Typeable a => (Web => a) -> (Producer a => View)
-play' (Proof -> a) = flip component a $ \self -> 
+play_ (Proof -> a) = flip component (a :: Web |- a) $ \self -> 
   let 
     setView :: OI -> IO ()
-    setView = Control.Monad.void . \case
-      Input v -> modifyref self (\_ (_,tid) -> (v,tid))
-      Output mv v -> modifyref self (\_ (_,tid) -> unsafePerformIO (putMVar mv ()) `pseq` (v,tid))
+    setView oi = modifyrefM_ self \_ (_,tid) -> 
+      pure $ case oi of
+        Input v     -> ((v,tid),def)
+        Output mv v -> ((v,tid),putMVar mv ())
 
-    setter :: Producer a => Web |- a -> IO ThreadId
-    setter a = forkIO do
-      Control.Exception.catch (yield $! consume setView (prove a)) \(se :: SomeException) -> 
-        case fromException se of
-          Just ThreadKilled -> pure ()
-          _ -> setView (Input (txt (Show.show se)))
   in 
     def
-      { construct = do
-        a <- askref self
-        tid <- setter a
-        pure (Null,tid)
-      , onReceive = \a (v,old) -> do
-        killThread old
-        tid <- setter a
-        pure (v,tid)
-      , render = \a (v,_) -> v
+      { construct = pure (Null,Nothing)
+      , onExecuting = \_ -> do
+        Proof a <- askref self 
+        tid <- forkIO (consume setView (a :: Web => a) `seq` pure ())
+        pure (Null,Just tid)
+      , onReceive = \(Proof a) (v,old) -> do
+        traverse_ killThread old
+        tid <- forkIO (consume setView (a :: Web => a) `seq` pure ())
+        pure (v,Just tid)
+      , onUnmounted = getref self >>= \(_,mtid) -> traverse_ killThread mtid 
+      , render = \_ -> fst
       }
+
+
+{-# NOINLINE play #-}
+play :: forall a. Typeable a => (Web => a) -> (Producer a => View)
+play (Proof -> a) = flip component (a :: Web |- a) $ \self -> 
+  let 
+    setView :: OI -> IO ()
+    setView oi = modifyrefM_ self \_ (_,tid) -> 
+      pure $ case oi of
+        Input v     -> ((v,tid),def)
+        Output mv v -> ((v,tid),putMVar mv ())
+
+  in 
+    def
+      { construct = pure (Null,Nothing)
+      , onExecuting = \_ -> do
+        Proof a <- askref self 
+        tid <- forkIO (yield $ consume setView (a :: Web => a))
+        pure (Null,Just tid)
+      , onReceive = \(Proof a) (v,old) -> do
+        traverse_ killThread old
+        tid <- forkIO (yield $ consume setView (a :: Web => a))
+        pure (v,Just tid)
+      , onUnmounted = getref self >>= \(_,mtid) -> traverse_ killThread mtid 
+      , render = \_ -> fst
+      }
+
+{-# NOINLINE playIO #-}
+playIO :: forall a. Typeable a => (Web => IO a) -> (Producer a => View)
+playIO (Proof -> a) = flip component (a :: Web |- IO a) $ \self -> 
+  let 
+    setView :: OI -> IO ()
+    setView oi = modifyrefM_ self \_ (_,tid) -> 
+      pure $ case oi of
+        Input v     -> ((v,tid),def)
+        Output mv v -> ((v,tid),putMVar mv ())
+  in 
+    def
+      { construct = pure (Null,Nothing)
+      , onExecuting = \_ -> do
+        Proof a <- askref self 
+        tid <- forkIO (consume setView (a :: Web => IO a) >>= yield)
+        pure (Null,Just tid)
+      , onReceive = \(Proof a) (v,_) -> do
+        tid <- forkIO (consume setView (a :: Web => IO a) >>= yield)
+        pure (v,Just tid)
+      , onUnmounted = getref self >>= \(_,mtid) -> traverse_ killThread mtid 
+      , render = \_ -> fst
+      }
+
 
 {-# NOINLINE animate #-}
 animate :: a -> a
@@ -119,10 +200,9 @@ become v = unsafePerformIO do
   mv <- newEmptyMVar
   -- this deepseq is important!
   let send v = v `deepseq` yield (Input v) 
-  v' <- handle (\(se :: SomeException) -> send (txt (Show.show se)))
-          (send (consume (putMVar mv) v))
+  handle (\(se :: SomeException) -> send (txt (Show.show se))) (send (consume (putMVar mv) v))
   a <- takeMVar mv
-  pure a
+  a `pseq` pure a
 
 {-# NOINLINE become_ #-}
 become_ :: View -> (Web => ())
@@ -142,19 +222,19 @@ error = become . fromTxt
 void :: View -> (Web => Void)
 void = become
 
-runner :: MVar (View,View) -> (Web => a) -> a
+runner :: IORef (View,View) -> (Web => a) -> a
 runner st a = consume builder a
   where
     builder :: OI -> IO ()
     builder (Input new) =
-      takeMVar st >>= \(old,mid) -> do
+      readIORef st >>= \(old,mid) -> do
         v <- diff old mid new
-        putMVar st (v,new)
+        writeIORef st (v,new)
     builder (Output mv new) =
-      takeMVar st >>= \(old,mid) -> do
+      readIORef st >>= \(old,mid) -> do
         v <- diff old mid new
-        putMVar mv ()
-        putMVar st (v,new)
+        -- putMVar mv ()
+        writeIORef st (v,new)
 
     runPlan :: [IO ()] -> IO ()
     runPlan plan = let !p = sequence_ (List.reverse plan) in p
@@ -178,28 +258,28 @@ anon :: Node -> (Web => a) -> a
 anon n a = consume builder a
   where
     {-# NOINLINE st #-}
-    st :: MVar (Maybe (View,View))
-    st = unsafePerformIO (newMVar Nothing)
+    st :: IORef (Maybe (View,View))
+    st = unsafePerformIO (newIORef Nothing)
       
     builder :: OI -> IO ()
     builder (Input new) =
-      takeMVar st >>= \case
+      readIORef st >>= \case
         Nothing -> do
           v <- inject n new
-          putMVar st (Just (v,new))
+          writeIORef st (Just (v,new))
         Just (old,mid) -> do
           v <- diff old mid new
-          putMVar st (Just (v,new))
+          writeIORef st (Just (v,new))
     builder (Output mv new) =
-      takeMVar st >>= \case
+      readIORef st >>= \case
         Nothing -> do
           v <- inject n new
           putMVar mv ()
-          putMVar st (Just (v,new))
+          writeIORef st (Just (v,new))
         Just (old,mid) -> do
           v <- diff old mid new
           putMVar mv ()
-          putMVar st (Just (v,new))
+          writeIORef st (Just (v,new))
 
     runPlan :: [IO ()] -> IO ()
     runPlan plan = let !p = sequence_ (List.reverse plan) in p
@@ -223,15 +303,15 @@ fix :: (Web => a -> a) -> a
 fix f = F.fix \a -> anon (toNode body) (f a) 
 
 -- this inline is important
-{-# INLINE run #-}
-run :: (Web => IO a) -> IO a
-run wa = do
+{-# NOINLINE run #-}
+run :: forall a. (Web => a) -> a
+run wa = unsafePerformIO do
   let n = toNode body
       v0 = Null
   v <- inject n v0
-  mv <- newMVar (v,v0) 
-  a <- runner mv wa
-  () <- a `seq` (pure $! runner mv Web.clear)
+  mv <- newIORef (v,v0) 
+  let !a = runner mv wa
+  let !b = runner mv Web.clear
   pure a
 
 data PromptState = PromptState 
@@ -305,14 +385,6 @@ dup !a = (a,a)
 show :: Show a => a -> (Web => b)
 show !a = become (txt (Show.show a))
 
-{-# INLINE ui #-}
-ui :: ((Web, Producer (m a)) => View) -> (Web => m a)
-ui v = become v
-
-{-# INLINE ui_ #-}
-ui_ :: Applicative m => (Web => View) -> (Web => m ())
-ui_ v = pure $! become_ v
-
 {-# INLINE clear #-}
 clear :: Web => ()
 clear = let !x = become_ Null in x `pseq` ()
@@ -328,12 +400,9 @@ instance Eq Stencil where
     where
       simplify = fmap (Txt.dropWhile (/= '/')) . Txt.splitOn "/:"
 
-instance FromPath a => IsString (Txt -> Maybe (Txt,a)) where
-  fromString s = fromPath (fromString s)
-
-instance FromPath b => IsString (Maybe (Txt,a) -> Maybe (Txt,b)) where
-  fromString s (Just (t,_)) = fromString s t
-  fromString _ _ = Nothing
+-- instance FromPath b => IsString (Maybe (Txt,a) -> Maybe (Txt,b)) where
+--   fromString s (Just (t,_)) = fromString s (R t)
+--   fromString _ _ = Nothing
 
 instance ToPath a => IsString (a -> Txt) where
   fromString s = snd . toPath (fromString s)
@@ -347,8 +416,12 @@ class FromPath a where
       Just res -> Prelude.error "fromPath(txt): Stencil and type mismatch."
       _ -> Nothing
 
+
 instance FromPath () where
-  fromPath s x = Just (x,())
+  fromPath (Stencil s) x =
+    case stencil s x of
+      Just (rest,_) -> Just (rest,())
+      _ -> Nothing
 instance FromPath Txt
 instance FromPath String
 
@@ -384,6 +457,8 @@ class ToPath a where
   default toPath :: ToTxt a => Stencil -> a -> (Stencil,Txt)
   toPath s a = fromMaybe (s,def) (Web.fill s (Pure.encodeURIComponent (toTxt a)))
 
+instance ToPath () where
+  toPath s () = fromMaybe (s,def) (Web.fill s "")
 instance ToPath Txt
 instance ToPath String
 instance (ToPath x, ToPath y) => ToPath (x,y) where
@@ -400,30 +475,108 @@ instance (ToPath x, ToPath y, ToPath z) => ToPath (x,y,z) where
 fill :: Stencil -> Txt -> Maybe (Stencil,Txt)
 fill (Stencil s) t =
   case Txt.breakOn "/:" s of
-    (x,"") -> Just (Stencil "","/" <> t)
+    (x,"") -> Just (Stencil "",x <> t)
     (before,Txt.dropWhile (/= '/') . Txt.tail -> after) -> 
       Just (Stencil after,before <> "/" <> t)
 
-pattern Route :: r -> Maybe (Txt,r)
-pattern Route r <- Just (_,r)
+pattern Route :: Path -> r -> Maybe (Path,r)
+pattern Route rest r <- Just (rest,r) where
+  Route rest r = Just (rest,r)
 
-newtype R = R Txt
-withRoute :: (Pure.State R => View) -> View
-withRoute = stateWith (const pure) initialize
-  where
-    initialize :: Pure.Modify R => IO (R,R -> IO ())
-    initialize = do
-      w    <- getWindow
-      stop <- onRaw (toNode w) "popstate" def \_ _ -> getPathname >>= Data.View.put . R
-      path <- getPathname
-      pure (R path,\_ -> stop)
+data Path = Path { _path :: {-# UNPACK #-}!Txt }
+data R a = R { _unconsumed :: {-# UNPACK #-}!Path, _active :: a }
+-- withRoute :: (Exists R => a) -> a
+-- withRoute = stateWith (const pure) initialize
+--   where
+--     initialize :: Pure.Modify R => IO (R,R -> IO ())
+--     initialize = do
+--       w    <- getWindow
+--       stop <- onRaw (toNode w) "popstate" def \_ _ -> getPathname >>= Data.View.put . R
+--       path <- getPathname
+--       pure (R path,\_ -> stop)
 
-type Routed = Exists R
-route :: Routed => Txt
-route = let R r = it in r
+instance FromPath a => IsString (Path -> Maybe (Path,a)) where
+  fromString s (Path r) = fmap (\(t,a) -> (Path t,a)) $! fromPath (fromString s) r
 
-routed :: (Routed => View) -> IO ()
-routed v = Pure.run (withRoute v)
+url :: Path
+url = Path (unsafePerformIO getPathname)
+
+path :: Exists Path => Path
+path = it
+
+type Routed = Exists Path
+
+-- We have to constrain the type somehow or GHC's evaluation won't be
+-- productive. To that end, we use `Producer a => View`.
+-- Keep an eye on this, as we might need `a -> (Web => IO a)`
+{-# NOINLINE routed #-}
+routed :: forall a. ((Routed,Producer a) => View) -> (Web => a)
+routed ra = unsafePerformIO do
+  w <- getWindow 
+  mv <- newEmptyMVar
+  stop <- onRaw (toNode w) "popstate" def \_ _ -> do
+    pn <- getPathname 
+    let a = become (with (Path pn) ra)
+    a `pseq` putMVar mv a
+  tid <- forkIO do
+    pn <- getPathname
+    let a = become (with (Path pn) ra)
+    a `pseq` putMVar mv a
+  a <- takeMVar mv
+  stop
+  killThread tid
+  pure a
 
 link :: Txt -> View -> View
 link = clicks . goto
+
+{-# INLINE every #-}
+every :: forall a. Time -> (Exists Time => a) -> a
+every t a = go 
+  where 
+    {-# NOINLINE go #-}
+    go | !a <- delayed t (let t = unsafePerformIO time in t `seq` with t a)
+       = go
+
+{-# INLINE at #-}
+at :: forall a. [Time] -> (Exists Time => a) -> a
+at = atWith False False 
+
+{-# INLINE at' #-}
+at' :: forall a. [Time] -> (Exists Time => a) -> a
+at' = atWith True False 
+ 
+{-# INLINE dot #-}
+-- dot, as in: on-the-dot
+dot :: forall a. Time -> (Exists Time => a) -> a
+dot = dotWith False False
+
+{-# INLINE dot' #-}
+dot' :: forall a. Time -> (Exists Time => a) -> a
+dot' = dotWith True False
+
+{-# INLINE dotWith #-}
+dotWith :: forall a. Bool -> Bool -> Time -> (Exists Time => a) -> a
+dotWith compensate truth t = 
+  let 
+    fromInt = fromIntegral @Int
+    now = unsafePerformIO time
+    d = fromInt (floor (now / t) :: Int)
+    start = d * t
+  in 
+    atWith compensate truth [ start + fromInt n * t | n <- [1 :: Int ..] ]
+
+{-# INLINE atWith #-}
+atWith :: forall a. Bool -> Bool -> [Time] -> (Exists Time => a) -> a
+atWith compensate truth ts a = go ts 0
+  where 
+    {-# NOINLINE go #-}
+    go (t:ts) !err
+      | !s <- unsafePerformIO time
+      , () <- unsafePerformIO (delay (t - s - Milliseconds err 0))
+      , !e <- if compensate then unsafePerformIO time else t
+      , Milliseconds ms _ <- e - t
+      , e' <- if compensate then err / 2 + ms / 2 else err
+      , n  <- if truth then e else t
+      = if List.null ts then with n a else with n a `seq` go ts e'
+
