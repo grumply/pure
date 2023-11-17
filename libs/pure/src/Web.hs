@@ -1,6 +1,6 @@
 {-# language PatternSynonyms, DerivingVia, ViewPatterns, BlockArguments, ScopedTypeVariables, RankNTypes, DuplicateRecordFields, NamedFieldPuns, ConstraintKinds, FlexibleContexts, GADTs, TypeApplications, BangPatterns, AllowAmbiguousTypes, CPP, PatternSynonyms, OverloadedStrings, RecordWildCards, LambdaCase, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, DefaultSignatures, TypeOperators, TupleSections #-}
 {-# OPTIONS_GHC -O2 #-}
-module Web (Web.dot,dot',dotWith,Web.at,at',atWith,Web.every,url,Web.path,Path(..),embed,pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,done,Void,Web,play_,play,playIO,animate,become,become_,Web.error,Web.void,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
+module Web (Web.dot,dotWith,Web.at,atWith,Web.every,url,Web.path,Path(..),embed,pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,done,Void,Web,play_,play,playIO,animate,become,become_,Web.error,Web.void,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
 
 import Control.Concurrent hiding (yield)
 import qualified Data.Function as F
@@ -540,43 +540,33 @@ every t a = go
 
 {-# INLINE at #-}
 at :: forall a. [Time] -> (Exists Time => a) -> a
-at = atWith False False 
+at = atWith False 
 
-{-# INLINE at' #-}
-at' :: forall a. [Time] -> (Exists Time => a) -> a
-at' = atWith True False 
- 
 {-# INLINE dot #-}
 -- dot, as in: on-the-dot
 dot :: forall a. Time -> (Exists Time => a) -> a
-dot = dotWith False False
-
-{-# INLINE dot' #-}
-dot' :: forall a. Time -> (Exists Time => a) -> a
-dot' = dotWith True False
+dot = dotWith False
 
 {-# INLINE dotWith #-}
-dotWith :: forall a. Bool -> Bool -> Time -> (Exists Time => a) -> a
-dotWith compensate truth t = 
+dotWith :: forall a. Bool -> Time -> (Exists Time => a) -> a
+dotWith truth t = 
   let 
     fromInt = fromIntegral @Int
     now = unsafePerformIO time
     d = fromInt (floor (now / t) :: Int)
     start = d * t
   in 
-    atWith compensate truth [ start + fromInt n * t | n <- [1 :: Int ..] ]
+    atWith truth [ start + fromInt n * t | n <- [1 :: Int ..] ]
 
 {-# INLINE atWith #-}
-atWith :: forall a. Bool -> Bool -> [Time] -> (Exists Time => a) -> a
-atWith compensate truth ts a = go ts 0
+atWith :: forall a. Bool -> [Time] -> (Exists Time => a) -> a
+atWith truth ts a = go ts 0
   where 
     {-# NOINLINE go #-}
     go (t:ts) !err
       | !s <- unsafePerformIO time
       , () <- unsafePerformIO (delay (t - s - Milliseconds err 0))
-      , !e <- if compensate then unsafePerformIO time else t
-      , Milliseconds ms _ <- e - t
-      , e' <- if compensate then err / 2 + ms / 2 else err
-      , n  <- if truth then e else t
-      = if List.null ts then with n a else with n a `seq` go ts e'
+      , !n  <- if truth then unsafePerformIO time else t
+      , Milliseconds ms _ <- n - t
+      = if List.null ts then with n a else with n a `seq` go ts (err / 2 + ms / 2)
 
