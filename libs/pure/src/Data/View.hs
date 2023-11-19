@@ -200,12 +200,12 @@ data View where
     } -> View
 
   ReactiveView ::
-    { reactiveVal :: !a
+    { reactiveVal :: a
     , reactiveView :: View
     } -> View
 
   WeakView ::
-    { weakVal :: !a
+    { weakVal :: a
     , weakView :: View
     } -> View
 
@@ -223,7 +223,7 @@ data View where
     } -> View
 
   TaggedView ::
-    { __tag :: Fingerprint
+    { __tag :: SomeTypeRep
     , taggedView :: View 
     } -> View
 
@@ -337,52 +337,148 @@ view = prove (witness @a)
 -- Reconciler hints
 
 {-# INLINE static #-}
+-- Create a static un-reconcilable view. Note that this closes over everything
+-- within the view, including existentials, like `Producer` consumers. 
 static :: View -> View
-static = ReactiveView ()
+static = reactive ()
 
--- Semantically, `reactive a . reactive b /= reactive (a,b)`.
+-- | A hint to the reconciler that the view should only be reconciled when the
+-- supplied value changes, where change is evaluated via referential equality.
+-- If the old and new reactive values are referentially equal, the reconciler
+-- short-circuites. 
+--
+-- ## Note on laziness
+-- The reactive value is not forced to WHNF. See `reactive'` for a version that
+-- forces the reactive value to WHNF. This can often be important to get expected
+-- behavior. See `reactive'` for an example.
+--
+-- ## Note on non-composability
+-- Operationally, `reactive a . reactive b /= reactive (a,b)`.
+--
+-- ## Note on safety and referential equality
+-- Note that `static` is implemented as `reactive ()`, but, importantly,
+-- it could be implemented as `reactive (Nothing @a)` for any `a`,
+-- since GHC only has one `Nothing` value. Understanding the implications of
+-- this is important when using `reactive`!
+--
+-- Given these two views:
+-- 
+-- > view1 :: Maybe Int -> View
+-- > view1 mi = reactive mi "view1"
+-- 
+-- > view2 :: Maybe Char -> View
+-- > view2 mc = reactive mc "view2"
+--
+-- Reconciliation of `view1 Nothing` and `view2 Nothing` is not expected to
+-- replace `"view1"` with `"view2"`, as `Nothing @Int` and `Nothing @Char`
+-- are referentially equal.
+-- 
+-- Thus, `reactive` is considered a low-level optimization that should be
+-- avoided unless you are certain it is necessary, and then you should 
+-- carefully control the contexts in which it is used. On way to guarantee
+-- the correct reconciliation in such a case is `tagged`:
+--
+-- > view1 :: Maybe Int -> View
+-- > view1 mi = tagged @(Maybe Int) (reactive mi "view1")
+--
+-- > view2 :: Maybe Char -> View
+-- > view2 mc = tagged @(Maybe Char) (reactive mc "view2")
+--
+-- The reconciler in `Data.View.Build` is guaranteed to correctly reconcile
+-- these views, but will not perform a short-circuiting reconciliation -
+-- it will replace the old view with the new by fully building the new view
+-- and then swapping the nodes.
 {-# INLINE reactive #-}
 reactive :: a -> View -> View
 reactive = ReactiveView
 
+-- | A strict version of `reactive`. `reactive'` is a hint to the reconciler
+-- that the view should only be reconciled when the supplied value changes,
+-- where change is evaluated via referential equality. If the old and new
+-- reactive values are referentially equal, the reconciler short-circuites.
+--
+-- ## Note on strictness and optimization
 -- The strictness here can be useful for primitives, but keep in mind that
 -- optimization level can affect the behavior.
 --
+-- ## Uses
 -- There are some neat tricks that can be had with `reactive'`, like:
 --
--- > reactive' (value > 1) do
--- >   _
+-- > reactive' (value > 1) ...
 --
 -- If `value` is strictly increasing from an initial value less than 1, this
--- `lazy'` call will update exactly once, when the value first exceeds 1.
+-- `lazy'` call will update exactly once, when the value first exceeds 1. If
+-- you attempt to do this same comparison with the non-strict `reactive`, you
+-- will likely find it failing to achieve the same effect.
 --
 {-# INLINE reactive' #-}
 reactive' :: a -> View -> View
 reactive' !a = ReactiveView a
 
--- If the given value is not the exact same object (reallyUnsafePtrEquality),
--- replace the View. You probably don't need this; you likely just need stronger
--- typing!
--- Semantically, `weak a . weak b == weak (a,b)`.
+-- | A hint to the reconciler that any changes to the supplied value -
+-- any changes that result in referential inequality - should result in
+-- replacing the view. Unlike `reactive`, if the value doesn't change,
+-- reconciliation continues normally.
+--
+-- Operationally, `weak a . weak b == weak (a,b)`.
+--
 {-# INLINE weak #-}
 weak :: a -> View -> View
 weak = WeakView
 
--- If the given value is not the exact same object after forcing to WHNF 
--- and comparing with reallyUnsafePtrEquality, replace the View. You probably
--- don't need this; you likely just need stronger typing! The strictness here
--- can be useful for primitives, but keep in mind that optimization level can 
--- affect the behavior.
+-- | A strict version of `weak` that forces the value to WHNF. `weak'` is a
+-- hint to the reconciler that any changes to the supplied value - any changes
+-- that result in referential inequality - should result in replacing the view.
+-- Unlike `reactive` or `reactive'`, if the value doesn't change, reconciliation
+-- continues normally.
+--
+-- Operationally, `weak' a . weak' b == weak' (a,b)`.
+--
 {-# INLINE weak' #-}
 weak' :: a -> View -> View
 weak' !a = weak a
 
+-- | A hint to the reconciler that only equivalently-tagged views should be
+-- reconciled - any change to the tag should result in a full build-and-swap.
+-- This can be especially useful in library code that exposes a `View`-level
+-- interface, but needs to guarantee that it will not be reconciled with, or
+-- reconciled against, any other code. If the type is not exported, no other
+-- views can be equivalently tagged. 
+--
+-- Use can be either via `tagged` or the `Tag` pattern synonym.
+--
+-- ## Uses
+-- Need for `tagged` sometimes arises in forms:
+--
+-- > view1 = Input
+-- > view2 = Input
+--
+-- Reconciling these two views can be problematic. The value of `view1` at
+-- reconciliation will not be reset when reconciled with `view2`, because
+-- the reconciler does not know that they are different. One solution is:
+--
+-- > view1 = tagged @SomeViewTag Input
+-- > view2 = tagged @SomeViewTag Input
+--
+-- Generally, this is not an issue because `Input` is usually inside some
+-- state/reactivity wrapper. Occasionally, though, it will manifest when
+-- the state/reactivity wrapper is wrapping the same type of value. Note that
+-- `tagged` is not always a solution, though - sometimes you'll need `weak`:
+--
+-- > commentForm :: PostId -> View
+-- > commentForm pid = weak pid (Form <||> [ Input, ... ])
+--
+-- Without `weak`, browsing from one page with a comment form to another might
+-- result in the reconciler not replacing the `Input`. This is often not an
+-- issue, but when it is, there are `tagged`, `weak`, and component-based 
+-- (effectively equivalent to `tagged`) solutions available.
 {-# INLINE tagged #-}
 tagged :: forall t. Typeable t => View -> View
-tagged = TaggedView (typeRepFingerprint (typeRep (Proxy :: Proxy t)))
+tagged = TaggedView (someTypeRep (Proxy :: Proxy t))
 
+-- | A bi-directional pattern synonym for `TaggedView`s.
 pattern Tag :: forall t. Typeable t => View -> View
-pattern Tag v <- TaggedView ((==) (typeRepFingerprint (typeRep (Proxy :: Proxy t))) -> True) v where
+pattern Tag v <- TaggedView ((==) (someTypeRep (Proxy :: Proxy t)) -> True) v where
   Tag t = tagged @t t
 
 -- Txt

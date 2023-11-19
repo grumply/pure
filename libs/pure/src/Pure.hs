@@ -1,4 +1,4 @@
-{-# language CPP, ScopedTypeVariables, DuplicateRecordFields #-}
+{-# language CPP, ScopedTypeVariables, DuplicateRecordFields, RankNTypes, FlexibleContexts, ViewPatterns #-} 
 module Pure 
   (module Pure
   ,module Export
@@ -50,11 +50,12 @@ import Effect.Router as Export hiding (map)
 import Effect.Script as Export
 import Effect.Styles as Export hiding (css)
 import Effect.Title as Export
-import Web.Events as Export
+import Web.Events as Export hiding (bottom,right,top,left,x,y,width,height)
 -- import Web.Events.Resize as Export (Resize(Resize,borderBlockSize,borderInlineSize,contentBlockSize,contentInlineSize),resize,resizes)
 
 import Data.View.Build as Export
 import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,even,repeat,span,tan,reverse,read,map)
+
 
 -- | A variant of `fix` 'fixed' to a function (`->`) type with a convenient
 -- ordering for inline usage: `flip fix`. For introducing local anonymous
@@ -62,6 +63,10 @@ import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,
 -- 
 -- > loop initialState \k currentState -> 
 -- >   { ... k newState ... }
+--
+-- Note the satisfying type when the continuation's arguments are re-arranged:
+--
+-- > a -> (a -> (a -> r) -> r) -> r
 --
 -- NOTE: the type of `loop`, while fixed to an arrow type, is still polymorphic
 --       and remains covariant in the result type and can be used similarly
@@ -79,6 +84,56 @@ import Prelude as Export hiding (all,any,or,and,(^^),max,min,rem,odd,drop,break,
 {-# INLINE loop #-}
 loop :: state -> ((state -> a) -> state -> a) -> a
 loop = flip fix
+
+{-
+fixp a f = let go a = f a go in go a 
+
+the original implementation of 'purified state' 
+which should be equivalent to fixp
+
+runState :: a -> (a -> (a -> b) -> b) -> b
+runState initial f = unsafePerformIO do
+  mv <- newMVar initial
+  r <- newEmptyMVar
+  tid <- forkIO do
+    tid <- myThreadId
+    flip F.fix Nothing \k tid -> do
+      a <- takeMVar mv 
+      traverse_ killThread tid
+      tid <- forkIO do
+        tid <- myThreadId
+        putMVar r $ f a (\a -> unsafePerformIO (putMVar mv a >> readMVar r)) 
+      k (Just tid)
+  b <- takeMVar r
+  killThread tid
+  pure b
+
+-}
+
+-- Note that GHC wants the strictness annotation here or it exhausts
+-- the simplifier. This type is the generalization of `fixp`, but I'm
+-- not sure where it would be necessary. Note that GHC does fully
+-- eliminate the `Phi` constructor with `runPhi` + `toPhi`. I've not
+-- seen how this version would be of benefit, however. I will keep it
+-- as a reference.
+data Phi a r = Phi !(a -> Phi a r -> r)
+
+{-# INLINE runPhi #-}
+runPhi :: a -> Phi a r -> r
+runPhi a (Phi f) = f a (Phi f)
+
+{-# INLINE toPhi #-}
+toPhi :: (a -> (a -> r) -> r) -> Phi a r
+toPhi f = let phi = Phi (\a k -> f a (flip runPhi k)) in phi 
+
+{-# INLINE fixp #-}
+fixp :: a -> (a -> (a -> r) -> r) -> r
+fixp a f = fix (flip f) a
+
+{-# INLINE fixe #-}
+-- a version of `fixp` that uses existentials for get/put.
+fixe :: a -> ((Exists a, Exists (a -> r)) => r) -> r
+fixe a f = fixp a (\a g -> with a (with g f))
 
 {-# INLINE run #-}
 run :: View -> IO ()
