@@ -142,7 +142,7 @@ play (Proof -> a) = flip component (a :: Web |- a) $ \self ->
 -- | A convenient specialization of `play` that discards the result. 
 {-# NOINLINE play_ #-}
 play_ :: forall a. Typeable a => (Web => a) -> View
-play_ a = consume (\(_ :: a) -> pure ()) (play a)
+play_ a = consume (\(!(_ :: a)) -> pure ()) (play a)
 
 -- | A convenient specialization of `play` to a type of `IO a` such that the
 -- `View` still produces an `a`, rather than an `IO a`.
