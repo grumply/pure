@@ -1,6 +1,6 @@
 {-# language PatternSynonyms, DerivingVia, ViewPatterns, BlockArguments, ScopedTypeVariables, RankNTypes, DuplicateRecordFields, NamedFieldPuns, ConstraintKinds, FlexibleContexts, GADTs, TypeApplications, BangPatterns, AllowAmbiguousTypes, CPP, PatternSynonyms, OverloadedStrings, RecordWildCards, LambdaCase, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, DefaultSignatures, TypeOperators, TupleSections #-}
 {-# OPTIONS_GHC -O2 #-}
-module Web (Web.dot,dotWith,Web.at,atWith,Web.every,url,Web.path,Path(..),pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,Void,Web,play_,play,playIO,animate,become,become_,Web.error,halt,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
+module Web (Web.dot,dotWith,Web.at,atWith,Web.every,url,Web.path,Path(..),pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,Void,Web,play_,play,playIO,animate,unsafeLazyBecome,become,become_,Web.error,halt,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
 
 import Control.Concurrent hiding (yield)
 import qualified Data.Function as F
@@ -458,46 +458,56 @@ instance ToPath a => IsString (a -> Txt) where
 class FromPath a where
   fromPath :: Stencil -> Txt -> Maybe (Txt,a)
   default fromPath :: Read a => Stencil -> Txt -> Maybe (Txt,a)
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,t)]) <- stencil s u 
     a <- readMaybe (fromTxt t)
     pure (rest,a)
 instance FromPath () where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,_) <- stencil s u
     pure (rest,())
 instance FromPath Txt where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,t)]) <- stencil s u
     pure (rest,t)
 instance FromPath String where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,t)]) <- stencil s u
     pure (rest,fromTxt t)
 instance FromPath (Marker a) where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,t)]) <- stencil s u
     pure (rest,fromTxt t)
 instance FromPath Key where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,t)]) <- stencil s u
     pure (rest,fromTxt t)
 
 instance (FromPath l, FromPath r) => FromPath (Either l r) where
+  {-# NOINLINE fromPath #-}
   fromPath s u = do (fmap Right <$> fromPath s u) <|> (fmap Left <$> fromPath s u)
 instance FromPath i => FromPath [i] where
+  {-# NOINLINE fromPath #-}
   fromPath s u = go u [] where
     go u xs
       | Just (rest,a) <- fromPath s u = go rest (a : xs)
       | otherwise = Just (u,List.reverse xs)
 
 instance (FromPath x, FromPath y) => FromPath (x,y) where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,y),(_,x)]) <- stencil s u 
     (_,x') <- fromPath "/:x" ("/" <> x)
     (_,y') <- fromPath "/:y" ("/" <> y)
     pure (rest,(x',y'))
 instance (FromPath x, FromPath y, FromPath z) => FromPath (x,y,z) where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,z),(_,y),(_,x)]) <- stencil s u
     (_,x') <- fromPath "/:x" ("/" <> x)
@@ -505,6 +515,7 @@ instance (FromPath x, FromPath y, FromPath z) => FromPath (x,y,z) where
     (_,z') <- fromPath "/:z" ("/" <> z)
     pure (rest,(x',y',z'))
 instance (FromPath w, FromPath x, FromPath y, FromPath z) => FromPath (w,x,y,z) where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,z),(_,y),(_,x),(_,w)]) <- stencil s u
     (_,w') <- fromPath "/:w" ("/" <> w)
@@ -513,6 +524,7 @@ instance (FromPath w, FromPath x, FromPath y, FromPath z) => FromPath (w,x,y,z) 
     (_,z') <- fromPath "/:z" ("/" <> z)
     pure (rest,(w',x',y',z'))
 instance (FromPath v, FromPath w, FromPath x, FromPath y, FromPath z) => FromPath (v,w,x,y,z) where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,z),(_,y),(_,x),(_,w),(_,v)]) <- stencil s u
     (_,v') <- fromPath "/:v" ("/" <> v)
@@ -522,6 +534,7 @@ instance (FromPath v, FromPath w, FromPath x, FromPath y, FromPath z) => FromPat
     (_,z') <- fromPath "/:z" ("/" <> z)
     pure (rest,(v',w',x',y',z'))
 instance (FromPath u, FromPath v, FromPath w, FromPath x, FromPath y, FromPath z) => FromPath (u,v,w,x,y,z) where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,z),(_,y),(_,x),(_,w),(_,v),(_,u)]) <- stencil s u
     (_,u') <- fromPath "/:u" ("/" <> u)
@@ -532,6 +545,7 @@ instance (FromPath u, FromPath v, FromPath w, FromPath x, FromPath y, FromPath z
     (_,z') <- fromPath "/:z" ("/" <> z)
     pure (rest,(u',v',w',x',y',z'))
 instance (FromPath t, FromPath u, FromPath v, FromPath w, FromPath x, FromPath y, FromPath z) => FromPath (t,u,v,w,x,y,z) where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,z),(_,y),(_,x),(_,w),(_,v),(_,u),(_,t)]) <- stencil s u
     (_,t') <- fromPath "/:t" ("/" <> t)
@@ -543,6 +557,7 @@ instance (FromPath t, FromPath u, FromPath v, FromPath w, FromPath x, FromPath y
     (_,z') <- fromPath "/:z" ("/" <> z)
     pure (rest,(t',u',v',w',x',y',z'))
 instance (FromPath r, FromPath t, FromPath u, FromPath v, FromPath w, FromPath x, FromPath y, FromPath z) => FromPath (r,t,u,v,w,x,y,z) where
+  {-# NOINLINE fromPath #-}
   fromPath (Stencil st) u = do
     (rest,[(_,z),(_,y),(_,x),(_,w),(_,v),(_,u),(_,t),(_,r)]) <- stencil st u
     (_,r') <- fromPath "/:r" ("/" <> r)
@@ -558,23 +573,31 @@ instance (FromPath r, FromPath t, FromPath u, FromPath v, FromPath w, FromPath x
 class ToPath a where
   toPath :: Stencil -> a -> (Stencil,Txt)
   default toPath :: Show a => Stencil -> a -> (Stencil,Txt)
+  {-# NOINLINE toPath #-}
   toPath s a = fromMaybe (s,def) (Web.fill s (Pure.encodeURIComponent (toTxt (Show.show a))))
 
 instance ToPath () where
+  {-# NOINLINE toPath #-}
   toPath s () = fromMaybe (s,def) (Web.fill s "")
 instance ToPath Txt where
+  {-# NOINLINE toPath #-}
   toPath s t = fromMaybe (s,def) (Web.fill s (Pure.encodeURIComponent t))
 instance ToPath String where
+  {-# NOINLINE toPath #-}
   toPath s t = fromMaybe (s,def) (Web.fill s (Pure.encodeURIComponent (toTxt t)))
 instance ToPath (Marker a) where
+  {-# NOINLINE toPath #-}
   toPath s m = fromMaybe (s,def) (Web.fill s (Pure.encodeURIComponent (toTxt m)))
 instance ToPath Key where
+  {-# NOINLINE toPath #-}
   toPath s k = fromMaybe (s,def) (Web.fill s (Pure.encodeURIComponent (toTxt k)))
 
 instance (ToPath l, ToPath r) => ToPath (Either l r) where
+  {-# NOINLINE toPath #-}
   toPath s (Left l) = toPath s l
   toPath s (Right r) = toPath s r
 instance (ToPath i) => ToPath [i] where
+  {-# NOINLINE toPath #-}
   toPath s = go
     where 
       go [] 
@@ -587,17 +610,20 @@ instance (ToPath i) => ToPath [i] where
         = (s,x <> xs)
           
 instance (ToPath y, ToPath z) => ToPath (y,z) where
+  {-# NOINLINE toPath #-}
   toPath s (y,z) =
     let (sy,ty) = toPath s  y
         (sz,tz) = toPath sy z
     in (sz,ty <> tz)
 instance (ToPath x, ToPath y, ToPath z) => ToPath (x,y,z) where
+  {-# NOINLINE toPath #-}
   toPath s (x,y,z) =
     let (sx,tx) = toPath s  x
         (sy,ty) = toPath sx y
         (sz,tz) = toPath sy z
     in (sz,tx <> ty <> tz)
 instance (ToPath w, ToPath x, ToPath y, ToPath z) => ToPath (w,x,y,z) where
+  {-# NOINLINE toPath #-}
   toPath s (w,x,y,z) =
     let (sw,tw) = toPath s  w
         (sx,tx) = toPath sw x
@@ -605,6 +631,7 @@ instance (ToPath w, ToPath x, ToPath y, ToPath z) => ToPath (w,x,y,z) where
         (sz,tz) = toPath sy z
     in (sz,tw <> tx <> ty <> tz)
 instance (ToPath v, ToPath w, ToPath x, ToPath y, ToPath z) => ToPath (v,w,x,y,z) where
+  {-# NOINLINE toPath #-}
   toPath s (v,w,x,y,z) =
     let (sv,tv) = toPath s  v
         (sw,tw) = toPath sv w
@@ -613,6 +640,7 @@ instance (ToPath v, ToPath w, ToPath x, ToPath y, ToPath z) => ToPath (v,w,x,y,z
         (sz,tz) = toPath sy z
     in (sz,tv <> tw <> tx <> ty <> tz)
 instance (ToPath u, ToPath v, ToPath w, ToPath x, ToPath y, ToPath z) => ToPath (u,v,w,x,y,z) where
+  {-# NOINLINE toPath #-}
   toPath s (u,v,w,x,y,z) =
     let (su,tu) = toPath s  u
         (sv,tv) = toPath su v
@@ -622,6 +650,7 @@ instance (ToPath u, ToPath v, ToPath w, ToPath x, ToPath y, ToPath z) => ToPath 
         (sz,tz) = toPath sy z
     in (sz,tu <> tv <> tw <> tx <> ty <> tz)
 instance (ToPath t, ToPath u, ToPath v, ToPath w, ToPath x, ToPath y, ToPath z) => ToPath (t,u,v,w,x,y,z) where
+  {-# NOINLINE toPath #-}
   toPath s (t,u,v,w,x,y,z) =
     let (st,tt) = toPath s  t
         (su,tu) = toPath st u
@@ -632,6 +661,7 @@ instance (ToPath t, ToPath u, ToPath v, ToPath w, ToPath x, ToPath y, ToPath z) 
         (sz,tz) = toPath sy z
     in (sz,tt <> tu <> tv <> tw <> tx <> ty <> tz)
 instance (ToPath r, ToPath t, ToPath u, ToPath v, ToPath w, ToPath x, ToPath y, ToPath z) => ToPath (r,t,u,v,w,x,y,z) where
+  {-# NOINLINE toPath #-}
   toPath s (r,t,u,v,w,x,y,z) =
     let (sr,tr) = toPath s  r
         (st,tt) = toPath sr t
@@ -686,6 +716,7 @@ routed ra = unsafePerformIO do
   killThread tid
   pure a
 
+{-# INLINE link #-}
 link :: Txt -> View -> View
 link = clicks . goto
 

@@ -1,14 +1,11 @@
 {-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts, ConstraintKinds, BlockArguments, MultiWayIf, LambdaCase, DuplicateRecordFields, TypeOperators, DerivingVia, DataKinds, NamedFieldPuns, TypeFamilies, DeriveFunctor, UndecidableInstances, InstanceSigs, RoleAnnotations, ConstrainedClassMethods, DeriveAnyClass, DeriveGeneric #-}
-{-# OPTIONS_GHC -O2 #-}
 module Data.View (module Data.View, Typeable()) where
 
-import Data.Functor.Identity (Identity(..))
-import Control.Applicative (Const(..))
-
+import Debug.Trace
 import Control.Arrow ((&&&))
-import Control.Applicative (Applicative(..),Alternative(..))
+import Control.Applicative (Applicative(..),Alternative(..),Const(..))
 import Control.Comonad (Comonad(..),ComonadApply(..))
-import Control.Concurrent (ThreadId,forkIO,killThread,myThreadId,MVar,newMVar,newEmptyMVar,readMVar,putMVar,takeMVar)
+import Control.Concurrent (ThreadId,forkIO,killThread,myThreadId,MVar,newMVar,newEmptyMVar,readMVar,putMVar,takeMVar,tryPutMVar)
 import Control.DeepSeq (NFData(..),deepseq)
 import Control.Exception (mask,onException,evaluate,Exception,catch,throw,SomeException)
 import Control.Monad (void,join,forever,unless,when,MonadPlus(..))
@@ -18,7 +15,8 @@ import Control.Monad.ST (ST)
 import Data.Coerce (Coercible(),coerce)
 import Data.Foldable (for_)
 import Data.Functor.Contravariant (Contravariant(..))
-import Data.IORef (IORef,newIORef,atomicModifyIORef',readIORef)
+import Data.Functor.Identity (Identity(..))
+import Data.IORef (IORef,newIORef,atomicModifyIORef',readIORef,writeIORef)
 import Data.List as List (null)
 import Data.Maybe (listToMaybe,fromJust)
 import Data.Monoid (Monoid(..),(<>))
@@ -28,19 +26,19 @@ import Data.String (IsString(..))
 import Data.Try as Try (Try,try)
 import Data.Time (Time,time,delay,timeout)
 import Data.Traversable (for)
-import Data.Type.Equality
+import Data.Type.Equality ( type (==) )
 import Data.Typeable (TypeRep,Typeable,tyConName,typeRepTyCon,typeOf,typeRep,typeRepFingerprint,cast)
 import Data.Unique (Unique,newUnique)
 import GHC.Exts as Exts (IsList(..),Any,Constraint,reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#,Proxy#,proxy#,inline)
 import GHC.Fingerprint.Type (Fingerprint())
-import GHC.Generics (Generic(..))
-import GHC.Stack
-import System.IO.Unsafe (unsafePerformIO)
+import GHC.Generics
+import GHC.Stack ( HasCallStack )
+import System.IO.Unsafe (unsafePerformIO,unsafeDupablePerformIO)
 import Type.Reflection (SomeTypeRep,someTypeRep)
 import Unsafe.Coerce (unsafeCoerce)
 
 import Data.Default (Default(..))
-import Data.DOM (Evt,Element,Node(..),IsNode(..),Text,Options,nullJSV)
+import Data.DOM (Evt,Element,Node(..),IsNode(..),Text,Options,nullJSV,JSV)
 import Data.JSON (ToJSON,FromJSON)
 import Data.Txt (FromTxt(..),ToTxt(..),Txt)
 import Data.Queue (Queue,arrive)
@@ -88,7 +86,7 @@ data Comp props state = Comp
   , onExecuting    :: state -> IO state
   , onMounted      :: IO ()
   , onReceive      :: props -> state -> IO state
-  , onForce        :: props -> state -> IO Bool
+  , force          :: props -> state -> IO Bool
   , onUpdate       :: props -> state -> IO ()
   , onUpdated      :: props -> state -> IO ()
   , onUnmounted    :: IO ()
@@ -107,7 +105,7 @@ instance Default (Comp props state) where
     , onExecuting   = return
     , onMounted     = return ()
     , onReceive     = \_ -> return
-    , onForce       = \_ _ -> return True
+    , force       = \_ _ -> return True
     , onUpdate      = \_ _ -> return ()
     , onUpdated     = \_ _ -> return ()
     , onUnmounted   = return ()
@@ -200,12 +198,14 @@ data View where
     } -> View
 
   ReactiveView ::
-    { reactiveVal :: a
+    { reactiveCmp  :: a -> a -> Bool
+    , reactiveVal  :: a
     , reactiveView :: View
     } -> View
 
   WeakView ::
-    { weakVal :: a
+    { weakCmp  :: a -> a -> Bool
+    , weakVal  :: a
     , weakView :: View
     } -> View
 
@@ -247,7 +247,7 @@ instance NFData View where
   rnf Prebuilt {..} = ()
 
 instance Default View where
-  {-# INLINE def #-}
+  {-# NOINLINE def #-}
   def = NullView Nothing
 
 instance IsString View where
@@ -265,6 +265,67 @@ x === y = isTrue# (unsafeCoerce# reallyUnsafePtrEquality# x y)
 {-# INLINE (/==) #-}
 (/==) :: a -> b -> Bool
 x /== y = Prelude.not (x === y)
+
+-- | A class for reference equality extended to work element-wise for tuples
+-- and lists.
+-- 
+-- ## Overlapping
+-- The catch-all instance is overlappable. You may construct custom instances,
+-- but it is generally not recommended.
+--
+-- ## Variants
+-- `req` is non-strict. `req'` is strict in both arguments.
+-- 
+-- ## Instances
+-- For (<9)-tuples, `req'` defers to the element-wise `req'`.
+-- For [], `req'` defers to the element-wise `req'`.
+-- For JSV (including Txt) on GHCJS, defers to native reference equality.
+-- For everything else, uses reallyUnsafePtrEquality#.
+-- 
+class Req a where
+  req :: a -> a -> Bool
+  req' :: a -> a -> Bool
+
+instance {-# OVERLAPPABLE #-} Req a where
+  req = (===)
+  req' !a !b = a === b
+
+instance {-# OVERLAPPING #-} (Req a, Req b) => Req (a,b) where
+  req (a1,b1) (a2,b2) = a1 `req` a2 && b1 `req` b2
+  req' (a1,b1) (a2,b2) = a1 `req'` a2 && b1 `req'` b2
+
+instance {-# OVERLAPPING #-} (Req a, Req b, Req c) => Req (a,b,c) where
+  req (a1,b1,c1) (a2,b2,c2) = a1 `req` a2 && b1 `req` b2 && c1 `req` c2
+  req' (a1,b1,c1) (a2,b2,c2) = a1 `req'` a2 && b1 `req'` b2 && c1 `req'` c2
+
+instance {-# OVERLAPPING #-} (Req a, Req b, Req c, Req d) => Req (a,b,c,d) where
+  req (a1,b1,c1,d1) (a2,b2,c2,d2) = a1 `req` a2 && b1 `req` b2 && c1 `req` c2 && d1 `req` d2
+  req' (a1,b1,c1,d1) (a2,b2,c2,d2) = a1 `req'` a2 && b1 `req'` b2 && c1 `req'` c2 && d1 `req'` d2
+
+instance {-# OVERLAPPING #-} (Req a, Req b, Req c, Req d, Req e) => Req (a,b,c,d,e) where
+  req (a1,b1,c1,d1,e1) (a2,b2,c2,d2,e2) = a1 `req` a2 && b1 `req` b2 && c1 `req` c2 && d1 `req` d2 && e1 `req` e2
+  req' (a1,b1,c1,d1,e1) (a2,b2,c2,d2,e2) = a1 `req'` a2 && b1 `req'` b2 && c1 `req'` c2 && d1 `req'` d2 && e1 `req'` e2
+
+instance {-# OVERLAPPING #-} (Req a, Req b, Req c, Req d, Req e, Req f) => Req (a,b,c,d,e,f) where
+  req (a1,b1,c1,d1,e1,f1) (a2,b2,c2,d2,e2,f2) = a1 `req` a2 && b1 `req` b2 && c1 `req` c2 && d1 `req` d2 && e1 `req` e2 && f1 `req` f2
+  req' (a1,b1,c1,d1,e1,f1) (a2,b2,c2,d2,e2,f2) = a1 `req'` a2 && b1 `req'` b2 && c1 `req'` c2 && d1 `req'` d2 && e1 `req'` e2 && f1 `req'` f2
+
+instance {-# OVERLAPPING #-} (Req a, Req b, Req c, Req d, Req e, Req f, Req g) => Req (a,b,c,d,e,f,g) where
+  req (a1,b1,c1,d1,e1,f1,g1) (a2,b2,c2,d2,e2,f2,g2) = a1 `req` a2 && b1 `req` b2 && c1 `req` c2 && d1 `req` d2 && e1 `req` e2 && f1 `req` f2 && g1 `req` g2
+  req' (a1,b1,c1,d1,e1,f1,g1) (a2,b2,c2,d2,e2,f2,g2) = a1 `req'` a2 && b1 `req'` b2 && c1 `req'` c2 && d1 `req'` d2 && e1 `req'` e2 && f1 `req'` f2 && g1 `req'` g2
+
+instance {-# OVERLAPPING #-} (Req a, Req b, Req c, Req d, Req e, Req f, Req g, Req h) => Req (a,b,c,d,e,f,g,h) where
+  req (a1,b1,c1,d1,e1,f1,g1,h1) (a2,b2,c2,d2,e2,f2,g2,h2) = a1 `req` a2 && b1 `req` b2 && c1 `req` c2 && d1 `req` d2 && e1 `req` e2 && f1 `req` f2 && g1 `req` g2 && h1 `req` h2
+  req' (a1,b1,c1,d1,e1,f1,g1,h1) (a2,b2,c2,d2,e2,f2,g2,h2) = a1 `req'` a2 && b1 `req'` b2 && c1 `req'` c2 && d1 `req'` d2 && e1 `req'` e2 && f1 `req'` f2 && g1 `req'` g2 && h1 `req'` h2
+
+instance {-# OVERLAPPING #-} Req a => Req [a] where
+  req [] [] = True
+  req (a1:as1) (a2:as2) = a1 `req` a2 && as1 `req` as2
+  req _ _ = False
+  
+  req' [] [] = True
+  req' (a1:as1) (a2:as2) = a1 `req'` a2 && as1 `req'` as2
+  req' _ _ = False
 
 {-# INLINE asProxyOf #-}
 asProxyOf :: a -> Proxy a
@@ -343,9 +404,9 @@ static :: View -> View
 static = reactive ()
 
 -- | A hint to the reconciler that the view should only be reconciled when the
--- supplied value changes, where change is evaluated via referential equality.
--- If the old and new reactive values are referentially equal, the reconciler
--- short-circuites. 
+-- supplied value changes, where change is evaluated via referential equality
+-- across product componenets using `Req`. If the old and new reactive values
+-- are referentially equal, the reconciler short-circuites. 
 --
 -- ## Note on laziness
 -- The reactive value is not forced to WHNF. See `reactive'` for a version that
@@ -388,9 +449,9 @@ static = reactive ()
 -- these views, but will not perform a short-circuiting reconciliation -
 -- it will replace the old view with the new by fully building the new view
 -- and then swapping the nodes.
-{-# INLINE reactive #-}
-reactive :: a -> View -> View
-reactive = ReactiveView
+--
+reactive :: Req a => a -> View -> View
+reactive = ReactiveView req
 
 -- | A strict version of `reactive`. `reactive'` is a hint to the reconciler
 -- that the view should only be reconciled when the supplied value changes,
@@ -407,13 +468,13 @@ reactive = ReactiveView
 -- > reactive' (value > 1) ...
 --
 -- If `value` is strictly increasing from an initial value less than 1, this
--- `lazy'` call will update exactly once, when the value first exceeds 1. If
+-- `reactive'` call will update exactly once, when the value first exceeds 1. If
 -- you attempt to do this same comparison with the non-strict `reactive`, you
 -- will likely find it failing to achieve the same effect.
 --
 {-# INLINE reactive' #-}
-reactive' :: a -> View -> View
-reactive' !a = ReactiveView a
+reactive' :: Req a => a -> View -> View
+reactive' = ReactiveView req'
 
 -- | A hint to the reconciler that any changes to the supplied value -
 -- any changes that result in referential inequality - should result in
@@ -423,10 +484,10 @@ reactive' !a = ReactiveView a
 -- Operationally, `weak a . weak b == weak (a,b)`.
 --
 {-# INLINE weak #-}
-weak :: a -> View -> View
-weak = WeakView
+weak :: Req a => a -> View -> View
+weak = WeakView req
 
--- | A strict version of `weak` that forces the value to WHNF. `weak'` is a
+-- | A strict version of `weak` that forces the value to quasi-WHNF. `weak'` is a
 -- hint to the reconciler that any changes to the supplied value - any changes
 -- that result in referential inequality - should result in replacing the view.
 -- Unlike `reactive` or `reactive'`, if the value doesn't change, reconciliation
@@ -435,8 +496,8 @@ weak = WeakView
 -- Operationally, `weak' a . weak' b == weak' (a,b)`.
 --
 {-# INLINE weak' #-}
-weak' :: a -> View -> View
-weak' !a = weak a
+weak' :: Req a => a -> View -> View
+weak' = WeakView req'
 
 -- | A hint to the reconciler that only equivalently-tagged views should be
 -- reconciled - any change to the tag should result in a full build-and-swap.
@@ -525,9 +586,13 @@ componentWith = ComponentView (someTypeRep (Proxy :: Proxy (props,state))) Nothi
 component :: forall props state. (Typeable props, Typeable state) => (Ref props state -> Comp props state) -> props -> View
 component v p = ComponentView (someTypeRep (Proxy :: Proxy (props,state))) Nothing v (const p)
 
+{-# INLINE nil #-}
+nil :: View
+nil = NullView Nothing
+
 pattern Null :: View
 pattern Null <- (NullView _) where
-  Null = NullView Nothing
+  Null = nil
 
 {-# INLINE viewHTMLTag #-}
 viewHTMLTag :: View -> Maybe Txt
@@ -636,8 +701,8 @@ setFeatures fs v = v { features = fs }
   "getFeatures RawView" forall e t f c       . getFeatures (RawView e t f c)        = f;
   "getFeatures KHTMLView" forall e t cs f    . getFeatures (KHTMLView e t f cs)     = f;
   "getFeatures KSVGView" forall e t cs ls f  . getFeatures (KSVGView e t f ls cs)   = f;
-  "getFeatures ReactiveView" forall a v      . getFeatures (ReactiveView a v)       = getFeatures v;
-  "getFeatures WeakView" forall a v          . getFeatures (WeakView a v)           = getFeatures v;
+  "getFeatures ReactiveView" forall c a v    . getFeatures (ReactiveView c a v)     = getFeatures v;
+  "getFeatures WeakView" forall c a v        . getFeatures (WeakView c a v)         = getFeatures v;
   "getFeatures PortalView" forall p d v      . getFeatures (PortalView p d v)       = getFeatures v;
   "getFeatures ComponentView" forall _r r c p. getFeatures (ComponentView _r r c p) = mempty;
   "getFeatures TaggedView" forall _t v       . getFeatures (TaggedView _t v)        = getFeatures v;
@@ -651,8 +716,8 @@ setFeatures fs v = v { features = fs }
   "setFeatures RawView" forall e t f c f'      . setFeatures f (RawView e t f' c)       = RawView e t f c;
   "setFeatures KHTMLView" forall e t cs f f'   . setFeatures f (KHTMLView e t f' cs)    = KHTMLView e t f cs;
   "setFeatures KSVGView" forall e t cs ls f f' . setFeatures f (KSVGView e t f' ls cs)  = KSVGView e t f ls cs;
-  "setFeatures ReactiveView" forall a v f      . setFeatures f (ReactiveView a v)       = ReactiveView a (setFeatures f v);
-  "setFeatures WeakView" forall a v f          . setFeatures f (WeakView a v)           = WeakView a (setFeatures f v);
+  "setFeatures ReactiveView" forall c a v f    . setFeatures f (ReactiveView c a v)     = ReactiveView c a (setFeatures f v);
+  "setFeatures WeakView" forall c a v f        . setFeatures f (WeakView c a v)         = WeakView c a (setFeatures f v);
   "setFeatures PortalView" forall p d v f      . setFeatures f (PortalView p d v)       = PortalView p d (setFeatures f v);
   "setFeatures ComponentView" forall _r r c p f. setFeatures f (ComponentView _r r c p) = ComponentView _r r c p;
   "setFeatures TaggedView" forall _t v f       . setFeatures f (TaggedView _t v)        = TaggedView _t (setFeatures f v);
@@ -842,8 +907,8 @@ setXLinks _ v = v
   "getXLinks RawView" forall e t f c        . getXLinks (RawView e t f c)        = mempty;
   "getXLinks KHTMLView" forall e t cs f     . getXLinks (KHTMLView e t f cs)     = mempty;
   "getXLinks KSVGView" forall e t cs ls f   . getXLinks (KSVGView e t f ls cs)   = ls;
-  "getXLinks ReactiveView" forall a v       . getXLinks (ReactiveView a v)       = getXLinks v;
-  "getXLinks WeakView" forall a v           . getXLinks (WeakView a v)           = getXLinks v;
+  "getXLinks ReactiveView" forall c a v     . getXLinks (ReactiveView c a v)     = getXLinks v;
+  "getXLinks WeakView" forall c a v         . getXLinks (WeakView c a v)         = getXLinks v;
   "getXLinks PortalView" forall p d v       . getXLinks (PortalView p d v)       = getXLinks v;
   "getXLinks ComponentView" forall _r r c p . getXLinks (ComponentView _r r c p) = mempty;
   "getXLinks TaggedView" forall _t v        . getXLinks (TaggedView _t v)        = getXLinks v;
@@ -856,8 +921,8 @@ setXLinks _ v = v
   "setXLinks RawView" forall e t f c ls        . setXLinks ls (RawView e t f c)        = RawView e t f c;
   "setXLinks KHTMLView" forall e t cs f ls     . setXLinks ls (KHTMLView e t f cs)     = KHTMLView e t f cs;
   "setXLinks KSVGView" forall e t cs ls f ls'  . setXLinks ls (KSVGView e t f ls' cs)  = KSVGView e t f ls cs;
-  "setXLinks ReactiveView" forall a v ls       . setXLinks ls (ReactiveView a v)       = ReactiveView a (setXLinks ls v);
-  "setXLinks WeakView" forall a v ls           . setXLinks ls (WeakView a v)           = WeakView a (setXLinks ls v);
+  "setXLinks ReactiveView" forall c a v ls     . setXLinks ls (ReactiveView c a v)     = ReactiveView c a (setXLinks ls v);
+  "setXLinks WeakView" forall c a v ls         . setXLinks ls (WeakView c a v)         = WeakView c a (setXLinks ls v);
   "setXLinks PortalView" forall p d v ls       . setXLinks ls (PortalView p d v)       = PortalView p d (setXLinks ls v);
   "setXLinks ComponentView" forall _r r c p ls . setXLinks ls (ComponentView _r r c p) = ComponentView _r r c p;
   "setXLinks TaggedView" forall _t v ls        . setXLinks ls (TaggedView _t v)        = TaggedView _t (setXLinks ls v);
@@ -919,8 +984,8 @@ addChildren cs v = setChildren (getChildren v <> cs) v
   "getChildren RawView" forall e t f c       . getChildren (RawView e t f c)        = [];
   "getChildren KHTMLView" forall e t cs f    . getChildren (KHTMLView e t f cs)     = [];
   "getChildren KSVGView" forall e t cs ls f  . getChildren (KSVGView e t f ls cs)   = [];
-  "getChildren ReactiveView" forall a v      . getChildren (ReactiveView a v)       = getChildren v;
-  "getChildren WeakView" forall a v          . getChildren (WeakView a v)           = getChildren v;
+  "getChildren ReactiveView" forall c a v    . getChildren (ReactiveView c a v)     = getChildren v;
+  "getChildren WeakView" forall c a v        . getChildren (WeakView c a v)         = getChildren v;
   "getChildren PortalView" forall p d v      . getChildren (PortalView p d v)       = getChildren v;
   "getChildren ComponentView" forall _r r c p. getChildren (ComponentView _r r c p) = [];
   "getChildren TaggedView" forall _t v       . getChildren (TaggedView _t v)        = getChildren v;
@@ -933,8 +998,8 @@ addChildren cs v = setChildren (getChildren v <> cs) v
   "setChildren RawView" forall e t f c cs       . setChildren cs (RawView e t f c)        = RawView e t f c;
   "setChildren KHTMLView" forall e t kcs f cs   . setChildren cs (KHTMLView e t f kcs)    = KHTMLView e t f kcs;
   "setChildren KSVGView" forall e t kcs ls f cs . setChildren cs (KSVGView e t f ls kcs)  = KSVGView e t f ls kcs;
-  "setChildren ReactiveView" forall a v cs      . setChildren cs (ReactiveView a v)       = ReactiveView a (setChildren cs v);
-  "setChildren WeakView" forall a v cs          . setChildren cs (WeakView a v)           = WeakView a (setChildren cs v);
+  "setChildren ReactiveView" forall c a v cs    . setChildren cs (ReactiveView c a v)     = ReactiveView c a (setChildren cs v);
+  "setChildren WeakView" forall c a v cs        . setChildren cs (WeakView c a v)         = WeakView c a (setChildren cs v);
   "setChildren PortalView" forall p d v cs      . setChildren cs (PortalView p d v)       = PortalView p d (setChildren cs v);
   "setChildren ComponentView" forall _r r c p cs. setChildren cs (ComponentView _r r c p) = ComponentView _r r c p;
   "setChildren TaggedView" forall _t v cs       . setChildren cs (TaggedView _t v)        = TaggedView _t (setChildren cs v);
@@ -957,6 +1022,8 @@ getKeyedChildren v@SVGView {} = keyedChildren v
 getKeyedChildren PortalView {..} = getKeyedChildren portalView
 getKeyedChildren TaggedView {..} = getKeyedChildren taggedView
 getKeyedChildren Prebuilt {..} = getKeyedChildren prebuilt
+getKeyedChildren ReactiveView {..} = getKeyedChildren reactiveView
+getKeyedChildren WeakView {..} = getKeyedChildren weakView
 getKeyedChildren _ = []
 
 {-# INLINE [1] setKeyedChildren #-}
@@ -966,6 +1033,8 @@ setKeyedChildren cs v@KSVGView {} = v { keyedChildren = cs }
 setKeyedChildren cs PortalView {..} = PortalView { portalView = setKeyedChildren cs portalView, .. }
 setKeyedChildren cs TaggedView {..} = TaggedView { taggedView = setKeyedChildren cs taggedView, .. }
 setKeyedChildren cs Prebuilt {..} = Prebuilt { prebuilt = setKeyedChildren cs prebuilt, .. }
+setKeyedChildren cs ReactiveView {..} = ReactiveView { reactiveView = setKeyedChildren cs reactiveView, .. }
+setKeyedChildren cs WeakView {..} = WeakView { weakView = setKeyedChildren cs weakView, .. }
 setKeyedChildren _ v = v
 
 {-# INLINE [1] addKeyedChildren #-}
@@ -985,8 +1054,8 @@ addKeyedChildren kcs v = setKeyedChildren (getKeyedChildren v <> kcs) v
   "getKeyedChildren RawView" forall e t f c        . getKeyedChildren (RawView e t f c)        = [];
   "getKeyedChildren KHTMLView" forall e t kcs f    . getKeyedChildren (KHTMLView e t f kcs)    = kcs;
   "getKeyedChildren KSVGView" forall e t kcs ls f  . getKeyedChildren (KSVGView e t f ls kcs)  = kcs;
-  "getKeyedChildren ReactiveView" forall a v       . getKeyedChildren (ReactiveView a v)       = getKeyedChildren v;
-  "getKeyedChildren WeakView" forall a v           . getKeyedChildren (WeakView a v)           = getKeyedChildren v;
+  "getKeyedChildren ReactiveView" forall c a v     . getKeyedChildren (ReactiveView c a v)     = getKeyedChildren v;
+  "getKeyedChildren WeakView" forall c a v         . getKeyedChildren (WeakView c a v)         = getKeyedChildren v;
   "getKeyedChildren PortalView" forall p d v       . getKeyedChildren (PortalView p d v)       = getKeyedChildren v;
   "getKeyedChildren ComponentView" forall _r r c p . getKeyedChildren (ComponentView _r r c p) = [];
   "getKeyedChildren TaggedView" forall _t v        . getKeyedChildren (TaggedView _t v)        = getKeyedChildren v;
@@ -999,8 +1068,8 @@ addKeyedChildren kcs v = setKeyedChildren (getKeyedChildren v <> kcs) v
   "setKeyedChildren RawView" forall e t f c kcs        . setKeyedChildren kcs (RawView e t f c)        = RawView e t f c;
   "setKeyedChildren KHTMLView" forall e t kcs f kcs'   . setKeyedChildren kcs (KHTMLView e t f kcs')   = KHTMLView e t f kcs;
   "setKeyedChildren KSVGView" forall e t kcs ls f kcs' . setKeyedChildren kcs (KSVGView e t f ls kcs') = KSVGView e t f ls kcs;
-  "setKeyedChildren ReactiveView" forall a v kcs       . setKeyedChildren kcs (ReactiveView a v)       = ReactiveView a (setKeyedChildren kcs v);
-  "setKeyedChildren WeakView" forall a v kcs           . setKeyedChildren kcs (WeakView a v)           = WeakView a (setKeyedChildren kcs v);
+  "setKeyedChildren ReactiveView" forall c a v kcs     . setKeyedChildren kcs (ReactiveView c a v)     = ReactiveView c a (setKeyedChildren kcs v);
+  "setKeyedChildren WeakView" forall c a v kcs         . setKeyedChildren kcs (WeakView c a v)         = WeakView c a (setKeyedChildren kcs v);
   "setKeyedChildren PortalView" forall p d v kcs       . setKeyedChildren kcs (PortalView p d v)       = PortalView p d (setKeyedChildren kcs v);
   "setKeyedChildren ComponentView" forall _r r c p kcs . setKeyedChildren kcs (ComponentView _r r c p) = ComponentView _r r c p;
   "setKeyedChildren TaggedView" forall _t v kcs        . setKeyedChildren kcs (TaggedView _t v)        = TaggedView _t (setKeyedChildren kcs v);
@@ -1100,9 +1169,13 @@ with a w = inline (unsafeCoerce (Witness w :: Witness a r)) a
 using :: (b == a) ~ False => (b -> a) -> (Exists a => r) -> (Exists b => r)
 using f = with (f it)
 
+-- {-# INLINE may #-}
+-- may :: forall a b. Exists (Maybe a) => b -> (Exists a => b) -> b
+-- may nothing just = maybe nothing (`with` just) (it :: Maybe a)
+
 {-# INLINE may #-}
-may :: forall a b. Exists (Maybe a) => b -> (Exists a => b) -> b
-may nothing just = maybe nothing (`with` just) (it :: Maybe a)
+may :: Maybe a -> View -> (a -> View) -> View
+may m n j = reactive m (maybe n j m)
 
 {-# INLINE try #-}
 try :: forall a b. Exists (Try.Try a) => b -> b -> (Exists a => b) -> b
@@ -1155,8 +1228,15 @@ yield :: Producer a => a -> IO ()
 yield = effect
 
 {-# INLINE stream #-}
-stream :: (a -> IO ()) -> (Producer a => b) -> b
-stream f = with (Handler (\a after -> f a >> after >> pure True))
+stream :: forall a b. (a -> IO ()) -> (Producer a => b) -> b
+stream f b = 
+  case unsafeDupablePerformIO (writeIORef ref f) of
+    () -> with (Handler (\a after -> readIORef ref >>= \f -> f a >> after >> pure True)) b
+  -- with (Handler (\a after -> f a >> after >> pure True)) b
+  where
+    {-# NOINLINE ref #-}
+    ref :: IORef (a -> IO ())
+    ref = unsafePerformIO (newIORef undefined)
 
 {-# INLINE consume #-}
 consume :: (a -> IO ()) -> (Producer a => b) -> b
@@ -1176,7 +1256,7 @@ data Fork
 --
 -- Consider:
 -- 
--- > lazy action do
+-- > lazily action do
 -- >   fork do
 -- >     { ... await ... }
 --
@@ -1187,11 +1267,11 @@ data Fork
 fork :: View -> View
 fork = component @View @Fork (const def { deferred = True, render = const })
 
-data Asynchronous a = Asynchronous (IO a) (Material '[a])
+data Asynchronous a = Asynchronous (IO a) (Exists a |- View)
 
 data Async a = Async 
   { action :: IO a
-  , view_  :: Material '[a]
+  , view_  :: Exists a |- View
   , thread :: ThreadId 
   , result :: MVar a
   }
@@ -1205,15 +1285,12 @@ data Async a = Async
 await :: Exists a => a
 await = it
 
-parv :: Typeable a => a -> (Exists a => View) -> View
-parv a = lazy (evaluate a)
-
-{-# NOINLINE lazy #-}
+{-# NOINLINE lazily #-}
 -- Note that only the asynchrony of the first action can be witnessed in View
 -- To witness the asynchrony of reconciled effects, use `weak` to recreate the
 -- `View` on each reconciliation.
-lazy :: forall a. Typeable a => IO a -> (Exists a => View) -> View
-lazy io v = go (Asynchronous io (proof v))
+lazily :: forall a. Typeable a => IO a -> (Exists a => View) -> View
+lazily io v = go (Asynchronous io (proof v))
   where
     go = component \self -> def
       { deferred = True
@@ -1224,17 +1301,8 @@ lazy io v = go (Asynchronous io (proof v))
           thread <- forkIO (action >>= putMVar result)
           pure Async {..}
 
-      , onForce = \(Asynchronous new_action new_view) old@Async {..} -> do
-          let
-            sameAction = isTrue# (reallyUnsafePtrEquality# new_action action) 
-            sameView   = isTrue# (reallyUnsafePtrEquality# new_view view_)
-          pure (not sameAction || not sameView)
-
-      , onReceive = \(Asynchronous new_action new_view) old@Async {..} -> do
-          let
-            sameAction = isTrue# (reallyUnsafePtrEquality# new_action action) 
-            sameView   = isTrue# (reallyUnsafePtrEquality# new_view view_)
-          case (sameAction,sameView) of
+      , onReceive = \(Asynchronous new_action new_view) old@Async {..} ->
+          case (req new_action action,req new_view view_) of
             (False,_) -> do
               let action = new_action
               let view_ = new_view
@@ -1243,13 +1311,12 @@ lazy io v = go (Asynchronous io (proof v))
                   a <- action 
                   unmask do
                     tid <- myThreadId
-                    modifyrefM self $ \_ Async {..} ->
+                    modifyrefM_ self $ \_ Async {..} ->
                       if tid == thread then do
                         result <- newMVar a
                         pure (Async {..},def)
                       else
                         pure (Async {..},def)
-                    pure ()
               pure Async {..}
 
             (_,False) -> do
@@ -1263,19 +1330,16 @@ lazy io v = go (Asynchronous io (proof v))
 
       }
 
-data Synchronous a = Synchronous (IO a) (Material '[a])
+data Synchronous a = Synchronous (IO a) (Exists a |- View)
 data Sync a = Sync 
   { action :: IO a
   , result :: a
-  , view_  :: Material '[a]
+  , view_  :: Exists a |- View
   }
 
-seqv :: Typeable a => a -> (Exists a => View) -> View
-seqv a = eager (evaluate a)
-
-{-# NOINLINE eager #-}
-eager :: forall a. Typeable a => IO a -> (Exists a => View) -> View
-eager io v = go (Synchronous io (proof v))
+{-# NOINLINE eagerly #-}
+eagerly :: forall a. Typeable a => IO a -> (Exists a => View) -> View
+eagerly io v = go (Synchronous io (proof v))
   where
     go = component \self -> def
       { construct = do
@@ -1283,17 +1347,8 @@ eager io v = go (Synchronous io (proof v))
         result <- action
         pure Sync {..}
 
-      , onForce = \(Synchronous new_action new_view) Sync {..} -> do
-          let
-            sameAction = isTrue# (reallyUnsafePtrEquality# new_action action) 
-            sameView   = isTrue# (reallyUnsafePtrEquality# new_view view_)
-          pure (not sameAction || not sameView)
-
       , onReceive = \(Synchronous new_action new_view) old@Sync {..} -> do
-          let
-            sameAction = isTrue# (reallyUnsafePtrEquality# new_action action) 
-            sameView   = isTrue# (reallyUnsafePtrEquality# new_view view_)
-          case (sameAction,sameView) of
+          case (action === new_action,view_ === new_view) of
             (False,_) -> do
               let action = new_action
               let view_ = new_view
@@ -1313,7 +1368,7 @@ conc a b = race [a,b] it
 
 {-# INLINE race #-}
 race :: [View] -> (Exists View => View) -> View
-race vs v = lazy run v
+race vs v = lazily run v
   where
     run = do
       mv <- newEmptyMVar
@@ -1388,7 +1443,7 @@ watch' = component go
       }
 
 watching' :: (Typeable a, Typeable b) => a -> IO (b,IO ()) -> (Exists b => View) -> View
-watching' a create v = component go (a,create,\b -> with b v)
+watching' a create v = component go (a,create,(`with` v))
   where
     go self = def
       { construct = askref self >>= \(_,create,_) -> create
@@ -1404,13 +1459,13 @@ watching' a create v = component go (a,create,\b -> with b v)
 watching :: Typeable b => IO b -> (Exists b => View) -> View
 watching io = watching' io (io >>= \b -> pure (b,def))
 
-data Polling a = Polling Time (IO a) (Material '[a])
+data Polling a = Polling Time (IO a) (Exists a |- View)
 
 data Poll a = Poll
   { interval :: Time
   , begin :: Time
   , action :: IO a 
-  , view_  :: Material '[a]
+  , view_  :: Exists a |- View
   , thread :: ThreadId
   , result :: MVar a
   }
@@ -1453,18 +1508,11 @@ poll t f v = go (Polling t f (proof v))
 
           pure Poll {..}
 
-      , onForce = \(Polling new_interval new_action new_view) old@Poll {..} -> do
-          let
-            sameInterval = new_interval == interval
-            sameAction   = isTrue# (reallyUnsafePtrEquality# new_action action)
-            sameView     = isTrue# (reallyUnsafePtrEquality# new_view view_)
-          pure (not sameInterval || not sameAction || not sameView)
-
       , onReceive = \(Polling new_interval new_action new_view) old@Poll {..} -> do
           let
             sameInterval = new_interval == interval
-            sameAction   = isTrue# (reallyUnsafePtrEquality# new_action action) 
-            sameView     = isTrue# (reallyUnsafePtrEquality# new_view view_)
+            sameAction   = new_action === action 
+            sameView     = new_view === view_
           now <- time
           if 
             | not sameInterval || not sameAction -> do
@@ -1525,7 +1573,9 @@ poll t f v = go (Polling t f (proof v))
 delayed :: Time -> a -> a
 delayed t a = unsafePerformIO do
   mv <- newEmptyMVar
-  forkIO (evaluate a >>= putMVar mv)
+  forkIO do
+    Control.Exception.catch (evaluate a >>= putMVar mv) \(se :: SomeException) -> 
+      void (tryPutMVar mv (Control.Exception.throw se))
   delay t
   takeMVar mv
 

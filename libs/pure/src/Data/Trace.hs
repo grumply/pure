@@ -36,7 +36,7 @@ import Data.Maybe (mapMaybe,fromJust,listToMaybe)
 import Data.Ord (compare)
 import Data.Time (Time,time)
 import Data.Tree (Tree(..),Forest)
-import Data.View (Exists(..),with,Producer,stream,yield,State,state,modify,View,lazy)
+import Data.View (Exists(..),with,Producer,stream,yield,State,state,modify,View,lazily)
 import GHC.Fingerprint (Fingerprint(..))
 import GHC.Generics (Generic)
 import GHC.Types (Constraint)
@@ -138,7 +138,7 @@ as a base-case and `tracing` otherwise. Use `emit` to produce traces.
    page :: PageTracing 0 => Page -> View
    page Page { slug } =  -- Assume `slug` is an identifier for the page
      tracePage do
-       lazy (pageTrace (PageRenderStart slug)) do
+       lazily (pageTrace (PageRenderStart slug)) do
          Article <||>
            [ pageTrace (HeaderRenderStart slug) do -- Trace header render start
                <... render page header ...>
@@ -484,7 +484,7 @@ tracingWith k = with (Traces (traces @domain @n ++ [k]) :: Traces domain (n + 1)
 {-# INLINE tracingView #-}
 tracingView :: forall domain n. Tracing domain n => (Tracing domain (n + 1) => View) -> View
 tracingView v = 
-  lazy keyIO do
+  lazily keyIO do
     with (Traces (traces @domain @n ++ [it]) :: Traces domain (n + 1)) do
       v
 
@@ -628,7 +628,7 @@ mapFlows = mapMaybe go
 {-# INLINE flow #-}
 flow :: forall domain a. (Typeable a, Trace a) => ((Exists (Flow a), Tracing domain 0) => View) -> View
 flow x = 
-  lazy keyIO do
+  lazily keyIO do
     with (Traces [it] :: Traces domain 0) do
       state (keyFlow [it] :: Flow a) do
         stream (modify . addToFlow @a) do
@@ -639,7 +639,7 @@ flow x =
 {-# INLINE flows #-}
 flows :: forall domain a. (Typeable a, Trace a) => ((Exists (Flows a), Tracing domain 0) => View) -> View
 flows x = 
-  lazy keyIO do
+  lazily keyIO do
     with (Traces [it] :: Traces domain 0) do
       state ([] :: Flows a) do
         stream (modify . addToFlows @a) do

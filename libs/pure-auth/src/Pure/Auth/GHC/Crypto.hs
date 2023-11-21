@@ -144,7 +144,7 @@ withPool :: forall c. Typeable c => FilePath -> (Pool c => View) -> View
 withPool fp = stateIO (createDirectoryIfMissing True fp >> pure (Pool fp :: Pool_ c))
 
 withSecret :: forall c. Typeable c => IO (Secret_ c) -> (Secret c => View) -> View
-withSecret = lazy 
+withSecret = lazily 
 
 newSecret :: IO (Secret_ c)
 newSecret = Secret <$> CRT.getRandomBytes 32

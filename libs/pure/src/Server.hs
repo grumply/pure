@@ -45,7 +45,7 @@ import Data.Time (pattern Seconds,pattern Second,Time)
 import Data.Traversable
 import Data.Typeable
 import Data.Txt as Txt
-import Data.View hiding (Event,Handler,channel)
+import Data.View hiding (Event,Handler,channel,force)
 import Data.Void
 import GHC.Generics
 import Text.Read (readMaybe)

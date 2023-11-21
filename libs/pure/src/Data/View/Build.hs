@@ -2,6 +2,8 @@
 {-# OPTIONS_GHC -O2 #-}
 module Data.View.Build (inject,prebuild,cleanup,race',suspense,suspenses,anticipation,diffDeferred,buildPlan,build) where
 
+import Debug.Trace
+
 import Control.Concurrent (MVar,newEmptyMVar,putMVar,takeMVar,readMVar,yield,forkIO,killThread)
 import Control.Exception (catch,mask,evaluate,onException,BlockedIndefinitelyOnMVar)
 import Control.Monad.ST (ST,runST)
@@ -16,7 +18,7 @@ import Data.Maybe (fromJust,isJust)
 import Data.STRef (STRef,newSTRef,readSTRef,modifySTRef',writeSTRef)
 import Data.Traversable (for,traverse)
 import Data.Typeable (Typeable,(:~:)(..),eqT,typeRep)
-import GHC.Exts (reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#,Any,inline)
+import GHC.Exts (reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#,Any,inline,Int(I#),dataToTag#)
 import System.IO.Unsafe (unsafePerformIO)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -25,7 +27,7 @@ import Data.Set (Set)
 import qualified Data.Map.Strict as Map (fromList,toList,insert,difference,keys,differenceWith,null,elems,mergeWithKey,mapWithKey)
 import qualified Data.Set as Set (fromList,toList,insert,delete,null)
 
-import Data.View (pattern Null,Exists,it,lazy,stateWith',Modify,put,View(..),Features(..),Listener(..),Lifecycle(..),Comp(..),Target(..),getHost,setProps,queueComponentUpdate,Ref(..),ComponentPatch(..),asProxyOf,ListenerAction(..),(===),(/==))
+import Data.View (pattern Null,Exists,it,lazily,stateWith',Modify,put,View(..),Features(..),Listener(..),Lifecycle(..),Comp(..),Target(..),getHost,setProps,queueComponentUpdate,Ref(..),ComponentPatch(..),asProxyOf,ListenerAction(..),(===),(/==))
 import Data.Time (Time,timeout)
 
 import Data.Animation
@@ -101,7 +103,7 @@ import Data.DOM
 
 import Data.Queue (Queue,newQueue,arrive,collect)
 
-import Data.Txt (Txt)
+import Data.Txt (Txt,toTxt)
 import qualified Data.Txt as Txt (intercalate)
 
 {-
@@ -156,7 +158,7 @@ prebuild v = do
   pure (Prebuilt v')
 
 race' :: [View] -> (Exists View => View) -> View
-race' vs v = lazy run v 
+race' vs v = lazily run v 
   where
     run = do
       mv <- newEmptyMVar
@@ -166,21 +168,21 @@ race' vs v = lazy run v
       pure v
 
 -- | Deep suspense. Crosses component boundaries via use of `prebuild`.
--- Works across, for example, nested `lazy`s.
+-- Works across, for example, nested `lazily`s.
 --
 -- Suppose you have a primary request whose response dictates further nested
 -- requests. With `suspense`, it is possible to apply suspense to the full 
 -- view, including the secondary requests, as if it were a unified request.
 --
 -- In the following example, a suspense view will render after 100ms unless
--- all lazy views have resolved:
+-- all lazily views have resolved:
 --
 -- > suspense (Milliseconds 100 0) "Loading" do
--- >   lazy <some IO action producing a list> do
+-- >   lazily <some IO action producing a list> do
 -- >     Div <||>
--- >       [ lazy <some IO action based on `x`>
--- >           { ... await :: <some result from the nested `lazy`> ... }
--- >       | x <- await :: <some list response from the wrapping `lazy`>
+-- >       [ lazily <some IO action based on `x`>
+-- >           { ... await :: <some result from the nested `lazily`> ... }
+-- >       | x <- await :: <some list response from the wrapping `lazily`>
 -- >       ]
 --
 -- To bypass deep suspense, see `fork`, which initially renders
@@ -196,17 +198,17 @@ suspense t sus = suspenses True [(t,sus)]
 
 -- | Shallow suspense. Does not cross component boundaries. 
 -- Useful for fine-grained suspense of lazily-produced existentials, like
--- those of `lazy` and `parv`.
+-- those of `lazily` and `parv`.
 -- 
 -- Importantly, the following will not work and requires `suspense`:
 --
 -- > anticipation 0 "Loading" do
--- >   lazy someHttpGET do
+-- >   lazily someHttpGET do
 -- >     { ... await ... }
 --
 -- But, this could work (assuming no nested component boundaries in the body):
 --
--- > lazy someHttpGET do
+-- > lazily someHttpGET do
 -- >   anticipation 0 "Loading" do
 -- >     { ... await ... }
 --
@@ -245,7 +247,7 @@ suspenses deep tvs v = stateWith' (\_ -> pure) initialize it
               -- just used `evaluate`, the initialization methods of 
               -- components would not be run and suspense would only apply 
               -- to any `unsafePerformIO` or similar in the view preimage.
-              -- That would still be useful inside a `lazy @a` when `await @a`
+              -- That would still be useful inside a `lazily @a` when `await @a`
               -- is called, but it is much less interesting than the deep 
               -- suspense achieved with prebuild.
               -- 
@@ -318,8 +320,8 @@ build' mtd = start
           forkIO $ newComponentThread mv cr c live new ps state2
           -- GHC doesn't allow for record update of a ComponentView here
           return (ComponentView rep (Just cr) comp props)
-        go (ReactiveView _ f) = go f
-        go (WeakView _ f) = go f
+        go (ReactiveView _ _ f) = go f
+        go (WeakView _ _ f) = go f
         go TaggedView{..} = go taggedView
         go o@TextView {..} = do
           tn <- createText content
@@ -381,7 +383,7 @@ build' mtd = start
             { portalProxy = Just e
             , portalView = v
             }
-
+            
 setXLinks :: Element -> Map Txt Txt -> IO ()
 setXLinks e = traverse_ (uncurry (setAttributeNS e "http://www.w3.org/1999/xlink")) . Map.toList
 
@@ -582,7 +584,7 @@ newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state 
                 UpdateProperties newProps' -> do
 
                   newState'    <- onReceive newProps' newState
-                  shouldUpdate <- onForce   newProps' newState'
+                  shouldUpdate <- force     newProps' newState'
 
                   let
                     writeRefs = do
@@ -606,7 +608,7 @@ newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state 
                 UpdateState f -> do
 
                   (newState',after) <- f newProps newState
-                  shouldUpdate      <- onForce newProps newState'
+                  shouldUpdate      <- force newProps newState'
 
                   let writeRef = writeIORef crState newState'
 
@@ -669,10 +671,15 @@ cleanup' _ = return ()
 diffDeferred :: forall s. IORef [IO ()] -> Plan s -> Plan s -> View -> View -> View -> ST s View
 diffDeferred = diffDeferred'
 
+which :: View -> Maybe Txt
+which HTMLView {..} = Just tag
+which TextView {..} = Just content
+which d = Just (toTxt (show (I# (dataToTag# d))))
+
 diffDeferred' :: forall s. IORef [IO ()] -> Plan s -> Plan s -> View -> View -> View -> ST s View
 diffDeferred' mounted plan plan' old !mid !new =
   -- sameData = isTrue# (dataToTag# mid ==# dataToTag# new)
-  if mid === new then return old else
+  if mid === new then return old else -- traceShow (which mid) $
       let
           replace = do
             !new' <- unsafeIOToST (build' mounted Nothing new)
@@ -688,15 +695,17 @@ diffDeferred' mounted plan plan' old !mid !new =
           (Prebuilt pb,_) ->
             diffDeferred' mounted plan plan' old pb new
 
-          (ReactiveView a f,ReactiveView a' f')
-            | a === a'  -> return old
+          (ReactiveView c a f,ReactiveView c' a' f')
+            | c === c' && unsafeCoerce# c a a' -> -- trace "same" 
+              return old
             | otherwise -> diffDeferred' mounted plan plan' old f f'
 
-          (WeakView a f,WeakView a' f')
-            | a === a' -> diffDeferred' mounted plan plan' old f f'
+          (WeakView c a f,WeakView c' a' f')
+            | c === c' && unsafeCoerce# c a a' -> 
+              diffDeferred' mounted plan plan' old f f'
 
           (TaggedView t v,TaggedView t' v')
-            | t === t' || t == t' ->
+            | t === t' || t == t' -> 
               diffDeferred' mounted plan plan' old v v'
 
           (ComponentView rep r v p,ComponentView rep' r' v' p')
@@ -828,7 +837,8 @@ diffXLinkMaps = Map.mergeWithKey diff remove add
 diffClassesDeferred :: Element -> Plan s -> Set Txt -> Set Txt -> ST s ()
 diffClassesDeferred e p !mid !new =
   if mid === new then return () else
-    diffClassesDeferred' e p mid new
+    -- trace "classes changed" $
+      diffClassesDeferred' e p mid new
 
 diffClassesDeferred' :: Element -> Plan s -> Set Txt -> Set Txt -> ST s ()
 diffClassesDeferred' e p mid new
@@ -861,7 +871,8 @@ diffStyleMaps = Map.mergeWithKey diff remove add
 diffAttributesDeferred :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
 diffAttributesDeferred e p mid new =
   if mid === new then return () else
-    diffAttributesDeferred' e p mid new
+    -- traceShow ("attributes changed",mid,new) $
+      diffAttributesDeferred' e p mid new
 
 diffAttributesDeferred' :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
 diffAttributesDeferred' e p mid new = do
@@ -881,7 +892,8 @@ diffAttributeMaps = Map.mergeWithKey diff remove add
 diffPropertiesDeferred :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
 diffPropertiesDeferred e p mid new =
   if mid === new then return () else
-    diffPropertiesDeferred' e p mid new
+    -- trace "properties changed" $
+      diffPropertiesDeferred' e p mid new
 
 diffPropertiesDeferred' :: Element -> Plan s -> Map Txt Txt -> Map Txt Txt -> ST s ()
 diffPropertiesDeferred' e p mid new = do
@@ -942,7 +954,8 @@ removeListenerDeferred p (On _ _ _ _ _ stp) = amendPlan p stp
 diffListenersDeferred :: Element -> Plan s -> [Listener] -> [Listener] -> [Listener] -> ST s [Listener]
 diffListenersDeferred e p old !mid !new =
   if mid === new then return old else
-    diffListenersDeferred' e p old mid new
+    -- trace "listeners changed" $ 
+      diffListenersDeferred' e p old mid new
 
 diffListenersDeferred' :: Element -> Plan s -> [Listener] -> [Listener] -> [Listener] -> ST s [Listener]
 diffListenersDeferred' e p olds mids news =
@@ -1013,7 +1026,8 @@ diffListenerDeferred' e p old mid new
 diffChildrenDeferred :: forall s. Element -> IORef [IO ()] -> Plan s -> Plan s -> DiffST s [View]
 diffChildrenDeferred e mounted plan plan' olds !mids !news =
   if mids === news then return olds else
-    diffChildrenDeferred' e mounted plan plan' olds mids news
+    -- trace "children changed" $
+      diffChildrenDeferred' e mounted plan plan' olds mids news
 
 diffChildrenDeferred' :: forall s. Element -> IORef [IO ()] -> Plan s -> Plan s -> DiffST s [View]
 diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =

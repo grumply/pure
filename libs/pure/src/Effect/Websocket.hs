@@ -12,7 +12,7 @@ import Data.Proxy
 import Data.Subscribe
 import Data.Txt
 import Data.Typeable
-import Data.View
+import Data.View hiding (Req(req))
 import Data.Websocket as WS hiding (Websocket)
 import qualified Data.Websocket as WS
 #ifndef __GHCJS__
@@ -239,7 +239,7 @@ request
   , Logging Value
   ) 
   => Effect.Websocket.Policy -> WS.API msgs reqs -> Proxy request -> payload -> (Exists response => View) -> View
-request policy api rq pl v = lazy (req @domain policy api rq pl) v
+request policy api rq pl v = lazily (req @domain policy api rq pl) v
 
 flush 
   :: forall domain request msgs reqs payload.

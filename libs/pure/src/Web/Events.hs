@@ -64,9 +64,9 @@ animationStart = animationStartWith def yield
 animationStarts :: (Exists AnimationStart => IO ()) -> View -> View
 animationStarts f = events @AnimationStart f animationStart
 
-{-# INLINE onAnimationStart #-}
+{-# NOINLINE onAnimationStart #-}
 onAnimationStart :: (Exists AnimationStart => a) -> View -> (Producer a => View)
-onAnimationStart a = animationStarts (yield a)
+onAnimationStart a = animationStartWith def (\as -> yield (with as a))
 
 newtype AnimationIteration = AnimationIteration AnimationEvent
 
@@ -82,9 +82,9 @@ animationIteration = animationIterationWith def yield
 animationIterations :: (Exists AnimationIteration => IO ()) -> View -> View
 animationIterations f = events @AnimationIteration f animationIteration
 
-{-# INLINE onAnimationIteration #-}
+{-# NOINLINE onAnimationIteration #-}
 onAnimationIteration :: (Exists AnimationIteration => a) -> View -> (Producer a => View)
-onAnimationIteration a = animationIterations (yield a)
+onAnimationIteration a = animationIterationWith def (\ai -> yield (with ai a))
 
 newtype AnimationCancel = AnimationCancel AnimationEvent
 
@@ -100,9 +100,9 @@ animationCancel = animationCancelWith def yield
 animationCancels :: (Exists AnimationCancel => IO ()) -> View -> View
 animationCancels f = events @AnimationCancel f animationCancel
 
-{-# INLINE onAnimationCancel #-}
+{-# NOINLINE onAnimationCancel #-}
 onAnimationCancel :: (Exists AnimationCancel => a) -> View -> (Producer a => View)
-onAnimationCancel a = animationCancels (yield a)
+onAnimationCancel a = animationCancelWith def (\ac -> yield (with ac a))
 
 newtype AnimationEnd = AnimationEnd AnimationEvent
 
@@ -118,9 +118,9 @@ animationEnd = animationEndWith def yield
 animationEnds :: (Exists AnimationEnd => IO ()) -> View -> View
 animationEnds f = events @AnimationEnd f animationEnd
 
-{-# INLINE onAnimationEnd #-}
+{-# NOINLINE onAnimationEnd #-}
 onAnimationEnd :: (Exists AnimationEnd => a) -> View -> (Producer a => View)
-onAnimationEnd a = animationEnds (yield a)
+onAnimationEnd a = animationEndWith def (\ae -> yield (with ae a))
 
 data ClipboardEvent = ClipboardEvent
   { eventObject :: JSV
@@ -148,9 +148,9 @@ cut = cutWith def yield
 cuts :: (Exists Cut => IO ()) -> View -> View
 cuts f = events @Cut f cut
 
-{-# INLINE onCut #-}
+{-# NOINLINE onCut #-}
 onCut :: (Exists Cut => a) -> View -> (Producer a => View)
-onCut a = cuts (yield a)
+onCut a = cutWith def (\c -> yield (with c a))
 
 newtype Copy = Copy ClipboardEvent
 
@@ -166,9 +166,9 @@ copy = copyWith def yield
 copies :: (Exists Copy => IO ()) -> View -> View
 copies f = events @Copy f Web.Events.copy
 
-{-# INLINE onCopy #-}
+{-# NOINLINE onCopy #-}
 onCopy :: (Exists Copy => a) -> View -> (Producer a => View)
-onCopy a = copies (yield a)
+onCopy a = copyWith def (\c -> yield (with c a))
 
 newtype Paste = Paste ClipboardEvent
 
@@ -184,9 +184,9 @@ paste = pasteWith def yield
 pastes :: (Exists Paste => IO ()) -> View -> View
 pastes f = events @Paste f paste
 
-{-# INLINE onPaste #-}
+{-# NOINLINE onPaste #-}
 onPaste :: (Exists Paste => a) -> View -> (Producer a => View)
-onPaste a = pastes (yield a)
+onPaste a = pasteWith def (\p -> yield (with p a))
 
 data CompositionEvent = CompositionEvent
   { eventObject :: JSV
@@ -214,9 +214,9 @@ compositionStart = compositionStartWith def yield
 compositionStarts :: (Exists CompositionStart => IO ()) -> View -> View
 compositionStarts f = events @CompositionStart f compositionStart
 
-{-# INLINE onCompositionStart #-}
+{-# NOINLINE onCompositionStart #-}
 onCompositionStart :: (Exists CompositionStart => a) -> View -> (Producer a => View)
-onCompositionStart a = compositionStarts (yield a)
+onCompositionStart a = compositionStartWith def (\cs -> yield (with cs a))
 
 newtype CompositionUpdate = CompositionUpdate CompositionEvent
 
@@ -232,9 +232,9 @@ compositionUpdate = compositionUpdateWith def yield
 compositionUpdates :: (Exists CompositionUpdate => IO ()) -> View -> View
 compositionUpdates f = events @CompositionUpdate f compositionUpdate
 
-{-# INLINE onCompositionUpdate #-}
+{-# NOINLINE onCompositionUpdate #-}
 onCompositionUpdate :: (Exists CompositionUpdate => a) -> View -> (Producer a => View)
-onCompositionUpdate a = compositionUpdates (yield a)
+onCompositionUpdate a = compositionUpdateWith def (\cu -> yield (with cu a))
 
 newtype CompositionEnd = CompositionEnd CompositionEvent
 
@@ -250,9 +250,9 @@ compositionEnd = compositionEndWith def yield
 compositionEnds :: (Exists CompositionEnd => IO ()) -> View -> View
 compositionEnds f = events @CompositionEnd f compositionEnd
 
-{-# INLINE onCompositionEnd #-}
+{-# NOINLINE onCompositionEnd #-}
 onCompositionEnd :: (Exists CompositionEnd => a) -> View -> (Producer a => View)
-onCompositionEnd a = compositionEnds (yield a)
+onCompositionEnd a = compositionEndWith def (\ce -> yield (with ce a))
 
 data DragEvent = DragEvent
   { eventObject :: JSV
@@ -280,9 +280,9 @@ drag = dragWith def yield
 drags :: (Exists Drag => IO ()) -> View -> View
 drags f = events @Drag f drag
 
-{-# INLINE onDrag #-}
+{-# NOINLINE onDrag #-}
 onDrag :: (Exists Drag => a) -> View -> (Producer a => View)
-onDrag a = drags (yield a)
+onDrag a = dragWith def (\d -> yield (with d a))
 
 newtype DragEnd = DragEnd DragEvent
 
@@ -298,9 +298,9 @@ dragEnd = dragEndWith def yield
 dragEnds :: (Exists DragEnd => IO ()) -> View -> View
 dragEnds f = events @DragEnd f dragEnd
 
-{-# INLINE onDragEnd #-}
+{-# NOINLINE onDragEnd #-}
 onDragEnd :: (Exists DragEnd => a) -> View -> (Producer a => View)
-onDragEnd a = dragEnds (yield a)
+onDragEnd a = dragEndWith def (\de -> yield (with de a))
 
 newtype DragEnter = DragEnter DragEvent
 
@@ -316,9 +316,9 @@ dragEnter = dragEnterWith def yield
 dragEnters :: (Exists DragEnter => IO ()) -> View -> View
 dragEnters f = events @DragEnter f dragEnter
 
-{-# INLINE onDragEnter #-}
+{-# NOINLINE onDragEnter #-}
 onDragEnter :: (Exists DragEnter => a) -> View -> (Producer a => View)
-onDragEnter a = dragEnters (yield a)
+onDragEnter a = dragEnterWith def (\de -> yield (with de a))
 
 newtype DragLeave = DragLeave DragEvent
 
@@ -334,9 +334,9 @@ dragLeave = dragLeaveWith def yield
 dragLeaves :: (Exists DragLeave => IO ()) -> View -> View
 dragLeaves f = events @DragLeave f dragLeave
 
-{-# INLINE onDragLeave #-}
+{-# NOINLINE onDragLeave #-}
 onDragLeave :: (Exists DragLeave => a) -> View -> (Producer a => View)
-onDragLeave a = dragLeaves (yield a)
+onDragLeave a = dragLeaveWith def (\dl -> yield (with dl a))
 
 newtype DragOver = DragOver DragEvent
 
@@ -352,9 +352,9 @@ dragOver = dragOverWith def yield
 dragOvers :: (Exists DragOver => IO ()) -> View -> View
 dragOvers f = events @DragOver f dragOver
 
-{-# INLINE onDragOver #-}
+{-# NOINLINE onDragOver #-}
 onDragOver :: (Exists DragOver => a) -> View -> (Producer a => View)
-onDragOver a = dragOvers (yield a)
+onDragOver a = dragOverWith def (\dov -> yield (with dov a))
 
 newtype DragStart = DragStart DragEvent
 
@@ -370,9 +370,9 @@ dragStart = dragStartWith def yield
 dragStarts :: (Exists DragStart => IO ()) -> View -> View
 dragStarts f = events @DragStart f dragStart
 
-{-# INLINE onDragStart #-}
+{-# NOINLINE onDragStart #-}
 onDragStart :: (Exists DragStart => a) -> View -> (Producer a => View)
-onDragStart a = dragStarts (yield a)
+onDragStart a = dragStartWith def (\ds -> yield (with ds a))
 
 newtype Drop = Drop DragEvent
 
@@ -388,9 +388,9 @@ drop = dropWith def yield
 drops :: (Exists Drop => IO ()) -> View -> View
 drops f = events @Drop f Web.Events.drop
 
-{-# INLINE onDrop #-}
+{-# NOINLINE onDrop #-}
 onDrop :: (Exists Drop => a) -> View -> (Producer a => View)
-onDrop a = drops (yield a)
+onDrop a = dropWith def (\d -> yield (with d a))
 
 data FocusEvent = FocusEvent
   { eventObject :: JSV
@@ -418,9 +418,9 @@ focus = focusWith def yield
 focuses :: (Exists Focus => IO ()) -> View -> View
 focuses f = events @Focus f focus
 
-{-# INLINE onFocus #-}
+{-# NOINLINE onFocus #-}
 onFocus :: (Exists Focus => a) -> View -> (Producer a => View)
-onFocus a = focuses (yield a)
+onFocus a = focusWith def (\f -> yield (with f a))
 
 newtype Blur = Blur FocusEvent
 
@@ -436,9 +436,9 @@ blur = blurWith def yield
 blurs :: (Exists Blur => IO ()) -> View -> View
 blurs f = events @Blur f blur
 
-{-# INLINE onBlur #-}
+{-# NOINLINE onBlur #-}
 onBlur :: (Exists Blur => a) -> View -> (Producer a => View)
-onBlur a = blurs (yield a)
+onBlur a = blurWith def (\b -> yield (with b a))
 
 newtype FocusIn = FocusIn FocusEvent
 
@@ -454,9 +454,9 @@ focusIn = focusInWith def yield
 focusIns :: (Exists FocusIn => IO ()) -> View -> View
 focusIns f = events @FocusIn f focusIn
 
-{-# INLINE onFocusIn #-}
+{-# NOINLINE onFocusIn #-}
 onFocusIn :: (Exists FocusIn => a) -> View -> (Producer a => View)
-onFocusIn a = focusIns (yield a)
+onFocusIn a = focusInWith def (\fi -> yield (with fi a))
 
 newtype FocusOut = FocusOut FocusEvent
 
@@ -472,13 +472,14 @@ focusOut = focusOutWith def yield
 focusOuts :: (Exists FocusOut => IO ()) -> View -> View
 focusOuts f = events @FocusOut f focusOut
 
-{-# INLINE onFocusOut #-}
+{-# NOINLINE onFocusOut #-}
 onFocusOut :: (Exists FocusOut => a) -> View -> (Producer a => View)
-onFocusOut a = focusOuts (yield a)
+onFocusOut a = focusOutWith def (\fo -> yield (with fo a))
 
 data ChangeEvent = ChangeEvent
   { eventObject :: JSV
   , value :: Txt
+  , checked :: Bool
   }
 
 toChangeEvent :: Evt -> ChangeEvent
@@ -486,6 +487,7 @@ toChangeEvent (evtObj -> o) = let err = error "Invalid ChangeEvent" in
   ChangeEvent
     { eventObject = o
     , value = fromMaybe err (o .# "target" >>= (.# "value"))
+    , checked = fromMaybe False (o .# "target" >>= (.# "checked"))
     }
 
 newtype Change = Change ChangeEvent
@@ -502,13 +504,15 @@ change = changeWith def yield
 changes :: (Exists Change => IO ()) -> View -> View
 changes f = events @Change f change
 
-{-# INLINE onChange #-}
+{-# NOINLINE onChange #-}
 onChange :: (Exists Change => a) -> View -> (Producer a => View)
-onChange a = changes (yield a)
+onChange a = changeWith def (\c -> yield (with c a))
 
 data InputEvent = InputEvent
   { eventObject :: JSV
   , value :: Txt
+  , checked :: Bool
+  , indeterminate :: Bool
   , inputType :: Txt
   , files :: [(Txt,ByteTxt)]
   }
@@ -518,6 +522,8 @@ toInputEvent (evtObj -> o) = let err = error "Invalid InputEvent" in
   InputEvent
     { eventObject = o 
     , value = fromMaybe err (o .# "target" >>= (.# "value"))
+    , checked = fromMaybe False (o .# "target" >>= (.# "checked"))
+    , indeterminate = fromMaybe False (o .# "target" >>= (.# "indeterminate"))
     , inputType = fromMaybe err (o .# "inputType")
     , files = maybe err (unsafePerformIO . getFiles . (coerce :: JSV -> Node)) (o .# "target")
     }
@@ -536,9 +542,9 @@ beforeInput = beforeInputWith def yield
 beforeInputs :: (Exists BeforeInput => IO ()) -> View -> View
 beforeInputs f = events @BeforeInput f beforeInput
 
-{-# INLINE onBeforeInput #-}
+{-# NOINLINE onBeforeInput #-}
 onBeforeInput :: (Exists BeforeInput => a) -> View -> (Producer a => View)
-onBeforeInput a = beforeInputs (yield a)
+onBeforeInput a = beforeInputWith def (\bi -> yield (with bi a))
 
 newtype Input = In InputEvent
 
@@ -554,9 +560,9 @@ input = inputWith def yield
 inputs :: (Exists Input => IO ()) -> View -> View
 inputs f = events @Input f input
 
-{-# INLINE onInput #-}
+{-# NOINLINE onInput #-}
 onInput :: (Exists Input => a) -> View -> (Producer a => View)
-onInput a = inputs (yield a)
+onInput a = inputWith def (\i -> yield (with i a))
 
 #ifdef __GHCJS__
 foreign import javascript unsafe
@@ -635,9 +641,9 @@ keyUp = keyUpWith def yield
 keyUps :: (Exists KeyUp => IO ()) -> View -> View
 keyUps f = events @KeyUp f keyUp
 
-{-# INLINE onKeyUps #-}
-onKeyUps :: (Exists KeyUp => a) -> View -> (Producer a => View)
-onKeyUps a = keyUps (yield a)
+{-# NOINLINE onKeyUp #-}
+onKeyUp :: (Exists KeyUp => a) -> View -> (Producer a => View)
+onKeyUp a = keyUpWith def (\ku -> yield (with ku a))
 
 newtype KeyPress = KeyPress KeyboardEvent
 
@@ -653,9 +659,9 @@ keyPress = keyPressWith def yield
 keyPresses :: (Exists KeyPress => IO ()) -> View -> View
 keyPresses f = events @KeyPress f keyPress
 
-{-# INLINE onKeyPress #-}
+{-# NOINLINE onKeyPress #-}
 onKeyPress :: (Exists KeyPress => a) -> View -> (Producer a => View)
-onKeyPress a = keyPresses (yield a)
+onKeyPress a = keyPressWith def (\kp -> yield (with kp a))
 
 newtype KeyDown = KeyDown KeyboardEvent
 
@@ -671,9 +677,9 @@ keyDown = keyDownWith def yield
 keyDowns :: (Exists KeyDown => IO ()) -> View -> View
 keyDowns f = events @KeyDown f keyDown
 
-{-# INLINE onKeyDown #-}
+{-# NOINLINE onKeyDown #-}
 onKeyDown :: (Exists KeyDown => a) -> View -> (Producer a => View)
-onKeyDown a = keyDowns (yield a)
+onKeyDown a = keyDownWith def (\kd -> yield (with kd a))
 
 -- Modifiers
 
@@ -880,9 +886,9 @@ click = clickWith def yield
 clicks :: (Exists Click => IO ()) -> View -> View
 clicks f = events @Click f click
 
-{-# INLINE onClick #-}
+{-# NOINLINE onClick #-}
 onClick :: (Exists Click => a) -> View -> (Producer a => View)
-onClick a = clicks (yield a) 
+onClick a = clickWith def (\c -> yield (with c a))
 
 newtype DoubleClick = DoubleClick MouseEvent
 
@@ -898,9 +904,9 @@ doubleClick = doubleClickWith def yield
 doubleClicks :: (Exists DoubleClick => IO ()) -> View -> View
 doubleClicks f = events @DoubleClick f doubleClick
 
-{-# INLINE onDoubleClick #-}
+{-# NOINLINE onDoubleClick #-}
 onDoubleClick :: (Exists DoubleClick => a) -> View -> (Producer a => View)
-onDoubleClick a = doubleClicks (yield a)
+onDoubleClick a = doubleClickWith def (\dc -> yield (with dc a))
 
 newtype MouseOver = MouseOver MouseEvent
 
@@ -916,9 +922,9 @@ mouseOver = mouseOverWith def yield
 mouseOvers :: (Exists MouseOver => IO ()) -> View -> View
 mouseOvers f = events @MouseOver f mouseOver
 
-{-# INLINE onMouseOver #-}
+{-# NOINLINE onMouseOver #-}
 onMouseOver :: (Exists MouseOver => a) -> View -> (Producer a => View)
-onMouseOver a = mouseOvers (yield a)
+onMouseOver a = mouseOverWith def (\mo -> yield (with mo a))
 
 newtype MouseEnter = MouseEnter MouseEvent
 
@@ -934,9 +940,9 @@ mouseEnter = mouseEnterWith def yield
 mouseEnters :: (Exists MouseEnter => IO ()) -> View -> View
 mouseEnters f = events @MouseEnter f mouseEnter
 
-{-# INLINE onMouseEnter #-}
+{-# NOINLINE onMouseEnter #-}
 onMouseEnter :: (Exists MouseEnter => a) -> View -> (Producer a => View)
-onMouseEnter a = mouseEnters (yield a)
+onMouseEnter a = mouseEnterWith def (\me -> yield (with me a))
 
 newtype MouseMove = MouseMove MouseEvent
 
@@ -952,9 +958,9 @@ mouseMove = mouseMoveWith def yield
 mouseMoves :: (Exists MouseMove => IO ()) -> View -> View
 mouseMoves f = events @MouseMove f mouseMove
 
-{-# INLINE onMouseMove #-}
+{-# NOINLINE onMouseMove #-}
 onMouseMove :: (Exists MouseMove => a) -> View -> (Producer a => View)
-onMouseMove a = mouseMoves (yield a)
+onMouseMove a = mouseMoveWith def (\mm -> yield (with mm a))
 
 newtype MouseOut = MouseOut MouseEvent
 
@@ -970,9 +976,9 @@ mouseOut = mouseOutWith def yield
 mouseOuts :: (Exists MouseOut => IO ()) -> View -> View
 mouseOuts f = events @MouseOut f mouseOut
 
-{-# INLINE onMouseOut #-}
+{-# NOINLINE onMouseOut #-}
 onMouseOut :: (Exists MouseOut => a) -> View -> (Producer a => View)
-onMouseOut a = mouseOuts (yield a)
+onMouseOut a = mouseOutWith def (\mo -> yield (with mo a))
 
 newtype MouseLeave = MouseLeave MouseEvent
 
@@ -988,9 +994,9 @@ mouseLeave = mouseLeaveWith def yield
 mouseLeaves :: (Exists MouseLeave => IO ()) -> View -> View
 mouseLeaves f = events @MouseLeave f mouseLeave
 
-{-# INLINE onMouseLeave #-}
+{-# NOINLINE onMouseLeave #-}
 onMouseLeave :: (Exists MouseLeave => a) -> View -> (Producer a => View)
-onMouseLeave a = mouseLeaves (yield a)
+onMouseLeave a = mouseLeaveWith def (\ml -> yield (with ml a))
 
 newtype MouseDown = MouseDown MouseEvent
 
@@ -1006,9 +1012,9 @@ mouseDown = mouseDownWith def yield
 mouseDowns :: (Exists MouseDown => IO ()) -> View -> View
 mouseDowns f = events @MouseDown f mouseDown
 
-{-# INLINE onMouseDown #-}
+{-# NOINLINE onMouseDown #-}
 onMouseDown :: (Exists MouseDown => a) -> View -> (Producer a => View)
-onMouseDown a = mouseDowns (yield a)
+onMouseDown a = mouseDownWith def (\md -> yield (with md a))
 
 newtype MouseUp = MouseUp MouseEvent
 
@@ -1024,9 +1030,9 @@ mouseUp = mouseUpWith def yield
 mouseUps :: (Exists MouseUp => IO ()) -> View -> View
 mouseUps f = events @MouseUp f mouseUp
 
-{-# INLINE onMouseUp #-}
+{-# NOINLINE onMouseUp #-}
 onMouseUp :: (Exists MouseUp => a) -> View -> (Producer a => View)
-onMouseUp a = mouseUps (yield a)
+onMouseUp a = mouseUpWith def (\mu -> yield (with mu a))
 
 newtype ContextMenu = ContextMenu MouseEvent
 
@@ -1042,9 +1048,9 @@ contextMenu = contextMenuWith def yield
 contextMenus :: (Exists ContextMenu => IO ()) -> View -> View
 contextMenus f = events @ContextMenu f contextMenu
 
-{-# INLINE onContextMenu #-}
+{-# NOINLINE onContextMenu #-}
 onContextMenu :: (Exists ContextMenu => a) -> View -> (Producer a => View)
-onContextMenu a = contextMenus (yield a)
+onContextMenu a = contextMenuWith def (\cm -> yield (with cm a))
 
 data Mutation 
   = AttributeMutation
@@ -1288,9 +1294,9 @@ pointerOver = pointerOverWith def yield
 pointerOvers :: (Exists PointerOver => IO ()) -> View -> View
 pointerOvers f = events @PointerOver f pointerOver
 
-{-# INLINE onPointerOver #-}
+{-# NOINLINE onPointerOver #-}
 onPointerOver :: (Exists PointerOver => a) -> View -> (Producer a => View)
-onPointerOver a = pointerOvers (yield a)
+onPointerOver a = pointerOverWith def (\po -> yield (with po a))
 
 newtype PointerEnter = PointerEnter PointerEvent
 
@@ -1306,9 +1312,9 @@ pointerEnter = pointerEnterWith def yield
 pointerEnters :: (Exists PointerEnter => IO ()) -> View -> View
 pointerEnters f = events @PointerEnter f pointerEnter
 
-{-# INLINE onPointerEnter #-}
+{-# NOINLINE onPointerEnter #-}
 onPointerEnter :: (Exists PointerEnter => a) -> View -> (Producer a => View)
-onPointerEnter a = pointerEnters (yield a)
+onPointerEnter a = pointerEnterWith def (\pe -> yield (with pe a))
 
 newtype PointerDown = PointerDown PointerEvent
 
@@ -1324,9 +1330,9 @@ pointerDown = pointerDownWith def yield
 pointerDowns :: (Exists PointerDown => IO ()) -> View -> View
 pointerDowns f = events @PointerDown f pointerDown
 
-{-# INLINE onPointerDown #-}
+{-# NOINLINE onPointerDown #-}
 onPointerDown :: (Exists PointerDown => a) -> View -> (Producer a => View)
-onPointerDown a = pointerDowns (yield a)
+onPointerDown a = pointerDownWith def (\pd -> yield (with pd a))
 
 newtype PointerMove = PointerMove PointerEvent
 
@@ -1342,9 +1348,9 @@ pointerMove = pointerMoveWith def yield
 pointerMoves :: (Exists PointerMove => IO ()) -> View -> View
 pointerMoves f = events @PointerMove f pointerMove
 
-{-# INLINE onPointerMove #-}
+{-# NOINLINE onPointerMove #-}
 onPointerMove :: (Exists PointerMove => a) -> View -> (Producer a => View)
-onPointerMove a = pointerMoves (yield a)
+onPointerMove a = pointerMoveWith def (\pm -> yield (with pm a))
 
 newtype PointerRawUpdate = PointerRawUpdate PointerEvent
 
@@ -1360,9 +1366,9 @@ pointerRawUpdate = pointerRawUpdateWith def yield
 pointerRawUpdates :: (Exists PointerRawUpdate => IO ()) -> View -> View
 pointerRawUpdates f = events @PointerRawUpdate f pointerRawUpdate
 
-{-# INLINE onPointerRawUpdate #-}
+{-# NOINLINE onPointerRawUpdate #-}
 onPointerRawUpdate :: (Exists PointerRawUpdate => a) -> View -> (Producer a => View)
-onPointerRawUpdate a = pointerRawUpdates (yield a)
+onPointerRawUpdate a = pointerRawUpdateWith def (\pru -> yield (with pru a))
 
 newtype PointerUp = PointerUp PointerEvent
 
@@ -1378,9 +1384,9 @@ pointerUp = pointerUpWith def yield
 pointerUps :: (Exists PointerUp => IO ()) -> View -> View
 pointerUps f = events @PointerUp f pointerUp
 
-{-# INLINE onPointerUp #-}
+{-# NOINLINE onPointerUp #-}
 onPointerUp :: (Exists PointerUp => a) -> View -> (Producer a => View)
-onPointerUp a = pointerUps (yield a)
+onPointerUp a = pointerUpWith def (\pu -> yield (with pu a))
 
 newtype PointerCancel = PointerCancel PointerEvent
 
@@ -1396,9 +1402,9 @@ pointerCancel = pointerCancelWith def yield
 pointerCancels :: (Exists PointerCancel => IO ()) -> View -> View
 pointerCancels f = events @PointerCancel f pointerCancel
 
-{-# INLINE onPointerCancel #-}
+{-# NOINLINE onPointerCancel #-}
 onPointerCancel :: (Exists PointerCancel => a) -> View -> (Producer a => View)
-onPointerCancel a = pointerCancels (yield a)
+onPointerCancel a = pointerCancelWith def (\pc -> yield (with pc a))
 
 newtype PointerOut = PointerOut PointerEvent
 
@@ -1414,9 +1420,9 @@ pointerOut = pointerOutWith def yield
 pointerOuts :: (Exists PointerOut => IO ()) -> View -> View
 pointerOuts f = events @PointerOut f pointerOut
 
-{-# INLINE onPointerOut #-}
+{-# NOINLINE onPointerOut #-}
 onPointerOut :: (Exists PointerOut => a) -> View -> (Producer a => View)
-onPointerOut a = pointerOuts (yield a)
+onPointerOut a = pointerOutWith def (\po -> yield (with po a))
 
 newtype PointerLeave = PointerLeave PointerEvent
 
@@ -1432,9 +1438,9 @@ pointerLeave = pointerLeaveWith def yield
 pointerLeaves :: (Exists PointerLeave => IO ()) -> View -> View
 pointerLeaves f = events @PointerLeave f pointerLeave
 
-{-# INLINE onPointerLeave #-}
+{-# NOINLINE onPointerLeave #-}
 onPointerLeave :: (Exists PointerLeave => a) -> View -> (Producer a => View)
-onPointerLeave a = pointerLeaves (yield a)
+onPointerLeave a = pointerLeaveWith def (\pl -> yield (with pl a))
 
 newtype GotPointerCapture = GotPointerCapture PointerEvent
 
@@ -1450,9 +1456,9 @@ gotPointerCapture = gotPointerCaptureWith def yield
 gotPointerCaptures :: (Exists GotPointerCapture => IO ()) -> View -> View
 gotPointerCaptures f = events @GotPointerCapture f gotPointerCapture
 
-{-# INLINE onGotPointerCapture #-}
+{-# NOINLINE onGotPointerCapture #-}
 onGotPointerCapture :: (Exists GotPointerCapture => a) -> View -> (Producer a => View)
-onGotPointerCapture a = gotPointerCaptures (yield a)
+onGotPointerCapture a = gotPointerCaptureWith def (\pc -> yield (with pc a))
 
 newtype LostPointerCapture = LostPointerCapture PointerEvent
 
@@ -1468,9 +1474,9 @@ lostPointerCapture = lostPointerCaptureWith def yield
 lostPointerCaptures :: (Exists LostPointerCapture => IO ()) -> View -> View
 lostPointerCaptures f = events @LostPointerCapture f lostPointerCapture
 
-{-# INLINE onLostPointerCapture #-}
+{-# NOINLINE onLostPointerCapture #-}
 onLostPointerCapture :: (Exists LostPointerCapture => a) -> View -> (Producer a => View)
-onLostPointerCapture a = lostPointerCaptures (yield a)
+onLostPointerCapture a = lostPointerCaptureWith def (\lpc -> yield (with lpc a))
 
 data Resize = Resize
   { eventObject :: JSV
@@ -1575,9 +1581,9 @@ scroll = scrollWith def yield
 scrolls :: (Exists Scroll => IO ()) -> View -> View
 scrolls f = events @Scroll f scroll
 
-{-# INLINE onScroll #-}
+{-# NOINLINE onScroll #-}
 onScroll :: (Exists Scroll => a) -> View -> (Producer a => View)
-onScroll a = scrolls (yield a)
+onScroll a = scrollWith def (\s -> yield (with s a))
 
 newtype ScrollEnd = ScrollEnd ScrollEvent
 
@@ -1593,9 +1599,9 @@ scrollEnd = scrollEndWith def yield
 scrollEnds :: (Exists ScrollEnd => IO ()) -> View -> View
 scrollEnds f = events @ScrollEnd f scrollEnd
 
-{-# INLINE onScrollEnd #-}
+{-# NOINLINE onScrollEnd #-}
 onScrollEnd :: (Exists ScrollEnd => a) -> View -> (Producer a => View)
-onScrollEnd a = scrollEnds (yield a)
+onScrollEnd a = scrollEndWith def (\se -> yield (with se a))
 
 data SelectionEvent = SelectionEvent
   { eventObject :: JSV
@@ -1620,9 +1626,9 @@ selected = selectedWith def yield
 selecteds :: (Exists Selected => IO ()) -> View -> View
 selecteds f = events @Selected f selected
 
-{-# INLINE onSelected #-}
+{-# NOINLINE onSelected #-}
 onSelected :: (Exists Selected => a) -> View -> (Producer a => View)
-onSelected a = selecteds (yield a)
+onSelected a = selectedWith def (\s -> yield (with s a))
 
 data TouchType = Direct | Stylus
 instance FromJSON TouchType where
@@ -1721,9 +1727,9 @@ touchStart = touchStartWith def yield
 touchStarts :: (Exists TouchStart => IO ()) -> View -> View
 touchStarts f = events @TouchStart f touchStart
 
-{-# INLINE onTouchStart #-}
+{-# NOINLINE onTouchStart #-}
 onTouchStart :: (Exists TouchStart => a) -> View -> (Producer a => View)
-onTouchStart a = touchStarts (yield a)
+onTouchStart a = touchStartWith def (\ts -> yield (with ts a))
 
 newtype TouchEnd = TouchEnd TouchEvent
 
@@ -1739,9 +1745,9 @@ touchEnd = touchEndWith def yield
 touchEnds :: (Exists TouchEnd => IO ()) -> View -> View
 touchEnds f = events @TouchEnd f touchEnd
 
-{-# INLINE onTouchEnd #-}
+{-# NOINLINE onTouchEnd #-}
 onTouchEnd :: (Exists TouchEnd => a) -> View -> (Producer a => View)
-onTouchEnd a = touchEnds (yield a)
+onTouchEnd a = touchEndWith def (\te -> yield (with te a))
 
 newtype TouchMove = TouchMove TouchEvent
 
@@ -1757,9 +1763,9 @@ touchMove = touchMoveWith def yield
 touchMoves :: (Exists TouchMove => IO ()) -> View -> View
 touchMoves f = events @TouchMove f touchMove
 
-{-# INLINE onTouchMove #-}
+{-# NOINLINE onTouchMove #-}
 onTouchMove :: (Exists TouchMove => a) -> View -> (Producer a => View)
-onTouchMove a = touchMoves (yield a)
+onTouchMove a = touchMoveWith def (\tm -> yield (with tm a))
 
 newtype TouchCancel = TouchCancel TouchEvent
 
@@ -1775,9 +1781,9 @@ touchCancel = touchCancelWith def yield
 touchCancels :: (Exists TouchCancel => IO ()) -> View -> View
 touchCancels f = events @TouchCancel f touchCancel
 
-{-# INLINE onTouchCancel #-}
+{-# NOINLINE onTouchCancel #-}
 onTouchCancel :: (Exists TouchCancel => a) -> View -> (Producer a => View)
-onTouchCancel a = touchCancels (yield a)
+onTouchCancel a = touchCancelWith def (\tc -> yield (with tc a))
 
 data TransitionEvent = TransitionEvent
   { eventObject :: JSV
@@ -1809,9 +1815,9 @@ transitionStart = transitionStartWith def yield
 transitionStarts :: (Exists TransitionStart => IO ()) -> View -> View
 transitionStarts f = events @TransitionStart f transitionStart
 
-{-# INLINE onTransitionStart #-}
+{-# NOINLINE onTransitionStart #-}
 onTransitionStart :: (Exists TransitionStart => a) -> View -> (Producer a => View)
-onTransitionStart a = transitionStarts (yield a)
+onTransitionStart a = transitionStartWith def (\ts -> yield (with ts a))
 
 newtype TransitionEnd = TransitionEnd TransitionEvent
 
@@ -1827,9 +1833,9 @@ transitionEnd = transitionEndWith def yield
 transitionEnds :: (Exists TransitionEnd => IO ()) -> View -> View
 transitionEnds f = events @TransitionEnd f transitionEnd
 
-{-# INLINE onTransitionEnd #-}
+{-# NOINLINE onTransitionEnd #-}
 onTransitionEnd :: (Exists TransitionEnd => a) -> View -> (Producer a => View)
-onTransitionEnd a = transitionEnds (yield a)
+onTransitionEnd a = transitionEndWith def (\te -> yield (with te a))
 
 newtype TransitionRun = TransitionRun TransitionEvent
 
@@ -1845,9 +1851,9 @@ transitionRun = transitionRunWith def yield
 transitionRuns :: (Exists TransitionRun => IO ()) -> View -> View
 transitionRuns f = events @TransitionRun f transitionRun
 
-{-# INLINE onTransitionRun #-}
+{-# NOINLINE onTransitionRun #-}
 onTransitionRun :: (Exists TransitionRun => a) -> View -> (Producer a => View)
-onTransitionRun a = transitionRuns (yield a)
+onTransitionRun a = transitionRunWith def (\tr -> yield (with tr a))
 
 newtype TransitionCancel = TransitionCancel TransitionEvent
 
@@ -1863,9 +1869,9 @@ transitionCancel = transitionCancelWith def yield
 transitionCancels :: (Exists TransitionCancel => IO ()) -> View -> View
 transitionCancels f = events @TransitionCancel f transitionCancel
 
-{-# INLINE onTransitionCancel #-}
+{-# NOINLINE onTransitionCancel #-}
 onTransitionCancel :: (Exists TransitionCancel => a) -> View -> (Producer a => View)
-onTransitionCancel a = transitionCancels (yield a)
+onTransitionCancel a = transitionCancelWith def (\tc -> yield (with tc a))
 
 data DeltaMode = Pixel | Line | Page
 
@@ -1910,6 +1916,6 @@ wheel = wheelWith def yield
 wheels :: (Exists Wheel => IO ()) -> View -> View
 wheels f = events @Wheel f wheel
 
-{-# INLINE onWheel #-}
+{-# NOINLINE onWheel #-}
 onWheel :: (Exists Wheel => a) -> View -> (Producer a => View)
-onWheel a = wheels (yield a)
+onWheel a = wheelWith def (\w -> yield (with w a))

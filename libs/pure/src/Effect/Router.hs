@@ -30,7 +30,7 @@ current :: Router rt => rt
 current = let Route _ rt = it in rt
 
 onRoute :: Router rt => (rt -> IO ()) -> View -> View
-onRoute f = lazy (f current)
+onRoute f = lazily (f current)
 
 router :: forall rt. Typeable rt => (forall a. Routing rt a) -> (Router rt => View) -> View
 router rtng v = do

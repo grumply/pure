@@ -166,8 +166,8 @@ instance ToJSON View where
            ( if Prelude.null cs then [] else [ "c" .= toJSON cs ])
           )
 
-      go (ReactiveView _ f) = go f
-      go (WeakView _ f) = go f
+      go (ReactiveView _ _ f) = go f
+      go (WeakView _ _ f) = go f
       
       go (Prebuilt v) = go v
 
@@ -286,8 +286,8 @@ instance Show View where
 
       go n (TaggedView _ v) = go n v
 
-      go n (ReactiveView _ f) = go n f
-      go n (WeakView _ f) = go n f
+      go n (ReactiveView _ _ f) = go n f
+      go n (WeakView _ _ f) = go n f
       
       go n (Prebuilt v) = go n v
 
@@ -333,8 +333,8 @@ instance ToTxt View where
 
   toTxt (TaggedView _ v) = toTxt v
 
-  toTxt (ReactiveView _ f) = toTxt f
-  toTxt (WeakView _ f) = toTxt f
+  toTxt (ReactiveView _ _ f) = toTxt f
+  toTxt (WeakView _ _ f) = toTxt f
   
   toTxt (Prebuilt v) = toTxt v
 

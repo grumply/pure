@@ -110,9 +110,9 @@ addTheme = do
         -- Some themes are simply meant to be type-safe tags for other themes.
         -- We try to avoid cluttering <head> with empty style elements. 
         -- This can probably be simplifed to just the first case?
-        | [ ReactiveView _ (TextView _ "") ] <- cs -> pure ()
-        | [ TextView _ "" ] <- cs                  -> pure ()
-        | [] <- cs                                 -> pure ()
+        | [ ReactiveView _ _ (TextView _ "") ] <- cs -> pure ()
+        | [ TextView _ "" ] <- cs                    -> pure ()
+        | [] <- cs                                   -> pure ()
 
       content -> void (inject Lifted.head (Attribute "data-pure-theme" pre content))
 
