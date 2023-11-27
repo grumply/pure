@@ -11,6 +11,7 @@ module Effect.Router
 import Data.Default
 import Data.DOM
 import Data.Events
+import Data.Exists
 import Data.HTML
 import Data.Router
 import qualified Data.Router as Export hiding (route)

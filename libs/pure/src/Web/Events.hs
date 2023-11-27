@@ -11,6 +11,7 @@ import Data.Coerce
 import Data.Default
 import Data.DOM
 import Data.Events (pattern OnWith)
+import Data.Exists
 import Data.File
 import Data.Foldable
 import Data.Function ((&),fix)

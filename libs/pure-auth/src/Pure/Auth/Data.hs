@@ -6,6 +6,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import Data.Char
 import Data.Either
+import Data.Exists
 import Data.Hashable
 import Data.List as List
 import Data.Maybe

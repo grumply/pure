@@ -13,6 +13,7 @@ module Effect.Intersection
 
 import Data.Default
 import Data.DOM hiding (Options)
+import Data.Exists
 import Data.HTML
 import Data.JSON hiding (Null)
 import Data.Txt

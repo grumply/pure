@@ -29,6 +29,7 @@ import Data.Retry as Export (retry,recover,recoverWith,recoverWithIO,recovering,
 import Data.DOM as Export (body,Evt)
 import Data.CSS as Export hiding (root,target,active,checked,wrap,select,empty,stylesheet,CSS_(..),focus,or)
 import Data.Default as Export
+import Data.Exists as Export
 import Data.Hashable as Export
 import Data.HTML as Export hiding (Style,DateTime,Select,Accept,Alt,ContextMenu,Meta,Selected,Async,Form)
 import Data.JSON as Export hiding (Null,Key,lookup,match,Number)

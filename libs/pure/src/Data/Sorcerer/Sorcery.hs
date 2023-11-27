@@ -11,6 +11,7 @@ import Data.Sorcerer.Streamable
 
 import Control.Concurrent
 import Control.Monad
+import Data.Exists
 import Data.Foldable
 import Data.Typeable
 import Data.Unique

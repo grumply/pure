@@ -1,17 +1,19 @@
 {-# language PatternSynonyms, DerivingVia, ViewPatterns, BlockArguments, ScopedTypeVariables, RankNTypes, DuplicateRecordFields, NamedFieldPuns, ConstraintKinds, FlexibleContexts, GADTs, TypeApplications, BangPatterns, AllowAmbiguousTypes, CPP, PatternSynonyms, OverloadedStrings, RecordWildCards, LambdaCase, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, DefaultSignatures, TypeOperators, TupleSections #-}
 {-# OPTIONS_GHC -O2 #-}
-module Web (Web.dot,dotWith,Web.at,atWith,Web.every,url,Web.path,Path(..),pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,Void,Web,play_,play,playIO,animate,unsafeLazyBecome,become,become_,Web.error,halt,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
+module Web (Web.dot,dotWith,Web.at,atWith,Web.every,url,Web.path,Path(..),pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,Void,Web,produce_,produce,produceIO,animate,unsafeLazyBecome,become,become_,Web.error,halt,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
 
 import Control.Concurrent hiding (yield)
 import qualified Data.Function as F
 import Data.Default
 import Data.DOM
+import Data.Exists
 import Data.Foldable
 import Data.Either (isRight)
 import Data.Events (pattern OnSubmitWith, intercept)
 import Data.Key
 import Data.Maybe
 import Data.Router
+import Data.Slug
 import Data.View.Build
 import Data.View
 import Data.Void
@@ -47,17 +49,17 @@ data OI = Input View | Output (MVar ()) View
 -- Declaring a `Web` constraint is equivalent to saying that there must be
 -- a context in which `View`s can be displayed in order to evaluate the 
 -- constrained code. The `Web` context is introduced via either `run` or
--- `play` (or its specializations, `play_` and `playIO`), and used via
+-- `produce` (or its specializations, `produce_` and `produceIO`), and used via
 -- `become` and `become_` and their derivatives (`clear`, `halt`, `show`,
 -- etc....).
 type Web = Producer OI
 
--- | Embed a `Web =>` context to construct a producing `View`.
+-- | Run a `Web =>` context as a producing `View`.
 --
 -- ## Example usage
 --
 -- > someView :: Producer () => View
--- > someView = play (countdown 10 ())
+-- > someView = produce (countdown 10 ())
 -- >
 -- > countdown :: forall a. Web => Int -> a -> a
 -- > countdown n a = go n
@@ -70,8 +72,8 @@ type Web = Producer OI
 -- modified with respect to its evaluation, not its value. That is, only 
 -- parametrically-polymorphic functions like `id` or `seq` can be applied to
 -- the `a`. While seemingly immaterial, this is a powerful feature that allows
--- for a generic continuation-based interface where the `a` is the result of
--- some other view (perhaps, even, another `countdown`).
+-- for a generic continuation-based interface where the `a` is supplied via the
+-- result of some other view (perhaps, even, another `countdown`).
 --
 -- Via constraints, the return value can be modified:
 --
@@ -80,43 +82,41 @@ type Web = Producer OI
 -- >   Button <| onClick (modify (+(1::Int)) >> ma)) |> 
 -- >     [ "Increment" ]
 --
--- For views that don't produce values:
+-- ## Non-Returning Views
+-- For views that don't produce values, you can use a fully-polymorphic result 
+-- type:
 --
 -- > clock :: Web => a
 -- > clock = every Second (become (txt (RFC3339 it)))
 -- 
--- Note that `clock` says it can be any value you want, as long as you give it
--- a `Web` context. Since arbitrary values cannot be witnessed (other than via
--- bottom), this is equivalent to saying that `clock` never returns. A common
--- way to use this is to specialize `a` to `Void`:
+-- A common way to use this is to specialize `a` to `Void`:
 --
 -- > _ :: View
--- > _ = consume absurd (play clock)
+-- > _ = consume absurd (produce clock)
+-- 
+-- `consume` satisfies the producer with `absurd` which will not be called with
+-- anything other than bottom. 
 --
 -- ## Careful use
--- Careful use of `play` is important because nested uses can result in `Web =>` 
--- constraint satisfaction before the value is sent to `play`. For instance, in:
+-- Careful use of `produce` is important because nested uses can result in `Web =>` 
+-- constraint satisfaction before the value is sent to `produce`. For instance, in:
 --
--- > Web.run (play (become "some view"))
+-- > Web.run (produce_ (become "some view"))
 --
--- Note that `Web.run` is somewhat like `Pure.run (Web.play ...)`, but gives
+-- Note that `Web.run` is somewhat like `Pure.run (Web.produce ...)`, but gives
 -- pure access to the return value by specializing the embedding context to
--- <body>. The `become` in this case yields to `run`, not `play`, so you must
+-- <body>. The `become` in this case yields to `run`, not `produce`, so you must
 -- encapsulate the `Web =>` context:
 --
 -- > someView :: View
--- > someView = play (become "some view")
+-- > someView = produce_ (become "some view")
 --
 -- `someView` doesn't expose a `Web =>` dependency, so `become` is satisfied by
--- the local `play`.
--- 
--- In the failing example `Web.run ...`, if the `...` were not a direct call to 
--- `play . become`, and instead were a complex `View` tree, that tree would be
--- overwritten by the `become` call.
+-- the local `produce_`.
 --
-{-# NOINLINE play #-}
-play :: forall a. Typeable a => (Web => a) -> (Producer a => View)
-play (Proof -> a) = flip component (a :: Web |- a) $ \self -> 
+{-# NOINLINE produce #-}
+produce :: forall a. Typeable a => (Web => a) -> (Producer a => View)
+produce (Proof -> a) = flip component (a :: Web |- a) $ \self -> 
   let 
     setView :: OI -> IO ()
     setView oi = modifyrefM_ self \_ (_,tid) -> 
@@ -139,16 +139,16 @@ play (Proof -> a) = flip component (a :: Web |- a) $ \self ->
       , render = \_ -> fst
       }
 
--- | A convenient specialization of `play` that discards the result. 
-{-# NOINLINE play_ #-}
-play_ :: forall a. Typeable a => (Web => a) -> View
-play_ a = consume (\(!(_ :: a)) -> pure ()) (play a)
+-- | A convenient specialization of `produce` that discards the result. 
+{-# NOINLINE produce_ #-}
+produce_ :: forall a. Typeable a => (Web => a) -> View
+produce_ a = consume (\(!(_ :: a)) -> pure ()) (produce a)
 
--- | A convenient specialization of `play` to a type of `IO a` such that the
+-- | A convenient specialization of `produce` to a type of `IO a` such that the
 -- `View` still produces an `a`, rather than an `IO a`.
-{-# NOINLINE playIO #-}
-playIO :: forall a. Typeable a => (Web => IO a) -> (Producer a => View)
-playIO ioa = consume (>>= yield @a) (play ioa)
+{-# NOINLINE produceIO #-}
+produceIO :: forall a. Typeable a => (Web => IO a) -> (Producer a => View)
+produceIO ioa = consume (>>= yield @a) (produce ioa)
 
 -- | Force a value to WHNF in an animation frame. This is useful for
 -- wrapping `become` to guarantee that reconciliation is performed within
@@ -321,7 +321,7 @@ run wa = unsafePerformIO do
         builder (Output mv new) =
           readIORef st >>= \(old,mid) -> do
             v <- diff old mid new
-            -- putMVar mv ()
+            putMVar mv ()
             writeIORef st (v,new)
 
         runPlan :: [IO ()] -> IO ()
@@ -488,6 +488,11 @@ instance FromPath Key where
   fromPath (Stencil s) u = do
     (rest,[(_,t)]) <- stencil s u
     pure (rest,fromTxt t)
+instance FromPath Slug where
+  {-# NOINLINE fromPath #-}
+  fromPath (Stencil s) u = do
+    (rest,[(_,t)]) <- stencil s u
+    pure (rest,fromTxt t)
 
 instance (FromPath l, FromPath r) => FromPath (Either l r) where
   {-# NOINLINE fromPath #-}
@@ -591,6 +596,9 @@ instance ToPath (Marker a) where
 instance ToPath Key where
   {-# NOINLINE toPath #-}
   toPath s k = fromMaybe (s,def) (Web.fill s (Pure.encodeURIComponent (toTxt k)))
+instance ToPath Slug where
+  {-# NOINLINE toPath #-}
+  toPath s g = fromMaybe (s,def) (Web.fill s (toTxt g))
 
 instance (ToPath l, ToPath r) => ToPath (Either l r) where
   {-# NOINLINE toPath #-}

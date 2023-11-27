@@ -12,6 +12,7 @@ import Data.Typeable
 import Prelude hiding (map)
 
 import Data.Default
+import Data.Exists
 import Data.Subscribe
 import Data.View
 

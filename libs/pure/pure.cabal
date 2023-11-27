@@ -109,6 +109,7 @@ library
     Data.Default
     Data.Ease
     Data.Events
+    Data.Exists
     Data.Fetch
     Data.Fetch.Response
     Data.File

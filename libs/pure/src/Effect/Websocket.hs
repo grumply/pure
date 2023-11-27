@@ -3,6 +3,7 @@ module Effect.Websocket (Effect.Websocket.Policy(..),Websocket,Effect.Websocket.
 
 import Control.Concurrent
 import Data.Log
+import Data.Exists
 import Data.Foldable
 import Data.IORef
 import Data.JSON
