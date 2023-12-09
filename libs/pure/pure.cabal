@@ -103,6 +103,7 @@ library
     Data.Bloom.Scalable
     Data.Covariance
     Data.Controller
+    Data.Consumer
     Data.Component
     Data.CSS
     Data.DOM
