@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, BlockArguments, DerivingStrategies, TypeApplications, RankNTypes, AllowAmbiguousTypes, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, TypeOperators, DefaultSignatures, ViewPatterns #-}
 module Client 
   ( Get_(..), Got_(..), Post_(..), Patch_(..), Delete_(..), Put_(..)
-  , Client.query, Client.update, Client.create, Client.place, Client.delete, Client.query'
+  , Client.query, Client.update, Client.create, Client.replace, Client.delete, Client.query'
   -- ,ws,wssend,wsmessage,wserror
   , sseWith, sse
   , endpoint, API(..)
@@ -9,7 +9,7 @@ module Client
   , module Export
   ) where
 
-import Pure as Export hiding (Event,liftIO,throw,index,read,get,Result,place)
+import Pure as Export hiding (Event,liftIO,throw,index,read,get,Result,replace)
 import qualified Pure as Export (throw)
 
 import Data.JSON as JSON hiding (Key,Result)
@@ -446,13 +446,13 @@ create = Client.post_ @api (Endpoint.create @r)
 delete :: forall api r. (Methods r, Delete_ api (Delete r)) => Delete r
 delete = Client.delete_ @api (Endpoint.delete @r)
 
--- | Send a `PUT` request to the given endpoint following the `Place`
+-- | Send a `PUT` request to the given endpoint following the `Replace`
 -- specification for `r`.
 --
 -- > instance Methods SomeR where
--- >   type Place SomeR = ParamA -> ParamB -> IO ResponseR
+-- >   type Replace SomeR = ParamA -> ParamB -> IO ResponseR
 -- >
--- > r :: ResponseR <- place @SomeR a b
+-- > r :: ResponseR <- replace @SomeR a b
 --
-place :: forall api r. (Methods r, Put_ api (Place r)) => Place r
-place = Client.put_ @api (Endpoint.place @r)
+replace :: forall api r. (Methods r, Put_ api (Replace r)) => Replace r
+replace = Client.put_ @api (Endpoint.replace @r)

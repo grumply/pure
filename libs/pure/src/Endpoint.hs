@@ -206,8 +206,8 @@ class Typeable r => Methods r where
   type Query r :: *
   type Query r = Void
 
-  type Place r :: *
-  type Place r = Void
+  type Replace r :: *
+  type Replace r = Void
 
   type Delete r :: *
   type Delete r = Void
@@ -225,8 +225,8 @@ update = endpoint @r
 query :: forall r. Methods r => GET (Query r)
 query = endpoint @r
 
-place :: forall r. Methods r => PUT (Place r)
-place = endpoint @r
+replace :: forall r. Methods r => PUT (Replace r)
+replace = endpoint @r
 
 delete :: forall r. Methods r => DELETE (Delete r)
 delete = endpoint @r

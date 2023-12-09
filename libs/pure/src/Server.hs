@@ -438,7 +438,7 @@ class Methods r => Server r where
        , Lambda (Create r)
        , Lambda (Update r)
        , Lambda (Query r)
-       , Lambda (Place r)
+       , Lambda (Replace r)
        , Lambda (Delete r)
        ) => Server.Handler
   handlers = Handler (if path == toTxt (endpoint @r) then go else Nothing)
@@ -447,7 +447,7 @@ class Methods r => Server r where
       go | method == methodGet     = fmap (queryMiddleware  @r) (handler (lambda (Endpoint.query  @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.query  @r)))
          | method == methodPatch   = fmap (updateMiddleware @r) (handler (lambda (Endpoint.update @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.update @r)))
          | method == methodPost    = fmap (createMiddleware @r) (handler (lambda (Endpoint.create @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.create @r)))
-         | method == methodPut     = fmap (placeMiddleware @r)  (handler (lambda (Endpoint.place @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.place @r)))
+         | method == methodPut     = fmap (replaceMiddleware @r)  (handler (lambda (Endpoint.replace @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.replace @r)))
          | method == methodDelete  = fmap (deleteMiddleware @r) (handler (lambda (Endpoint.delete @r) (showParseErrors @r) (showExceptions @r) (cors @r) (Server.delete @r)))
          | method == methodOptions = Just \_ respond -> respond (responseLBS status200 ((hAllow,methods @r):cors @r) def)
          | otherwise = Just \_ respond -> respond (responseLBS notImplemented501 [] def)
@@ -470,11 +470,11 @@ class Methods r => Server r where
   queryMiddleware :: (Exists Request, Env r) => Middleware
   queryMiddleware = id
 
-  place :: (Exists Request, Env r) => Place r
-  place = respond 501 mempty
+  replace :: (Exists Request, Env r) => Replace r
+  replace = respond 501 mempty
 
-  placeMiddleware :: (Exists Request, Env r) => Middleware
-  placeMiddleware = id
+  replaceMiddleware :: (Exists Request, Env r) => Middleware
+  replaceMiddleware = id
 
   delete :: (Exists Request, Env r) => Delete r
   delete = respond 501 mempty
