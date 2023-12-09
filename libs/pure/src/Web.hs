@@ -1,8 +1,9 @@
 {-# language PatternSynonyms, DerivingVia, ViewPatterns, BlockArguments, ScopedTypeVariables, RankNTypes, DuplicateRecordFields, NamedFieldPuns, ConstraintKinds, FlexibleContexts, GADTs, TypeApplications, BangPatterns, AllowAmbiguousTypes, CPP, PatternSynonyms, OverloadedStrings, RecordWildCards, LambdaCase, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, DefaultSignatures, TypeOperators, TupleSections #-}
 {-# OPTIONS_GHC -O2 #-}
-module Web (Web.dot,dotWith,Web.at,atWith,Web.every,url,Web.path,Path(..),pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,Void,Web,produce_,produce,produceIO,animate,unsafeLazyBecome,become,become_,Web.error,halt,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link) where
+module Web (url,Web.path,Path(..),pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,Void,Web,produce_,produce,produce',produceIO,animate,unsafeLazyBecome,become,become_,Web.error,halt,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link,once) where
 
 import Control.Concurrent hiding (yield)
+import Control.Monad (forever)
 import qualified Data.Function as F
 import Data.Default
 import Data.DOM
@@ -32,13 +33,17 @@ import Data.List as List
 import Data.IORef
 import Control.Monad (when,void)
 import GHC.Exts
+import GHC.Magic
 import Control.Parallel (pseq)
 import qualified Pure
 
 import Control.Applicative
-import Data.JSON (ToJSON,FromJSON,traceJSON)
+import Control.Exception as E
+import Data.JSON (ToJSON,FromJSON)
 import Data.Time
 import qualified Data.Variance as Var
+import GHC.IO
+import Unsafe.Coerce
 
 -- The view-embedding commands. `Input` is used for `become`, which
 -- has an associated `Producer` context, and `Output` is used for
@@ -115,40 +120,65 @@ type Web = Producer OI
 -- the local `produce_`.
 --
 {-# NOINLINE produce #-}
-produce :: forall a. Typeable a => (Web => a) -> (Producer a => View)
-produce (Proof -> a) = flip component (a :: Web |- a) $ \self -> 
+produce :: forall a. Typeable a => Bool -> (Web => a) -> (Producer a => View)
+produce continuously a = static (produce' continuously a)
+
+{-# NOINLINE produce' #-}
+produce' :: forall a. Typeable a => Bool -> (Web => a) -> (Producer a => View)
+produce' continuously (Proof -> a) = flip component (a :: Web |- a,continuously) $ \self -> 
   let 
+    {-# NOINLINE setView #-}
     setView :: OI -> IO ()
-    setView oi = modifyrefM_ self \_ (_,tid) -> 
+    setView oi = modifyrefM_ self \_ (_,mv,tid) -> 
       pure $ case oi of
-        Input v     -> ((v,tid),def)
-        Output mv v -> ((v,tid),putMVar mv ())
+        Input v    -> ((v,mv,tid),def)
+        Output x v -> ((v,mv,tid),putMVar x ())
+    
+    runner mv = go >> putMVar mv ()
+      where
+        go = do
+          (Proof a,_) <- askref self 
+          E.catch (yield (consume setView (a :: Web => a))) \case
+            e | Just ThreadKilled <- asyncExceptionFromException e -> E.throw e
+              | otherwise -> pure ()
+          (_,continuously) <- askref self 
+          when continuously (runner mv)
 
   in 
     def
-      { construct = pure (Null,Nothing)
-      , onExecuting = \_ -> do
-        Proof a <- askref self 
-        tid <- forkIO (yield $ consume setView (a :: Web => a))
-        pure (Null,Just tid)
-      , onReceive = \(Proof a) (v,old) -> do
-        traverse_ killThread old
-        tid <- forkIO (yield $ consume setView (a :: Web => a))
-        pure (v,Just tid)
-      , onUnmounted = getref self >>= \(_,mtid) -> traverse_ killThread mtid 
-      , render = \_ -> fst
+      { construct = do
+        mv <- newEmptyMVar
+        tid <- forkIO (runner mv)
+        pure (Null,mv,tid)
+      , onReceive = \old_a (v,mv,old) -> do
+        (_,continuously) <- askref self
+        if continuously then do
+          mx <- tryTakeMVar mv
+          case mx of
+            Nothing -> pure (v,mv,old)
+            Just () -> do
+              mv <- newEmptyMVar
+              tid <- forkIO (runner mv)
+              pure (v,mv,tid)
+        else
+          pure (v,mv,old)
+      , onUnmounted = do
+        (_,_,tid) <- getref self 
+        killThread tid 
+      , render = \_ (v,_,_) -> v
       }
+
 
 -- | A convenient specialization of `produce` that discards the result. 
 {-# NOINLINE produce_ #-}
-produce_ :: forall a. Typeable a => (Web => a) -> View
-produce_ a = consume (\(!(_ :: a)) -> pure ()) (produce a)
+produce_ :: forall a. Typeable a => Bool -> (Web => a) -> View
+produce_ continuously a = consume (\(!(_ :: a)) -> pure ()) (produce continuously a)
 
 -- | A convenient specialization of `produce` to a type of `IO a` such that the
 -- `View` still produces an `a`, rather than an `IO a`.
 {-# NOINLINE produceIO #-}
-produceIO :: forall a. Typeable a => (Web => IO a) -> (Producer a => View)
-produceIO ioa = consume (>>= yield @a) (produce ioa)
+produceIO :: forall a. Typeable a => Bool -> (Web => IO a) -> (Producer a => View)
+produceIO continuously ioa = consume (>>= yield @a) (produce continuously ioa)
 
 -- | Force a value to WHNF in an animation frame. This is useful for
 -- wrapping `become` to guarantee that reconciliation is performed within
@@ -189,7 +219,7 @@ become :: (Producer a => View) -> (Web => a)
 become v = unsafePerformIO do
   mv <- newEmptyMVar
   -- this deepseq is important!
-  let send v = v `deepseq` yield (Input v) 
+  let send v = v `deepseq` yield (Input v)
   handle (\(se :: SomeException) -> send (txt (Show.show se))) (send (consume (putMVar mv) v))
   a <- takeMVar mv
   a `pseq` pure a
@@ -219,7 +249,7 @@ become_ v = unsafePerformIO do
   let send v = v `deepseq` yield (Output mv v)
   handle (\(se :: SomeException) -> send (txt (Show.show se))) (send v)
   x <- takeMVar mv
-  x `seq` pure ()
+  x `pseq` pure ()
 
 -- | Display some textual error. This effectively halts any computations being
 -- performed within the `Web =>` context. Equivalent to `halt . fromTxt`.
@@ -488,7 +518,7 @@ instance FromPath Key where
   fromPath (Stencil s) u = do
     (rest,[(_,t)]) <- stencil s u
     pure (rest,fromTxt t)
-instance FromPath Slug where
+instance FromPath (Slug a) where
   {-# NOINLINE fromPath #-}
   fromPath (Stencil s) u = do
     (rest,[(_,t)]) <- stencil s u
@@ -596,7 +626,7 @@ instance ToPath (Marker a) where
 instance ToPath Key where
   {-# NOINLINE toPath #-}
   toPath s k = fromMaybe (s,def) (Web.fill s (Pure.encodeURIComponent (toTxt k)))
-instance ToPath Slug where
+instance ToPath (Slug a) where
   {-# NOINLINE toPath #-}
   toPath s g = fromMaybe (s,def) (Web.fill s (toTxt g))
 
@@ -698,9 +728,11 @@ data R a = R { _unconsumed :: {-# UNPACK #-}!Path, _active :: a }
 instance FromPath a => IsString (Path -> Maybe (Path,a)) where
   fromString s (Path r) = fmap (\(t,a) -> (Path t,a)) $! fromPath (fromString s) r
 
+{-# NOINLINE url #-}
 url :: Path
 url = Path (unsafePerformIO getPathname)
 
+{-# NOINLINE path #-}
 path :: Exists Path => Path
 path = it
 
@@ -728,44 +760,6 @@ routed ra = unsafePerformIO do
 link :: Txt -> View -> View
 link = clicks . goto
 
-{-# INLINE every #-}
-every :: forall a. Time -> (Exists Time => a) -> a
-every t a = go 
-  where 
-    {-# NOINLINE go #-}
-    go | !a <- delayed t (let t = unsafePerformIO time in t `seq` with t a)
-       = go
-
-{-# INLINE at #-}
-at :: forall a. [Time] -> (Exists Time => a) -> a
-at = atWith False 
-
-{-# INLINE dot #-}
--- dot, as in: on-the-dot
-dot :: forall a. Time -> (Exists Time => a) -> a
-dot = dotWith False
-
-{-# INLINE dotWith #-}
-dotWith :: forall a. Bool -> Time -> (Exists Time => a) -> a
-dotWith truth t = 
-  let 
-    fromInt = fromIntegral @Int
-    now = unsafePerformIO time
-    d = fromInt (floor (now / t) :: Int)
-    start = d * t
-  in 
-    atWith truth [ start + fromInt n * t | n <- [1 :: Int ..] ]
-
-{-# INLINE atWith #-}
-atWith :: forall a. Bool -> [Time] -> (Exists Time => a) -> a
-atWith truth [] a = with (unsafePerformIO time) a
-atWith truth ts a = go ts
-  where 
-    {-# NOINLINE go #-}
-    go ~(t:ts)
-      | !s <- unsafePerformIO time
-      , () <- unsafePerformIO (delay (t - s))
-      , !n  <- if truth then unsafePerformIO time else t
-      , Milliseconds ms _ <- n - t
-      = if List.null ts then with n a else with n a `seq` go ts
+once :: IO () -> View
+once f = consume (\() -> f) (produce False ())
 
