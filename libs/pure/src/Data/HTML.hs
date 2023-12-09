@@ -356,18 +356,15 @@ pattern Wbr = SimpleHTML "wbr"
 --------------------------------------------------------------------------------
 -- HTML Attributes
 
--- Safari does not like this as a property
 pattern AutoCapitalize :: Txt -> View -> View
 pattern AutoCapitalize v a = Attribute "autocapitalize" v a
 
 pattern AutoComplete :: Txt -> View -> View
 pattern AutoComplete v a = Attribute "autocomplete" v a
 
--- Safari does not like this as a property
 pattern AutoCorrect :: Txt -> View -> View
 pattern AutoCorrect v a = Attribute "autocorrect" v a
 
--- Safari does not like this as a property
 pattern AutoFocus :: Txt -> View -> View
 pattern AutoFocus v a = Attribute "autofocus" v a
 
@@ -413,11 +410,12 @@ pattern Ismap v a = Attribute "ismap" v a
 pattern Ping :: Txt -> View -> View
 pattern Ping v a = Attribute "ping" v a
 
+pattern Selected :: Txt -> View -> View
+pattern Selected v a = Attribute "selected" v a
+
 pattern Slot :: Txt -> View -> View
 pattern Slot v a = Attribute "slot" v a
 
--- Using this as a property introduced some bugs where
--- SpellCheck "false" caused <input spellcheck="true">
 pattern SpellCheck :: Txt -> View -> View
 pattern SpellCheck v a = Attribute "spellcheck" v a
 
@@ -759,9 +757,6 @@ pattern Scrolling v a = Property "scrolling" v a
 
 pattern Seamless :: Txt -> View -> View
 pattern Seamless v a = Property "seamless" v a
-
-pattern Selected :: Txt -> View -> View
-pattern Selected v a = Property "selected" v a
 
 pattern Shape :: Txt -> View -> View
 pattern Shape v a = Property "shape" v a
