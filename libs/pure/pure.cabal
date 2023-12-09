@@ -168,6 +168,7 @@ library
     Web.DataTransfer
     Web.Events
     Web.File
+    Web.Form
     Web.Iterable
     Web.Range
     
