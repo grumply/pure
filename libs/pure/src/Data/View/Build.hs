@@ -270,7 +270,6 @@ suspenses deep tvs v = stateWith' (\_ -> pure) initialize it
 build :: IORef [IO ()] -> Maybe Node -> View -> IO View
 build = build'
 
-{-# INLINABLE build' #-}
 build' :: IORef [IO ()] -> Maybe Node -> View -> IO View
 build' mtd = start
   where
@@ -682,7 +681,7 @@ diffDeferred' mounted plan plan' old !mid !new =
   if mid === new then return old else -- traceShow (which mid) $
       let
           replace = do
-            !new' <- unsafeIOToST (build' mounted Nothing new)
+            !new' <- unsafeIOToST (build mounted Nothing new)
             replaceDeferred plan plan' old new'
 
           sameTag = tag mid === tag new
@@ -718,7 +717,7 @@ diffDeferred' mounted plan plan' old !mid !new =
 
           (ComponentView {},_)
             | ComponentView _ (Just r0) _ _ <- old -> do
-              !new' <- unsafeIOToST (build' mounted Nothing new)
+              !new' <- unsafeIOToST (build mounted Nothing new)
               amendPlan plan $ do
                 old <- readIORef (crView r0)
                 replaceNode (fromJust $ getHost old) (fromJust $ getHost new')
@@ -754,7 +753,7 @@ diffDeferred' mounted plan plan' old !mid !new =
               !v <- diffDeferred' mounted plan plan' (portalView old) (portalView mid) (portalView new)
               return old { portalView = v }
             | otherwise -> do
-              !built@(getHost -> Just h) <- unsafeIOToST (build' mounted Nothing (portalView new))
+              !built@(getHost -> Just h) <- unsafeIOToST (build mounted Nothing (portalView new))
               amendPlan plan' (cleanup' old)
               amendPlan plan $ do
                 for_ (getHost (portalView old)) removeNode
@@ -768,9 +767,9 @@ diffDeferred' mounted plan plan' old !mid !new =
             replace
 
           (_,PortalView{}) -> do
-            !proxy <- unsafeIOToST (build' mounted Nothing (NullView Nothing))
+            !proxy <- unsafeIOToST (build mounted Nothing (NullView Nothing))
             replaceDeferred plan plan' old proxy
-            !built@(getHost -> Just h) <- unsafeIOToST (build' mounted Nothing (portalView new))
+            !built@(getHost -> Just h) <- unsafeIOToST (build mounted Nothing (portalView new))
             amendPlan plan $ append (toNode $ portalDestination new) h
             return (PortalView (fmap coerce $ getHost proxy) (portalDestination new) built)
           
@@ -1038,7 +1037,7 @@ diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
     ([],_ ) -> do
       !frag <- unsafeIOToST createFrag
       let n = Just (toNode frag)
-      !news' <- unsafeIOToST (traverse (build' mounted n) news)
+      !news' <- unsafeIOToST (traverse (build mounted n) news)
       amendPlan plan (append e frag)
       return news'
 
@@ -1067,7 +1066,7 @@ diffChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
         diff ~[] _ news = do
           !frag <- unsafeIOToST createFrag
           let n = Just (toNode frag)
-          !news' <- unsafeIOToST (for news (build' mounted n))
+          !news' <- unsafeIOToST (for news (build mounted n))
           amendPlan plan (append e frag)
           return news'
 
@@ -1141,7 +1140,7 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
     ([],_ ) -> do
       !frag <- unsafeIOToST createFrag
       let n = Just (toNode frag)
-      !news' <- unsafeIOToST (traverse (traverse (build' mounted n)) news)
+      !news' <- unsafeIOToST (traverse (traverse (build mounted n)) news)
       amendPlan plan (append e frag)
       return news'
 
@@ -1239,7 +1238,7 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
         go dc _ [] _ news = do
           !frag <- unsafeIOToST createFrag
           let n = Just (toNode frag)
-          !news' <- unsafeIOToST (traverse (traverse (build' mounted n)) news)
+          !news' <- unsafeIOToST (traverse (traverse (build mounted n)) news)
           amendPlan plan (append e frag)
           return news'
 
@@ -1251,6 +1250,6 @@ diffKeyedChildrenDeferred' (toNode -> e) mounted plan plan' olds mids news =
         dKCD_ins :: Int -> Int -> View -> ST s (Int,View)
         dKCD_ins i nk new = do
           let ins ~(Just a) = amendPlan plan (insertAt (coerce e) a i)
-          !n' <- unsafeIOToST (build' mounted Nothing new)
+          !n' <- unsafeIOToST (build mounted Nothing new)
           ins (getHost n')
           return (nk,n')
