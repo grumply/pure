@@ -1,6 +1,6 @@
 {-# language MagicHash, CPP, ScopedTypeVariables, PatternSynonyms, PolyKinds, DefaultSignatures, ViewPatterns, RecordWildCards, GADTs, FlexibleInstances, AllowAmbiguousTypes, OverloadedStrings, TypeApplications, BangPatterns, RankNTypes, FlexibleContexts, ConstraintKinds, BlockArguments, MultiWayIf, LambdaCase, DuplicateRecordFields, TypeOperators, DerivingVia, DataKinds, NamedFieldPuns, TypeFamilies, DeriveFunctor, UndecidableInstances, InstanceSigs, RoleAnnotations, ConstrainedClassMethods, DeriveAnyClass, DeriveGeneric #-}
 {-# OPTIONS_GHC -O2 #-}
-module Data.View (module Data.View, module Data.Exists, Typeable()) where
+module Data.View (module Data.View, module Data.Exists, module Data.Consumer, Typeable()) where
 
 import Debug.Trace
 import Control.Arrow ((&&&))
@@ -33,11 +33,13 @@ import Data.Unique (Unique,newUnique)
 import GHC.Exts as Exts (IsList(..),Any,Constraint,reallyUnsafePtrEquality#,isTrue#,unsafeCoerce#,Proxy#,proxy#,inline)
 import GHC.Fingerprint.Type (Fingerprint())
 import GHC.Generics
-import GHC.Stack ( HasCallStack )
+import GHC.Magic (noinline)
+import GHC.Stack (HasCallStack)
 import System.IO.Unsafe (unsafePerformIO,unsafeDupablePerformIO)
 import Type.Reflection (SomeTypeRep,someTypeRep)
 import Unsafe.Coerce (unsafeCoerce)
 
+import Data.Consumer 
 import Data.Default (Default(..))
 import Data.DOM (Evt,Element,Node(..),IsNode(..),Text,Options,nullJSV,JSV)
 import Data.Exists
@@ -397,6 +399,62 @@ class Proof a where
 view :: forall a. (Proof a, Props a) => View
 view = prove (witness @a)
 
+{-# INLINE effect' #-}
+effect' :: Effect eff => eff -> IO () -> IO Bool
+effect' = runHandler it
+
+{-# INLINE effect #-}
+effect :: Effect eff => eff -> IO ()
+effect eff = void (effect' eff (pure ()))
+
+{-# INLINE reinterpret #-}
+-- | Adapt producers to be more specific or varied.
+reinterpret :: forall msg msg' a. (msg -> msg') -> (Effect msg => a) -> (Effect msg' => a)
+reinterpret f = with (Handler (effect' . f)) 
+
+-- {-# INLINE also #-}
+-- also :: forall msg a. (msg -> IO ()) -> (Effect msg => a) -> (Effect msg => a)
+-- also f = with (Handler (\m io -> effect' m (io >> f m)))
+
+{-# INLINE (#) #-}
+infixr 9 #
+(#) :: forall a b x. (a -> b) -> (Effect a => x) -> (Effect b => x)
+(#) = Data.View.reinterpret
+
+-- This strictness is important for `Web`. Without it, many diverse instances
+-- of `consume`/`yield` pairs will be non-productive!
+--
+-- Consider, if anything strange arises, that an implementation with a better
+-- guarantee about evaluation order might be required: 
+--
+-- > yield a = a `pseq` effect a
+--
+-- or, equivalently:
+--
+-- > yield a = a `seq` lazy (effect a)
+--
+-- It is important to guarantee that a `Web =>` constraint has been fully
+-- satisfied by `with` (and not thunk'd), before being yielded.
+--
+-- If this strictness requirement has a negative impact on your use, you can try
+-- the non-strict version, `effect`. Many use-cases do not require the 
+-- strictness. 
+--
+{-# INLINE yield #-}
+yield :: Producer a => a -> IO ()
+yield !a = effect a
+
+{-# INLINE consume #-}
+consume :: forall a b. (a -> IO ()) -> (Producer a => b) -> b
+consume = stream
+
+{-# INLINE events #-}
+events :: forall a b. (Exists a => IO ()) -> (Producer a => b) -> b
+events f = stream @a (`with` f)
+
+{-# INLINE discard #-}
+discard :: forall a b. (Producer a => b) -> b
+discard = stream @a (\_ -> pure ())
 -- Reconciler hints
 
 {-# INLINE static #-}
@@ -1802,29 +1860,18 @@ foldM step initial v = componentWith folder (\self -> with (upd self) (Fold step
         , render = \(Fold _ _ v) (st,_) -> v st
         }
 
--- This seems to be an unfortunate necessity in some very particular circumstances,
--- so it's been made as convenient to use and understand as possible. 
---
--- There are a decent set of instances, as well: 
---
---   Unconstrained: Functor, Applicative, Monad, MonadFail, MonadFix, MonadZip, IsString, IsList, Alternative/MonadPlus (error)
---   Constrained/Lifted: Semigroup/Monoid, Num, Fractional, Floating
---
+-- | The type of constraint-based entailments. Basically, a constrained Identity.
 newtype c |- a = Proof { prove :: c => a }
 
 {-# INLINE proof #-}
+-- | Construct a constraint-based entailment.
 proof :: (c => a) -> (c |- a)
 proof = Proof
 
-{-# INLINE refine #-}
--- | The contravariant `refine` allows you to adapt consumers to be more general.
--- 
--- NOTE: Do not use `refine` with an inlined `proof` when `a == b`
---
--- Related: see `reinterpret`.
---
-refine :: (b -> a) -> (Exists a |- x) -> (Exists b |- x)
-refine f ax = proof (with (f it) (prove ax))
+{-# INLINE generalize #-}
+-- | Generalize an entailment. 
+generalize :: (b -> a) -> (Exists a |- x) -> (Exists b |- x)
+generalize f ax = proof (with (f it) (prove ax))
 
 instance Functor ((|-) c) where
   fmap :: (a -> b) -> c |- a -> c |- b
@@ -1855,7 +1902,10 @@ instance Monad ((|-) c) where
 
 instance Alternative ((|-) c) where
   empty = fail "empty"
-  (<|>) l r = l `Data.View.or` r
+
+  -- Yeah, this is awful and breaks bottom preservation. 
+  -- Strongly consider removing.
+  (<|>) l r = l `Data.View.or` r 
 
 instance MonadPlus ((|-) c)
 
