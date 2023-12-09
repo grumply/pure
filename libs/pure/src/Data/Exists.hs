@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, TypeApplications, TypeFamilies, FlexibleContexts, TypeOperators, DataKinds, ScopedTypeVariables, ConstraintKinds, AllowAmbiguousTypes #-}
-{-# OPTIONS_GHC -O0 #-}
+{-# OPTIONS_GHC -O2 #-}
 module Data.Exists where
 
 import Control.Monad
@@ -37,65 +37,4 @@ with a w = inline (unsafeCoerce (Witness w :: Witness a r)) a
 --
 using :: (b == a) ~ False => (b -> a) -> (Exists a => r) -> (Exists b => r)
 using f = with (f it)
-
-newtype Handler eff = Handler { runHandler :: eff -> IO () -> IO Bool }
-
-type Effect eff = Exists (Handler eff)
-
-{-# INLINE effect' #-}
-effect' :: Effect eff => eff -> IO () -> IO Bool
-effect' = runHandler it
-
-{-# INLINE effect #-}
-effect :: Effect eff => eff -> IO ()
-effect eff = void (effect' eff (pure ()))
-
-{-# INLINE reinterpret #-}
--- | The covariant `reinterpret` allows you to adapt producers to be more specific or varied.
--- 
--- Related: see `refine`.
-reinterpret :: forall msg msg' a. (msg -> msg') -> (Effect msg => a) -> (Effect msg' => a)
-reinterpret f = with (Handler (effect' . f)) 
-
--- {-# INLINE also #-}
--- also :: forall msg a. (msg -> IO ()) -> (Effect msg => a) -> (Effect msg => a)
--- also f = with (Handler (\m io -> effect' m (io >> f m)))
-
-{-# INLINE (#) #-}
-infixr 9 #
-(#) :: forall a b x. (a -> b) -> (Effect a => x) -> (Effect b => x)
-(#) = Data.Exists.reinterpret
-
-{-# RULES
-  "Data.Exists.reinterpret id" forall x. Data.Exists.reinterpret id x = x
-  #-}
-
-type Producer a = Effect a
-
-{-# INLINE yield #-}
-yield :: Producer a => a -> IO ()
-yield = effect
-
-{-# INLINE stream #-}
-stream :: forall a b. (a -> IO ()) -> (Producer a => b) -> b
-stream f b = 
-  case unsafeDupablePerformIO (writeIORef ref f) of
-    () -> with (Handler (\a after -> readIORef ref >>= \f -> f a >> after >> pure True)) b
-  -- with (Handler (\a after -> f a >> after >> pure True)) b
-  where
-    {-# NOINLINE ref #-}
-    ref :: IORef (a -> IO ())
-    ref = unsafePerformIO (newIORef undefined)
-
-{-# INLINE consume #-}
-consume :: (a -> IO ()) -> (Producer a => b) -> b
-consume = stream
-
-{-# INLINE events #-}
-events :: forall a b. (Exists a => IO ()) -> (Producer a => b) -> b
-events f = stream @a (`with` f)
-
-{-# INLINE discard #-}
-discard :: forall a b. (Producer a => b) -> b
-discard = stream @a (\_ -> pure ())
 
