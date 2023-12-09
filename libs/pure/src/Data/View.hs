@@ -455,6 +455,25 @@ events f = stream @a (`with` f)
 {-# INLINE discard #-}
 discard :: forall a b. (Producer a => b) -> b
 discard = stream @a (\_ -> pure ())
+
+{-# INLINE template #-}
+-- | Optimize a top-level view to improve reconciliation. 
+--
+-- The idea is that a fully-saturated View-producing function - a View value -
+-- might get inlined into multiple use-sites (consider a navigational menu) and
+-- a reconciler might see different views when it should see them as
+-- referentially equal.
+-- 
+-- The implementation is simply:
+-- 
+-- > template = noinline
+-- 
+-- This is just an idea, and largely untested. This could end up removed if it
+-- is found to not work, or not work well.
+--
+template :: a -> a
+template = noinline 
+
 -- Reconciler hints
 
 {-# INLINE static #-}
