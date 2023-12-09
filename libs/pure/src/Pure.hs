@@ -38,7 +38,7 @@ import Data.Marker as Export hiding (hex)
 import Data.Random as Export hiding (normal,int,next,list,exponential) 
 import Data.Scroll as Export
 import Data.Slug as Export
-import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize,translate,events,empty,change,lower,flow,play)
+import Data.Styles as Export hiding (not,zoom,state,delay,fill,Left,Right,true,false,url,Scroll,blur,copy,drop,scroll,select,repeat,resize,translate,events,empty,change,lower,flow,template)
 import Data.Theme as Export hiding (within)
 import Data.Time as Export hiding (Time_,every,duration)
 import Data.Trace as Export
