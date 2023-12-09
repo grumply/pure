@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, ConstraintKinds, TypeSynonymInstances, FlexibleInstances, DerivingVia #-}
-module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,JSONParseError(..),decodeThrow,decodeThrowBS,JSON,module Export) where
+module Data.JSON (parse,decode,decodeEither,encode,decodeBS,decodeBSEither,encodeBS,object,traceJSON,JSONParseError(..),decodeThrow,decodeThrowBS,JSON,module Export,alert,alertJSON) where
 
 import Data.Txt (Txt,ToTxt(..),FromTxt(..))
 
@@ -90,6 +90,28 @@ traceJSON a b =
     x = unsafePerformIO (logJSON a)
   in 
     x `seq` b
+
+alert :: Show a => a -> b -> b
+alert a = alertJSON (toTxt (Prelude.show a))
+
+alertJSON :: ToJSON a => a -> b -> b
+alertJSON a b =
+#ifdef __GHCJS__
+  let
+    x = unsafePerformIO (alert_js (toJSON a))
+  in
+    x `seq` b
+#else
+  let
+    x = unsafePerformIO (logJSON a >> putStr "<Enter To Continue Evaluation>" >> getLine)
+  in
+    x `seq` b
+#endif
+
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "alert($1)" alert_js :: Value -> IO ()
+#endif
 
 newtype JSONParseError = JSONParseError String deriving (Show,ToJSON,FromJSON) via String
 instance Exception JSONParseError
