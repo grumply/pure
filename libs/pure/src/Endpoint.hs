@@ -1,4 +1,4 @@
-{-# language DerivingVia, TypeApplications, ScopedTypeVariables, TypeFamilies, GADTs, MultiParamTypeClasses, AllowAmbiguousTypes, OverloadedStrings, DataKinds, UndecidableInstances #-}
+{-# language DerivingVia, TypeApplications, ScopedTypeVariables, TypeFamilies, GADTs, MultiParamTypeClasses, AllowAmbiguousTypes, OverloadedStrings, DataKinds, UndecidableInstances, DefaultSignatures #-}
 module Endpoint where
 
 import Control.Exception
@@ -189,13 +189,13 @@ unauthorized = throw Unauthorized
 -- > instance API MyApp where 
 -- >   api = "https://localhost:8081"
 --
-class API r where
+class API (r :: *) where
   api :: Txt
   -- At some point, it would make sense to better integrate this, but, for now,
   -- simple is best.
 
 
-class Typeable r => Methods r where
+class Methods (r :: *) where
  
   type Create r :: *
   type Create r = Void
@@ -214,6 +214,7 @@ class Typeable r => Methods r where
 
   {-# NOINLINE endpoint #-}
   endpoint :: Endpoint method x
+  default endpoint :: Typeable r => Endpoint method x
   endpoint = defaultBase @r
     
 create :: forall r. Methods r => POST (Create r)
