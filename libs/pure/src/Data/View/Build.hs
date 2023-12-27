@@ -315,7 +315,7 @@ build' mtd = start
           live <- go new
           writeIORef live_ live
           mv <- newEmptyMVar
-          modifyIORef' mtd (\xs -> putMVar mv ():onMounted c:xs)
+          modifyIORef' mtd (\xs -> putMVar mv (onMounted c):xs)
           forkIO $ newComponentThread mv cr c live new ps state2
           -- GHC doesn't allow for record update of a ComponentView here
           return (ComponentView rep (Just cr) comp props)
@@ -479,9 +479,11 @@ awaitComponentPatches pq = do
   mpq <- readIORef pq
   for mpq collect `catch` \(_ :: BlockedIndefinitelyOnMVar) -> return Nothing
 
-newComponentThread :: forall props state. MVar () -> Ref props state -> Comp props state -> View -> View -> props -> state -> IO ()
-newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state ->
-  onExecuting state >>= \st -> takeMVar barrier >> loop (deferred || state /== st) live view props st
+newComponentThread :: forall props state. MVar (IO ()) -> Ref props state -> Comp props state -> View -> View -> props -> state -> IO ()
+newComponentThread barrier ref@Ref {..} comp@Comp {..} = \live view props state -> do
+  st <- onExecuting state 
+  join (takeMVar barrier)
+  loop (deferred || state /== st) live view props st
   where
     loop :: Bool -> View -> View -> props -> state -> IO ()
     loop = loop'
