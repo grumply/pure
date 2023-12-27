@@ -13,16 +13,15 @@ executable frontend
 
   build-depends:
     base,
-    async,
     pure,
     pure-media-library,
-    pure-convoker,
-    pure-magician,
-    pure-auth,
-    shared
+    shared,
+    containers,
+    lens,
+    vector,
   
   if impl(ghcjs)
-    ghc-options: -dedupe -DGHCJS_BROWSER -DGHCJS_GC_INTERVAL=30000000
+    ghc-options: -dedupe -DGHCJS_BROWSER -DGHCJS_GC_INTERVAL=5000000 -threaded
 
   default-language: Haskell2010
 

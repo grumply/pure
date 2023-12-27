@@ -13,8 +13,8 @@ library
     base,
     pure,
     pure-media-library,
-    pure-convoker,
-    pure-magician
+    vector
+
 
   default-language: Haskell2010
 

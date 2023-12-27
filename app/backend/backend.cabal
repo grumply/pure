@@ -13,8 +13,6 @@ executable backend
     base,
     pure,
     pure-auth,
-    pure-convoker,
-    pure-magician,
     pure-media-library,
     shared,
     
