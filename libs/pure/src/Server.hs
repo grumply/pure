@@ -222,7 +222,7 @@ instance {-# OVERLAPPABLE #-} ToJSON r => Channel (IO [r]) where
           ] responder
           )
 
-instance {-# OVERLAPPING #-} (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [(SomeEventId,r)]) where 
+instance {-# OVERLAPPING #-} (FromJSON a, ToJSON r) => Channel (a -> IO [(SomeEventId,r)]) where 
   channel ep showParseErrors l = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
@@ -265,7 +265,7 @@ instance {-# OVERLAPPING #-} (Typeable a, FromJSON a, ToJSON r) => Channel (a ->
               )
 
 
-instance {-# OVERLAPPABLE #-} (Typeable a, FromJSON a, ToJSON r) => Channel (a -> IO [r]) where 
+instance {-# OVERLAPPABLE #-} (FromJSON a, ToJSON r) => Channel (a -> IO [r]) where 
   channel ep showParseErrors l = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
@@ -310,22 +310,22 @@ instance {-# OVERLAPPABLE #-} (Typeable a, FromJSON a, ToJSON r) => Channel (a -
 reshape :: Endpoint method a -> Endpoint method b
 reshape = fromTxt . toTxt
 
-instance (Typeable a, Typeable b, FromJSON a, FromJSON b, ToJSON r) => Channel (a -> b -> IO [r]) where
+instance (FromJSON a, FromJSON b, ToJSON r) => Channel (a -> b -> IO [r]) where
   channel path showParseErrors l = channel (reshape path) showParseErrors (uncurry l)
 
-instance (Typeable a, Typeable b, Typeable c, FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Channel (a -> b -> c -> IO [r]) where
+instance (FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Channel (a -> b -> c -> IO [r]) where
   channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c) -> l a b c)
 
-instance (Typeable a, Typeable b, Typeable c, Typeable d, FromJSON a, FromJSON b, FromJSON c, FromJSON d, ToJSON r) => Channel (a -> b -> c -> d -> IO [r]) where
+instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d, ToJSON r) => Channel (a -> b -> c -> d -> IO [r]) where
   channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d) -> l a b c d)
 
-instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, ToJSON r) => Channel (a -> b -> c -> d -> e -> IO [r]) where
+instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, ToJSON r) => Channel (a -> b -> c -> d -> e -> IO [r]) where
   channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d,e) -> l a b c d e)
 
-instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, ToJSON r) => Channel (a -> b -> c -> d -> e -> f -> IO [r]) where
+instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, ToJSON r) => Channel (a -> b -> c -> d -> e -> f -> IO [r]) where
   channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d,e,f) -> l a b c d e f)
 
-instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, FromJSON g, ToJSON r) => Channel (a -> b -> c -> d -> e -> f -> g -> IO [r]) where
+instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, FromJSON g, ToJSON r) => Channel (a -> b -> c -> d -> e -> f -> g -> IO [r]) where
   channel path showParseErrors l = channel (reshape path) showParseErrors (\(a,b,c,d,e,f,g) -> l a b c d e f g)
 
 class Lambda a where
@@ -354,7 +354,7 @@ instance ToJSON r => Lambda (IO r) where
             Left e  -> responseLBS status500 [(hContentType,"application/json")] (if showExceptions then encode e else def)
             Right r -> responseLBS status200 ((hContentType,"application/json"):headers) r
 
-instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where 
+instance (FromJSON a, ToJSON r) => Lambda (a -> IO r) where 
   lambda ep showParseErrors showExceptions headers l = Handler (if match ep then Just endpoint else Nothing)
     where
       endpoint :: Exists Request => Application
@@ -384,22 +384,22 @@ instance (Typeable a, FromJSON a, ToJSON r) => Lambda (a -> IO r) where
                 Left e  -> responseLBS status500 [(hContentType,"application/json")] (if showExceptions then encode e else def)
                 Right r -> responseLBS status200 ((hContentType,"application/json"):headers) r
 
-instance (Typeable a, Typeable b, FromJSON a, FromJSON b, ToJSON r) => Lambda (a -> b -> IO r) where
+instance (FromJSON a, FromJSON b, ToJSON r) => Lambda (a -> b -> IO r) where
   lambda path showParseErrors showExceptions headers l = lambda (reshape path) showParseErrors showExceptions headers (uncurry l)
 
-instance (Typeable a, Typeable b, Typeable c, FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Lambda (a -> b -> c -> IO r) where
+instance (FromJSON a, FromJSON b, FromJSON c, ToJSON r) => Lambda (a -> b -> c -> IO r) where
   lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c) -> l a b c)
 
-instance (Typeable a, Typeable b, Typeable c, Typeable d, FromJSON a, FromJSON b, FromJSON c, FromJSON d, ToJSON r) => Lambda (a -> b -> c -> d -> IO r) where
+instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d, ToJSON r) => Lambda (a -> b -> c -> d -> IO r) where
   lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c,d) -> l a b c d)
 
-instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, ToJSON r) => Lambda (a -> b -> c -> d -> e -> IO r) where
+instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, ToJSON r) => Lambda (a -> b -> c -> d -> e -> IO r) where
   lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c,d,e) -> l a b c d e)
 
-instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, ToJSON r) => Lambda (a -> b -> c -> d -> e -> f -> IO r) where
+instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, ToJSON r) => Lambda (a -> b -> c -> d -> e -> f -> IO r) where
   lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c,d,e,f) -> l a b c d e f)
 
-instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, FromJSON g, ToJSON r) => Lambda (a -> b -> c -> d -> e -> f -> g -> IO r) where
+instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d, FromJSON e, FromJSON f, FromJSON g, ToJSON r) => Lambda (a -> b -> c -> d -> e -> f -> g -> IO r) where
   lambda path showParseErrors showException headers l = lambda (reshape path) showParseErrors showException headers (\(a,b,c,d,e,f,g) -> l a b c d e f g)
 
 cache :: Time -> Middleware
@@ -415,7 +415,7 @@ logging level app request respond = do
   Log.log level request
   app request respond
 
-class Methods r => Server r where
+class (Methods r) => Server r where
 
   cors :: [Header]
   cors = []
