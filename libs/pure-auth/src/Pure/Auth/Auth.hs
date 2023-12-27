@@ -1,4 +1,4 @@
-{-# language ScopedTypeVariables, TypeApplications, CPP, LambdaCase, RecordWildCards, ViewPatterns, NamedFieldPuns, ConstraintKinds, FlexibleContexts, RankNTypes, AllowAmbiguousTypes, OverloadedStrings #-}
+{-# language ScopedTypeVariables, TypeApplications, CPP, LambdaCase, RecordWildCards, ViewPatterns, NamedFieldPuns, ConstraintKinds, FlexibleContexts, RankNTypes, AllowAmbiguousTypes, OverloadedStrings, PolyKinds #-}
 module Pure.Auth.Auth 
   (Authenticated
   ,User
@@ -140,7 +140,7 @@ authenticated r t@Token {..}
 
 authorized :: forall c r. Authenticated c => Txt -> (Txt -> r) -> r
 authorized c r =
-  case List.lookup c (claims @c token) of
+  case List.lookup c (claims (token @c)) of
     Just x -> r x
     _      -> unauthorized
 

@@ -27,7 +27,7 @@ type role Hash nominal nominal
 newtype Password = Password Txt
   deriving (ToJSON,FromJSON,ToTxt,FromTxt,Show,Eq,Ord) via Txt
 
-newtype Username c = Username Txt
+newtype Username (c :: *) = Username Txt
   deriving 
     (ToJSON,ToTxt,Show,Eq,Ord,Hashable
 #ifndef __GHCJS__
@@ -61,14 +61,14 @@ data Token (c :: *) = Token
     deriving anyclass (ToJSON,FromJSON)
 type role Token nominal
 
-newtype Pool_ c = Pool FilePath
+newtype Pool_ (c :: *) = Pool FilePath
 type role Pool_ nominal
 type Pool c = Exists (Pool_ c)
 
 pool :: forall c. Pool c => FilePath
 pool = let Pool fp = it :: Pool_ c in fp
 
-newtype Secret_ c = Secret BS.ByteString deriving Show
+newtype Secret_ (c :: *) = Secret BS.ByteString deriving Show
 instance ToJSON (Secret_ c) where toJSON (Secret sec) = toJSON (show sec)
 instance FromJSON (Secret_ c) where parseJSON v = Secret . Prelude.read <$> parseJSON v
 type role Secret_ nominal
