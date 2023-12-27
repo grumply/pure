@@ -1,6 +1,6 @@
-{-# language PatternSynonyms, DerivingVia, ViewPatterns, BlockArguments, ScopedTypeVariables, RankNTypes, DuplicateRecordFields, NamedFieldPuns, ConstraintKinds, FlexibleContexts, GADTs, TypeApplications, BangPatterns, AllowAmbiguousTypes, CPP, PatternSynonyms, OverloadedStrings, RecordWildCards, LambdaCase, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, DefaultSignatures, TypeOperators, TupleSections #-}
+{-# language PatternSynonyms, DerivingVia, ViewPatterns, BlockArguments, ScopedTypeVariables, RankNTypes, DuplicateRecordFields, NamedFieldPuns, ConstraintKinds, FlexibleContexts, GADTs, TypeApplications, BangPatterns, AllowAmbiguousTypes, CPP, PatternSynonyms, OverloadedStrings, RecordWildCards, LambdaCase, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, DefaultSignatures, TypeOperators, TupleSections, PolyKinds #-}
 {-# OPTIONS_GHC -O2 #-}
-module Web (url,Web.path,Path(..),pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,Void,Web,produce_,produce,produce',produceIO,animate,unsafeLazyBecome,become,become_,Web.error,halt,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link,once) where
+module Web (url,Web.path,Path(..),pattern Route,Routed,routed,Stencil(),ToPath(..),FromPath(..),Web.clear,Void,Web,produce_,produce,produce',produceIO,animate,unsafeLazyBecome,become,become_,Web.error,halt,Web.fix,run,Web.read,Web.show,prompt,Web.reader,Parser,link,once,rep) where
 
 import Control.Concurrent hiding (yield)
 import Control.Monad (forever)
@@ -137,12 +137,13 @@ produce' continuously (Proof -> a) = flip component (a :: Web |- a,continuously)
     runner mv = go >> putMVar mv ()
       where
         go = do
+          tid <- myThreadId
           (Proof a,_) <- askref self 
           E.catch (yield (consume setView (a :: Web => a))) \case
             e | Just ThreadKilled <- asyncExceptionFromException e -> E.throw e
               | otherwise -> pure ()
           (_,continuously) <- askref self 
-          when continuously (runner mv)
+          when continuously go
 
   in 
     def
@@ -715,8 +716,9 @@ fill :: Stencil -> Txt -> Maybe (Stencil,Txt)
 fill (Stencil s) t =
   case Txt.breakOn "/:" s of
     (x,"") -> Just (Stencil "",x <> t)
-    (before,Txt.dropWhile (/= '/') . Txt.tail -> after) -> 
-      Just (Stencil after,before <> "/" <> t)
+    (before,Txt.dropWhile (/= '/') . Txt.tail -> after)
+      | ":" `Txt.isInfixOf` after -> Just (Stencil after,before <> "/" <> t)
+      | otherwise -> Just (Stencil "",before <> "/" <> t <> after)
 
 pattern Route :: Path -> r -> Maybe (Path,r)
 pattern Route rest r <- Just (rest,r) where
