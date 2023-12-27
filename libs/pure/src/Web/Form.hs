@@ -7,9 +7,10 @@ module Web.Form
   , char
   , text
   , string
+  , textarea
   , defaulting
-  , Submit(..)
   , onSubmit
+  , GForm(..)
   ) where
 
 import Control.Monad
@@ -40,14 +41,16 @@ import Unsafe.Coerce
 import Web
 import Web.Events
 import Data.Events (pattern OnSubmitWith,intercept)
+import Data.Slug
 
-data Submit = Submit
+import Data.Unique
+
 {-# NOINLINE onSubmit #-}
-onSubmit :: View -> (Producer Submit => View)
-onSubmit = OnSubmitWith intercept (\_ -> yield Submit)
+onSubmit :: a -> View -> (Producer a => View)
+onSubmit a = OnSubmitWith intercept (\_ -> yield a)
 
 defaulting :: forall a. Default a => View -> (Producer a => View)
-defaulting = OnMounted (\_ -> yield (def :: a) >> def)
+defaulting = lifecycle def { onStart = yield (def :: a) }
 
 -- Strange instance. Markers are supposed to be generated server-side, so
 -- we use a default 0-marker in cases where the data structure requires one.
@@ -59,8 +62,7 @@ defaulting = OnMounted (\_ -> yield (def :: a) >> def)
 -- to either make an alternate structure just for a form or to make the marker
 -- optional.
 instance (Typeable k, Typeable (a :: k)) => Form (Marker a) where
-  form f Nothing = [ consume f (produce False (fromTxt "" :: Marker a)) ]
-  form _ _       = []
+  form f mk = [ once (f (fromMaybe (decodeBase16 "") mk)) ]
   
 -- Strange instance. Keys are supposed to be generated server-side, so
 -- we use a default 0-key in cases where the data structure requires one.
@@ -72,11 +74,26 @@ instance (Typeable k, Typeable (a :: k)) => Form (Marker a) where
 -- to either make an alternate structure just for a form or make the key
 -- optional.
 instance Form Key where
-  form f Nothing = [ consume f (produce False (fromTxt "" :: Key)) ]
-  form _ _       = []
+  form f mk = [ once (f (fromMaybe (toKey (decodeBase16 "" :: Marker ())) mk)) ]
 
-fractional :: forall a. (Real a, Fractional a) => a -> (Producer a => View)
-fractional a = (realToFrac :: Double -> a) # (fracInternal (realToFrac a))
+instance (Typeable k, Typeable (a :: k)) => Form (Slug a) where
+  form f ms =
+    let
+      input :: Exists Input => IO ()
+      input 
+        | In InputEvent { value } <- it 
+        = f (fromTxt value)
+        
+        | otherwise 
+        = pure ()
+    in
+      [ Label <||> [ txt (rep @(Slug a)) ]
+      , lifecycle def { onStart = f (fromMaybe (fromTxt "") ms) } do
+          Input <| Value (fromMaybe "" (fmap toTxt ms)) . Type "text" . inputs input
+      ]
+
+fractional :: forall a. (Real a, Fractional a) => Maybe a -> (Producer a => View)
+fractional ma = (realToFrac :: Double -> a) # (fracInternal (maybe 0 realToFrac ma))
   where
     fracInternal :: Double -> (Producer Double => View)
     fracInternal n = do
@@ -87,10 +104,11 @@ fractional a = (realToFrac :: Double -> a) # (fracInternal (realToFrac a))
             Just i -> yield (i :: Double)
             _      -> pure ()
 
-      Input <| Attribute "value" (toTxt (Prelude.show n)) . inputs input
+      lifecycle def { onStart = maybe def yield ma } do
+        Input <| Attribute "value" (toTxt (Prelude.show n)) . inputs input
 
-integral :: forall a. Integral a => a -> (Producer a => View)
-integral a = (fromIntegral :: Int -> a) # (numInternal (fromIntegral a))
+integral :: forall a. Integral a => Maybe a -> (Producer a => View)
+integral ma = (fromIntegral :: Int -> a) # (numInternal (maybe 0 fromIntegral ma))
   where
     numInternal :: Int -> (Producer Int => View)
     numInternal n = do
@@ -101,37 +119,61 @@ integral a = (fromIntegral :: Int -> a) # (numInternal (fromIntegral a))
             Just i -> yield (i :: Int)
             _      -> pure ()
 
-      Input <| Attribute "value" (toTxt (Prelude.show n)) . inputs input
+      lifecycle def { onStart = maybe def yield ma } do
+        Input <| Attribute "value" (toTxt (Prelude.show n)) . inputs input
 
-char :: Char -> (Producer Char => View)
-char c = 
-  let
-    input :: Exists Input => IO ()
-    input 
-      | In InputEvent { value } <- it 
-      , Just (c,_) <- Txt.uncons value
-      = yield c
-      
-      | otherwise 
-      = pure ()
-  in
-    Input <| Attribute "value" (Txt.singleton c) . Type "text" . MaxLength 1 . inputs input
+char :: Maybe Char -> (Producer Char => View)
+char mc = go (fromMaybe 'a' mc)
+  where
+    go c =
+      let
+        input :: Exists Input => IO ()
+        input 
+          | In InputEvent { value } <- it 
+          , Just (c,_) <- Txt.uncons value
+          = yield c
+          
+          | otherwise 
+          = pure ()
+      in
+        lifecycle def { onStart = maybe def yield mc } do
+          Input <| Attribute "value" (Txt.singleton c) . Type "text" . MaxLength 1 . inputs input
 
-text :: forall t. (FromTxt t, ToTxt t) => t -> (Producer t => View)
-text t =
-  let
-    input :: Exists Input => IO ()
-    input 
-      | In InputEvent { value } <- it 
-      = yield (fromTxt value :: t)
-      
-      | otherwise 
-      = pure ()
-  in
-    Input <| Attribute "value" (toTxt t) . Type "text" . inputs input
+text :: forall t. (FromTxt t, ToTxt t) => Maybe t -> (Producer t => View)
+text mt = go (maybe "" toTxt mt)
+  where
+    go t = 
+      let
+        input :: Exists Input => IO ()
+        input 
+          | In InputEvent { value } <- it 
+          = yield (fromTxt value :: t)
+          
+          | otherwise 
+          = pure ()
+      in
+        lifecycle def { onStart = maybe def yield mt } do
+          Input <| Attribute "value" t . Type "text" . inputs input
 
-string :: String -> (Producer String => View)
+string :: Maybe String -> (Producer String => View)
 string = text
+
+textarea :: forall t. (FromTxt t, ToTxt t) => Maybe t -> (Producer t => View)
+textarea mt = go (maybe "" toTxt mt)
+  where
+    go t =
+      let
+        input :: Exists Input => IO ()
+        input 
+          | In InputEvent { value } <- it 
+          = yield (fromTxt value :: t)
+          
+          | otherwise 
+          = pure ()
+      in
+        lifecycle def { onStart = maybe def yield mt } do
+          Textarea <| Type "text" . inputs input |> 
+            [ txt t ]
 
 class Typeable a => Form a where
   form :: (a -> IO ()) -> Maybe a -> [View]
