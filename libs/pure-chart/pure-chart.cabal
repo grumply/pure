@@ -1,0 +1,58 @@
+cabal-version:       2.4
+name:                pure-chart
+version:             0.8.0.0
+
+library
+  mixins:
+      base (Prelude as Base)
+    , base hiding (Prelude)
+    
+  exposed-modules:
+      Chart,
+      Chart.Algorithms,
+      Chart.Animation,
+      Chart.Commands,
+      Chart.Config,
+      Chart.Fragment,
+      Chart.Gather,
+      Chart.Gestures,
+      Chart.Path,
+      Chart.Point,
+      Chart.Shapes,
+      Chart.Subpath,
+      Chart.Transformation,
+      Chart.Viewport
+      
+  other-modules:
+    Prelude
+
+  build-depends:
+    base,
+    pure,
+    lens,
+    vector
+
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  
+  default-extensions:
+    DerivingStrategies
+    DerivingVia
+    DeriveAnyClass
+    DeriveGeneric
+    OverloadedStrings
+    BlockArguments
+    ViewPatterns
+    DuplicateRecordFields
+    NamedFieldPuns
+    FlexibleContexts
+    TypeOperators
+    RecordWildCards
+    FlexibleInstances
+    ConstraintKinds
+    RankNTypes
+    ScopedTypeVariables
+    LambdaCase
+    DataKinds
+    KindSignatures
+    TypeApplications
