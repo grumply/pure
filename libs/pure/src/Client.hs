@@ -40,7 +40,7 @@ import Endpoint
 import System.IO.Unsafe
 import Prelude hiding (or)
 
-class Post_ api req where
+class Post_ (api :: *) req where
   post_ :: POST req -> req
 
 instance (API api, Typeable r, FromJSON r) => Post_ api (IO r) where
@@ -77,7 +77,7 @@ instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, T
 instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Post_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
   post_ ep a b c d e f g = post_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
-class Patch_ api req where
+class Patch_ (api :: *) req where
   patch_ :: PATCH req -> req
 
 instance (API api, Typeable r, FromJSON r) => Patch_ api (IO r) where
@@ -114,7 +114,7 @@ instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, T
 instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Patch_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
   patch_ ep a b c d e f g = patch_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
-class Get_ api req where
+class Get_ (api :: *) req where
   get_ :: GET req -> req
 
 instance (API api, Typeable r, FromJSON r) => Get_ api (IO r) where
@@ -159,7 +159,7 @@ instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, T
 instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Get_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
   get_ ep a b c d e f g = Client.get_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
-class Got_ api req where
+class Got_ (api :: *) req where
   type Unsafe req :: *
   got_ :: GET req -> Unsafe req
 
@@ -195,7 +195,7 @@ instance (API api, Typeable r, FromJSON r, Typeable a, ToJSON a, Typeable b, ToJ
   type Unsafe (a -> b -> c -> d -> e -> f -> g -> IO r) = a -> b -> c -> d -> e -> f -> g -> r
   got_ ep a b c d e f g = unsafePerformIO (Client.get_ @api ep a b c d e f g)
 
-class Delete_ api req where
+class Delete_ (api :: *) req where
   delete_ :: DELETE req -> req
 
 instance (API api, Typeable r, FromJSON r) => Delete_ api (IO r) where
@@ -240,7 +240,7 @@ instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, T
 instance (API api, Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g, Typeable r, ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, FromJSON r) => Delete_ api (a -> b -> c -> d -> e -> f -> g -> IO r) where
   delete_ ep a b c d e f g = Client.delete_ @api (fromTxt (toTxt ep)) (a,b,c,d,e,f,g)
 
-class Put_ api req where
+class Put_ (api :: *) req where
   put_ :: PUT req -> req
 
 instance (API api, Typeable r, FromJSON r) => Put_ api (IO r) where
