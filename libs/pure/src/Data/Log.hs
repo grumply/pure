@@ -29,7 +29,7 @@ import System.FilePath
 type Logging a = Producer (Event a)
 
 data Critical = Warn | Error | Fatal
-  deriving (Enum,Bounded,Eq,Ord)
+  deriving (Enum,Bounded,Eq,Ord,Generic)
 
 instance ToJSON Critical where
   toJSON = toJSON @Txt . \case
@@ -47,7 +47,7 @@ instance FromJSON Critical where
       _       -> mzero
 
 data Informational = Trace | Debug | Info 
-  deriving (Enum,Bounded,Eq,Ord)
+  deriving (Enum,Bounded,Eq,Ord,Generic)
 
 instance ToJSON Informational where
   toJSON = toJSON @Txt . \case
@@ -65,7 +65,7 @@ instance FromJSON Informational where
       _       -> mzero
 
 data Level = Informational Informational | Critical Critical
-  deriving (Eq,Ord)
+  deriving (Eq,Ord,Generic)
 
 noncritical :: Level -> Bool
 noncritical (Critical _) = False
@@ -298,11 +298,3 @@ memory = do
       modifyMVar_ mv $ \rcrds -> do
         now <- time
         pure ((level,now,value):rcrds)
-
-{-
-TODO:
-
-  Logging via sorcerer.
-    This will require initializaing the Logger in IO to add the log aggregates to the sorcerer listeners.
-
--}
