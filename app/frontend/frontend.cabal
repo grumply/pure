@@ -8,17 +8,11 @@ executable frontend
   main-is: Main.hs
   
   other-modules:
-    Admin
-    Listing
 
   build-depends:
     base,
     pure,
-    pure-media-library,
-    shared,
-    containers,
-    lens,
-    vector,
+    shared
   
   if impl(ghcjs)
     ghc-options: -dedupe -DGHCJS_BROWSER -DGHCJS_GC_INTERVAL=5000000 -threaded

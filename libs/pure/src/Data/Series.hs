@@ -3,14 +3,35 @@ module Data.Series
   ( Series()
   , Policy(..)
   , second
+  , Data.Series.seconds
+  , secondsFrom
   , minute
+  , Data.Series.minutes
+  , minutesFrom
   , hour
+  , Data.Series.hours
+  , hoursFrom
+  , Data.Series.day
+  , Data.Series.days
+  , daysFrom
+  , week
+  , Data.Series.weeks
+  , weeksFrom
+  , month
+  , Data.Series.months
+  , monthsFrom
+  , quarter
+  , quarters
+  , quartersFrom
+  , year
+  , Data.Series.years
+  , yearsFrom
   , new
   , integrate
 
   , Data.Series.null
 
-  , analyze
+  , summarize
   , size
   , variance
   , stdDev
@@ -33,13 +54,17 @@ module Data.Series
   , findPoint
 
   , range
+  
+  , estimate
+  , reconstruct
   ) where
 
 import Control.Applicative ((<|>))
 import Data.Coerce (coerce)
+import Data.Interval
 import Data.JSON (ToJSON(..),FromJSON(..))
 import Data.Maybe (fromJust,isNothing)
-import Data.Time
+import Data.Time as Time
 import Data.Variance (Variance(),varies,vary,minimum,maximum,populationVariance,populationStdDev,count,mean,sampleVariance,sampleStdDev)
 import Data.List as List
 import Data.Ord
@@ -59,15 +84,15 @@ null (Root mt _ _ _) = isNothing mt
 --
 -- O(1)
 --
-analyze :: Series a -> Variance
-analyze (Root _ _ v _) = v
+summarize :: Series a -> Summary
+summarize (Root _ _ v _) = Summary v
 
 -- | Get the total count of items in and summarized by the series.
 --
 -- O(1)
 --
 size :: Series a -> Int
-size = count . analyze
+size = count . summary . summarize
 
 -- | Get the mean value of the series.
 --
@@ -76,7 +101,7 @@ size = count . analyze
 -- O(1)
 --
 mean :: Series a -> Maybe Double
-mean = Data.Variance.mean . analyze
+mean = Data.Variance.mean . summary . summarize
 
 -- | Get the population variance of the series, assuming the series to be fully
 -- representative.
@@ -87,10 +112,10 @@ mean = Data.Variance.mean . analyze
 --
 -- If you are sampling events, you might want to consider:
 -- 
--- > Data.Variance.sampleVariance . analyze
+-- > Data.Variance.sampleVariance . summarize
 --
 variance :: Series a -> Maybe Double
-variance = populationVariance . analyze
+variance = populationVariance . summary . summarize
 
 -- | Get the population standard deviation of the series, assuming the series to
 -- be fully representative.
@@ -101,24 +126,24 @@ variance = populationVariance . analyze
 --
 -- If you are sampling events, you might want to consider:
 -- 
--- > Data.Variance.sampleStdDev . analyze
+-- > Data.Variance.sampleStdDev . summarize
 --
 stdDev :: Series a -> Maybe Double
-stdDev = populationStdDev . analyze
+stdDev = populationStdDev . summary . summarize
 
 -- | Get the series maximum, if the series is non-empty.
 --
 -- O(1)
 --
 maximum :: Series a -> Maybe Double
-maximum = Data.Variance.maximum . analyze
+maximum = Data.Variance.maximum . summary . summarize
 
 -- | Get the series minimum, if the series is non-empty.
 --
 -- O(1)
 --
 minimum :: Series a -> Maybe Double
-minimum = Data.Variance.minimum . analyze
+minimum = Data.Variance.minimum . summary . summarize
 
 -- | Get a summary size.
 --
@@ -195,7 +220,7 @@ points (Root _ _ _ (Series _ v _ _)) = List.reverse v
 --
 summaries :: Series a -> [(Time,Time,Summary)]
 summaries (Root _ _ _ (Series mt _ _ (Just sv))) = build (extract sv)
-  where    
+  where
     build :: [(Time,Summary)] -> [(Time,Time,Summary)]
     build tvs = zipWith go tvs (tail (fmap (Just . fst) tvs) <> [Nothing])
       where
@@ -204,14 +229,28 @@ summaries (Root _ _ _ (Series mt _ _ (Just sv))) = build (extract sv)
         go (start,v) Nothing    = (start,fromJust mt,v)
 
     extract :: Series Summary -> [(Time,Summary)]
-    extract (Series _ b _ (Just v)) = extract v <> List.reverse b
-    extract (Series _ _ _ Nothing) = []
+    extract (Series _ b _ mv) = maybe [] extract mv <> List.reverse b
 summaries _ = []
+
+-- | Approximately reconstruct a series at a given sampling rate from the first
+-- recorded point to the latest. For summarized ranges, the same value is used
+-- for all points (the summary mean).
+reconstruct :: (Real a, Fractional a) => Time -> Series a -> [(Time,a)]
+reconstruct g sa = concatMap go (summaries sa) ++ 
+  case (sStart (sSeries sa),sLatest sa) of
+    (Just start,Just end) -> go (start,end,Summary (varies snd (points sa)))
+    _ -> []
+  where
+    go (start,end,s) = 
+      [ (t,u) 
+      | t <- if start == end then [start] else [start,start+g..end-g] 
+      , Just u <- [fmap realToFrac (summaryMean s)] 
+      ]
 
 -- | Find the summary associated with a given time. Returns `Nothing` in
 -- the case that the time does not fall within a summary.
 --
--- O(n)
+-- O(summaries)
 --
 findSummary :: Time -> Series a -> Maybe (Time,Time,Summary)
 findSummary t = wrapping . summaries
@@ -221,9 +260,19 @@ findSummary t = wrapping . summaries
       | otherwise        = wrapping ss
     wrapping _           = Nothing
 
+-- | Estimate the value at a given time. If the series does not cover the time,
+-- `Nothing` is returned.
+--
+-- O(summaries)
+--
+estimate :: Time -> Series a -> Maybe Double
+estimate t s = do
+  (_,_,summary) <- findSummary t s 
+  summaryMean summary
+
 -- | Find the point that is closest to the given time.
 --
--- O(n)
+-- O(points)
 --
 -- Note: `findPoint` should be avoided. Instead, `findSummary` should be used as
 --       it is more representative of the expected use of a `Series`.
@@ -234,27 +283,29 @@ findPoint p = closest . points
     closest []  = Nothing
     closest pts = Just (minimumBy (comparing (abs . subtract p . fst)) pts)
 
--- | Extract the summaries and points that overlap the given open-ended range of
--- times. The summaries are expected to be non-overlapping and non-overlapping
+-- | Extract the summaries and points that overlap the given interval. The
+-- summaries are expected to be non-overlapping and non-overlapping
 -- with the list of points, assuming that the series was correctly constructed
 -- with strictly-increasing times.
-range :: Maybe Time -> Maybe Time -> Series a -> ([(Time,Time,Summary)],[(Time,a)])
-range mstart mend sa = (filter summaryInRange (summaries sa),filter pointInRange (points sa))
+--
+-- See `summarizeRange` to further reduce the result.
+--
+range :: Interval Time -> Series a -> ([(Time,Time,Summary)],[(Time,a)])
+range i sa = (filter summaryInRange (summaries sa),filter pointInRange (points sa))
   where
-    summaryInRange (s,e,v) =
-      case (mstart,mend) of
-        (Just start,Just end) -> start <= s && e <= end
-        (Just start,_)        -> start <= s
-        (_,Just end)          ->               e <= end
-        _                     -> True
+    summaryInRange (s,e,v) = intersecting (interval (including s) (including e)) i
+    pointInRange (t,a) = intersecting (interval (including t) (including t)) i
 
-    pointInRange (t,a) =
-      case (mstart,mend) of
-        (Just start,Just end) -> start <= t && t <= end
-        (Just start,_)        -> start <= t
-        (_,Just end)          ->               t <= end
-        _                     -> True
+-- | Summarize a full range query result.
+summarizeRange :: Real a => ([(Time,Time,Summary)],[(Time,a)]) -> (Time,Time,Summary)
+summarizeRange (l,r) = 
+  (List.minimum (fmap (\(s,_,_) -> s) l)
+  ,List.maximum (fmap fst r)
+  ,mconcat (Summary (varies snd r) : fmap (\(_,_,s) -> s) l)
+  )
 
+-- Note that this structure always contains a `Root a -> Series a -> Maybe (Series Summary)`;
+-- the `sBuffer` is specialized to `[(Time,Summary)]` after the first `Series`.
 data Series a 
   = Root 
     { sLatest   :: !(Maybe Time)
@@ -268,6 +319,7 @@ data Series a
     , sCount    :: {-# UNPACK #-}!Int
     , sSummary  :: !(Maybe (Series Summary))
     }
+  deriving stock (Generic,Eq,Ord,Show)
 
 instance ToJSON a => ToJSON (Series a) where
   toJSON (Root l ts v s) = toJSON (l,ts,v,s)
@@ -305,13 +357,21 @@ instance FromJSON a => FromJSON (Series a) where
 -- with worse constant factors.
 --   
 new :: Policy -> Series a
-new p@(Clock ts) | not (coerce validTimes ts) = 
-  error "Clock policies must be non-empty and composed of strictly-increasing [Granularity]."
-new p@(Hybrid its) | not (coerce validTimes (fmap fst its)) = 
-  error "Hybrid policies must be non-empty and composed of strictly-increasing [Granularity]."
-new p@(Elapsed ts) | not (validTimes ts) = 
-  error "Elapsed policies must be non-empty and composed of strictly-increasing [Time]."
-new p = Root Nothing p mempty (Series Nothing [] 0 Nothing)
+new p = case p of
+  (Clock ts) | not (validTimes (fmap period ts)) -> error "Clock policies must be non-empty and composed of strictly-increasing [Granularity]."
+  (Hybrid its) | not (coerce validTimes (fmap (period . fst) its)) -> error "Hybrid policies must be non-empty and composed of strictly-increasing [Granularity]."
+  (Elapsed ts) | not (validTimes ts) -> error "Elapsed policies must be non-empty and composed of strictly-increasing [Time]."
+  _ -> Root Nothing p mempty (Series Nothing [] 0 Nothing)
+  where
+    period g = case g of
+      Data.Series.Seconds _ n -> Time.Seconds (fromIntegral n) 0   
+      Data.Series.Minutes _ n -> Time.Minutes (fromIntegral n) 0
+      Data.Series.Hours _ n -> Time.Hours (fromIntegral n) 0
+      Data.Series.Days _ n -> Time.Days (fromIntegral n) 0
+      Data.Series.Weeks _ n -> Time.Weeks (fromIntegral n) 0
+      Data.Series.Months _ n -> Time.Months (fromIntegral n) 0
+      Data.Series.Quarters _ n -> Time.Months (fromIntegral n * 3) 0
+      Data.Series.Years _ n -> Time.Years (fromIntegral n) 0
 
 validTimes :: [Time] -> Bool
 validTimes as = nonEmpty as && strictlyIncreasing as
@@ -321,14 +381,42 @@ validTimes as = nonEmpty as && strictlyIncreasing as
     strictlyIncreasing (a0:a1:as) = a0 < a1 && strictlyIncreasing (a1:as)
     strictlyIncreasing _ = True
 
-newtype Granularity = Granularity Time
-  deriving stock (Generic,Eq,Ord)
+data Granularity 
+  = Seconds Time Int
+  | Minutes Time Int
+  | Hours Time Int
+  | Days Time Int
+  | Weeks Time Int
+  | Months Time Int
+  | Quarters Time Int
+  | Years Time Int
+  deriving stock (Generic,Eq,Ord,Show)
   deriving anyclass (ToJSON,FromJSON)
 
-second = Granularity Second
-minute = Granularity Minute
-hour = Granularity Hour
-day = Granularity Day
+second = Data.Series.seconds 1
+seconds = secondsFrom 0
+secondsFrom = Data.Series.Seconds
+minute = Data.Series.minutes 1
+minutes = minutesFrom 0
+minutesFrom = Data.Series.Minutes
+hour = Data.Series.hours 1
+hours = hoursFrom 0
+hoursFrom = Data.Series.Hours
+day = Data.Series.days 1
+days = daysFrom 0
+daysFrom = Data.Series.Days
+week = Data.Series.weeks 1
+weeks = weeksFrom 0
+weeksFrom = Data.Series.Weeks
+month = Data.Series.months 1
+months = monthsFrom 0
+monthsFrom = Data.Series.Months
+quarter = Data.Series.quarters 1
+quarters = quartersFrom 0
+quartersFrom = Data.Series.Quarters
+year = Data.Series.years 1
+years = yearsFrom 0
+yearsFrom = Data.Series.Years
 
 -- | The `Policy` specifies how series events are aggregated.
 --
@@ -342,12 +430,11 @@ day = Granularity Day
 -- The custom policy gives elapsed time aggregation. The expectation is that
 -- the query logic will accomodate the mismatch between the wall-clock and
 -- elapsed-time summaries. Note that the custom policy is expected to be
--- /slightly/ more performant since the matching logic only u
--- only subtraction.
+-- /slightly/ more performant since the matching logic only uses subtraction.
 --
 -- The fixed policy specifies that a certain number of events or summaries are 
 -- aggregated at each level. If the aggregation gets to the empty list, that
--- tells to aggregator to roll off old summaries.
+-- tells the aggregator to roll off old summaries.
 --
 -- The current result of this approach is a bit odd, as there is 1 summary kept
 -- in the final tier that definitely shouldn't be kept. For the moment, I 
@@ -360,20 +447,8 @@ day = Granularity Day
 -- serializable. If that were not a requirement, we would simply use the type
 -- of `shouldAggregate`, itself, along with a `depth` argument.
 --
--- The constructor `Granularity` is not exposed; we expose a fixed set of 
--- granularity options. I'm reluctant to expose others, but could be convinced 
--- to do so. Each additional granularity incurs a cost in aggregation logic. 
--- Until I figure out a clean way to allow arbitrary `Time` values, I would 
--- prefer to keep this set small. The current set is `second`, `minute`, `hour`,
--- `day`. I originally had `week`, `month`, `year`, and `decade`, but because 
--- they do not calendar-align (Month in Data.Time is the 400-year Gregorian
--- average month of ~30.5 days and Year is the average year of ~365.2 days, and
--- switching to `UTCTime` for accuracy is even more costly, I removed them... My
--- assumption was that the client-side query logic can necessarily aggregate on
--- the expected boundaries. I'm sure there are still issues here, but
--- performance was my primary importance.
 data Policy = Clock [Granularity] | Fixed [Int] | Hybrid [(Granularity,Int)] | Elapsed [Time]
-  deriving stock Generic
+  deriving stock (Generic,Eq,Ord,Show)
   deriving anyclass (ToJSON,FromJSON)
 
 {-# INLINE peel #-}
@@ -387,24 +462,46 @@ peel x = x
 shouldAggregate :: Policy -> Time -> Time -> Int -> Maybe Bool
 shouldAggregate (Fixed (i:_)) _ _ count = Just (count >= i)
 shouldAggregate (Elapsed (t:_)) start current _ = Just (current - start >= t)
-shouldAggregate (Clock (Granularity t:_)) start current _ = 
-  case t of
-    Second ->
-      let Seconds s _ = current
-          Seconds s' _ = start
-      in Just (s > s')
-    Minute ->
-      let Minutes m _ = current
-          Minutes m' _ = start
-      in Just (m > m')
-    Hour ->
-      let Hours h _ = current
-          Hours h' _ = start
-      in Just (h > h')
-    Day ->
-      let Days d _ = current
-          Days d' _ = start
-      in Just (d > d')
+shouldAggregate (Clock (g:_)) start current _ = 
+  let 
+    t :: Int -> Double -> Int
+    t n = floor . (/ fromIntegral n) 
+    d :: Int -> Int -> Int
+    d n = (`div` n)
+  in
+    case g of
+      Data.Series.Seconds from n ->
+        let Time.Seconds s _ = current - from
+            Time.Seconds s' _ = start - from
+        in Just (t n s > t n s')
+      Data.Series.Minutes from n ->
+        let Time.Minutes m _ = current - from
+            Time.Minutes m' _ = start - from
+        in Just (t n m > t n m')
+      Data.Series.Hours from n ->
+        let Time.Hours h _ = current - from
+            Time.Hours h' _ = start - from
+        in Just (t n h > t n h')
+      Data.Series.Days from n ->
+        let Time.Days d _ = current - from
+            Time.Days d' _ = start - from
+        in Just (t n d > t n d')
+      Data.Series.Weeks from n ->
+        let Time.Weeks w _ = current - from
+            Time.Weeks w' _ = start - from
+        in Just (t n w > t n w')
+      Data.Series.Months from n ->
+        let Time.Gregorian y m _ = current - from
+            Time.Gregorian y' m' _ = start - from
+        in Just (d n (y * 12 + m) > d n (y' * 12 + m'))
+      Data.Series.Quarters from n ->
+        let Time.Gregorian y m _ = current - from
+            Time.Gregorian y' m' _ = start - from
+        in Just (d (3 * n) (y * 12 + m) > d (3 * n) (y' * 12 + m'))
+      Data.Series.Years from n ->
+        let Time.Gregorian y _ _ = current - from
+            Time.Gregorian y' _ _ = start - from
+        in Just (d n y > d n y')
 shouldAggregate (Hybrid ((t,i):_)) start current count
   | count >= i = Just True
   | otherwise  = shouldAggregate (Clock [t]) start current count
@@ -413,14 +510,15 @@ shouldAggregate _ _ _ _ = Nothing
 
 -- | Integrate a value into a series. It is expected that integrated points
 -- have strictly-increasing `Time` values. This can be guaranteed in a multi-
--- threaded context by putting the `Series` behind an MVar and using 
+-- threaded context by putting the `Series` behind an MVar and using a custom
 -- `integrateIO`.
 --
 -- Note: complexity is amortized O(1) and should be largely unaffected (up to
 --       minor constants) by the chosen Policy.
 -- 
+{-# INLINE integrate #-}
 integrate :: forall a. Real a => Time -> a -> Series a -> Series a
-integrate now a (Root _ ls v s) = Root (Just now) ls (vary id a v) (go ls s)
+integrate !now !a (Root _ ls v s) = Root (Just now) ls (vary id a v) (go ls s)
   where
     go :: Policy -> Series a -> Series a
     go p (Series Nothing _ _ s) = Series (Just now) [(now,a)] 1 s
@@ -445,7 +543,7 @@ integrate now a (Root _ ls v s) = Root (Just now) ls (vary id a v) (go ls s)
           Series (Just start) ((now,a) : init b) c s
 
     summarize :: Policy -> Time -> Summary -> Maybe (Series Summary) -> Series Summary
-    summarize _ t v Nothing = Series (Just t) [(t,v)] 1 Nothing
+    summarize _ t !v Nothing = Series (Just t) [(t,v)] 1 Nothing
     summarize p t v (Just (Series (Just start) b c s)) =
       case shouldAggregate p start now c of
         Just True ->

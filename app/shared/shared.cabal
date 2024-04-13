@@ -11,10 +11,7 @@ library
 
   build-depends:
     base,
-    pure,
-    pure-media-library,
-    vector
-
+    pure
 
   default-language: Haskell2010
 

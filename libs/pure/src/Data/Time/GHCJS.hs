@@ -10,7 +10,7 @@ import Data.Ratio
 import Data.Hashable
 
 newtype Micros = Micros { getMicros :: Double }
-  deriving (Show,Eq,Ord,Num,Real,Fractional,Floating,RealFrac,Generic,ToJSON,FromJSON)
+  deriving (Show,Eq,Ord,Num,Enum,Real,Fractional,Floating,RealFrac,Generic,ToJSON,FromJSON)
 
 instance ToTxt Micros where
   toTxt (Micros us) = toTxt us
@@ -22,7 +22,7 @@ micros :: IO Micros
 micros = Micros <$> getTime_micros_js
 
 newtype Millis = Millis { getMillis :: Double }
-  deriving (Show,Eq,Ord,Num,Real,Fractional,Floating,RealFrac,Generic,ToJSON,FromJSON)
+  deriving (Show,Eq,Ord,Num,Enum,Real,Fractional,Floating,RealFrac,Generic,ToJSON,FromJSON)
 
 instance ToTxt Millis where
   toTxt (Millis ms) = toTxt ms

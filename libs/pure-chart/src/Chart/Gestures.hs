@@ -77,6 +77,8 @@ panner PannerConfig {..} = Proof proof
 
         mouseDown :: Exists MouseDown => IO ()
         mouseDown = let MouseDown me = it in with me do
+          let MouseEvent { eventObject } = it
+          preventDefault eventObject
           when panButton do
             writeIORef lastPosition mousePointSVG
             writeIORef panning True

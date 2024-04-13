@@ -16,7 +16,7 @@ executable dev
       , containers
       , directory
       , filepath
-      , fsnotify
+      , fsnotify == 0.3.*
       , process
       , bytestring
       , optparse-applicative

@@ -3,7 +3,7 @@ module Pure.Auth
   ( module Export
   , Object, liveWith, live
 #ifndef __GHCJS__
-  , Pure.Auth.object
+  , Pure.Auth.obj
 #endif
   ) where
 
@@ -78,7 +78,7 @@ liveWith policy o s v =
 
                   msgs <- onRaw es "message" def \_ msg ->
                     case msg .# "data" of
-                      Just d | Just (i,e) <- decode d -> yield @(Int,e) (i,e)
+                      Just d | Just (i,e) <- decode @Txt d -> yield @(Int,e) (i,e)
                       _ -> putMVar mv stop
 
                   errs <- onRaw es "error" def \_ _ -> putMVar mv (stop >> retry)
@@ -110,8 +110,8 @@ foreign import javascript unsafe
 #endif
 
 #ifndef __GHCJS__
-object :: forall c e a. (Typeable c, Typeable e, Typeable a, FromJSON (Stream e), ToJSON a, ToJSON e, FromJSON e, Streamable e, Aggregable e a, Ord (Stream e), Pool c, Secret c, Pool e, Secret e) => Object c e a -> Time -> (Username c -> Stream e -> IO (Maybe Bool)) -> [Server.Handler]
-object o dur f =
+obj :: forall c e a. (Typeable c, Typeable e, Typeable a, FromJSON (Stream e), ToJSON a, ToJSON e, FromJSON e, Streamable e, Aggregable e a, Ord (Stream e), Pool c, Secret c, Pool e, Secret e) => Object c e a -> Time -> (Username c -> Stream e -> IO (Maybe Bool)) -> [Server.Handler]
+obj o dur f =
   [ Server.lambda (o <> "/read") False False [] do
       authenticated @c \s -> do
         permissions <- f (name @c) s

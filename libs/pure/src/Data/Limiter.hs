@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeFamilies #-}
-module Data.Limiter (Limiter,Limiter_(..),Tokens,limiter,limit,minDelay) where
+module Data.Limiter (Limiter,Limiter_(..),Tokens,limiter,limit,minDelay,refund) where
 
 import Data.Time
 import Data.JSON
@@ -29,6 +29,12 @@ data Limiter_ = Limiter
   , bRefillTime   :: {-# UNPACK #-}!Micros
   , bRefillAmount :: {-# UNPACK #-}!Tokens
   } deriving (Eq,Generic,ToJSON,FromJSON)
+
+refund :: MonadIO m => Int -> Limiter -> m ()
+refund r l = liftIO $
+  modifyMVar_ l $ \Limiter { bValue = old, .. } ->
+    let bValue = old + r
+    in pure Limiter {..}
 
 limiter :: MonadIO m => Int -> Int -> Int -> Micros -> m Limiter
 limiter bMax bValue bRefillAmount bRefillTime = liftIO $ do

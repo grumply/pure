@@ -5,12 +5,15 @@ module Data.Exists where
 import Control.Monad
 import Data.Type.Equality
 import Data.IORef
+import Data.Void (Void,absurd)
 import Unsafe.Coerce
 import GHC.Magic
 import System.IO.Unsafe
 
 class Exists a where
   it :: a
+instance Exists () where it = ()
+instance Exists Void where it = absurd (it :: Void)
 
 newtype Witness a r = Witness (Exists a => r)
 

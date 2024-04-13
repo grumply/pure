@@ -40,7 +40,8 @@ library
     base64-bytestring,
     comonad,
     unbounded-delays,
-    parallel
+    parallel, 
+    QuickCheck
 
   hs-source-dirs: src
 
@@ -116,6 +117,7 @@ library
     Data.File
     Data.HTML
     Data.Idle
+    Data.Interval
     Data.JSON
     Data.Key
     Data.Limiter

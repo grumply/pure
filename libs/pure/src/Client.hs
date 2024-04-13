@@ -308,7 +308,7 @@ sseWith policy host ep =
 
                 msgs <- onRaw es "message" def \_ msg ->
                   case msg .# "data" of
-                    Just d | Just e <- decode d -> yield @e e
+                    Just d | Just e <- decode @Txt d -> yield @e e
                     _ -> putMVar mv stop
 
                 errs <- onRaw es "error" def \_ _ -> putMVar mv (stop >> retry)
@@ -368,7 +368,7 @@ wsmessage = OnMounted (\_ -> onRaw (it :: Websocket) "message" def go)
   where
     go _ msg
       | Just m <- msg .# "data"
-      , Just a <- decode m
+      , Just a <- decode @Txt m
       = yield @a a
         
       | otherwise 

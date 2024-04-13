@@ -830,6 +830,7 @@ data MouseEvent = MouseEvent
   , shiftKey :: Bool
   , button :: Button
   , buttons :: [Button]
+  , detail :: Int
   }
 
 toMouseEvent :: Evt -> MouseEvent
@@ -871,6 +872,7 @@ toMouseEvent e@(evtObj -> o) = let err = error "Invalid MouseEvent." in
               , bit 3 Back
               , bit 4 Forward
               ]
+    , detail = fromMaybe err (o .# "detail")
     }
 
 data Click = Click MouseEvent

@@ -17,6 +17,7 @@ import GHC.Stack
 import GHC.Exception (prettyCallStackLines)
 
 import System.IO (SeekMode(..))
+import System.Directory (createDirectoryIfMissing)
 import qualified System.Posix.Files              as P
 import qualified System.Posix.IO                 as P
 #ifndef __GHCJS__
@@ -263,6 +264,7 @@ rotatingAfter bytes (Policy p) = Policy p'
 -- | Thread-safe file logging. To read the log lines, use `recorded`.
 recording :: ToJSON a => FilePath -> Policy -> IO (Level -> a -> IO (),IO ()) 
 recording dir (Policy p) = do
+  createDirectoryIfMissing True dir
   m <- markIO
   let file = fromTxt (toTxt m) <> ".log"
   now <- time

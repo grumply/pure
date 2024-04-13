@@ -23,12 +23,15 @@ import Data.Time.GHCJS as Export
 import Data.Time.GHC as Export
 #endif
 
-import Data.Time.Clock
+import Data.Time.Clock (UTCTime(..))
 import Data.Time.Clock.POSIX
+import Data.Time.Calendar (dayOfWeek)
+import qualified Data.Time.Calendar as Calendar
 import Data.Time.Format as Format (FormatTime(..),ParseTime(..),defaultTimeLocale,parseTimeM)
 import Data.Time.LocalTime (localTimeToUTC,utcToLocalTime,utc,utcToZonedTime,timeZoneMinutes,zonedTimeZone,getZonedTime,getCurrentTimeZone)
 
 import Data.Time.Clock as Export (UTCTime(),NominalDiffTime(),DiffTime())
+import Data.Time.Calendar as Export (DayOfWeek(..))
 import Data.Time.LocalTime as Export (LocalTime(),TimeZone())
 
 import Prelude
@@ -61,12 +64,22 @@ timeout (Microseconds us _) = Unbounded.timeout (round us)
 every :: Time -> IO () -> IO ()
 every t io = forever (io >> delay t)
 
-every_ :: Time -> IO () -> IO ()
-every_ t io = forever (delay t >> io)
+every' :: Time -> IO () -> IO ()
+every' t io = forever (delay t >> io)
+
+pattern Gregorian :: Int -> Int -> Int -> Time
+pattern Gregorian ys ms ds <- (toGregorian -> (fromIntegral -> ys,ms,ds)) where
+  Gregorian ys ms ds = fromGregorian (fromIntegral ys) ms ds 
+
+toGregorian :: Time -> (Integer,Int,Int)
+toGregorian = Calendar.toGregorian . utctDay . fromTime
+
+fromGregorian :: Integer -> Int -> Int -> Time
+fromGregorian ys ms ds = toTime (UTCTime (Calendar.fromGregorian ys ms ds) 0)
 
 newtype Time = Time_ { getTime :: Millis }
   deriving stock Generic
-  deriving (Eq,Ord,Num,Real,Fractional,Floating,RealFrac) via Millis
+  deriving (Eq,Ord,Num,Enum,Real,Fractional,Floating,RealFrac) via Millis
 
 instance ToTxt Time where
   toTxt t = RFC3339 t
@@ -337,10 +350,10 @@ pattern PrettyDate t <- (fmap toTime . fromPrettyDate @Txt @UTCTime -> Just t) w
   PrettyDate t = toPrettyDate @Txt @UTCTime (fromTime t)
 
 toPrettyDate :: (FromTxt txt, Format.FormatTime t) => t -> txt
-toPrettyDate = formatTime "%b%e, %Y"
+toPrettyDate = formatTime "%b %e, %Y"
 
 fromPrettyDate :: (ToTxt txt, Format.ParseTime t) => txt -> Maybe t
-fromPrettyDate = parseTime "%b%e, %Y"
+fromPrettyDate = parseTime "%b %e, %Y"
 
 pattern PrettyTime :: Time -> Txt
 pattern PrettyTime t <- (fmap toTime . fromPrettyTime @Txt @UTCTime -> Just t) where
@@ -351,7 +364,7 @@ toPrettyTime =
 #ifdef __GHCJS__
   fromTxt . pretty_time_js . toTime
 #else
-  formatTime "%l:%M%p" . fromTime @UTCTime . toTime
+  formatTime "%-l:%M%p" . fromTime @UTCTime . toTime
 #endif
   
 #ifdef __GHCJS__
@@ -359,17 +372,16 @@ foreign import javascript unsafe
   "var now = new Date($1); var hs = now.getHours(); var ms = now.getMinutes(); $r = hs % 12 + ':' + (ms < 10 ? '0' + ms : ms) + (hs > 11 ? 'pm' : 'am');" 
     pretty_time_js :: Time -> Txt
 #endif
-  
 
 fromPrettyTime :: (ToTxt txt, Format.ParseTime t) => txt -> Maybe t
-fromPrettyTime = parseTime "%l:%M%p"
+fromPrettyTime = parseTime "%-l:%M%p"
 
 pattern PrettyDateTime :: Time -> Txt
 pattern PrettyDateTime t <- (fmap toTime . fromPrettyDateTime @Txt @UTCTime -> Just t) where
   PrettyDateTime t = toPrettyDateTime @Txt @UTCTime (fromTime t)
 
 toPrettyDateTime :: (FromTxt txt, Format.FormatTime t) => t -> txt
-toPrettyDateTime = formatTime "%b %d, %Y %l:%M%p"
+toPrettyDateTime = formatTime "%b %d, %Y %-l:%M%p"
 
 fromPrettyDateTime :: (ToTxt txt, Format.ParseTime t) => txt -> Maybe t
 fromPrettyDateTime = parseTime "%b %d, %Y %l:%M%p"
@@ -435,11 +447,11 @@ ago now t
 
 duration :: Time -> Txt
 duration t@(abs -> d)
-  | Microseconds us _ <- d, us < 1000 = r us "us"
-  | Milliseconds ms _ <- d, ms < 1000 = r ms "ms"
-  | Seconds ss _      <- d, ss < 60   = r ss "s"
-  | Minutes ms _      <- d, ms < 60   = r ms "m"
-  | Hours hs _        <- d, hs < 24   = r hs "h"
+  | Microseconds us _ <- d, us < 2000 = r us "us"
+  | Milliseconds ms _ <- d, ms < 2000 = r ms "ms"
+  | Seconds ss _      <- d, ss < 120  = r ss "s"
+  | Minutes ms _      <- d, ms < 120  = r ms "m"
+  | Hours hs _        <- d, hs < 48   = r hs "h"
   | Days ds _         <- d            = r ds "d"
   where
     r :: Double -> Txt -> Txt
@@ -448,3 +460,27 @@ duration t@(abs -> d)
     signed :: Txt -> Txt
     signed | signum t < 0 = ("-" <>) | otherwise = id
 
+pattern ClockTime :: Time -> Txt
+pattern ClockTime t <- (fmap toTime . fromClockTime @Txt @UTCTime -> Just t) where
+  ClockTime t = toClockTime @Txt t
+
+toClockTime :: (FromTxt txt, IsTime t) => t -> txt
+toClockTime = 
+#ifdef __GHCJS__
+  fromTxt . pretty_clock_time_js . toTime
+#else
+  formatTime "%H:%M" . fromTime @UTCTime . toTime
+#endif
+
+fromClockTime :: (ToTxt txt, Format.ParseTime t) => txt -> Maybe t
+fromClockTime = parseTime "%H:%M"
+ 
+#ifdef __GHCJS__
+foreign import javascript unsafe
+  "var now = new Date($1); var hs = now.getHours(); var ms = now.getMinutes(); $r = hs + ':' + (ms == 0 ? '00' : ms < 10 ? '0' : '') + ms;" 
+    pretty_clock_time_js :: Time -> Txt
+#endif
+
+-- Function to get day of week from UTCTime
+day :: Time -> DayOfWeek
+day utcTime = dayOfWeek $ utctDay (fromTime utcTime)

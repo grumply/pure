@@ -1,4 +1,4 @@
-{-# language TypeOperators, DefaultSignatures, RecordWildCards, FlexibleInstances, TypeSynonymInstances, DataKinds, FlexibleContexts, UndecidableInstances, DeriveGeneric, DeriveAnyClass #-}
+{-# language TypeOperators, DefaultSignatures, RecordWildCards, FlexibleInstances, TypeSynonymInstances, DataKinds, FlexibleContexts, UndecidableInstances, DeriveGeneric, DeriveAnyClass, BangPatterns #-}
 module Data.Variance
   (Variance
   ,minimum,maximum,mean,count
@@ -95,7 +95,7 @@ maximum v
 
 {-# INLINE [1] vary #-}
 vary :: Real b => (a -> b) -> a -> Variance -> Variance
-vary f a Variance {..} =
+vary f !a Variance {..} =
   let b = realToFrac (f a)
       count = vCount + 1
       delta = b - vMean
@@ -113,7 +113,7 @@ vary f a Variance {..} =
 
 {-# INLINE [1] varies #-}
 varies :: (Foldable f, Real b) => (a -> b) -> f a -> Variance
-varies f = Foldable.foldl' (\v a -> vary f a v) mempty
+varies f = Foldable.foldl' (\v (!a) -> vary f a v) mempty
 
 {-# INLINE [1] variance #-}
 variance :: Variance -> Maybe Double
