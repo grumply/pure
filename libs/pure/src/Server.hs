@@ -63,6 +63,196 @@ import Network.HTTP.Types.Status as Export
 import Network.Wai
 import Endpoint
 
+{- |
+
+A web server for use in @pure@ applications (with GHC, not GHCJS). 
+
+# Handler
+
+A server is, essentially, '[Handler]'.
+
+  > newtype Handler = Handler { handler :: Exists Request => Maybe Application }
+
+'Handler' is, therefore, equivalent to @'Request' -> Maybe 'Application'@.
+
+The server chooses the first matching 'Handler', something like:
+
+  > listToMaybe (mapMaybe (($ currentRequest) . handler) handlers)
+
+The server component is a 'View'. Thus, embedding is implicit.
+
+  > serve :: Port -> Maybe TLSSettings -> [Handler] -> View
+
+Reactivity is available for the '[Handler]' (but not the 'Port' or 
+'Maybe TLSSettings'); changes to a 'Handler' are propagated to the live
+server implicitly through the server component's 'onReceive'. This is achieved
+by:
+
+  1. When the server 'View' component receives a new '[Handler]' properties, 
+     it writes them to an @IORef@.
+
+  2. Every request received by the @warp@ server uses the most-recent handlers
+     by reading the @IORef '[Handler]'@. 
+  
+This is safe in the majority of cases, but could lead to issues depending on
+what you allow, reactively, into the server. A server may be wrapped with
+'static' to prevent reactivity, if desired for: safety, performance, isolation,
+or correctness. Other approaches to controlling reactivity, like 'reactive'
+and 'weak', are also available.
+
+# Lambda
+
+There is a convenience method for constructing low-level handlers when the
+arguments and responses are JSON.
+
+  > lambda :: Endpoint method a -> Bool -> Bool -> [Header] -> (Exists Request => a) -> Handler
+
+It handles up-to arity 7 for the handler, @a@. The booleans are development flags
+for replying, if true, with internal JSON-decoding errors and exceptions, respectively.
+
+As an example, here is a simple server to roll an arbitrary-sided die:
+
+  > roll :: GET (Int -> IO Int)
+  > roll = "/roll"
+  >
+  > server :: View
+  > server = 
+  >   state (initialSeed 42) do
+  >     serve 8081 Nothing 
+  >       [ lambda roll False False [] rollImpl
+  >       ]
+  >
+  >   where
+  >     rollImpl :: State Seed => Int -> IO Int
+  >     rollImpl n = 
+  >       let (seed,result) = generate (uniformR 0 n) it
+  >       in put seed >> pure result
+
+Note that in the above example, it is possible to have two calls that, arriving
+sufficiently close together, produce the same value (use the same random seed).
+To prevent this, you could protect the seed with an 'MVar' and use 'modifyMVar'
+in the @lambda@. 
+
+# Channel
+
+For 'SSE', or coment-style handlers, there is: 
+
+  > channel :: Endpoint 'Endpoint.GET a -> Bool -> (Exists Request => a) -> Handler
+
+Channels are written much like lambdas, but have access to 'lastEventId', for
+resumption. Like 'Lambda', 'Channel' has instances for up to 7 arguments, and
+works for any 'GET' returning a @ToJSON a => IO [a]@.
+
+# Server
+
+'Server' is a convenience class that uses 'Methods' and 'Lambda'.
+
+One possible equivalent definition of the demonstrated @roll@ lambda is:
+
+  - shared
+
+    > data Roll = Roll Int
+    >
+    > instance Methods Roll where
+    >   type Query _ = Int -> IO Roll
+
+  - backend
+
+    > instance Server Dice where
+    >   Type Env Dice = State Seed
+    >   query n = 
+    >     let (seed,result) = generate (uniformR 0 n) it 
+    >     in put seed >> pure (Roll result)
+
+Note that the 'query' method needs access to the random seed state, so an
+'Env' is defined for all handlers of @Server Dice@.
+
+'Server' also has instance methods for CORS headers to send with all responses
+(that defaults to @[]@), flags for sending exceptions and parse errors,
+per-method middlewares, and default @501 Not Implemented@ responses for all methods:
+
+  > class Methods x => Server x where
+  >   showParseErrors :: Bool
+  >   showParseErrors = False
+  >
+  >   showExceptions :: Bool
+  >   showExceptions = False
+  >
+  >   cors :: [Header]
+  >   cors = []
+  >
+  >   createMiddleware :: (Exists Request, Env r) => Middleware
+  >   createMiddleware = id
+  >
+  >   updateMiddleware :: (Exists Request, Env r) => Middleware
+  >   updateMiddleware = id
+  >    
+  >   queryMiddleware :: (Exists Request, Env r) => Middleware
+  >   queryMiddleware = id
+  >
+  >   replaceMiddleware :: (Exists Request, Env r) => Middleware
+  >   replaceMiddleware = id
+  >
+  >   deleteMiddleware :: (Exists Request, Env r) => Middleware
+  >   deleteMiddleware = id
+  >
+  >   create :: (Exists Request, Env x) => Create x
+  >   create = respond 501 mempty
+  >
+  >   update :: (Exists Request, Env x) => Update x
+  >   update = respond 501 mempty
+  >   
+  >   query :: (Exists Request, Env x) => Query x
+  >   query = respond 501 mempty
+  >
+  >   replace :: (Exists Request, Env x) => Replace x
+  >   replace = respond 501 mempty
+  >
+  >   delete :: (Exists Request, Env x) => Delete x
+  >   delete = respond 501 mempty
+  >
+
+Note that `Methods` has defaults, as well:
+
+  > class Methods (r :: *) where
+  > 
+  >   type Create r :: *
+  >   type Create r = Void
+  >
+  >   type Update r :: *
+  >   type Update r = Void
+  >
+  >   type Query r :: *
+  >   type Query r = Void
+  >
+  >   type Replace r :: *
+  >   type Replace r = Void
+  >
+  >   type Delete r :: *
+  >   type Delete r = Void
+  >
+  >   endpoint :: Endpoint method x
+  >   default endpoint :: Typeable r => Endpoint method x
+  >   endpoint = defaultBase @r
+   
+Server sends a @501 Not Implemented@ for all unimplemented and all 'Void' 
+methods.
+
+# Communication
+
+Use 'query', 'query\'', 'update', 'create', 'delete', or 'replace' to make
+requests to a server implementing 'Server'.
+
+Use 'post_', 'patch_', 'delete_', 'put_', 'get_', or 'got_' with a custom 
+'Endpoint' to make stand-alone requests to 'lambda's or 'channel's.
+
+Request payloads are expected to be base64-encoded json, which is handled
+automatically here in 'Server' and in 'Client'. 'query' and 'delete' encode the
+payload in the url, but other methods use the body. 'Server' supports both for
+'GET' and 'DELETE', but only body payloads for 'POST', 'PATCH', and 'PUT'.
+
+-}
+
 serve :: Warp.Port -> Maybe WarpTLS.TLSSettings -> [Handler] -> View
 serve port mtlss = Component $ \self -> 
   def
@@ -489,23 +679,29 @@ data Respond
   deriving Show
 instance Exception Respond
 
+-- We assume a default of JSON for all of the responses, so
+-- the methods `respond`, `respondFile`, and `respondFilePart`
+-- all add n text/json MIME content type. The methods
+-- `respondWith`, `respondFileWith`, and `respondFilePartWith`
+-- allow for custom mime types and additional headers.
+
 respond :: Int -> Txt -> a
-respond c = respondWith (toEnum c) [(hContentType,"application/json")]
+respond c = respondWith (toEnum c) [Server.json]
 
 respondWith :: Int -> [Header] -> Txt -> a
-respondWith s hs t = E.throw (Respond (toEnum s) ((hContentType,"application/json"):hs) t)
+respondWith s hs t = E.throw (Respond (toEnum s) hs t)
 
 respondFile :: Int -> FilePath -> a
-respondFile c = respondFileWith (toEnum c) [(hContentType,"application/json")]
+respondFile c = respondFileWith (toEnum c) [Server.json]
 
 respondFileWith :: Int -> [Header] -> FilePath -> a
-respondFileWith s hs fp = E.throw (RespondFile (toEnum s) ((hContentType,"application/json"):hs) fp)
+respondFileWith s hs fp = E.throw (RespondFile (toEnum s) hs fp)
 
 respondFilePart :: Int -> FilePath -> FilePart -> a
-respondFilePart c = respondFilePartWith (toEnum c) [(hContentType,"application/json")]
+respondFilePart c = respondFilePartWith (toEnum c) [Server.json]
 
 respondFilePartWith :: Int -> [Header] -> FilePath -> FilePart -> a
-respondFilePartWith s hs fp p = E.throw (RespondFilePart (toEnum s) ((hContentType,"application/json"):hs) fp p)
+respondFilePartWith s hs fp p = E.throw (RespondFilePart (toEnum s) hs fp p)
 
 corsHeaders :: forall r. Server r => [Header]
 corsHeaders =
@@ -513,3 +709,6 @@ corsHeaders =
   , ("Access-Control-Allow-Methods",methods @r)
   , ("Access-Control-Max-Age","86400")
   ]
+
+json :: Header
+json = (hContentType,"text/json")
