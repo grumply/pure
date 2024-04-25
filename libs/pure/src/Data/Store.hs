@@ -1,5 +1,5 @@
 {-# language TypeApplications, ScopedTypeVariables, DerivingVia, RankNTypes, FlexibleContexts, AllowAmbiguousTypes #-}
-module Data.Store (Storable(..),Memory(),Vault,Label,unsafeToLabel,Store,withStore,withUniverse,observe,store,replace) where
+module Data.Store (Storable(..),Memory(),Universe,Vault,Store,Label,unsafeToLabel,withStore,withUniverse,observe,store,replace) where
 
 import Data.Marker (Marker(),markIO)
 import Data.Key (Key(),toKey)
