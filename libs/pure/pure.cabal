@@ -139,6 +139,7 @@ library
     Data.Sorcerer.Sorcery
     Data.SVG
     Data.Stream
+    Data.Store
     Data.Styles
     Data.Subscribe
     Data.Theme
