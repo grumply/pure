@@ -43,7 +43,7 @@ access = stateIO (readToken @domain)
 --
 -- > authentication @domain (guarded @domain Null (basic @domain) v)
 --
-simple :: forall domain. Authenticating domain => (Authenticated domain => View) -> View
+simple :: forall domain. (Typeable domain, API domain, Logging Value) => (Authenticated domain => View) -> View
 simple v = access @domain (guarded @domain (auth @domain) v)
 
 logout :: forall domain. (Authenticating domain, Authenticated domain) => IO ()
