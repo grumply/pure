@@ -67,7 +67,8 @@ media ep Config {..} =
           pure []
 
   ]
-#else
+#endif
+
 -- | Note: Endpoint app is needed to disambiguate the endpoints in case you want to have multiple
 --         upload endpoints for different media libraries.
 uploader :: forall api app. (API api, Typeable app, Authenticated app, Producer (Marker ByteTxt)) => (forall method x. Endpoint method x) -> View
@@ -79,5 +80,4 @@ uploader ep = Input <| OnChangeWith intercept select . Type "file" . Accept "ima
 
     onUpload :: (Txt,ByteTxt) -> IO ()
     onUpload (name,content) = post_ @api (upload ep) (token @app) content >>= traverse_ yield
-#endif
 
