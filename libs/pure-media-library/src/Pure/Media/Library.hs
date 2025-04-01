@@ -11,11 +11,11 @@ import System.Directory
 import System.FilePath
 #else
 import Client
+#endif
 import Data.DOM
 import Web.File as File
 import Data.Events as Events (pattern OnChangeWith,target,intercept)
 import Data.HTML (pattern Accept)
-#endif
 
 upload :: (forall method x. Endpoint method x) -> POST (Token app -> ByteTxt -> IO (Maybe (Marker ByteTxt)))
 upload = (<> "/media/upload") . fromTxt . toTxt
