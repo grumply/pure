@@ -9,13 +9,13 @@ import Server
 import Data.Marker
 import System.Directory
 import System.FilePath
-#else
-import Client
 #endif
+import Client
 import Data.DOM
 import Web.File as File
+import Web.Events (getFiles)
 import Data.Events as Events (pattern OnChangeWith,target,intercept)
-import Data.HTML (pattern Accept)
+import Data.HTML (pattern Accept, pattern Input, pattern Type)
 
 upload :: (forall method x. Endpoint method x) -> POST (Token app -> ByteTxt -> IO (Maybe (Marker ByteTxt)))
 upload = (<> "/media/upload") . fromTxt . toTxt
@@ -71,6 +71,9 @@ media ep Config {..} =
 
 -- | Note: Endpoint app is needed to disambiguate the endpoints in case you want to have multiple
 --         upload endpoints for different media libraries.
+--         
+-- TODO: switch to InputEvent from Web.Events since its file support is more convenient
+-- TODO: generalize to other file types, since this is not really image-specific
 uploader :: forall api app. (API api, Typeable app, Authenticated app, Producer (Marker ByteTxt)) => (forall method x. Endpoint method x) -> View
 uploader ep = Input <| OnChangeWith intercept select . Type "file" . Accept "image/*"
   where
