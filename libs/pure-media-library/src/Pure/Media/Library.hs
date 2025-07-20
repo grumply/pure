@@ -10,7 +10,7 @@ import Data.Marker
 import System.Directory
 import System.FilePath
 #endif
-import Client
+import Client hiding (list)
 import Data.DOM
 import Web.File as File
 import Web.Events (getFiles)
@@ -32,7 +32,7 @@ data Config = Config
   , root :: FilePath
   }
 
-media :: forall app. (Typeable app, Pool app, Secret app) => (forall method x. Endpoint method x) -> Config -> [Handler]
+media :: forall app. (Typeable app, Pool app, Secret app) => (forall method x. Endpoint method x) -> Config -> [Server.Handler]
 media ep Config {..} =
   [ lambda (upload ep) False False [] do
       authenticated @app \contents -> do
