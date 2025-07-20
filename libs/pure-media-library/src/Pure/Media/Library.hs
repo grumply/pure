@@ -39,7 +39,7 @@ media ep Config {..} =
         valid <- validate contents
         if valid then do
           m <- markIO
-          let dir = root </> fromTxt (toTxt (name @app)) 
+          let dir = root </> fromTxt (toTxt (Pure.Auth.name @app)) 
               fp = dir </> fromTxt (toTxt m)
           createDirectoryIfMissing True dir
           writeByteTxt fp contents
@@ -49,13 +49,13 @@ media ep Config {..} =
         
   , lambda (Pure.Media.Library.delete ep) False False [] do
       authenticated @app \marker -> do
-        let fp = root </> fromTxt (toTxt (name @app)) </> fromTxt (toTxt marker)
+        let fp = root </> fromTxt (toTxt (Pure.Auth.name @app)) </> fromTxt (toTxt marker)
         exists <- doesFileExist fp
         when exists (removeFile fp)
 
   , lambda (list ep) False False [] do
       authenticated @app do
-        let dir = root </> fromTxt (toTxt (name @app))
+        let dir = root </> fromTxt (toTxt (Pure.Auth.name @app))
         exists <- doesDirectoryExist dir
         if exists then do
           contents <- getDirectoryContents dir
